@@ -279,6 +279,31 @@ The module generates a TOML config file and runs rfm as a systemd service with
 automatic restart on failure. `agent.ipfix.*` and `agent.enrich.*` are available
 through typed module options.
 
+## Scope and non-goals
+
+RFM is a lightweight flow telemetry agent, not a full traffic analysis platform.
+A few deliberate choices follow from that:
+
+The BPF programs capture only the fields needed for basic flow identification:
+IP addresses, L4 ports, protocol number, interface, direction, and packet
+length. They do not extract TCP flags, ToS/DSCP, TTL, IPv6 flow labels, or ICMP
+type/code. Adding these fields would widen the per-event wire struct, increase
+ring buffer pressure, and expand the IPFIX template surface for information that
+most lightweight deployments never query. Operators who need TCP flag analysis,
+QoS-aware accounting, or deep header inspection should consider ntopng or pmacct
+instead.
+
+Prometheus flow gauges are intentionally rolled up by enrichment labels
+(interface, direction, protocol, ASN, city). Source and destination ports are
+not included as Prometheus labels. With `max_flows` defaulting to 65536 and
+ephemeral source ports ranging from 32768 to 60999, adding port labels would
+create maybe 10k+ unique time series per scrape interval, most of which are seen
+once and never again. This kind of high cardinality churn is expensive for
+Prometheus to ingest and store. Port level flow records are available through
+the IPFIX push path, where a downstream collector (goflow2 or similar, or flow
+collector platforms with IPFIX support like Cloudflare Magic Network Monitoring)
+is better suited to handle them.
+
 ## Comparison with other tools
 
 |                     | rfm                                                  | ntopng                                        | pmacct                                    |
