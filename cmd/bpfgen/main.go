@@ -139,6 +139,7 @@ func cflags(source string, cfg config, extra []string) []string {
 		"-O2",
 		"-g",
 		"-Wall",
+		"-Wno-missing-declarations",
 		"-I" + incdir,
 		"-I" + filepath.Join(incdir, "vmlinux", cfg.vmlinux),
 		"-D__TARGET_ARCH_" + cfg.arch,

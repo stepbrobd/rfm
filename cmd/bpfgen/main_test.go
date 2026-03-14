@@ -56,7 +56,7 @@ func TestCFlags(t *testing.T) {
 			source: "testdata/without.bpf.c",
 			cfg:    config{"x86", "x86"},
 			want: []string{
-				"-O2", "-g", "-Wall",
+				"-O2", "-g", "-Wall", "-Wno-missing-declarations",
 				"-Itestdata/include",
 				"-Itestdata/include/vmlinux/x86",
 				"-D__TARGET_ARCH_x86",
@@ -68,7 +68,7 @@ func TestCFlags(t *testing.T) {
 			cfg:    config{"arm64", "aarch64"},
 			extra:  []string{"-I/usr/include/bpf"},
 			want: []string{
-				"-O2", "-g", "-Wall",
+				"-O2", "-g", "-Wall", "-Wno-missing-declarations",
 				"-Itestdata/include",
 				"-Itestdata/include/vmlinux/aarch64",
 				"-D__TARGET_ARCH_arm64",
@@ -88,7 +88,7 @@ func TestCFlags(t *testing.T) {
 }
 
 func TestBpf2go(t *testing.T) {
-	flags := []string{"-O2", "-g", "-Wall", "-Itestdata/include", "-D__TARGET_ARCH_x86"}
+	flags := []string{"-O2", "-g", "-Wall", "-Wno-missing-declarations", "-Itestdata/include", "-D__TARGET_ARCH_x86"}
 	got := bpf2go("testdata/without.bpf.c", "test", "testdata", "mypkg", flags)
 	want := []string{
 		"tool", "bpf2go",
@@ -98,7 +98,7 @@ func TestBpf2go(t *testing.T) {
 		"test",
 		"testdata/without.bpf.c",
 		"--",
-		"-O2", "-g", "-Wall", "-Itestdata/include", "-D__TARGET_ARCH_x86",
+		"-O2", "-g", "-Wall", "-Wno-missing-declarations", "-Itestdata/include", "-D__TARGET_ARCH_x86",
 	}
 	if !slices.Equal(got, want) {
 		t.Errorf("bpf2go:\ngot:  %v\nwant: %v", got, want)
