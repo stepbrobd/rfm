@@ -1,8 +1,9 @@
-//go:build ebpf_test
+//go:build linux
 
 package probe
 
 import (
+	"fmt"
 	"net"
 	"testing"
 	"time"
@@ -11,6 +12,8 @@ import (
 )
 
 func TestLoad(t *testing.T) {
+	testutil.RequireRoot(t)
+
 	p, err := Load()
 	if err != nil {
 		t.Fatal(err)
@@ -19,6 +22,8 @@ func TestLoad(t *testing.T) {
 }
 
 func TestAttach(t *testing.T) {
+	testutil.RequireRoot(t)
+
 	ns := testutil.NewNS(t)
 
 	p, err := Load()
@@ -33,6 +38,8 @@ func TestAttach(t *testing.T) {
 }
 
 func TestIfaceCounters(t *testing.T) {
+	testutil.RequireRoot(t)
+
 	ns := testutil.NewNS(t)
 
 	p, err := Load()
@@ -59,9 +66,6 @@ func TestIfaceCounters(t *testing.T) {
 	)
 	ns.SendRaw(t, pkt)
 
-	// give the packet time to be processed
-	time.Sleep(50 * time.Millisecond)
-
 	// read iface stats
 	key := rfmRfmIfaceKey{
 		Ifindex: uint32(ns.Ifindex()),
@@ -69,23 +73,28 @@ func TestIfaceCounters(t *testing.T) {
 		Proto:   4, // IPv4
 	}
 
-	var vals []rfmRfmIfaceValue
-	if err := p.IfaceStats().Lookup(key, &vals); err != nil {
-		t.Fatal(err)
-	}
-
-	// sum across CPUs
 	var packets, bytes uint64
-	for _, v := range vals {
-		packets += v.Packets
-		bytes += v.Bytes
-	}
+	testutil.Eventually(t, time.Second, 10*time.Millisecond, func() error {
+		var vals []rfmRfmIfaceValue
+		if err := p.IfaceStats().Lookup(key, &vals); err != nil {
+			return err
+		}
 
-	if packets == 0 {
-		t.Error("expected packets > 0")
-	}
-	if bytes == 0 {
-		t.Error("expected bytes > 0")
-	}
+		packets, bytes = 0, 0
+		for _, v := range vals {
+			packets += v.Packets
+			bytes += v.Bytes
+		}
+
+		if packets == 0 {
+			return fmt.Errorf("expected packets > 0")
+		}
+		if bytes == 0 {
+			return fmt.Errorf("expected bytes > 0")
+		}
+
+		return nil
+	})
+
 	t.Logf("packets=%d bytes=%d", packets, bytes)
 }

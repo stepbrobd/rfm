@@ -74,9 +74,14 @@ func run(_ *cobra.Command, args []string) error {
 		return err
 	}
 
+	skip := runtime.GOOS != "linux" && os.Getenv("BPFGEN_FORCE") != "1"
+
 	extra, err := pkgconfig(libs)
 	if err != nil {
-		return err
+		if !skip {
+			return err
+		}
+		extra = nil
 	}
 	extra = append(extra, strings.Fields(os.Getenv("BPFGEN_EXTRA_CFLAGS"))...)
 
@@ -89,7 +94,7 @@ func run(_ *cobra.Command, args []string) error {
 		}
 	}
 
-	if runtime.GOOS != "linux" && os.Getenv("BPFGEN_FORCE") != "1" {
+	if skip {
 		fmt.Fprintf(os.Stderr, "bpfgen: skipping build on GOOS=%s\n", runtime.GOOS)
 		return nil
 	}

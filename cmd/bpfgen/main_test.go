@@ -5,10 +5,11 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"slices"
 	"strings"
 	"testing"
+
+	"ysun.co/rfm/testutil"
 )
 
 func TestDetect(t *testing.T) {
@@ -117,13 +118,11 @@ func TestPkgconfig(t *testing.T) {
 	})
 
 	t.Run("libbpf", func(t *testing.T) {
-		if _, err := exec.LookPath("pkg-config"); err != nil {
-			t.Skip("pkg-config not available")
-		}
+		testutil.RequireCommand(t, "pkg-config")
 
 		got, err := pkgconfig([]string{"libbpf"})
 		if err != nil {
-			t.Fatalf("pkgconfig([libbpf]) error = %v", err)
+			t.Skipf("libbpf pkg-config metadata not available: %v", err)
 		}
 		if len(got) == 0 {
 			t.Error("pkgconfig([libbpf]) returned empty")
@@ -201,9 +200,7 @@ func readCompDB(t *testing.T, path string) []compentry {
 }
 
 func TestBuild(t *testing.T) {
-	if runtime.GOOS != "linux" {
-		t.Skip("requires linux")
-	}
+	testutil.RequireLinux(t)
 
 	tests := []struct {
 		name   string
@@ -262,9 +259,7 @@ func TestBuild(t *testing.T) {
 }
 
 func TestBuildCompDB(t *testing.T) {
-	if runtime.GOOS != "linux" {
-		t.Skip("requires linux")
-	}
+	testutil.RequireLinux(t)
 
 	outdir := t.TempDir()
 	dbpath := filepath.Join(outdir, "compile_commands.json")
