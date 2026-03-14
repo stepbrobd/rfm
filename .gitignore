@@ -37,6 +37,7 @@
 *.su
 *.test
 *.x86_64
+.cache
 .direnv
 .env
 .tmp_versions/
