@@ -5,10 +5,11 @@
       systems = import inputs.systems;
 
       perSystem =
-        { lib
-        , pkgs
-        , system
-        , ...
+        {
+          lib,
+          pkgs,
+          system,
+          ...
         }:
         {
           _module.args.pkgs = import inputs.nixpkgs {
@@ -26,19 +27,23 @@
           };
 
           devShells.default = pkgs.mkShell {
-            packages = with pkgs; [
-              bear
-              bpftools
-              go
-              go-tools
-              gomod2nix
-              gopls
-              libbpf
-              llvmPackages.clang-tools
-              llvmPackages.clang-unwrapped
-              llvmPackages.libllvm
-              pkg-config
-            ];
+            packages =
+              with pkgs;
+              [
+                bear
+                go
+                go-tools
+                gomod2nix
+                gopls
+                llvmPackages.clang-tools
+                llvmPackages.clang-unwrapped
+                llvmPackages.libllvm
+                pkg-config
+              ]
+              ++ lib.optionals stdenv.isLinux [
+                bpftools
+                libbpf
+              ];
           };
 
           formatter = pkgs.writeShellScriptBin "formatter" ''
@@ -61,7 +66,7 @@
             ${lib.getExe pkgs.go} mod tidy
             ${lib.getExe pkgs.go} test -race ./...
             ${lib.getExe pkgs.go} vet ./...
-            ${lib.getExe pkgs.nixpkgs-fmt} .
+            ${lib.getExe pkgs.nixfmt-tree} .
             ${lib.getExe pkgs.taplo} format **/*.toml
             ${lib.getExe' pkgs.go-tools "staticcheck"} ./...
             ${lib.getExe' pkgs.gomod2nix "gomod2nix"}
