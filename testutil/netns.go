@@ -24,12 +24,14 @@ func NewNS(t *testing.T) *NS {
 
 	orig, err := netns.Get()
 	if err != nil {
+		SkipIfUnprivileged(t, err)
 		t.Fatal(err)
 	}
 
 	ns, err := netns.New()
 	if err != nil {
 		orig.Close()
+		SkipIfUnprivileged(t, err)
 		t.Fatal(err)
 	}
 
@@ -47,6 +49,7 @@ func NewNS(t *testing.T) *NS {
 		PeerName:  "rfm1",
 	}
 	if err := netlink.LinkAdd(veth); err != nil {
+		SkipIfUnprivileged(t, err)
 		t.Fatal(err)
 	}
 
@@ -57,6 +60,7 @@ func NewNS(t *testing.T) *NS {
 			t.Fatal(err)
 		}
 		if err := netlink.LinkSetUp(l); err != nil {
+			SkipIfUnprivileged(t, err)
 			t.Fatal(err)
 		}
 	}
@@ -94,6 +98,7 @@ func (n *NS) SendRaw(t *testing.T, pkt []byte) {
 		syscall.AF_PACKET, syscall.SOCK_RAW,
 		int(htons(syscall.ETH_P_ALL)))
 	if err != nil {
+		SkipIfUnprivileged(t, err)
 		t.Fatal(err)
 	}
 	defer syscall.Close(fd)
@@ -102,6 +107,7 @@ func (n *NS) SendRaw(t *testing.T, pkt []byte) {
 		Ifindex: peer.Attrs().Index,
 	}
 	if err := syscall.Sendto(fd, pkt, 0, addr); err != nil {
+		SkipIfUnprivileged(t, err)
 		t.Fatal(err)
 	}
 }

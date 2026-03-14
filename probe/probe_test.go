@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"syscall"
 	"testing"
 	"time"
 
@@ -15,8 +16,12 @@ import (
 
 func skipIfUnsupported(t *testing.T, err error) {
 	t.Helper()
+
 	if errors.Is(err, ebpf.ErrNotSupported) {
 		t.Skipf("not supported: %v", err)
+	}
+	if errors.Is(err, syscall.EPERM) || errors.Is(err, syscall.EACCES) {
+		t.Skipf("requires additional linux capabilities: %v", err)
 	}
 }
 

@@ -17,6 +17,5 @@ func init() {
 }
 
 func runAgent(cmd *cobra.Command, args []string) error {
-	fmt.Println("rfm agent: not yet implemented")
-	return nil
+	return fmt.Errorf("agent mode is not implemented yet")
 }
