@@ -1,3 +1,10 @@
 schema = 3
 
 [mod]
+  [mod.'github.com/cilium/ebpf']
+    version = 'v0.21.0'
+    hash = 'sha256-Xa+oc0fleYWgNs7DzXOkcArSVitzbXzHMOu8SlAVnO8='
+
+  [mod.'golang.org/x/sys']
+    version = 'v0.37.0'
+    hash = 'sha256-5aT0xP02sW1o9sfJHtWoGGNVYDdwb9FyiX/n6RAlzPo='
