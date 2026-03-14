@@ -17,6 +17,14 @@ schema = 3
     version = 'v1.0.10'
     hash = 'sha256-uDPnWjHpSrzXr17KEYEA1yAbizfcsfo5AyztY2tS6ZU='
 
+  [mod.'github.com/vishvananda/netlink']
+    version = 'v1.3.1'
+    hash = 'sha256-xURBhfN6vit7GIrNkSy9bWE3JewfOWTG4hHTUN1zPWo='
+
+  [mod.'github.com/vishvananda/netns']
+    version = 'v0.0.5'
+    hash = 'sha256-wYDmrmqdv9R8dAL5nuWJ+1Nh7fWWxdpd03UkLOtyJrk='
+
   [mod.'golang.org/x/sys']
     version = 'v0.37.0'
     hash = 'sha256-5aT0xP02sW1o9sfJHtWoGGNVYDdwb9FyiX/n6RAlzPo='

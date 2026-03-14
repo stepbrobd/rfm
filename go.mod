@@ -9,6 +9,8 @@ tool ysun.co/rfm/cmd/bpfgen
 require (
 	github.com/cilium/ebpf v0.21.0
 	github.com/spf13/cobra v1.10.2
+	github.com/vishvananda/netlink v1.3.1
+	github.com/vishvananda/netns v0.0.5
 )
 
 require (
