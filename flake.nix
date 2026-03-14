@@ -23,6 +23,9 @@
               go-tools
               gomod2nix
               gopls
+              llvmPackages.clang-tools
+              llvmPackages.clang-unwrapped
+              llvmPackages.libllvm
             ];
           };
 
@@ -39,7 +42,7 @@
             done
             pushd "$root" > /dev/null
 
-            ${lib.getExe pkgs.findutils} . -regex '.*\.\(c\|h\)' -exec ${lib.getExe' pkgs.clang-tools "clang-format"} -style=LLVM -i {} \;
+            ${lib.getExe pkgs.findutils} . -regex '.*\.\(c\|h\)' -exec ${lib.getExe' pkgs.llvmPackages.clang-tools "clang-format"} -style=LLVM -i {} \;
             ${lib.getExe pkgs.go} fix ./...
             ${lib.getExe pkgs.go} fmt ./...
             ${lib.getExe pkgs.go} mod tidy
