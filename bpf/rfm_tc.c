@@ -26,6 +26,18 @@ struct {
 	__type(value, struct rfm_iface_value);
 } rfm_iface_stats SEC(".maps");
 
+struct {
+	__uint(type, BPF_MAP_TYPE_RINGBUF);
+	__uint(max_entries, 256 * 1024);
+} rfm_flow_events SEC(".maps");
+
+struct {
+	__uint(type, BPF_MAP_TYPE_PERCPU_ARRAY);
+	__uint(max_entries, 1);
+	__type(key, __u32);
+	__type(value, __u64);
+} rfm_flow_drops SEC(".maps");
+
 static __always_inline int rfm_tc(struct __sk_buff *skb, __u8 dir)
 {
 	void *data = (void *)(long)skb->data;
@@ -35,13 +47,15 @@ static __always_inline int rfm_tc(struct __sk_buff *skb, __u8 dir)
 		return TC_ACT_OK;
 
 	struct ethhdr *eth = data;
-	__u8 proto = 0;
-	switch (bpf_ntohs(eth->h_proto)) {
+	__u16 eth_proto = bpf_ntohs(eth->h_proto);
+	__u8 iface_proto = 0;
+
+	switch (eth_proto) {
 	case ETH_P_IP:
-		proto = 4;
+		iface_proto = 4;
 		break;
 	case ETH_P_IPV6:
-		proto = 6;
+		iface_proto = 6;
 		break;
 	}
 
@@ -49,7 +63,7 @@ static __always_inline int rfm_tc(struct __sk_buff *skb, __u8 dir)
 	struct rfm_iface_key ikey = {
 		.ifindex = skb->ifindex,
 		.dir = dir,
-		.proto = proto,
+		.proto = iface_proto,
 	};
 
 	struct rfm_iface_value *val =
@@ -62,6 +76,80 @@ static __always_inline int rfm_tc(struct __sk_buff *skb, __u8 dir)
 						.bytes = skb->len };
 		bpf_map_update_elem(&rfm_iface_stats, &ikey, &init, BPF_ANY);
 	}
+
+	// flow events only for IP packets
+	if (iface_proto == 0)
+		return TC_ACT_OK;
+
+	__u32 cfg_key = 0;
+	struct rfm_config *cfg =
+		bpf_map_lookup_elem(&rfm_config, &cfg_key);
+	if (!cfg || cfg->sample_rate == 0)
+		return TC_ACT_OK;
+
+	if (bpf_get_prandom_u32() % cfg->sample_rate != 0)
+		return TC_ACT_OK;
+
+	// parse IP headers into a stack event
+	struct rfm_flow_event ev = {
+		.ifindex = skb->ifindex,
+		.dir = dir,
+		.len = skb->len,
+	};
+
+	void *l4 = NULL;
+
+	if (eth_proto == ETH_P_IP) {
+		struct iphdr *ip = data + sizeof(struct ethhdr);
+		if ((void *)(ip + 1) > end)
+			return TC_ACT_OK;
+
+		ev.proto = ip->protocol;
+
+		// map IPv4 to v6: ::ffff:x.x.x.x
+		ev.src_addr[10] = 0xff;
+		ev.src_addr[11] = 0xff;
+		__builtin_memcpy(&ev.src_addr[12], &ip->saddr, 4);
+
+		ev.dst_addr[10] = 0xff;
+		ev.dst_addr[11] = 0xff;
+		__builtin_memcpy(&ev.dst_addr[12], &ip->daddr, 4);
+
+		l4 = (void *)ip + sizeof(struct iphdr);
+	} else {
+		struct ipv6hdr *ip6 = data + sizeof(struct ethhdr);
+		if ((void *)(ip6 + 1) > end)
+			return TC_ACT_OK;
+
+		ev.proto = ip6->nexthdr;
+		__builtin_memcpy(ev.src_addr, &ip6->saddr, 16);
+		__builtin_memcpy(ev.dst_addr, &ip6->daddr, 16);
+
+		l4 = (void *)(ip6 + 1);
+	}
+
+	// extract ports for TCP and UDP
+	if (ev.proto == 6 || ev.proto == 17) {
+		if (l4 + 4 > end)
+			return TC_ACT_OK;
+		ev.src_port = bpf_ntohs(*(__u16 *)l4);
+		ev.dst_port = bpf_ntohs(*(__u16 *)(l4 + 2));
+	}
+
+	// emit to ring buffer
+	struct rfm_flow_event *ring_ev =
+		bpf_ringbuf_reserve(&rfm_flow_events, sizeof(*ring_ev), 0);
+	if (!ring_ev) {
+		__u32 drop_key = 0;
+		__u64 *drops =
+			bpf_map_lookup_elem(&rfm_flow_drops, &drop_key);
+		if (drops)
+			(*drops)++;
+		return TC_ACT_OK;
+	}
+
+	__builtin_memcpy(ring_ev, &ev, sizeof(ev));
+	bpf_ringbuf_submit(ring_ev, 0);
 
 	return TC_ACT_OK;
 }

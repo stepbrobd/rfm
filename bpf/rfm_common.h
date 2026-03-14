@@ -24,4 +24,16 @@ struct rfm_iface_value {
 	__u64 packets, bytes;
 };
 
+struct rfm_flow_event {
+	__u32 ifindex;
+	__u8 dir;
+	__u8 proto;
+	__u16 _pad;
+	__u8 src_addr[16];
+	__u8 dst_addr[16];
+	__u16 src_port;
+	__u16 dst_port;
+	__u32 len;
+};
+
 #endif
