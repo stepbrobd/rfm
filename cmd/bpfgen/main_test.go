@@ -199,8 +199,17 @@ func readCompDB(t *testing.T, path string) []compentry {
 	return db
 }
 
+func requirePkgConfigLib(t *testing.T, lib string) {
+	t.Helper()
+	testutil.RequireCommand(t, "pkg-config")
+	if err := exec.Command("pkg-config", "--exists", lib).Run(); err != nil {
+		t.Skipf("%s not available via pkg-config", lib)
+	}
+}
+
 func TestBuild(t *testing.T) {
 	testutil.RequireLinux(t)
+	testutil.RequireCommand(t, "clang")
 
 	tests := []struct {
 		name   string
@@ -213,6 +222,12 @@ func TestBuild(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			for i, f := range tt.flags {
+				if f == "--pkg-config" && i+1 < len(tt.flags) {
+					requirePkgConfigLib(t, tt.flags[i+1])
+				}
+			}
+
 			outdir := t.TempDir()
 			args := []string{
 				"tool", "bpfgen",
@@ -260,6 +275,7 @@ func TestBuild(t *testing.T) {
 
 func TestBuildCompDB(t *testing.T) {
 	testutil.RequireLinux(t)
+	testutil.RequireCommand(t, "clang")
 
 	outdir := t.TempDir()
 	dbpath := filepath.Join(outdir, "compile_commands.json")
