@@ -4,6 +4,11 @@
 #include <bpf/bpf_endian.h>
 #include <bpf/bpf_helpers.h>
 
+// vmlinux.h has types but not #define constants
+#define TC_ACT_OK 0
+#define ETH_P_IP 0x0800
+#define ETH_P_IPV6 0x86DD
+
 struct {
   __uint(type, BPF_MAP_TYPE_ARRAY);
   __uint(max_entries, 1);
