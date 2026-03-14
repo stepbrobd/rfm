@@ -3,16 +3,35 @@
 package probe
 
 import (
+	"bytes"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"net"
+	"structs"
 	"syscall"
 	"testing"
 	"time"
 
 	"github.com/cilium/ebpf"
+	"github.com/cilium/ebpf/ringbuf"
 	"ysun.co/rfm/testutil"
 )
+
+// rfmRfmFlowEvent matches the BPF struct rfm_flow_event.
+// ring buffer maps don't generate Go types, so we define it here.
+type rfmRfmFlowEvent struct {
+	_       structs.HostLayout
+	Ifindex uint32
+	Dir     uint8
+	Proto   uint8
+	Pad     uint16
+	SrcAddr [16]uint8
+	DstAddr [16]uint8
+	SrcPort uint16
+	DstPort uint16
+	Len     uint32
+}
 
 func skipIfUnsupported(t *testing.T, err error) {
 	t.Helper()
@@ -113,4 +132,144 @@ func TestIfaceCounters(t *testing.T) {
 	})
 
 	t.Logf("packets=%d bytes=%d", packets, bytes)
+}
+
+// readFlowEvent sets up a probe with sampling, attaches it, sends a packet,
+// and reads flow events from the ring buffer until match returns true.
+// this filters out background traffic like ICMPv6 neighbor solicitations.
+func readFlowEvent(t *testing.T, pkt []byte, match func(rfmRfmFlowEvent) bool) rfmRfmFlowEvent {
+	t.Helper()
+
+	ns := testutil.NewNS(t)
+
+	p, err := Load(Config{SampleRate: 1})
+	if err != nil {
+		skipIfUnsupported(t, err)
+		t.Fatal(err)
+	}
+	defer p.Close()
+
+	if err := p.Attach(ns.Ifindex()); err != nil {
+		skipIfUnsupported(t, err)
+		t.Fatal(err)
+	}
+
+	rd, err := ringbuf.NewReader(p.FlowEvents())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rd.Close()
+
+	ns.SendRaw(t, pkt)
+
+	deadline := time.Now().Add(time.Second)
+	for {
+		rd.SetDeadline(deadline)
+		rec, err := rd.Read()
+		if err != nil {
+			t.Fatalf("read flow event: %v", err)
+		}
+
+		var ev rfmRfmFlowEvent
+		if err := binary.Read(bytes.NewReader(rec.RawSample), binary.NativeEndian, &ev); err != nil {
+			t.Fatalf("decode event: %v", err)
+		}
+
+		if ev.Ifindex != uint32(ns.Ifindex()) {
+			continue
+		}
+		if match(ev) {
+			return ev
+		}
+	}
+}
+
+func TestFlowEventIPv4TCP(t *testing.T) {
+	testutil.RequireRoot(t)
+
+	pkt := testutil.EthIPv4TCP(
+		net.IPv4(10, 0, 0, 1),
+		net.IPv4(10, 0, 0, 2),
+		12345, 80,
+	)
+
+	ev := readFlowEvent(t, pkt, func(e rfmRfmFlowEvent) bool {
+		return e.Proto == 6 && e.SrcPort == 12345
+	})
+
+	if ev.Dir != 0 {
+		t.Fatalf("dir = %d, want 0 (ingress)", ev.Dir)
+	}
+	if ev.Proto != 6 {
+		t.Fatalf("proto = %d, want 6 (TCP)", ev.Proto)
+	}
+
+	wantSrc := [16]uint8{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xff, 0xff, 10, 0, 0, 1}
+	if ev.SrcAddr != wantSrc {
+		t.Fatalf("src_addr = %v, want %v", ev.SrcAddr, wantSrc)
+	}
+
+	wantDst := [16]uint8{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xff, 0xff, 10, 0, 0, 2}
+	if ev.DstAddr != wantDst {
+		t.Fatalf("dst_addr = %v, want %v", ev.DstAddr, wantDst)
+	}
+
+	if ev.SrcPort != 12345 {
+		t.Fatalf("src_port = %d, want 12345", ev.SrcPort)
+	}
+	if ev.DstPort != 80 {
+		t.Fatalf("dst_port = %d, want 80", ev.DstPort)
+	}
+	if ev.Len == 0 {
+		t.Fatal("len = 0, want > 0")
+	}
+}
+
+func TestFlowEventIPv6TCP(t *testing.T) {
+	testutil.RequireRoot(t)
+
+	pkt := testutil.EthIPv6TCP(
+		net.ParseIP("fd00::1"),
+		net.ParseIP("fd00::2"),
+		4000, 443,
+	)
+
+	ev := readFlowEvent(t, pkt, func(e rfmRfmFlowEvent) bool {
+		return e.Proto == 6 && e.SrcPort == 4000
+	})
+
+	wantSrc := [16]uint8{0xfd, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1}
+	if ev.SrcAddr != wantSrc {
+		t.Fatalf("src_addr = %v, want %v", ev.SrcAddr, wantSrc)
+	}
+
+	wantDst := [16]uint8{0xfd, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2}
+	if ev.DstAddr != wantDst {
+		t.Fatalf("dst_addr = %v, want %v", ev.DstAddr, wantDst)
+	}
+
+	if ev.SrcPort != 4000 {
+		t.Fatalf("src_port = %d, want 4000", ev.SrcPort)
+	}
+	if ev.DstPort != 443 {
+		t.Fatalf("dst_port = %d, want 443", ev.DstPort)
+	}
+}
+
+func TestFlowEventUDP(t *testing.T) {
+	testutil.RequireRoot(t)
+
+	pkt := testutil.EthIPv4UDP(
+		net.IPv4(10, 0, 0, 1),
+		net.IPv4(10, 0, 0, 2),
+		5000, 53,
+	)
+
+	ev := readFlowEvent(t, pkt, func(e rfmRfmFlowEvent) bool {
+		return e.Proto == 17 && e.SrcPort == 5000
+	})
+
+	if ev.DstPort != 53 {
+		t.Fatalf("dst_port = %d, want 53", ev.DstPort)
+	}
 }
