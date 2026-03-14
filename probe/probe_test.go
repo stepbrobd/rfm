@@ -3,19 +3,29 @@
 package probe
 
 import (
+	"errors"
 	"fmt"
 	"net"
 	"testing"
 	"time"
 
+	"github.com/cilium/ebpf"
 	"ysun.co/rfm/testutil"
 )
+
+func skipIfUnsupported(t *testing.T, err error) {
+	t.Helper()
+	if errors.Is(err, ebpf.ErrNotSupported) {
+		t.Skipf("not supported: %v", err)
+	}
+}
 
 func TestLoad(t *testing.T) {
 	testutil.RequireRoot(t)
 
 	p, err := Load()
 	if err != nil {
+		skipIfUnsupported(t, err)
 		t.Fatal(err)
 	}
 	defer p.Close()
@@ -28,11 +38,13 @@ func TestAttach(t *testing.T) {
 
 	p, err := Load()
 	if err != nil {
+		skipIfUnsupported(t, err)
 		t.Fatal(err)
 	}
 	defer p.Close()
 
 	if err := p.Attach(ns.Ifindex()); err != nil {
+		skipIfUnsupported(t, err)
 		t.Fatal(err)
 	}
 }
@@ -44,17 +56,16 @@ func TestIfaceCounters(t *testing.T) {
 
 	p, err := Load()
 	if err != nil {
+		skipIfUnsupported(t, err)
 		t.Fatal(err)
 	}
 	defer p.Close()
 
-	// enable processing: set sample_rate > 0
-	cfg := rfmRfmConfig{SampleRate: 1}
-	if err := p.Config().Put(uint32(0), cfg); err != nil {
-		t.Fatal(err)
-	}
+	// no config setup required: iface stats must work independently
+	// of sampling configuration
 
 	if err := p.Attach(ns.Ifindex()); err != nil {
+		skipIfUnsupported(t, err)
 		t.Fatal(err)
 	}
 
