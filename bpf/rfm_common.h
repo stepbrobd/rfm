@@ -3,7 +3,7 @@
 #define __RFM_COMMON_H
 
 #define RFM_DIR_INGRESS 0
-#define RFM_DIR_EGRESS  1
+#define RFM_DIR_EGRESS 1
 
 struct rfm_config {
   __u32 sample_rate;
