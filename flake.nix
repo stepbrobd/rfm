@@ -5,16 +5,25 @@
       systems = import inputs.systems;
 
       perSystem =
-        {
-          lib,
-          pkgs,
-          system,
-          ...
+        { lib
+        , pkgs
+        , system
+        , ...
         }:
         {
           _module.args.pkgs = import inputs.nixpkgs {
             inherit system;
             config.allowDeprecatedx86_64Darwin = true;
+            overlays = [ inputs.gomod2nix.overlays.default ];
+          };
+
+          devShells.default = pkgs.mkShell {
+            packages = with pkgs; [
+              go
+              go-tools
+              gomod2nix
+              gopls
+            ];
           };
 
           formatter = pkgs.writeShellScriptBin "formatter" ''
@@ -31,7 +40,15 @@
             pushd "$root" > /dev/null
 
             ${lib.getExe pkgs.findutils} . -regex '.*\.\(c\|h\)' -exec ${lib.getExe' pkgs.clang-tools "clang-format"} -style=LLVM -i {} \;
-            ${lib.getExe pkgs.nixfmt-tree} .
+            ${lib.getExe pkgs.go} fix ./...
+            ${lib.getExe pkgs.go} fmt ./...
+            ${lib.getExe pkgs.go} mod tidy
+            ${lib.getExe pkgs.go} test -race ./...
+            ${lib.getExe pkgs.go} vet ./...
+            ${lib.getExe pkgs.nixpkgs-fmt} .
+            ${lib.getExe pkgs.taplo} format **/*.toml
+            ${lib.getExe' pkgs.go-tools "staticcheck"} ./...
+            ${lib.getExe' pkgs.gomod2nix "gomod2nix"}
 
             popd
           '';
@@ -42,4 +59,9 @@
   inputs.systems.url = "github:nix-systems/default";
   inputs.parts.url = "github:hercules-ci/flake-parts";
   inputs.parts.inputs.nixpkgs-lib.follows = "nixpkgs";
+  inputs.utils.url = "github:numtide/flake-utils";
+  inputs.utils.inputs.systems.follows = "systems";
+  inputs.gomod2nix.url = "github:nix-community/gomod2nix";
+  inputs.gomod2nix.inputs.nixpkgs.follows = "nixpkgs";
+  inputs.gomod2nix.inputs.flake-utils.follows = "utils";
 }
