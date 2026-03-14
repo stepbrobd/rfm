@@ -19,13 +19,17 @@
 
           devShells.default = pkgs.mkShell {
             packages = with pkgs; [
+              bear
+              bpftools
               go
               go-tools
               gomod2nix
               gopls
+              libbpf
               llvmPackages.clang-tools
               llvmPackages.clang-unwrapped
               llvmPackages.libllvm
+              pkg-config
             ];
           };
 
