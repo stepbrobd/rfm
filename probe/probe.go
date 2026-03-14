@@ -42,3 +42,28 @@ func (p *Probe) Config() *ebpf.Map {
 func (p *Probe) IfaceStats() *ebpf.Map {
 	return p.objs.RfmIfaceStats
 }
+
+// Attach attaches TC ingress and egress programs to the given interface
+func (p *Probe) Attach(ifindex int) error {
+	ing, err := link.AttachTCX(link.TCXOptions{
+		Interface: ifindex,
+		Program:   p.objs.RfmTcIngress,
+		Attach:    ebpf.AttachTCXIngress,
+	})
+	if err != nil {
+		return fmt.Errorf("attach ingress on %d: %w", ifindex, err)
+	}
+
+	egr, err := link.AttachTCX(link.TCXOptions{
+		Interface: ifindex,
+		Program:   p.objs.RfmTcEgress,
+		Attach:    ebpf.AttachTCXEgress,
+	})
+	if err != nil {
+		ing.Close()
+		return fmt.Errorf("attach egress on %d: %w", ifindex, err)
+	}
+
+	p.links = append(p.links, ing, egr)
+	return nil
+}
