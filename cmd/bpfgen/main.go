@@ -1,13 +1,18 @@
 // bpfgen is a thin wrapper around cilium/ebpf bpf2go
 // to resolve target arch, set up vmlinux include paths for
 // multi arch build then forwards everything to bpf2go
+//
+// use --compdb to generate a compile_commands.json for clangd
+// this works even on non-linux where the actual build is skipped
+//
 // e.g.
-// //go:generate go tool bpfgen --ident foo --output-dir testdata --pkg-config libbpf source.bpf.c
+// //go:generate go tool bpfgen --ident foo --output-dir testdata --pkg-config libbpf --compdb compile_commands.json source.bpf.c
 
 package main
 
 import (
 	"cmp"
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -23,11 +28,18 @@ type config struct {
 	vmlinux string
 }
 
+type compentry struct {
+	Dir  string   `json:"directory"`
+	File string   `json:"file"`
+	Args []string `json:"arguments"`
+}
+
 var (
 	ident  string
 	outdir string
 	pkg    string
 	libs   []string
+	compdb string
 )
 
 var cmd = &cobra.Command{
@@ -42,8 +54,9 @@ var cmd = &cobra.Command{
 func init() {
 	cmd.Flags().StringVar(&ident, "ident", "", "stem for generated Go types and files")
 	cmd.Flags().StringVarP(&outdir, "output-dir", "o", ".", "directory for generated files")
-	cmd.Flags().StringVar(&pkg, "package", os.Getenv("GOPACKAGE"), "Go package for generated files")
+	cmd.Flags().StringVar(&pkg, "package", os.Getenv("GOPACKAGE"), "the Go package for generated files")
 	cmd.Flags().StringSliceVar(&libs, "pkg-config", nil, "pkg-config libraries for include flags")
+	cmd.Flags().StringVar(&compdb, "compdb", "", "path to compile_commands.json to update")
 	cmd.MarkFlagRequired("ident")
 }
 
@@ -55,8 +68,29 @@ func main() {
 }
 
 func run(_ *cobra.Command, args []string) error {
+	arch := cmp.Or(os.Getenv("BPF_TARGET_ARCH"), os.Getenv("GOARCH"), runtime.GOARCH)
+	cfg, err := detect(arch)
+	if err != nil {
+		return err
+	}
+
+	extra, err := pkgconfig(libs)
+	if err != nil {
+		return err
+	}
+	extra = append(extra, strings.Fields(os.Getenv("BPFGEN_EXTRA_CFLAGS"))...)
+
+	flags := cflags(args[0], cfg, extra)
+
+	// update compile_commands.json for clangd if requested
+	if compdb != "" {
+		if err := writeCompDB(compdb, args[0], flags); err != nil {
+			return err
+		}
+	}
+
 	if runtime.GOOS != "linux" && os.Getenv("BPFGEN_FORCE") != "1" {
-		fmt.Fprintf(os.Stderr, "bpfgen: skipping on GOOS=%s\n", runtime.GOOS)
+		fmt.Fprintf(os.Stderr, "bpfgen: skipping build on GOOS=%s\n", runtime.GOOS)
 		return nil
 	}
 
@@ -64,19 +98,7 @@ func run(_ *cobra.Command, args []string) error {
 		return fmt.Errorf("--package is required or GOPACKAGE must be set")
 	}
 
-	arch := cmp.Or(os.Getenv("BPF_TARGET_ARCH"), os.Getenv("GOARCH"), runtime.GOARCH)
-	cfg, err := detect(arch)
-	if err != nil {
-		return err
-	}
-
-	cflags, err := pkgconfig(libs)
-	if err != nil {
-		return err
-	}
-	cflags = append(cflags, strings.Fields(os.Getenv("BPFGEN_EXTRA_CFLAGS"))...)
-
-	proc := exec.Command("go", bpf2go(args[0], ident, outdir, pkg, cfg, cflags)...)
+	proc := exec.Command("go", bpf2go(args[0], ident, outdir, pkg, flags)...)
 	proc.Stdout = os.Stdout
 	proc.Stderr = os.Stderr
 
@@ -111,7 +133,7 @@ func detect(arch string) (config, error) {
 	}
 }
 
-func bpf2go(source, ident, outdir, pkg string, cfg config, cflags []string) []string {
+func cflags(source string, cfg config, extra []string) []string {
 	incdir := filepath.Join(filepath.Dir(source), "include")
 	flags := []string{
 		"-O2",
@@ -121,8 +143,10 @@ func bpf2go(source, ident, outdir, pkg string, cfg config, cflags []string) []st
 		"-I" + filepath.Join(incdir, "vmlinux", cfg.vmlinux),
 		"-D__TARGET_ARCH_" + cfg.arch,
 	}
-	flags = append(flags, cflags...)
+	return append(flags, extra...)
+}
 
+func bpf2go(source, ident, outdir, pkg string, flags []string) []string {
 	args := []string{
 		"tool", "bpf2go",
 		"-tags", "linux",
@@ -132,7 +156,6 @@ func bpf2go(source, ident, outdir, pkg string, cfg config, cflags []string) []st
 		source,
 		"--",
 	}
-
 	return append(args, flags...)
 }
 
@@ -152,4 +175,52 @@ func pkgconfig(libs []string) ([]string, error) {
 	}
 
 	return strings.Fields(strings.TrimSpace(string(out))), nil
+}
+
+func writeCompDB(path, source string, flags []string) error {
+	src, err := filepath.Abs(source)
+	if err != nil {
+		return err
+	}
+
+	args := []string{"clang", "--target=bpf"}
+	for _, f := range flags {
+		if strings.HasPrefix(f, "-I") {
+			if abs, err := filepath.Abs(f[2:]); err == nil {
+				f = "-I" + abs
+			}
+		}
+		args = append(args, f)
+	}
+	args = append(args, "-c", src)
+
+	entry := compentry{
+		Dir:  filepath.Dir(src),
+		File: src,
+		Args: args,
+	}
+
+	var db []compentry
+	data, err := os.ReadFile(path)
+	if err == nil {
+		json.Unmarshal(data, &db)
+	}
+
+	found := false
+	for i, e := range db {
+		if e.File == entry.File {
+			db[i] = entry
+			found = true
+			break
+		}
+	}
+	if !found {
+		db = append(db, entry)
+	}
+
+	out, err := json.MarshalIndent(db, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(path, append(out, '\n'), 0o644)
 }

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -42,32 +43,19 @@ func TestDetect(t *testing.T) {
 	}
 }
 
-func TestBpf2go(t *testing.T) {
+func TestCFlags(t *testing.T) {
 	tests := []struct {
 		name   string
 		source string
-		ident  string
-		outdir string
-		pkg    string
 		cfg    config
-		cflags []string
+		extra  []string
 		want   []string
 	}{
 		{
 			name:   "basic",
 			source: "testdata/without.bpf.c",
-			ident:  "test",
-			outdir: "testdata",
-			pkg:    "mypkg",
 			cfg:    config{"x86", "x86"},
 			want: []string{
-				"tool", "bpf2go",
-				"-tags", "linux",
-				"-go-package", "mypkg",
-				"-output-dir", "testdata",
-				"test",
-				"testdata/without.bpf.c",
-				"--",
 				"-O2", "-g", "-Wall",
 				"-Itestdata/include",
 				"-Itestdata/include/vmlinux/x86",
@@ -75,21 +63,11 @@ func TestBpf2go(t *testing.T) {
 			},
 		},
 		{
-			name:   "with_cflags",
+			name:   "with_extra",
 			source: "testdata/with.bpf.c",
-			ident:  "test",
-			outdir: "testdata",
-			pkg:    "mypkg",
 			cfg:    config{"arm64", "aarch64"},
-			cflags: []string{"-I/usr/include/bpf"},
+			extra:  []string{"-I/usr/include/bpf"},
 			want: []string{
-				"tool", "bpf2go",
-				"-tags", "linux",
-				"-go-package", "mypkg",
-				"-output-dir", "testdata",
-				"test",
-				"testdata/with.bpf.c",
-				"--",
 				"-O2", "-g", "-Wall",
 				"-Itestdata/include",
 				"-Itestdata/include/vmlinux/aarch64",
@@ -101,11 +79,29 @@ func TestBpf2go(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := bpf2go(tt.source, tt.ident, tt.outdir, tt.pkg, tt.cfg, tt.cflags)
+			got := cflags(tt.source, tt.cfg, tt.extra)
 			if !slices.Equal(got, tt.want) {
-				t.Errorf("bpf2go:\ngot:  %v\nwant: %v", got, tt.want)
+				t.Errorf("cflags:\ngot:  %v\nwant: %v", got, tt.want)
 			}
 		})
+	}
+}
+
+func TestBpf2go(t *testing.T) {
+	flags := []string{"-O2", "-g", "-Wall", "-Itestdata/include", "-D__TARGET_ARCH_x86"}
+	got := bpf2go("testdata/without.bpf.c", "test", "testdata", "mypkg", flags)
+	want := []string{
+		"tool", "bpf2go",
+		"-tags", "linux",
+		"-go-package", "mypkg",
+		"-output-dir", "testdata",
+		"test",
+		"testdata/without.bpf.c",
+		"--",
+		"-O2", "-g", "-Wall", "-Itestdata/include", "-D__TARGET_ARCH_x86",
+	}
+	if !slices.Equal(got, want) {
+		t.Errorf("bpf2go:\ngot:  %v\nwant: %v", got, want)
 	}
 }
 
@@ -133,6 +129,75 @@ func TestPkgconfig(t *testing.T) {
 			t.Error("pkgconfig([libbpf]) returned empty")
 		}
 	})
+}
+
+func TestWriteCompDB(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "compile_commands.json")
+
+	// create new
+	if err := writeCompDB(path, "testdata/without.bpf.c", []string{"-O2", "-Ifoo"}); err != nil {
+		t.Fatal(err)
+	}
+
+	db := readCompDB(t, path)
+	if len(db) != 1 {
+		t.Fatalf("got %d entries, want 1", len(db))
+	}
+	if !strings.HasSuffix(db[0].File, "testdata/without.bpf.c") {
+		t.Errorf("file = %q", db[0].File)
+	}
+
+	// add second entry
+	if err := writeCompDB(path, "testdata/with.bpf.c", []string{"-O2", "-Ibar"}); err != nil {
+		t.Fatal(err)
+	}
+
+	db = readCompDB(t, path)
+	if len(db) != 2 {
+		t.Fatalf("got %d entries, want 2", len(db))
+	}
+
+	// update existing entry (should replace, not append)
+	if err := writeCompDB(path, "testdata/without.bpf.c", []string{"-O2", "-Inew"}); err != nil {
+		t.Fatal(err)
+	}
+
+	db = readCompDB(t, path)
+	if len(db) != 2 {
+		t.Fatalf("got %d entries after update, want 2", len(db))
+	}
+
+	// verify updated flags
+	// -I paths are absolutized so check suffix
+	for _, e := range db {
+		if strings.HasSuffix(e.File, "without.bpf.c") {
+			hasNew := slices.ContainsFunc(e.Args, func(s string) bool {
+				return strings.HasPrefix(s, "-I") && strings.HasSuffix(s, "/new")
+			})
+			if !hasNew {
+				t.Errorf("updated entry missing -I.../new: %v", e.Args)
+			}
+			hasFoo := slices.ContainsFunc(e.Args, func(s string) bool {
+				return strings.HasPrefix(s, "-I") && strings.HasSuffix(s, "/foo")
+			})
+			if hasFoo {
+				t.Error("updated entry still has old -I.../foo")
+			}
+		}
+	}
+}
+
+func readCompDB(t *testing.T, path string) []compentry {
+	t.Helper()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var db []compentry
+	if err := json.Unmarshal(data, &db); err != nil {
+		t.Fatal(err)
+	}
+	return db
 }
 
 func TestBuild(t *testing.T) {
@@ -193,5 +258,46 @@ func TestBuild(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestBuildCompDB(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("requires linux")
+	}
+
+	outdir := t.TempDir()
+	dbpath := filepath.Join(outdir, "compile_commands.json")
+
+	out, err := exec.Command("go",
+		"tool", "bpfgen",
+		"--ident", "test",
+		"--output-dir", outdir,
+		"--package", "testpkg",
+		"--compdb", dbpath,
+		"testdata/without.bpf.c",
+	).CombinedOutput()
+	if err != nil {
+		t.Fatalf("bpfgen failed: %v\n%s", err, out)
+	}
+
+	// verify compile_commands.json was created
+	db := readCompDB(t, dbpath)
+	if len(db) != 1 {
+		t.Fatalf("got %d entries, want 1", len(db))
+	}
+
+	// verify entry has clang target and source
+	e := db[0]
+	if !slices.Contains(e.Args, "--target=bpf") {
+		t.Error("missing --target=bpf")
+	}
+	if !strings.HasSuffix(e.File, "without.bpf.c") {
+		t.Errorf("file = %q", e.File)
+	}
+
+	// verify build output also exists
+	if _, err := os.Stat(filepath.Join(outdir, "test_bpfel.o")); err != nil {
+		t.Error("build output missing alongside compdb generation")
 	}
 }
