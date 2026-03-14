@@ -17,6 +17,14 @@
             overlays = [ inputs.gomod2nix.overlays.default ];
           };
 
+          packages.default = pkgs.buildGoApplication {
+            pname = "rfm";
+            version = "0.0.1";
+            src = ./.;
+            modules = ./gomod2nix.toml;
+            subPackages = [ "cmd/rfm" ];
+          };
+
           devShells.default = pkgs.mkShell {
             packages = with pkgs; [
               bear
