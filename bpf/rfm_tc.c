@@ -114,6 +114,7 @@ static __always_inline int rfm_tc(struct __sk_buff *skb, __u8 dir)
 		ev.dst_addr[11] = 0xff;
 		__builtin_memcpy(&ev.dst_addr[12], &ip->daddr, 4);
 
+		// assumes standard 20-byte header, IP options are not handled
 		l4 = (void *)ip + sizeof(struct iphdr);
 	} else {
 		struct ipv6hdr *ip6 = data + sizeof(struct ethhdr);
