@@ -11,9 +11,8 @@ import (
 
 // NS is an isolated network namespace with a veth pair
 type NS struct {
-	handle netns.NsHandle
-	Veth   *netlink.Veth
-	Link   netlink.Link
+	veth *netlink.Veth
+	Link netlink.Link
 }
 
 func NewNS(t *testing.T) *NS {
@@ -32,15 +31,20 @@ func NewNS(t *testing.T) *NS {
 		t.Fatal(err)
 	}
 
+	// register cleanup early so failures below still restore ns
+	t.Cleanup(func() {
+		netns.Set(orig)
+		ns.Close()
+		orig.Close()
+		runtime.UnlockOSThread()
+	})
+
 	// create veth pair inside the namespace
 	veth := &netlink.Veth{
 		LinkAttrs: netlink.LinkAttrs{Name: "rfm0"},
 		PeerName:  "rfm1",
 	}
 	if err := netlink.LinkAdd(veth); err != nil {
-		netns.Set(orig)
-		ns.Close()
-		orig.Close()
 		t.Fatal(err)
 	}
 
@@ -60,17 +64,9 @@ func NewNS(t *testing.T) *NS {
 		t.Fatal(err)
 	}
 
-	t.Cleanup(func() {
-		netns.Set(orig)
-		ns.Close()
-		orig.Close()
-		runtime.UnlockOSThread()
-	})
-
 	return &NS{
-		handle: ns,
-		Veth:   veth,
-		Link:   link,
+		veth: veth,
+		Link: link,
 	}
 }
 
