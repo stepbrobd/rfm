@@ -82,8 +82,7 @@ static __always_inline int rfm_tc(struct __sk_buff *skb, __u8 dir)
 		return TC_ACT_OK;
 
 	__u32 cfg_key = 0;
-	struct rfm_config *cfg =
-		bpf_map_lookup_elem(&rfm_config, &cfg_key);
+	struct rfm_config *cfg = bpf_map_lookup_elem(&rfm_config, &cfg_key);
 	if (!cfg || cfg->sample_rate == 0)
 		return TC_ACT_OK;
 
@@ -141,8 +140,7 @@ static __always_inline int rfm_tc(struct __sk_buff *skb, __u8 dir)
 		bpf_ringbuf_reserve(&rfm_flow_events, sizeof(*ring_ev), 0);
 	if (!ring_ev) {
 		__u32 drop_key = 0;
-		__u64 *drops =
-			bpf_map_lookup_elem(&rfm_flow_drops, &drop_key);
+		__u64 *drops = bpf_map_lookup_elem(&rfm_flow_drops, &drop_key);
 		if (drops)
 			(*drops)++;
 		return TC_ACT_OK;

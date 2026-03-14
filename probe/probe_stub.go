@@ -12,7 +12,7 @@ var errUnsupported = errors.New("probe is only supported on linux")
 
 type Probe struct{}
 
-func Load() (*Probe, error) {
+func Load(Config) (*Probe, error) {
 	return nil, errUnsupported
 }
 
@@ -25,6 +25,14 @@ func (p *Probe) Config() *ebpf.Map {
 }
 
 func (p *Probe) IfaceStats() *ebpf.Map {
+	return nil
+}
+
+func (p *Probe) FlowEvents() *ebpf.Map {
+	return nil
+}
+
+func (p *Probe) FlowDrops() *ebpf.Map {
 	return nil
 }
 

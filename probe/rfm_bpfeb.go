@@ -86,6 +86,8 @@ type rfmProgramSpecs struct {
 // It can be passed ebpf.CollectionSpec.Assign.
 type rfmMapSpecs struct {
 	RfmConfig     *ebpf.MapSpec `ebpf:"rfm_config"`
+	RfmFlowDrops  *ebpf.MapSpec `ebpf:"rfm_flow_drops"`
+	RfmFlowEvents *ebpf.MapSpec `ebpf:"rfm_flow_events"`
 	RfmIfaceStats *ebpf.MapSpec `ebpf:"rfm_iface_stats"`
 }
 
@@ -116,12 +118,16 @@ func (o *rfmObjects) Close() error {
 // It can be passed to loadRfmObjects or ebpf.CollectionSpec.LoadAndAssign.
 type rfmMaps struct {
 	RfmConfig     *ebpf.Map `ebpf:"rfm_config"`
+	RfmFlowDrops  *ebpf.Map `ebpf:"rfm_flow_drops"`
+	RfmFlowEvents *ebpf.Map `ebpf:"rfm_flow_events"`
 	RfmIfaceStats *ebpf.Map `ebpf:"rfm_iface_stats"`
 }
 
 func (m *rfmMaps) Close() error {
 	return _RfmClose(
 		m.RfmConfig,
+		m.RfmFlowDrops,
+		m.RfmFlowEvents,
 		m.RfmIfaceStats,
 	)
 }

@@ -28,7 +28,7 @@ func skipIfUnsupported(t *testing.T, err error) {
 func TestLoad(t *testing.T) {
 	testutil.RequireRoot(t)
 
-	p, err := Load()
+	p, err := Load(Config{})
 	if err != nil {
 		skipIfUnsupported(t, err)
 		t.Fatal(err)
@@ -41,7 +41,7 @@ func TestAttach(t *testing.T) {
 
 	ns := testutil.NewNS(t)
 
-	p, err := Load()
+	p, err := Load(Config{})
 	if err != nil {
 		skipIfUnsupported(t, err)
 		t.Fatal(err)
@@ -59,7 +59,7 @@ func TestIfaceCounters(t *testing.T) {
 
 	ns := testutil.NewNS(t)
 
-	p, err := Load()
+	p, err := Load(Config{})
 	if err != nil {
 		skipIfUnsupported(t, err)
 		t.Fatal(err)
