@@ -46,6 +46,7 @@
             done
             pushd "$root" > /dev/null
 
+            ${lib.getExe pkgs.deno} fmt readme.md
             ${lib.getExe pkgs.findutils} . -regex '.*\.\(c\|h\)' -exec ${lib.getExe' pkgs.llvmPackages.clang-tools "clang-format"} -style=LLVM -i {} \;
             ${lib.getExe pkgs.go} fix ./...
             ${lib.getExe pkgs.go} fmt ./...
