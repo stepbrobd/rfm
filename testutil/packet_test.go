@@ -1,0 +1,102 @@
+package testutil
+
+import (
+	"encoding/binary"
+	"net"
+	"testing"
+)
+
+func TestUDP(t *testing.T) {
+	hdr := UDP(12345, 80)
+
+	if len(hdr) != UDPHdrLen {
+		t.Fatalf("want len %d, got %d", UDPHdrLen, len(hdr))
+	}
+
+	srcPort := binary.BigEndian.Uint16(hdr[0:2])
+	if srcPort != 12345 {
+		t.Fatalf("want src port 12345, got %d", srcPort)
+	}
+
+	dstPort := binary.BigEndian.Uint16(hdr[2:4])
+	if dstPort != 80 {
+		t.Fatalf("want dst port 80, got %d", dstPort)
+	}
+
+	length := binary.BigEndian.Uint16(hdr[4:6])
+	if length != UDPHdrLen {
+		t.Fatalf("want length %d, got %d", UDPHdrLen, length)
+	}
+}
+
+func TestIPv6(t *testing.T) {
+	payload := []byte{0xaa, 0xbb}
+	src := net.ParseIP("fd00::1")
+	dst := net.ParseIP("fd00::2")
+	proto := uint8(6) // TCP
+
+	hdr := IPv6(proto, src, dst, payload)
+
+	if len(hdr) != IPv6HdrLen+len(payload) {
+		t.Fatalf("want len %d, got %d", IPv6HdrLen+len(payload), len(hdr))
+	}
+
+	// version nibble must be 6
+	version := hdr[0] >> 4
+	if version != 6 {
+		t.Fatalf("want version 6, got %d", version)
+	}
+
+	// next header
+	if hdr[6] != proto {
+		t.Fatalf("want next header %d, got %d", proto, hdr[6])
+	}
+
+	// payload length
+	pLen := binary.BigEndian.Uint16(hdr[4:6])
+	if pLen != uint16(len(payload)) {
+		t.Fatalf("want payload length %d, got %d", len(payload), pLen)
+	}
+}
+
+func TestEthIPv4UDP(t *testing.T) {
+	src := net.ParseIP("10.0.0.1")
+	dst := net.ParseIP("10.0.0.2")
+
+	frame := EthIPv4UDP(src, dst, 1234, 53)
+
+	wantLen := EthHdrLen + IPv4HdrLen + UDPHdrLen
+	if len(frame) != wantLen {
+		t.Fatalf("want len %d, got %d", wantLen, len(frame))
+	}
+
+	// ethertype
+	ethertype := binary.BigEndian.Uint16(frame[12:14])
+	if ethertype != 0x0800 {
+		t.Fatalf("want ethertype 0x0800, got 0x%04x", ethertype)
+	}
+
+	// IP proto = 17 (UDP)
+	ipProto := frame[EthHdrLen+9]
+	if ipProto != 17 {
+		t.Fatalf("want IP proto 17, got %d", ipProto)
+	}
+}
+
+func TestEthIPv6TCP(t *testing.T) {
+	src := net.ParseIP("fd00::1")
+	dst := net.ParseIP("fd00::2")
+
+	frame := EthIPv6TCP(src, dst, 4000, 443)
+
+	wantLen := EthHdrLen + IPv6HdrLen + TCPHdrLen
+	if len(frame) != wantLen {
+		t.Fatalf("want len %d, got %d", wantLen, len(frame))
+	}
+
+	// ethertype
+	ethertype := binary.BigEndian.Uint16(frame[12:14])
+	if ethertype != 0x86DD {
+		t.Fatalf("want ethertype 0x86DD, got 0x%04x", ethertype)
+	}
+}
