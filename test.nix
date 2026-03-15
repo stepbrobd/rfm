@@ -9,6 +9,7 @@ let
 
       services.rfm = {
         enable = true;
+        interface = "eth1";
         settings = { };
       };
 

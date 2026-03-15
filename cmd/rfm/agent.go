@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -18,6 +19,8 @@ import (
 	"ysun.co/rfm/probe"
 )
 
+var agentIface string
+
 var agentCmd = &cobra.Command{
 	Use:   "agent",
 	Short: "start the rfm agent daemon",
@@ -25,20 +28,25 @@ var agentCmd = &cobra.Command{
 }
 
 func init() {
+	agentCmd.Flags().StringVarP(&agentIface, "interface", "i", "", "network interface to attach to (required)")
+	agentCmd.MarkFlagRequired("interface")
 	root.AddCommand(agentCmd)
 }
 
 func runAgent(cmd *cobra.Command, args []string) error {
+	iface, err := net.InterfaceByName(agentIface)
+	if err != nil {
+		return fmt.Errorf("interface %q: %w", agentIface, err)
+	}
+
 	p, err := probe.Load(probe.Config{SampleRate: 100})
 	if err != nil {
 		return fmt.Errorf("load probe: %w", err)
 	}
 	defer p.Close()
 
-	// TODO: accept ifindex from flag or config
-	ifindex := 1
-	if err := p.Attach(ifindex); err != nil {
-		return fmt.Errorf("attach: %w", err)
+	if err := p.Attach(iface.Index); err != nil {
+		return fmt.Errorf("attach %s: %w", agentIface, err)
 	}
 
 	rd, err := collector.NewReader(p.FlowEvents(), p.FlowDrops())

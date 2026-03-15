@@ -13,5 +13,5 @@ type IfaceStatsEntry struct {
 // IfaceStatsSource provides aggregated per-interface statistics.
 // The probe implements this on Linux; tests use a mock.
 type IfaceStatsSource interface {
-	IfaceStats() []IfaceStatsEntry
+	IfaceStats() ([]IfaceStatsEntry, error)
 }

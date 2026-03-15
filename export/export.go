@@ -3,6 +3,7 @@ package export
 import (
 	"fmt"
 	"net"
+	"os"
 	"strconv"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -111,7 +112,13 @@ func (mc *MetricsCollector) collectIfaceStats(ch chan<- prometheus.Metric) {
 		return
 	}
 
-	for _, e := range mc.source.IfaceStats() {
+	entries, err := mc.source.IfaceStats()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "rfm: scrape iface stats: %v\n", err)
+		return
+	}
+
+	for _, e := range entries {
 		ifname := ifnameFromIndex(e.Ifindex)
 		family := familyString(e.Proto)
 

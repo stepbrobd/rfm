@@ -3,6 +3,7 @@
 package export
 
 import (
+	"fmt"
 	"structs"
 
 	"ysun.co/rfm/probe"
@@ -31,10 +32,10 @@ type ProbeSource struct {
 }
 
 // IfaceStats reads the BPF iface stats map, summing per-CPU values.
-func (s *ProbeSource) IfaceStats() []IfaceStatsEntry {
+func (s *ProbeSource) IfaceStats() ([]IfaceStatsEntry, error) {
 	m := s.Probe.IfaceStats()
 	if m == nil {
-		return nil
+		return nil, nil
 	}
 
 	var entries []IfaceStatsEntry
@@ -55,5 +56,8 @@ func (s *ProbeSource) IfaceStats() []IfaceStatsEntry {
 			Bytes:   bytes,
 		})
 	}
-	return entries
+	if err := iter.Err(); err != nil {
+		return entries, fmt.Errorf("iterate iface stats: %w", err)
+	}
+	return entries, nil
 }

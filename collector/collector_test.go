@@ -369,6 +369,44 @@ func TestMaxFlowsForcedEvictionStats(t *testing.T) {
 	}
 }
 
+// errorReader always returns a non-deadline error
+type errorReader struct {
+	err error
+}
+
+func (r *errorReader) ReadRawEvent() ([]byte, error)  { return nil, r.err }
+func (r *errorReader) SetDeadline(t time.Time)        {}
+func (r *errorReader) DroppedEvents() (uint64, error) { return 0, nil }
+func (r *errorReader) Close() error                   { return nil }
+
+func TestRunZeroTimeoutReturnsError(t *testing.T) {
+	c := New(0, nil, 0)
+	mr := &mockReader{}
+	err := c.Run(context.Background(), mr)
+	if err == nil {
+		t.Fatal("Run with zero timeout should return error")
+	}
+}
+
+func TestRunNegativeTimeoutReturnsError(t *testing.T) {
+	c := New(-time.Second, nil, 0)
+	mr := &mockReader{}
+	err := c.Run(context.Background(), mr)
+	if err == nil {
+		t.Fatal("Run with negative timeout should return error")
+	}
+}
+
+func TestRunReaderErrorCleansUp(t *testing.T) {
+	mr := &errorReader{err: errors.New("device removed")}
+	c := New(time.Second, nil, 0)
+
+	err := c.Run(context.Background(), mr)
+	if err == nil {
+		t.Fatal("Run should propagate reader error")
+	}
+}
+
 func TestMaxFlowsZeroMeansUnlimited(t *testing.T) {
 	c := New(30*time.Second, nil, 0)
 

@@ -1,6 +1,7 @@
 package export
 
 import (
+	"fmt"
 	"net/netip"
 	"strings"
 	"testing"
@@ -15,10 +16,11 @@ import (
 
 type mockIfaceStats struct {
 	entries []IfaceStatsEntry
+	err     error
 }
 
-func (m *mockIfaceStats) IfaceStats() []IfaceStatsEntry {
-	return m.entries
+func (m *mockIfaceStats) IfaceStats() ([]IfaceStatsEntry, error) {
+	return m.entries, m.err
 }
 
 type staticEnricher struct {
@@ -369,6 +371,26 @@ func TestCollectFlowsAggregatesDuplicateLabels(t *testing.T) {
 		val := mf.GetMetric()[0].GetGauge().GetValue()
 		if val != 300 {
 			t.Fatalf("rfm_flow_bytes = %g, want 300 (100+200)", val)
+		}
+	}
+}
+
+func TestCollectIfaceStatsError(t *testing.T) {
+	src := &mockIfaceStats{
+		entries: []IfaceStatsEntry{
+			{Ifindex: 1, Dir: 0, Proto: 4, Packets: 10, Bytes: 1000},
+		},
+		err: fmt.Errorf("map iteration failed"),
+	}
+
+	mc := New(src, nil)
+	metrics := collectMetrics(t, mc)
+
+	// on error, no iface metrics should be emitted
+	for _, m := range metrics {
+		name := extractName(m.Desc())
+		if strings.HasPrefix(name, "rfm_interface_") {
+			t.Errorf("unexpected iface metric %q on error", name)
 		}
 	}
 }

@@ -11,6 +11,6 @@ type ProbeSource struct {
 }
 
 // IfaceStats returns nil on non-Linux platforms.
-func (s *ProbeSource) IfaceStats() []IfaceStatsEntry {
-	return nil
+func (s *ProbeSource) IfaceStats() ([]IfaceStatsEntry, error) {
+	return nil, nil
 }

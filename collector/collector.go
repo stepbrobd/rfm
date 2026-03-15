@@ -134,8 +134,17 @@ func (c *Collector) pollDrops(rd Reader) {
 // Run reads events from rd, decodes them, and records them until ctx is done.
 // It also runs a background goroutine for eviction and drop counter polling.
 func (c *Collector) Run(ctx context.Context, rd Reader) error {
+	if c.timeout <= 0 {
+		return fmt.Errorf("eviction timeout must be positive, got %v", c.timeout)
+	}
+
 	tick := time.NewTicker(c.timeout / 2)
 	defer tick.Stop()
+
+	// derive a child context so the background goroutine exits
+	// when Run returns, even on non-context reader errors
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
 
 	go func() {
 		for {
