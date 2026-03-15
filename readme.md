@@ -64,20 +64,53 @@ rejected at load time to catch typos. Example:
 interfaces = ["eth0", "tailscale0"]
 
 [agent.bpf]
-sample_rate = 100        # sample 1-in-N packets (default: 100)
-ring_buf_size = 262144   # ring buffer bytes (default: 262144)
+sample_rate = 100
+ring_buf_size = 262144
 
 [agent.collector]
-max_flows = 65536        # maximum active flows (default: 65536)
-eviction_timeout = "30s" # idle flow timeout (default: 30s)
+max_flows = 65536
+eviction_timeout = "30s"
 
 [agent.prometheus]
-host = "::"              # listen address (default: ::)
-port = 9669              # listen port (default: 9669)
+host = "::"
+port = 9669
 ```
 
-Set `interfaces = ["*"]` to monitor all non-loopback interfaces. The wildcard
-cannot be mixed with named interfaces.
+### `agent`
+
+`interfaces` (required, list of strings): Network interfaces to attach BPF
+programs to. Each entry must be a valid interface name present on the system.
+Duplicates are rejected. Set to `["*"]` to monitor all non-loopback interfaces.
+The wildcard cannot be mixed with named interfaces.
+
+### `agent.bpf`
+
+`sample_rate` (uint32, default 100): Sample 1 in every N packets for flow
+events. Must be greater than 0. A value of 1 samples every packet. Higher values
+reduce ring buffer throughput at the cost of flow granularity.
+
+`ring_buf_size` (int, default 262144): Size of the BPF ring buffer in bytes.
+Must be greater than 0 and should be a power of two. Larger buffers reduce the
+chance of dropped events under burst traffic.
+
+### `agent.collector`
+
+`max_flows` (int, default 65536): Maximum number of active flows held in memory.
+Must be >= 0. When the table is full, the oldest flow is forcibly evicted. A
+value of 0 means unlimited.
+
+`eviction_timeout` (string, default "30s"): How long a flow can be idle before
+eviction. Accepts any Go duration string (e.g. "10s", "1m", "500ms"). Must parse
+to a positive duration.
+
+### `agent.prometheus`
+
+`host` (string, default "::"): Address to bind the Prometheus metrics HTTP
+server to. Use "::" for all interfaces (IPv4 and IPv6), "0.0.0.0" for IPv4 only,
+or "127.0.0.1" to restrict to localhost.
+
+`port` (int, default 9669): TCP port for the metrics server. Must be between 1
+and 65535.
 
 ## Prometheus metrics
 
