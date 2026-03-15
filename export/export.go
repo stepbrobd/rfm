@@ -3,10 +3,10 @@ package export
 import (
 	"fmt"
 	"net"
-	"os"
 	"strconv"
 	"sync"
 
+	"github.com/charmbracelet/log"
 	"github.com/prometheus/client_golang/prometheus"
 	"ysun.co/rfm/collector"
 )
@@ -125,7 +125,7 @@ func (mc *MetricsCollector) collectIfaceStats(ch chan<- prometheus.Metric) {
 		mc.mu.Lock()
 		mc.bpfMapErr++
 		mc.mu.Unlock()
-		fmt.Fprintf(os.Stderr, "rfm: scrape iface stats: %v\n", err)
+		log.Error("scrape iface stats", "err", err)
 		return
 	}
 
