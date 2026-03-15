@@ -21,6 +21,18 @@ func (m *mockIfaceStats) IfaceStats() []IfaceStatsEntry {
 	return m.entries
 }
 
+type staticEnricher struct {
+	srcASN  uint32
+	srcCity string
+	dstASN  uint32
+	dstCity string
+}
+
+func (e *staticEnricher) Enrich(src, dst netip.Addr) (collector.Labels, collector.Labels) {
+	return collector.Labels{ASN: e.srcASN, City: e.srcCity},
+		collector.Labels{ASN: e.dstASN, City: e.dstCity}
+}
+
 // --- test helpers ---
 
 // collectAll calls Collect and returns a map of metric name -> summed value.
@@ -214,6 +226,100 @@ func TestCollectIfaceStats(t *testing.T) {
 	assertCounter(t, vals, "rfm_interface_tx_bytes_total", 500)
 	assertCounter(t, vals, "rfm_interface_rx_packets_total", 13)   // 10 + 3
 	assertCounter(t, vals, "rfm_interface_tx_packets_total", 5)
+}
+
+func TestCollectFlowsNoEnricher(t *testing.T) {
+	c := collector.New(time.Minute, nil, 0)
+	c.Record(collector.FlowEvent{
+		Ifindex: 2,
+		Dir:     0,
+		Proto:   6,
+		SrcAddr: netip.MustParseAddr("192.168.1.1"),
+		DstAddr: netip.MustParseAddr("192.168.1.2"),
+		SrcPort: 1234,
+		DstPort: 443,
+		Len:     200,
+	}, time.Now())
+
+	mc := New(nil, c)
+	vals := collectAll(t, mc)
+
+	assertGauge(t, vals, "rfm_flow_bytes", 200)
+	assertGauge(t, vals, "rfm_flow_packets", 1)
+
+	// Check labels - enrichment should be empty strings
+	metrics := collectMetrics(t, mc)
+	for _, m := range metrics {
+		name := extractName(m.Desc())
+		if name != "rfm_flow_bytes" {
+			continue
+		}
+		labels := metricLabels(t, m)
+		if labels["src_asn"] != "" {
+			t.Errorf("src_asn = %q, want empty", labels["src_asn"])
+		}
+		if labels["dst_asn"] != "" {
+			t.Errorf("dst_asn = %q, want empty", labels["dst_asn"])
+		}
+		if labels["direction"] != "ingress" {
+			t.Errorf("direction = %q, want ingress", labels["direction"])
+		}
+	}
+}
+
+func TestCollectFlowsWithEnricher(t *testing.T) {
+	e := &staticEnricher{
+		srcASN: 64512, srcCity: "Berlin",
+		dstASN: 13335, dstCity: "London",
+	}
+	c := collector.New(time.Minute, e, 0)
+	c.Record(collector.FlowEvent{
+		Ifindex: 3,
+		Dir:     1,
+		Proto:   17,
+		SrcAddr: netip.MustParseAddr("10.1.0.1"),
+		DstAddr: netip.MustParseAddr("10.2.0.1"),
+		SrcPort: 5000,
+		DstPort: 53,
+		Len:     64,
+	}, time.Now())
+
+	mc := New(nil, c)
+	metrics := collectMetrics(t, mc)
+
+	var found bool
+	for _, m := range metrics {
+		name := extractName(m.Desc())
+		if name != "rfm_flow_bytes" {
+			continue
+		}
+		found = true
+		labels := metricLabels(t, m)
+
+		if labels["src_asn"] != "64512" {
+			t.Errorf("src_asn = %q, want 64512", labels["src_asn"])
+		}
+		if labels["dst_asn"] != "13335" {
+			t.Errorf("dst_asn = %q, want 13335", labels["dst_asn"])
+		}
+		if labels["src_city"] != "Berlin" {
+			t.Errorf("src_city = %q, want Berlin", labels["src_city"])
+		}
+		if labels["dst_city"] != "London" {
+			t.Errorf("dst_city = %q, want London", labels["dst_city"])
+		}
+		if labels["direction"] != "egress" {
+			t.Errorf("direction = %q, want egress", labels["direction"])
+		}
+
+		val := metricValue(t, m)
+		if val != 64 {
+			t.Errorf("flow_bytes = %g, want 64", val)
+		}
+	}
+	if !found {
+		t.Error("rfm_flow_bytes metric not found")
+	}
 }
 
 func TestCollectNilSources(t *testing.T) {

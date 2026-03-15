@@ -126,7 +126,32 @@ func (mc *MetricsCollector) collectIfaceStats(ch chan<- prometheus.Metric) {
 }
 
 func (mc *MetricsCollector) collectFlows(ch chan<- prometheus.Metric) {
-	// TODO: implement flow gauge collection
+	if mc.col == nil {
+		return
+	}
+
+	enricher := mc.col.Enricher()
+	flows := mc.col.Flows()
+
+	for key, entry := range flows {
+		ifname := ifnameFromIndex(key.Ifindex)
+		dir := dirString(key.Dir)
+		proto := strconv.FormatUint(uint64(key.Proto), 10)
+
+		var srcASN, dstASN, srcCity, dstCity string
+		if enricher != nil {
+			srcLabels, dstLabels := enricher.Enrich(key.SrcAddr, key.DstAddr)
+			srcASN = formatASN(srcLabels.ASN)
+			dstASN = formatASN(dstLabels.ASN)
+			srcCity = srcLabels.City
+			dstCity = dstLabels.City
+		}
+
+		ch <- prometheus.MustNewConstMetric(descFlowBytes, prometheus.GaugeValue,
+			float64(entry.Bytes), ifname, dir, proto, srcASN, dstASN, srcCity, dstCity)
+		ch <- prometheus.MustNewConstMetric(descFlowPackets, prometheus.GaugeValue,
+			float64(entry.Packets), ifname, dir, proto, srcASN, dstASN, srcCity, dstCity)
+	}
 }
 
 func (mc *MetricsCollector) collectHealth(ch chan<- prometheus.Metric) {
