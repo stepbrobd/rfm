@@ -114,8 +114,12 @@ static __always_inline int rfm_tc(struct __sk_buff *skb, __u8 dir)
 		ev.dst_addr[11] = 0xff;
 		__builtin_memcpy(&ev.dst_addr[12], &ip->daddr, 4);
 
-		// assumes standard 20-byte header, IP options are not handled
-		l4 = (void *)ip + sizeof(struct iphdr);
+		// use actual IHL to skip IP options
+		__u8 ihl = ip->ihl;
+		if (ihl < 5)
+			return TC_ACT_OK;
+
+		l4 = (void *)ip + ((__u16)ihl << 2);
 	} else {
 		struct ipv6hdr *ip6 = data + sizeof(struct ethhdr);
 		if ((void *)(ip6 + 1) > end)

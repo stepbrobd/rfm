@@ -256,6 +256,30 @@ func TestFlowEventIPv6TCP(t *testing.T) {
 	}
 }
 
+func TestFlowEventIPv4Options(t *testing.T) {
+	testutil.RequireRoot(t)
+
+	// 4 NOP options → IHL=6 (24-byte header)
+	options := []byte{0x01, 0x01, 0x01, 0x01}
+	pkt := testutil.EthIPv4TCPWithOptions(
+		net.IPv4(10, 0, 0, 1),
+		net.IPv4(10, 0, 0, 2),
+		7777, 443,
+		options,
+	)
+
+	ev := readFlowEvent(t, pkt, func(e rfmRfmFlowEvent) bool {
+		return e.Proto == 6 && e.SrcPort == 7777
+	})
+
+	if ev.SrcPort != 7777 {
+		t.Fatalf("src_port = %d, want 7777", ev.SrcPort)
+	}
+	if ev.DstPort != 443 {
+		t.Fatalf("dst_port = %d, want 443", ev.DstPort)
+	}
+}
+
 func TestFlowEventUDP(t *testing.T) {
 	testutil.RequireRoot(t)
 
