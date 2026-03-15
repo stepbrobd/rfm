@@ -202,16 +202,14 @@ in
       m.wait_for_open_port(9669)
       m.succeed("curl -sf http://localhost:9669/metrics | grep rfm_")
 
-    # --- phase 2: TC program verification ---
+    # --- phase 2: TCX program verification (bpftool, not tc filter) ---
     # machine1 has multi-interface (eth1 + lo)
-    machine1.succeed("tc filter show dev eth1 ingress | grep rfm")
-    machine1.succeed("tc filter show dev eth1 egress | grep rfm")
-    machine1.succeed("tc filter show dev lo ingress | grep rfm")
-    machine1.succeed("tc filter show dev lo egress | grep rfm")
+    machine1.succeed("bpftool net show | grep rfm_tc_ingress")
+    machine1.succeed("bpftool net show | grep rfm_tc_egress")
 
     # machine2 has single interface (eth1 only)
-    machine2.succeed("tc filter show dev eth1 ingress | grep rfm")
-    machine2.succeed("tc filter show dev eth1 egress | grep rfm")
+    machine2.succeed("bpftool net show | grep rfm_tc_ingress")
+    machine2.succeed("bpftool net show | grep rfm_tc_egress")
 
     # --- phase 3: TCP traffic with iperf3 ---
     machine2.succeed("iperf3 -s -D -p 5201")
