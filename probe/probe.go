@@ -27,6 +27,12 @@ func Load(cfg Config) (*Probe, error) {
 		}
 	}
 
+	if cfg.IfaceStatsSize > 0 {
+		if ms, ok := spec.Maps["rfm_iface_stats"]; ok {
+			ms.MaxEntries = uint32(cfg.IfaceStatsSize)
+		}
+	}
+
 	var objs rfmObjects
 	if err := spec.LoadAndAssign(&objs, nil); err != nil {
 		return nil, fmt.Errorf("load BPF: %w", err)
@@ -78,9 +84,6 @@ func (p *Probe) Attach(ifindex int) error {
 		Attach:    ebpf.AttachTCXIngress,
 	})
 	if err != nil {
-		if errors.Is(err, ebpf.ErrNotSupported) {
-			return fmt.Errorf("attach ingress on %d: tcx requires linux 6.6 or later: %w", ifindex, err)
-		}
 		return fmt.Errorf("attach ingress on %d: %w", ifindex, err)
 	}
 
@@ -91,9 +94,6 @@ func (p *Probe) Attach(ifindex int) error {
 	})
 	if err != nil {
 		ing.Close()
-		if errors.Is(err, ebpf.ErrNotSupported) {
-			return fmt.Errorf("attach egress on %d: tcx requires linux 6.6 or later: %w", ifindex, err)
-		}
 		return fmt.Errorf("attach egress on %d: %w", ifindex, err)
 	}
 
