@@ -162,8 +162,8 @@ func TestDescribe(t *testing.T) {
 		descs = append(descs, d)
 	}
 
-	if got := len(descs); got != 9 {
-		t.Fatalf("got %d descriptors, want 9", got)
+	if got := len(descs); got != 10 {
+		t.Fatalf("got %d descriptors, want 10", got)
 	}
 
 	names := make(map[string]bool)
@@ -181,6 +181,7 @@ func TestDescribe(t *testing.T) {
 		"rfm_collector_active_flows",
 		"rfm_collector_dropped_events_total",
 		"rfm_collector_forced_evictions_total",
+		"rfm_errors_total",
 	}
 	for _, w := range want {
 		if !names[w] {
@@ -422,4 +423,46 @@ func TestCollectIfaceStatsFamily(t *testing.T) {
 	if !families["ipv6"] {
 		t.Error("expected family=ipv6 label")
 	}
+}
+
+func TestCollectErrorsTotal(t *testing.T) {
+	src := &mockIfaceStats{
+		entries: nil,
+		err:     fmt.Errorf("map broken"),
+	}
+
+	mc := New(src, nil)
+	metrics := collectMetrics(t, mc)
+
+	var found bool
+	for _, m := range metrics {
+		name := extractName(m.Desc())
+		if name != "rfm_errors_total" {
+			continue
+		}
+		found = true
+		labels := metricLabels(t, m)
+		if labels["subsystem"] != "bpf_map" {
+			t.Errorf("subsystem = %q, want bpf_map", labels["subsystem"])
+		}
+		val := metricValue(t, m)
+		if val != 1 {
+			t.Errorf("errors_total = %g, want 1", val)
+		}
+	}
+	if !found {
+		t.Error("rfm_errors_total not found")
+	}
+}
+
+func TestCollectErrorsTotalZeroOnSuccess(t *testing.T) {
+	src := &mockIfaceStats{
+		entries: []IfaceStatsEntry{
+			{Ifindex: 1, Dir: 0, Proto: 4, Packets: 1, Bytes: 100},
+		},
+	}
+
+	mc := New(src, nil)
+	vals := collectAll(t, mc)
+	assertCounter(t, vals, "rfm_errors_total", 0)
 }

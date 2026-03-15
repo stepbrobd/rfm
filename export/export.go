@@ -5,6 +5,7 @@ import (
 	"net"
 	"os"
 	"strconv"
+	"sync"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"ysun.co/rfm/collector"
@@ -58,6 +59,11 @@ var (
 		"Total flows forcibly evicted due to table overflow.",
 		nil, nil,
 	)
+	descErrorsTotal = prometheus.NewDesc(
+		"rfm_errors_total",
+		"Total errors encountered by subsystem.",
+		[]string{"subsystem"}, nil,
+	)
 
 	allDescs = []*prometheus.Desc{
 		descIfaceRxBytes,
@@ -69,14 +75,17 @@ var (
 		descActiveFlows,
 		descDroppedEvents,
 		descForcedEvictions,
+		descErrorsTotal,
 	}
 )
 
 // MetricsCollector implements prometheus.Collector, reading BPF iface
 // stats and the collector's flow table at scrape time.
 type MetricsCollector struct {
-	source IfaceStatsSource
-	col    *collector.Collector
+	source    IfaceStatsSource
+	col       *collector.Collector
+	mu        sync.Mutex
+	bpfMapErr uint64
 }
 
 // New creates a MetricsCollector. Both source and c may be nil.
@@ -99,6 +108,11 @@ func (mc *MetricsCollector) Collect(ch chan<- prometheus.Metric) {
 	mc.collectIfaceStats(ch)
 	mc.collectFlows(ch)
 	mc.collectHealth(ch)
+
+	mc.mu.Lock()
+	bpfErrs := mc.bpfMapErr
+	mc.mu.Unlock()
+	ch <- prometheus.MustNewConstMetric(descErrorsTotal, prometheus.CounterValue, float64(bpfErrs), "bpf_map")
 }
 
 func (mc *MetricsCollector) collectIfaceStats(ch chan<- prometheus.Metric) {
@@ -108,6 +122,9 @@ func (mc *MetricsCollector) collectIfaceStats(ch chan<- prometheus.Metric) {
 
 	entries, err := mc.source.IfaceStats()
 	if err != nil {
+		mc.mu.Lock()
+		mc.bpfMapErr++
+		mc.mu.Unlock()
 		fmt.Fprintf(os.Stderr, "rfm: scrape iface stats: %v\n", err)
 		return
 	}
