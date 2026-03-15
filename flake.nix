@@ -5,12 +5,7 @@
       systems = import inputs.systems;
 
       perSystem =
-        {
-          lib,
-          pkgs,
-          system,
-          ...
-        }:
+        { pkgs, system, ... }:
         {
           _module.args.pkgs = import inputs.nixpkgs {
             inherit system;
@@ -18,38 +13,10 @@
             overlays = [ inputs.gomod2nix.overlays.default ];
           };
 
-          packages.default = pkgs.callPackage ./default.nix { };
-
+          checks.default = pkgs.testers.runNixOSTest ./test.nix;
           devShells.default = pkgs.callPackage ./shell.nix { };
-
-          formatter = pkgs.writeShellScriptBin "formatter" ''
-            set -eoux pipefail
-            shopt -s globstar
-
-            root="$PWD"
-            while [[ ! -f "$root/.git/index" ]]; do
-              if [[ "$root" == "/" ]]; then
-                exit 1
-              fi
-              root="$(dirname "$root")"
-            done
-            pushd "$root" > /dev/null
-
-            ${lib.getExe pkgs.deno} fmt readme.md
-            ${lib.getExe pkgs.findutils} . -regex '.*\.\(c\|h\)' -exec ${lib.getExe' pkgs.llvmPackages.clang-tools "clang-format"} -i {} \;
-            ${lib.getExe pkgs.go} fix ./...
-            ${lib.getExe pkgs.go} fmt ./...
-            ${lib.getExe pkgs.go} generate ./...
-            ${lib.getExe pkgs.go} mod tidy
-            ${lib.getExe pkgs.go} test -race ./...
-            ${lib.getExe pkgs.go} vet ./...
-            ${lib.getExe pkgs.nixfmt-tree} .
-            ${lib.getExe pkgs.taplo} format **/*.toml
-            ${lib.getExe' pkgs.go-tools "staticcheck"} ./...
-            ${lib.getExe' pkgs.gomod2nix "gomod2nix"}
-
-            popd
-          '';
+          formatter = pkgs.callPackage ./formatter.nix { };
+          packages.default = pkgs.callPackage ./default.nix { };
         };
     };
 
