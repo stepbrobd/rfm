@@ -1,6 +1,14 @@
 schema = 3
 
 [mod]
+  [mod.'github.com/beorn7/perks']
+    version = 'v1.0.1'
+    hash = 'sha256-h75GUqfwJKngCJQVE5Ao5wnO3cfKD9lSIteoLp/3xJ4='
+
+  [mod.'github.com/cespare/xxhash/v2']
+    version = 'v2.3.0'
+    hash = 'sha256-7hRlwSR+fos1kx4VZmJ/7snR7zHh8ZFKX+qqqqGcQpY='
+
   [mod.'github.com/cilium/ebpf']
     version = 'v0.21.0'
     hash = 'sha256-Xa+oc0fleYWgNs7DzXOkcArSVitzbXzHMOu8SlAVnO8='
@@ -8,6 +16,26 @@ schema = 3
   [mod.'github.com/inconshreveable/mousetrap']
     version = 'v1.1.0'
     hash = 'sha256-XWlYH0c8IcxAwQTnIi6WYqq44nOKUylSWxWO/vi+8pE='
+
+  [mod.'github.com/munnerz/goautoneg']
+    version = 'v0.0.0-20191010083416-a7dc8b61c822'
+    hash = 'sha256-79URDDFenmGc9JZu+5AXHToMrtTREHb3BC84b/gym9Q='
+
+  [mod.'github.com/prometheus/client_golang']
+    version = 'v1.23.2'
+    hash = 'sha256-3GD4fBFa1tJu8MS4TNP6r2re2eViUE+kWUaieIOQXCg='
+
+  [mod.'github.com/prometheus/client_model']
+    version = 'v0.6.2'
+    hash = 'sha256-q6Fh6v8iNJN9ypD47LjWmx66YITa3FyRjZMRsuRTFeQ='
+
+  [mod.'github.com/prometheus/common']
+    version = 'v0.66.1'
+    hash = 'sha256-bqHPaV9IV70itx63wqwgy2PtxMN0sn5ThVxDmiD7+Tk='
+
+  [mod.'github.com/prometheus/procfs']
+    version = 'v0.16.1'
+    hash = 'sha256-OBCvKlLW2obct35p0L9Q+1ZrxZjpTmbgHMP2rng9hpo='
 
   [mod.'github.com/spf13/cobra']
     version = 'v1.10.2'
@@ -25,6 +53,14 @@ schema = 3
     version = 'v0.0.5'
     hash = 'sha256-wYDmrmqdv9R8dAL5nuWJ+1Nh7fWWxdpd03UkLOtyJrk='
 
+  [mod.'go.yaml.in/yaml/v2']
+    version = 'v2.4.2'
+    hash = 'sha256-oC8RWdf1zbMYCtmR0ATy/kCkhIwPR9UqFZSMOKLVF/A='
+
   [mod.'golang.org/x/sys']
     version = 'v0.37.0'
     hash = 'sha256-5aT0xP02sW1o9sfJHtWoGGNVYDdwb9FyiX/n6RAlzPo='
+
+  [mod.'google.golang.org/protobuf']
+    version = 'v1.36.8'
+    hash = 'sha256-yZN8ZON0b5HjUNUSubHst7zbvnMsOzd81tDPYQRtPgM='

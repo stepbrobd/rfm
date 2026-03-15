@@ -19,6 +19,7 @@ buildGoApplication (
           ./bpf
           ./cmd
           ./collector
+          ./export
           ./probe
           ./testutil
           # meta

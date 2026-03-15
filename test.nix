@@ -115,5 +115,9 @@ in
       m.wait_for_unit("multi-user.target")
       m.succeed("which rfm")
       m.succeed("ip -4 -br addr show dev eth1")
+
+      m.wait_for_unit("rfm.service")
+      m.wait_for_open_port(9669)
+      m.succeed("curl -sf http://localhost:9669/metrics | grep rfm_")
   '';
 }

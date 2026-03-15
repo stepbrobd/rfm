@@ -213,18 +213,18 @@ func TestCollectHealth(t *testing.T) {
 func TestCollectIfaceStats(t *testing.T) {
 	src := &mockIfaceStats{
 		entries: []IfaceStatsEntry{
-			{Ifindex: 1, Dir: 0, Proto: 6, Packets: 10, Bytes: 1000},  // rx
-			{Ifindex: 1, Dir: 1, Proto: 6, Packets: 5, Bytes: 500},    // tx
-			{Ifindex: 1, Dir: 0, Proto: 17, Packets: 3, Bytes: 300},   // rx udp
+			{Ifindex: 1, Dir: 0, Proto: 6, Packets: 10, Bytes: 1000}, // rx
+			{Ifindex: 1, Dir: 1, Proto: 6, Packets: 5, Bytes: 500},   // tx
+			{Ifindex: 1, Dir: 0, Proto: 17, Packets: 3, Bytes: 300},  // rx udp
 		},
 	}
 
 	mc := New(src, nil)
 	vals := collectAll(t, mc)
 
-	assertCounter(t, vals, "rfm_interface_rx_bytes_total", 1300)   // 1000 + 300
+	assertCounter(t, vals, "rfm_interface_rx_bytes_total", 1300) // 1000 + 300
 	assertCounter(t, vals, "rfm_interface_tx_bytes_total", 500)
-	assertCounter(t, vals, "rfm_interface_rx_packets_total", 13)   // 10 + 3
+	assertCounter(t, vals, "rfm_interface_rx_packets_total", 13) // 10 + 3
 	assertCounter(t, vals, "rfm_interface_tx_packets_total", 5)
 }
 

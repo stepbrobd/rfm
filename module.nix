@@ -22,5 +22,15 @@ in
 
   config = std.mkIf cfg.enable {
     environment.systemPackages = [ cfg.package ];
+
+    systemd.services.rfm = {
+      description = "rfm network flow monitor";
+      after = [ "network.target" ];
+      wantedBy = [ "multi-user.target" ];
+      serviceConfig = {
+        ExecStart = "${cfg.package}/bin/rfm agent";
+        Restart = "on-failure";
+      };
+    };
   };
 }
