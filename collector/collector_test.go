@@ -219,6 +219,51 @@ func TestRunDroppedEvents(t *testing.T) {
 	}
 }
 
+// sustainedReader always returns events, never triggers deadline exceeded
+type sustainedReader struct {
+	event []byte
+	drops uint64
+}
+
+func (r *sustainedReader) ReadRawEvent() ([]byte, error)  { return r.event, nil }
+func (r *sustainedReader) SetDeadline(t time.Time)        {}
+func (r *sustainedReader) DroppedEvents() (uint64, error) { return r.drops, nil }
+func (r *sustainedReader) Close() error                   { return nil }
+
+func TestRunDroppedEventsUnderLoad(t *testing.T) {
+	ev := FlowEvent{
+		Ifindex: 1, Proto: 6, SrcPort: 1000, DstPort: 80,
+		SrcAddr: netip.MustParseAddr("::ffff:10.0.0.1"),
+		DstAddr: netip.MustParseAddr("::ffff:10.0.0.2"),
+		Len:     100,
+	}
+	// reader never hits deadline — events flow continuously
+	mr := &sustainedReader{event: encodeWireEvent(ev), drops: 99}
+
+	// short timeout so the eviction ticker fires fast
+	c := New(200 * time.Millisecond)
+	ctx, cancel := context.WithCancel(context.Background())
+
+	errCh := make(chan error, 1)
+	go func() { errCh <- c.Run(ctx, mr) }()
+
+	// drops must be polled via the ticker, not the deadline path
+	deadline := time.Now().Add(time.Second)
+	for c.Stats().DroppedEvents == 0 {
+		if time.Now().After(deadline) {
+			t.Fatal("timed out: drops not polled under sustained traffic")
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+
+	cancel()
+	<-errCh
+
+	if s := c.Stats(); s.DroppedEvents != 99 {
+		t.Fatalf("dropped events = %d, want 99", s.DroppedEvents)
+	}
+}
+
 func TestRunContextCancel(t *testing.T) {
 	mr := &mockReader{}
 	c := New(30 * time.Second)

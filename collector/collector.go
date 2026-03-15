@@ -88,8 +88,16 @@ func (c *Collector) Stats() Stats {
 	}
 }
 
+func (c *Collector) pollDrops(rd Reader) {
+	if dropped, err := rd.DroppedEvents(); err == nil {
+		c.mu.Lock()
+		c.dropped = dropped
+		c.mu.Unlock()
+	}
+}
+
 // Run reads events from rd, decodes them, and records them until ctx is done.
-// It also runs a background eviction goroutine at timeout/2 intervals.
+// It also runs a background goroutine for eviction and drop counter polling.
 func (c *Collector) Run(ctx context.Context, rd Reader) error {
 	tick := time.NewTicker(c.timeout / 2)
 	defer tick.Stop()
@@ -101,23 +109,20 @@ func (c *Collector) Run(ctx context.Context, rd Reader) error {
 				return
 			case t := <-tick.C:
 				c.Evict(t)
+				c.pollDrops(rd)
 			}
 		}
 	}()
 
 	for {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
 		rd.SetDeadline(time.Now().Add(100 * time.Millisecond))
 		raw, err := rd.ReadRawEvent()
 		if err != nil {
 			if errors.Is(err, os.ErrDeadlineExceeded) {
-				if ctx.Err() != nil {
-					return ctx.Err()
-				}
-				if dropped, derr := rd.DroppedEvents(); derr == nil {
-					c.mu.Lock()
-					c.dropped = dropped
-					c.mu.Unlock()
-				}
+				c.pollDrops(rd)
 				continue
 			}
 			return fmt.Errorf("read event: %w", err)
