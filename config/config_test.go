@@ -231,6 +231,42 @@ func TestResolveWildcardWithOthers(t *testing.T) {
 	}
 }
 
+func TestLoadUnknownKey(t *testing.T) {
+	path := writeTOML(t, `
+[agent]
+interfaces = ["eth0"]
+
+[agent.bpf]
+sample_rte = 1
+`)
+	_, err := Load(path)
+	if err == nil {
+		t.Fatal("expected error for unknown key sample_rte")
+	}
+}
+
+func TestLoadWildcardMixed(t *testing.T) {
+	path := writeTOML(t, `
+[agent]
+interfaces = ["*", "lo"]
+`)
+	_, err := Load(path)
+	if err == nil {
+		t.Fatal("expected error for wildcard mixed with named interfaces")
+	}
+}
+
+func TestLoadDuplicateInterface(t *testing.T) {
+	path := writeTOML(t, `
+[agent]
+interfaces = ["eth0", "eth0"]
+`)
+	_, err := Load(path)
+	if err == nil {
+		t.Fatal("expected error for duplicate interface")
+	}
+}
+
 func itoa(n int) string {
 	if n == 0 {
 		return "0"

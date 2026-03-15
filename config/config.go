@@ -72,8 +72,12 @@ func Load(path string) (*Config, error) {
 	raw.Agent.Prometheus.Host = "::"
 	raw.Agent.Prometheus.Port = 9669
 
-	if err := toml.Unmarshal(data, &raw); err != nil {
+	meta, err := toml.Decode(string(data), &raw)
+	if err != nil {
 		return nil, fmt.Errorf("parsing config: %w", err)
+	}
+	if undecoded := meta.Undecoded(); len(undecoded) > 0 {
+		return nil, fmt.Errorf("unknown config key: %s", undecoded[0])
 	}
 
 	// Parse eviction timeout.
@@ -147,6 +151,18 @@ func validate(cfg *Config) error {
 
 	if len(a.Interfaces) == 0 {
 		return fmt.Errorf("agent.interfaces must be non-empty")
+	}
+	for _, name := range a.Interfaces {
+		if name == "*" && len(a.Interfaces) > 1 {
+			return fmt.Errorf("agent.interfaces: \"*\" cannot be mixed with named interfaces")
+		}
+	}
+	seen := make(map[string]bool, len(a.Interfaces))
+	for _, name := range a.Interfaces {
+		if seen[name] {
+			return fmt.Errorf("agent.interfaces: duplicate interface %q", name)
+		}
+		seen[name] = true
 	}
 	if a.BPF.SampleRate == 0 {
 		return fmt.Errorf("agent.bpf.sample_rate must be > 0")

@@ -211,6 +211,14 @@ in
     machine2.succeed("bpftool net show | grep rfm_tc_ingress")
     machine2.succeed("bpftool net show | grep rfm_tc_egress")
 
+    # --- phase 2b: multi-interface verification ---
+    # machine1 monitors eth1 + lo; generate loopback traffic and verify both
+    machine1.succeed("ping -c 5 127.0.0.1")
+    time.sleep(1)
+    metrics1 = machine1.succeed("curl -sf http://localhost:9669/metrics")
+    assert 'ifname="lo"' in metrics1, "missing lo interface in metrics (multi-interface)"
+    assert 'ifname="eth1"' in metrics1, "missing eth1 interface in metrics"
+
     # --- phase 3: TCP traffic with iperf3 ---
     machine2.succeed("iperf3 -s -D -p 5201")
     time.sleep(1)

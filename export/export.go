@@ -130,6 +130,9 @@ func (mc *MetricsCollector) collectIfaceStats(ch chan<- prometheus.Metric) {
 	}
 
 	for _, e := range entries {
+		if e.Proto != 4 && e.Proto != 6 {
+			continue
+		}
 		ifname := ifnameFromIndex(e.Ifindex)
 		family := familyString(e.Proto)
 
