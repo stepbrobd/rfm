@@ -83,6 +83,37 @@ func TestEthIPv4UDP(t *testing.T) {
 	}
 }
 
+func TestIPv4WithOptions(t *testing.T) {
+	src := net.ParseIP("10.0.0.1")
+	dst := net.ParseIP("10.0.0.2")
+	options := []byte{0x01, 0x01, 0x01, 0x01} // 4 NOP options
+	payload := []byte{0xaa, 0xbb}
+
+	hdr := IPv4WithOptions(6, src, dst, options, payload)
+
+	// IHL should be 6 (24 bytes header = 20 base + 4 options)
+	ihl := hdr[0] & 0x0f
+	if ihl != 6 {
+		t.Fatalf("ihl = %d, want 6", ihl)
+	}
+
+	// total length
+	total := binary.BigEndian.Uint16(hdr[2:4])
+	if total != 24+2 {
+		t.Fatalf("total length = %d, want %d", total, 24+2)
+	}
+
+	// protocol
+	if hdr[9] != 6 {
+		t.Fatalf("proto = %d, want 6", hdr[9])
+	}
+
+	// payload starts at offset 24
+	if hdr[24] != 0xaa || hdr[25] != 0xbb {
+		t.Fatalf("payload = %x %x, want aa bb", hdr[24], hdr[25])
+	}
+}
+
 func TestEthIPv6TCP(t *testing.T) {
 	src := net.ParseIP("fd00::1")
 	dst := net.ParseIP("fd00::2")

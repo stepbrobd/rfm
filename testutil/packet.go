@@ -69,6 +69,37 @@ func IPv6(proto uint8, src, dst net.IP, payload []byte) []byte {
 	return hdr
 }
 
+// IPv4WithOptions builds an IPv4 header with options (padded to 4-byte boundary)
+func IPv4WithOptions(proto uint8, src, dst net.IP, options, payload []byte) []byte {
+	optLen := len(options)
+	padLen := (4 - optLen%4) % 4
+	ihl := 5 + (optLen+padLen)/4
+	hdrLen := ihl * 4
+	total := hdrLen + len(payload)
+	hdr := make([]byte, total)
+	hdr[0] = byte(0x40 | ihl)
+	binary.BigEndian.PutUint16(hdr[2:4], uint16(total))
+	hdr[8] = 64 // TTL
+	hdr[9] = proto
+	copy(hdr[12:16], src.To4())
+	copy(hdr[16:20], dst.To4())
+	copy(hdr[20:20+optLen], options)
+	copy(hdr[hdrLen:], payload)
+	return hdr
+}
+
+// EthIPv4TCPWithOptions builds an eth+ipv4+tcp frame with IP options
+func EthIPv4TCPWithOptions(srcIP, dstIP net.IP, srcPort, dstPort uint16, options []byte) []byte {
+	tcp := TCP(srcPort, dstPort)
+	ip := IPv4WithOptions(6, srcIP, dstIP, options, tcp)
+	return Eth(
+		net.HardwareAddr{0xde, 0xad, 0xbe, 0xef, 0x00, 0x01},
+		net.HardwareAddr{0xde, 0xad, 0xbe, 0xef, 0x00, 0x02},
+		0x0800,
+		ip,
+	)
+}
+
 // EthIPv4TCP builds a complete eth+ipv4+tcp frame
 func EthIPv4TCP(srcIP, dstIP net.IP, srcPort, dstPort uint16) []byte {
 	tcp := TCP(srcPort, dstPort)
