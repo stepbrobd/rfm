@@ -5,6 +5,13 @@ let
     ip:
     { pkgs, ... }:
     {
+      imports = [ inputs.self.nixosModules.default ];
+
+      services.rfm = {
+        enable = true;
+        settings = { };
+      };
+
       boot.kernelPackages = pkgs.linuxPackages_latest;
       boot.supportedFilesystems.zfs = std.mkForce false;
       boot.initrd.supportedFilesystems.zfs = std.mkForce false;
@@ -23,8 +30,6 @@ let
       ];
 
       environment.systemPackages = with pkgs; [
-        inputs.self.packages.${pkgs.stdenv.hostPlatform.system}.default
-
         alacritty.terminfo
         bpftools
         bpftrace
