@@ -20,6 +20,7 @@ type AgentConfig struct {
 	BPF        BPFConfig        `toml:"bpf"`
 	Collector  CollectorConfig  `toml:"collector"`
 	Prometheus PrometheusConfig `toml:"prometheus"`
+	Enrich     EnrichConfig     `toml:"enrich"`
 }
 
 // BPFConfig controls the eBPF probe.
@@ -40,6 +41,23 @@ type PrometheusConfig struct {
 	Port int    `toml:"port"`
 }
 
+// EnrichConfig controls optional flow enrichment backends.
+type EnrichConfig struct {
+	MMDB MMDBConfig `toml:"mmdb"`
+	RIB  RIBConfig  `toml:"rib"`
+}
+
+// MMDBConfig controls MaxMind/DB-IP database lookups.
+type MMDBConfig struct {
+	ASNDB  string `toml:"asn_db"`
+	CityDB string `toml:"city_db"`
+}
+
+// RIBConfig controls the live RIB/BMP backend.
+type RIBConfig struct {
+	BMPListen string `toml:"bmp_listen"`
+}
+
 // rawCollectorConfig mirrors CollectorConfig with string-typed fields for TOML decoding.
 type rawCollectorConfig struct {
 	MaxFlows        int    `toml:"max_flows"`
@@ -53,6 +71,7 @@ type rawConfig struct {
 		BPF        BPFConfig          `toml:"bpf"`
 		Collector  rawCollectorConfig `toml:"collector"`
 		Prometheus PrometheusConfig   `toml:"prometheus"`
+		Enrich     EnrichConfig       `toml:"enrich"`
 	} `toml:"agent"`
 }
 
@@ -95,6 +114,7 @@ func Load(path string) (*Config, error) {
 				EvictionTimeout: evictionTimeout,
 			},
 			Prometheus: raw.Agent.Prometheus,
+			Enrich:     raw.Agent.Enrich,
 		},
 	}
 

@@ -20,8 +20,8 @@ func writeTOML(t *testing.T, content string) string {
 
 func TestLoadFull(t *testing.T) {
 	path := writeTOML(t, `
-[agent]
-interfaces = ["eth0", "tailscale0"]
+	[agent]
+	interfaces = ["eth0", "tailscale0"]
 
 [agent.bpf]
 sample_rate = 50
@@ -31,10 +31,17 @@ ring_buf_size = 131072
 max_flows = 1024
 eviction_timeout = "10s"
 
-[agent.prometheus]
-host = "127.0.0.1"
-port = 8080
-`)
+	[agent.prometheus]
+	host = "127.0.0.1"
+	port = 8080
+
+	[agent.enrich.mmdb]
+	asn_db = "/tmp/asn.mmdb"
+	city_db = "/tmp/city.mmdb"
+
+	[agent.enrich.rib]
+	bmp_listen = "127.0.0.1:11019"
+	`)
 
 	cfg, err := Load(path)
 	if err != nil {
@@ -61,6 +68,15 @@ port = 8080
 	}
 	if cfg.Agent.Prometheus.Port != 8080 {
 		t.Fatalf("port = %d, want 8080", cfg.Agent.Prometheus.Port)
+	}
+	if cfg.Agent.Enrich.MMDB.ASNDB != "/tmp/asn.mmdb" {
+		t.Fatalf("asn_db = %q, want /tmp/asn.mmdb", cfg.Agent.Enrich.MMDB.ASNDB)
+	}
+	if cfg.Agent.Enrich.MMDB.CityDB != "/tmp/city.mmdb" {
+		t.Fatalf("city_db = %q, want /tmp/city.mmdb", cfg.Agent.Enrich.MMDB.CityDB)
+	}
+	if cfg.Agent.Enrich.RIB.BMPListen != "127.0.0.1:11019" {
+		t.Fatalf("bmp_listen = %q, want 127.0.0.1:11019", cfg.Agent.Enrich.RIB.BMPListen)
 	}
 }
 

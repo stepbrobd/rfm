@@ -98,6 +98,51 @@ in
                   };
                 };
               };
+
+              enrich = std.mkOption {
+                default = { };
+                type = std.types.submodule {
+                  freeformType = toml.type;
+
+                  options = {
+                    mmdb = std.mkOption {
+                      default = { };
+                      type = std.types.submodule {
+                        freeformType = toml.type;
+
+                        options = {
+                          asn_db = std.mkOption {
+                            type = std.types.str;
+                            default = "";
+                            description = "Path to the ASN MMDB database.";
+                          };
+
+                          city_db = std.mkOption {
+                            type = std.types.str;
+                            default = "";
+                            description = "Path to the city MMDB database.";
+                          };
+                        };
+                      };
+                    };
+
+                    rib = std.mkOption {
+                      default = { };
+                      type = std.types.submodule {
+                        freeformType = toml.type;
+
+                        options = {
+                          bmp_listen = std.mkOption {
+                            type = std.types.str;
+                            default = "";
+                            description = "BMP listen address for live RIB updates.";
+                          };
+                        };
+                      };
+                    };
+                  };
+                };
+              };
             };
           };
         };
