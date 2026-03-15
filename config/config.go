@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/BurntSushi/toml"
@@ -53,9 +54,43 @@ type MMDBConfig struct {
 	CityDB string `toml:"city_db"`
 }
 
+// BMPConfig controls the live BMP listener for the RIB backend.
+type BMPConfig struct {
+	Host string `toml:"host"`
+	Port int    `toml:"port"`
+}
+
+// Enabled reports whether the BMP listener should be configured.
+func (c BMPConfig) Enabled() bool {
+	return c.Host != "" || c.Port != 0
+}
+
+// WithDefaults fills in BMP defaults when the backend is enabled.
+func (c BMPConfig) WithDefaults() BMPConfig {
+	if !c.Enabled() {
+		return c
+	}
+	if c.Host == "" {
+		c.Host = "::1"
+	}
+	if c.Port == 0 {
+		c.Port = 11019
+	}
+	return c
+}
+
+// Addr formats the listener address.
+func (c BMPConfig) Addr() string {
+	c = c.WithDefaults()
+	if !c.Enabled() {
+		return ""
+	}
+	return net.JoinHostPort(c.Host, strconv.Itoa(c.Port))
+}
+
 // RIBConfig controls the live RIB/BMP backend.
 type RIBConfig struct {
-	BMPListen string `toml:"bmp_listen"`
+	BMP BMPConfig `toml:"bmp"`
 }
 
 // rawCollectorConfig mirrors CollectorConfig with string-typed fields for TOML decoding.
@@ -88,7 +123,7 @@ func Load(path string) (*Config, error) {
 	raw.Agent.BPF.RingBufSize = 262144
 	raw.Agent.Collector.MaxFlows = 65536
 	raw.Agent.Collector.EvictionTimeout = "30s"
-	raw.Agent.Prometheus.Host = "::"
+	raw.Agent.Prometheus.Host = "::1"
 	raw.Agent.Prometheus.Port = 9669
 
 	meta, err := toml.Decode(string(data), &raw)
@@ -104,6 +139,8 @@ func Load(path string) (*Config, error) {
 	if err != nil {
 		return nil, fmt.Errorf("parsing eviction_timeout %q: %w", raw.Agent.Collector.EvictionTimeout, err)
 	}
+
+	raw.Agent.Enrich.RIB.BMP = raw.Agent.Enrich.RIB.BMP.WithDefaults()
 
 	cfg := &Config{
 		Agent: AgentConfig{
@@ -198,6 +235,9 @@ func validate(cfg *Config) error {
 	}
 	if a.Prometheus.Port < 1 || a.Prometheus.Port > 65535 {
 		return fmt.Errorf("agent.prometheus.port must be between 1 and 65535, got %d", a.Prometheus.Port)
+	}
+	if a.Enrich.RIB.BMP.Enabled() && (a.Enrich.RIB.BMP.Port < 1 || a.Enrich.RIB.BMP.Port > 65535) {
+		return fmt.Errorf("agent.enrich.rib.bmp.port must be between 1 and 65535, got %d", a.Enrich.RIB.BMP.Port)
 	}
 
 	return nil

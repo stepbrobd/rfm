@@ -48,7 +48,9 @@ func TestBuildMMDBBadPath(t *testing.T) {
 func TestBuildRIBBadListen(t *testing.T) {
 	_, _, err := Build(config.EnrichConfig{
 		RIB: config.RIBConfig{
-			BMPListen: "bad",
+			BMP: config.BMPConfig{
+				Host: "bad",
+			},
 		},
 	})
 	if err == nil {

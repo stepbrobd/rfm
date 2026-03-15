@@ -39,8 +39,9 @@ eviction_timeout = "10s"
 	asn_db = "/tmp/asn.mmdb"
 	city_db = "/tmp/city.mmdb"
 
-	[agent.enrich.rib]
-	bmp_listen = "127.0.0.1:11019"
+	[agent.enrich.rib.bmp]
+	host = "127.0.0.1"
+	port = 11019
 	`)
 
 	cfg, err := Load(path)
@@ -75,8 +76,11 @@ eviction_timeout = "10s"
 	if cfg.Agent.Enrich.MMDB.CityDB != "/tmp/city.mmdb" {
 		t.Fatalf("city_db = %q, want /tmp/city.mmdb", cfg.Agent.Enrich.MMDB.CityDB)
 	}
-	if cfg.Agent.Enrich.RIB.BMPListen != "127.0.0.1:11019" {
-		t.Fatalf("bmp_listen = %q, want 127.0.0.1:11019", cfg.Agent.Enrich.RIB.BMPListen)
+	if cfg.Agent.Enrich.RIB.BMP.Host != "127.0.0.1" {
+		t.Fatalf("bmp.host = %q, want 127.0.0.1", cfg.Agent.Enrich.RIB.BMP.Host)
+	}
+	if cfg.Agent.Enrich.RIB.BMP.Port != 11019 {
+		t.Fatalf("bmp.port = %d, want 11019", cfg.Agent.Enrich.RIB.BMP.Port)
 	}
 }
 
@@ -103,11 +107,55 @@ interfaces = ["eth0"]
 	if cfg.Agent.Collector.EvictionTimeout != 30*time.Second {
 		t.Fatalf("eviction_timeout = %v, want 30s", cfg.Agent.Collector.EvictionTimeout)
 	}
-	if cfg.Agent.Prometheus.Host != "::" {
-		t.Fatalf("host = %q, want ::", cfg.Agent.Prometheus.Host)
+	if cfg.Agent.Prometheus.Host != "::1" {
+		t.Fatalf("host = %q, want ::1", cfg.Agent.Prometheus.Host)
 	}
 	if cfg.Agent.Prometheus.Port != 9669 {
 		t.Fatalf("port = %d, want 9669", cfg.Agent.Prometheus.Port)
+	}
+}
+
+func TestLoadRIBBMPDefaultsHost(t *testing.T) {
+	path := writeTOML(t, `
+[agent]
+interfaces = ["eth0"]
+
+[agent.enrich.rib.bmp]
+port = 11019
+`)
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+
+	if cfg.Agent.Enrich.RIB.BMP.Host != "::1" {
+		t.Fatalf("bmp.host = %q, want ::1", cfg.Agent.Enrich.RIB.BMP.Host)
+	}
+	if cfg.Agent.Enrich.RIB.BMP.Port != 11019 {
+		t.Fatalf("bmp.port = %d, want 11019", cfg.Agent.Enrich.RIB.BMP.Port)
+	}
+}
+
+func TestLoadRIBBMPDefaultsPort(t *testing.T) {
+	path := writeTOML(t, `
+[agent]
+interfaces = ["eth0"]
+
+[agent.enrich.rib.bmp]
+host = "127.0.0.1"
+`)
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+
+	if cfg.Agent.Enrich.RIB.BMP.Host != "127.0.0.1" {
+		t.Fatalf("bmp.host = %q, want 127.0.0.1", cfg.Agent.Enrich.RIB.BMP.Host)
+	}
+	if cfg.Agent.Enrich.RIB.BMP.Port != 11019 {
+		t.Fatalf("bmp.port = %d, want 11019", cfg.Agent.Enrich.RIB.BMP.Port)
 	}
 }
 

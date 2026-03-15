@@ -111,13 +111,15 @@ type Server struct {
 // Listen starts a BMP listener when configured.
 // When BMP listen is unset, it returns nil, nil, nil.
 func Listen(cfg config.RIBConfig) (collector.Enricher, io.Closer, error) {
-	if cfg.BMPListen == "" {
+	bmpCfg := cfg.BMP.WithDefaults()
+	if !bmpCfg.Enabled() {
 		return nil, nil, nil
 	}
 
-	ln, err := net.Listen("tcp", cfg.BMPListen)
+	addr := bmpCfg.Addr()
+	ln, err := net.Listen("tcp", addr)
 	if err != nil {
-		return nil, nil, fmt.Errorf("listen BMP %q: %w", cfg.BMPListen, err)
+		return nil, nil, fmt.Errorf("listen BMP %q: %w", addr, err)
 	}
 
 	s := &Server{
