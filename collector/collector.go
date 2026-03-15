@@ -11,15 +11,15 @@ import (
 
 // Collector aggregates flow events into an in-memory flow table
 type Collector struct {
-	mu         sync.RWMutex
-	flows      map[FlowKey]*FlowEntry
-	timeout    time.Duration
-	enricher   Enricher
-	maxFlows   int
-	dropped    uint64
-	forced     uint64
-	decodeErrs uint64
-	readErrs   uint64
+	mu          sync.RWMutex
+	flows       map[FlowKey]*FlowEntry
+	timeout     time.Duration
+	enricher    Enricher
+	maxFlows    int
+	dropped     uint64
+	forced      uint64
+	ringBufErrs uint64
+	bpfMapErrs  uint64
 }
 
 // New creates a collector that evicts flows older than timeout.
@@ -118,8 +118,8 @@ func (c *Collector) Stats() Stats {
 		ActiveFlows:     uint64(len(c.flows)),
 		DroppedEvents:   c.dropped,
 		ForcedEvictions: c.forced,
-		DecodeErrors:    c.decodeErrs,
-		ReadErrors:      c.readErrs,
+		RingBufErrors:   c.ringBufErrs,
+		BPFMapErrors:    c.bpfMapErrs,
 	}
 }
 
@@ -127,7 +127,7 @@ func (c *Collector) pollDrops(rd Reader) {
 	dropped, err := rd.DroppedEvents()
 	c.mu.Lock()
 	if err != nil {
-		c.readErrs++
+		c.bpfMapErrs++
 	} else {
 		c.dropped = dropped
 	}
@@ -172,13 +172,16 @@ func (c *Collector) Run(ctx context.Context, rd Reader) error {
 				c.pollDrops(rd)
 				continue
 			}
+			c.mu.Lock()
+			c.ringBufErrs++
+			c.mu.Unlock()
 			return fmt.Errorf("read event: %w", err)
 		}
 
 		ev, err := DecodeFlowEvent(raw)
 		if err != nil {
 			c.mu.Lock()
-			c.decodeErrs++
+			c.ringBufErrs++
 			c.mu.Unlock()
 			continue
 		}

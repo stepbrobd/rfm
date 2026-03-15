@@ -401,7 +401,7 @@ func TestRunReaderErrorCleansUp(t *testing.T) {
 	}
 }
 
-func TestRunDecodeErrors(t *testing.T) {
+func TestRunRingBufErrors(t *testing.T) {
 	// short garbage event that will fail DecodeFlowEvent
 	mr := &mockReader{events: [][]byte{{0x00, 0x01, 0x02}}}
 
@@ -412,7 +412,7 @@ func TestRunDecodeErrors(t *testing.T) {
 	go func() { errCh <- c.Run(ctx, mr) }()
 
 	deadline := time.Now().Add(time.Second)
-	for c.Stats().DecodeErrors == 0 {
+	for c.Stats().RingBufErrors == 0 {
 		if time.Now().After(deadline) {
 			t.Fatal("timed out waiting for decode error to be counted")
 		}
@@ -422,8 +422,8 @@ func TestRunDecodeErrors(t *testing.T) {
 	cancel()
 	<-errCh
 
-	if s := c.Stats(); s.DecodeErrors != 1 {
-		t.Fatalf("decode errors = %d, want 1", s.DecodeErrors)
+	if s := c.Stats(); s.RingBufErrors != 1 {
+		t.Fatalf("decode errors = %d, want 1", s.RingBufErrors)
 	}
 }
 

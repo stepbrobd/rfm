@@ -67,6 +67,6 @@ type Stats struct {
 	ActiveFlows     uint64
 	DroppedEvents   uint64
 	ForcedEvictions uint64
-	DecodeErrors    uint64
-	ReadErrors      uint64
+	RingBufErrors   uint64
+	BPFMapErrors    uint64
 }
