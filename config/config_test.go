@@ -1,6 +1,7 @@
 package config
 
 import (
+	"net"
 	"os"
 	"path/filepath"
 	"testing"
@@ -171,6 +172,46 @@ func TestLoadNonexistentFile(t *testing.T) {
 	_, err := Load("/tmp/does-not-exist-rfm-config.toml")
 	if err == nil {
 		t.Fatal("expected error for nonexistent file")
+	}
+}
+
+func TestResolveWildcard(t *testing.T) {
+	indices, err := ResolveInterfaces([]string{"*"})
+	if err != nil {
+		t.Fatalf("ResolveInterfaces: %v", err)
+	}
+	if len(indices) == 0 {
+		t.Fatal("wildcard resolved to zero interfaces")
+	}
+	for _, idx := range indices {
+		iface, _ := net.InterfaceByIndex(idx)
+		if iface != nil && iface.Flags&net.FlagLoopback != 0 {
+			t.Errorf("wildcard should skip loopback, got %s", iface.Name)
+		}
+	}
+}
+
+func TestResolveNamed(t *testing.T) {
+	indices, err := ResolveInterfaces([]string{"lo"})
+	if err != nil {
+		t.Fatalf("ResolveInterfaces: %v", err)
+	}
+	if len(indices) != 1 {
+		t.Fatalf("got %d indices, want 1", len(indices))
+	}
+}
+
+func TestResolveBadInterface(t *testing.T) {
+	_, err := ResolveInterfaces([]string{"doesnotexist999"})
+	if err == nil {
+		t.Fatal("should fail on nonexistent interface")
+	}
+}
+
+func TestResolveWildcardWithOthers(t *testing.T) {
+	_, err := ResolveInterfaces([]string{"*", "eth0"})
+	if err == nil {
+		t.Fatal("should fail when * is mixed with named interfaces")
 	}
 }
 

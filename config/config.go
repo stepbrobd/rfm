@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"net"
 	"os"
 	"time"
 
@@ -98,6 +99,47 @@ func Load(path string) (*Config, error) {
 	}
 
 	return cfg, nil
+}
+
+// ResolveInterfaces converts interface names to indices.
+// ["*"] expands to all non-loopback interfaces.
+// "*" cannot be mixed with named interfaces.
+func ResolveInterfaces(names []string) ([]int, error) {
+	if len(names) == 1 && names[0] == "*" {
+		return resolveWildcard()
+	}
+	for _, n := range names {
+		if n == "*" {
+			return nil, fmt.Errorf("\"*\" cannot be mixed with named interfaces")
+		}
+	}
+	indices := make([]int, 0, len(names))
+	for _, name := range names {
+		iface, err := net.InterfaceByName(name)
+		if err != nil {
+			return nil, fmt.Errorf("interface %q: %w", name, err)
+		}
+		indices = append(indices, iface.Index)
+	}
+	return indices, nil
+}
+
+func resolveWildcard() ([]int, error) {
+	ifaces, err := net.Interfaces()
+	if err != nil {
+		return nil, fmt.Errorf("list interfaces: %w", err)
+	}
+	var indices []int
+	for _, iface := range ifaces {
+		if iface.Flags&net.FlagLoopback != 0 {
+			continue
+		}
+		indices = append(indices, iface.Index)
+	}
+	if len(indices) == 0 {
+		return nil, fmt.Errorf("no non-loopback interfaces found")
+	}
+	return indices, nil
 }
 
 func validate(cfg *Config) error {
