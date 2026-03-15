@@ -129,7 +129,7 @@ in
             eviction_timeout = "30s";
           };
           prometheus = {
-            host = "::";
+            host = "::1";
             port = 9669;
           };
           enrich = {
@@ -137,7 +137,10 @@ in
               asn_db = "${pkgs.dbip-asn-lite}/share/dbip/dbip-asn-lite.mmdb";
               city_db = "${pkgs.dbip-city-lite}/share/dbip/dbip-city-lite.mmdb";
             };
-            rib.bmp_listen = "127.0.0.1:11019";
+            rib.bmp = {
+              host = "127.0.0.1";
+              port = 11019;
+            };
           };
         };
       };

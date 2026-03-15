@@ -86,7 +86,7 @@ in
                   options = {
                     host = std.mkOption {
                       type = std.types.str;
-                      default = "::";
+                      default = "::1";
                       description = "Prometheus metrics listen address.";
                     };
 
@@ -132,10 +132,25 @@ in
                         freeformType = toml.type;
 
                         options = {
-                          bmp_listen = std.mkOption {
-                            type = std.types.str;
-                            default = "";
-                            description = "BMP listen address for live RIB updates.";
+                          bmp = std.mkOption {
+                            default = { };
+                            type = std.types.submodule {
+                              freeformType = toml.type;
+
+                              options = {
+                                host = std.mkOption {
+                                  type = std.types.str;
+                                  default = "";
+                                  description = "BMP listen host for live RIB updates.";
+                                };
+
+                                port = std.mkOption {
+                                  type = std.types.ints.between 0 65535;
+                                  default = 0;
+                                  description = "BMP listen port for live RIB updates.";
+                                };
+                              };
+                            };
                           };
                         };
                       };
