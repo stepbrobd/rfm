@@ -10,8 +10,6 @@
 struct rfm_config {
 	__u32 sample_rate;
 	__u32 flags;
-	__u32 inactive_timeout_ns;
-	__u32 _pad;
 };
 
 struct rfm_iface_key {

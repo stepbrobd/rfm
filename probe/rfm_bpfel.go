@@ -14,11 +14,9 @@ import (
 )
 
 type rfmRfmConfig struct {
-	_                 structs.HostLayout
-	SampleRate        uint32
-	Flags             uint32
-	InactiveTimeoutNs uint32
-	Pad               uint32
+	_          structs.HostLayout
+	SampleRate uint32
+	Flags      uint32
 }
 
 type rfmRfmIfaceKey struct {
