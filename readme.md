@@ -5,14 +5,146 @@ BGP routers. It attaches TC programs to network interfaces, collects per-flow
 traffic statistics with configurable sampling, enriches flows with BGP RIB
 metadata via BMP, and exports the results to Prometheus.
 
+Requirements:
+
+- Linux 6.12 or newer (TCX, `bpf_ktime_get_boot_ns`)
+- Go 1.23+
+- Root or `CAP_BPF` + `CAP_NET_ADMIN`
+
 The goal is a single `rfm` binary that:
 
-- attaches TC programs for bidirectional flow observation
-- keeps BPF behavior fully map-driven and stateless
-- enriches flows in userspace with BGP RIB data from BMP
-- exports Prometheus metrics
-- exposes runtime control over a Unix domain socket
-- reserves XDP for firewall fast-path features
+- Attaches TC programs for bidirectional flow observation
+- Keeps BPF behavior fully map-driven and stateless
+- Enriches flows in userspace with BGP RIB data from BMP
+- Exports Prometheus metrics
+- Exposes runtime control over a Unix domain socket
+- Reserves XDP for firewall fast-path features
+
+rfm runs as a single daemon (`rfm agent`) that loads eBPF programs, collects
+flow events in userspace, and serves Prometheus metrics over HTTP.
+
+```
++------------------------------------+
+|            kernel                  |
+|  TC ingress --+                    |
+|               +---> ring buffer -----> userspace collector
+|  TC egress  --+                    |
+|                                    |
+|  per-CPU iface stats map ------------> Prometheus /metrics
++------------------------------------+
+```
+
+BPF programs are attached via TCX as link-based attachments. All BPF behavior is
+map-driven: sampling rates and feature flags are configured through a shared
+`rfm_config` map, so no program reloads are needed to change runtime parameters.
+
+### Data path
+
+1. TC programs classify each packet by direction, protocol family, and 5-tuple.
+   Every packet updates per-CPU interface counters. Sampled packets (1-in-N)
+   emit a flow event to a ring buffer.
+2. The userspace collector reads events from the ring buffer, converts
+   `CLOCK_BOOTTIME` timestamps to wall clock time, and aggregates flows into an
+   in-memory table keyed by
+   `(ifindex, direction, protocol,
+   src/dst address, src/dst port)`.
+3. Flows are evicted after a configurable idle timeout. When the flow table is
+   full, the oldest flow is forcibly evicted.
+4. At scrape time, the Prometheus exporter reads the BPF interface counters map
+   directly and iterates the flow table, rolling up flows by enrichment labels
+   (ASN, city) before emitting metrics.
+
+## Configuration
+
+rfm reads a TOML config file (default `/etc/rfm/rfm.toml`). Unknown keys are
+rejected at load time to catch typos. Example:
+
+```toml
+[agent]
+interfaces = ["eth0", "tailscale0"]
+
+[agent.bpf]
+sample_rate = 100        # sample 1-in-N packets (default: 100)
+ring_buf_size = 262144   # ring buffer bytes (default: 262144)
+
+[agent.collector]
+max_flows = 65536        # maximum active flows (default: 65536)
+eviction_timeout = "30s" # idle flow timeout (default: 30s)
+
+[agent.prometheus]
+host = "::"              # listen address (default: ::)
+port = 9669              # listen port (default: 9669)
+```
+
+Set `interfaces = ["*"]` to monitor all non-loopback interfaces. The wildcard
+cannot be mixed with named interfaces.
+
+## Prometheus metrics
+
+Interface counters (from BPF map, zero overhead):
+
+- `rfm_interface_rx_bytes_total{ifname, family}`
+- `rfm_interface_tx_bytes_total{ifname, family}`
+- `rfm_interface_rx_packets_total{ifname, family}`
+- `rfm_interface_tx_packets_total{ifname, family}`
+
+Sampled flow gauges (rolled up by enrichment labels):
+
+- `rfm_flow_bytes{ifname, direction, proto, src_asn, dst_asn, src_city, dst_city}`
+- `rfm_flow_packets{ifname, direction, proto, src_asn, dst_asn, src_city, dst_city}`
+
+Collector health:
+
+- `rfm_collector_active_flows`
+- `rfm_collector_dropped_events_total`
+- `rfm_collector_forced_evictions_total`
+- `rfm_errors_total{subsystem}`
+
+## NixOS module
+
+Example:
+
+```nix
+services.rfm = {
+  enable = true;
+  settings.agent = {
+    interfaces = [ "eth0" "tailscale0" ];
+    bpf.sample_rate = 50;
+    prometheus.port = 9669;
+  };
+};
+```
+
+The module generates a TOML config file and runs rfm as a systemd service with
+automatic restart on failure.
+
+## Comparison with other tools
+
+|                     | rfm                                                  | ntopng                                        | pmacct                                    |
+| ------------------- | ---------------------------------------------------- | --------------------------------------------- | ----------------------------------------- |
+| Capture method      | eBPF TC (zero-copy ring buffer)                      | libpcap / PF_RING / nProbe                    | libpcap / NetFlow / sFlow / BMP           |
+| Resource footprint  | Single static binary, ~10 MB RSS                     | Web UI + Redis + optional DB                  | Multiple daemons (pmacctd, nfacctd, etc.) |
+| BGP integration     | Inline BMP receiver, same process                    | External nProbe agent or NetFlow              | Separate BGP daemon (bgp_daemon)          |
+| Flow granularity    | Per-packet sampling in kernel, userspace aggregation | Full packet capture or NetFlow                | Depends on input plugin                   |
+| Output              | Prometheus (pull)                                    | Web dashboard, Elasticsearch, MySQL, InfluxDB | Kafka, PostgreSQL, print, etc.            |
+| Configuration       | Single TOML file                                     | Web UI + config files                         | Multiple configuration files per daemon   |
+| Deployment          | Single binary or NixOS module                        | Packages for most distros, Docker             | Packages for most distros                 |
+| Kernel requirements | Linux 6.12+                                          | Any (libpcap)                                 | Any (libpcap) or none (NetFlow/sFlow)     |
+
+ntopng is a full network monitoring suite with a web interface, historical
+storage, and deep protocol inspection. It targets operators who need a turnkey
+dashboard and are willing to run the supporting infrastructure (Redis,
+optionally a database backend).
+
+pmacct is a collection of daemons that consume traffic data from various sources
+(libpcap, NetFlow, sFlow, BMP) and write to various backends (Kafka, PostgreSQL,
+memory tables). It is highly flexible but requires assembling multiple
+components and configuration files.
+
+rfm occupies a narrower niche: lightweight flow telemetry for Linux routers that
+already run Prometheus. It trades breadth of features for minimal resource usage
+and operational simplicity. The entire deployment is one binary, one config
+file, and one metrics endpoint.
 
 ## License
 
