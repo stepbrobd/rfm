@@ -1,13 +1,19 @@
 package main
 
 import (
+	"context"
 	"fmt"
+	"net/http"
+	"os"
 	"os/signal"
 	"syscall"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/spf13/cobra"
 	"ysun.co/rfm/collector"
+	"ysun.co/rfm/export"
 	"ysun.co/rfm/probe"
 )
 
@@ -40,10 +46,25 @@ func runAgent(cmd *cobra.Command, args []string) error {
 	}
 	defer rd.Close()
 
-	c := collector.New(30*time.Second, nil, 0)
+	c := collector.New(30*time.Second, nil, 65536)
+
+	mc := export.New(&export.ProbeSource{Probe: p}, c)
+	prometheus.MustRegister(mc)
+
+	mux := http.NewServeMux()
+	mux.Handle("/metrics", promhttp.Handler())
+	srv := &http.Server{Addr: ":9669", Handler: mux}
+
+	go func() {
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			fmt.Fprintf(os.Stderr, "http: %v\n", err)
+		}
+	}()
 
 	ctx, cancel := signal.NotifyContext(cmd.Context(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
 
-	return c.Run(ctx, rd)
+	runErr := c.Run(ctx, rd)
+	srv.Shutdown(context.Background())
+	return runErr
 }
