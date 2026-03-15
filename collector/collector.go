@@ -11,19 +11,30 @@ import (
 
 // Collector aggregates flow events into an in-memory flow table
 type Collector struct {
-	mu      sync.RWMutex
-	flows   map[FlowKey]*FlowEntry
-	timeout time.Duration
-	total   uint64
-	dropped uint64
+	mu       sync.RWMutex
+	flows    map[FlowKey]*FlowEntry
+	timeout  time.Duration
+	enricher Enricher
+	maxFlows int
+	total    uint64
+	dropped  uint64
+	forced   uint64
 }
 
-// New creates a collector that evicts flows older than timeout
-func New(timeout time.Duration) *Collector {
+// New creates a collector that evicts flows older than timeout.
+// enricher may be nil. maxFlows <= 0 means unlimited.
+func New(timeout time.Duration, enricher Enricher, maxFlows int) *Collector {
 	return &Collector{
-		flows:   make(map[FlowKey]*FlowEntry),
-		timeout: timeout,
+		flows:    make(map[FlowKey]*FlowEntry),
+		timeout:  timeout,
+		enricher: enricher,
+		maxFlows: maxFlows,
 	}
+}
+
+// Enricher returns the enricher passed to New.
+func (c *Collector) Enricher() Enricher {
+	return c.enricher
 }
 
 // Record adds a flow event to the table, creating or updating the entry
@@ -37,6 +48,9 @@ func (c *Collector) Record(ev FlowEvent, now time.Time) {
 
 	entry, ok := c.flows[key]
 	if !ok {
+		if c.maxFlows > 0 && len(c.flows) >= c.maxFlows {
+			c.evictOldest()
+		}
 		c.flows[key] = &FlowEntry{
 			Packets:  1,
 			Bytes:    uint64(ev.Len),
@@ -48,6 +62,26 @@ func (c *Collector) Record(ev FlowEvent, now time.Time) {
 	entry.Packets++
 	entry.Bytes += uint64(ev.Len)
 	entry.LastSeen = now
+}
+
+// evictOldest removes the flow with the oldest LastSeen. Must be called with mu held.
+func (c *Collector) evictOldest() {
+	var oldestKey FlowKey
+	var oldestTime time.Time
+	first := true
+
+	for k, v := range c.flows {
+		if first || v.LastSeen.Before(oldestTime) {
+			oldestKey = k
+			oldestTime = v.LastSeen
+			first = false
+		}
+	}
+
+	if !first {
+		delete(c.flows, oldestKey)
+		c.forced++
+	}
 }
 
 // Evict removes flows whose LastSeen is older than the configured timeout
@@ -82,9 +116,10 @@ func (c *Collector) Stats() Stats {
 	defer c.mu.RUnlock()
 
 	return Stats{
-		ActiveFlows:   uint64(len(c.flows)),
-		TotalEvents:   c.total,
-		DroppedEvents: c.dropped,
+		ActiveFlows:     uint64(len(c.flows)),
+		TotalEvents:     c.total,
+		DroppedEvents:   c.dropped,
+		ForcedEvictions: c.forced,
 	}
 }
 

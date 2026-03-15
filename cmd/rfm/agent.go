@@ -40,7 +40,7 @@ func runAgent(cmd *cobra.Command, args []string) error {
 	}
 	defer rd.Close()
 
-	c := collector.New(30 * time.Second)
+	c := collector.New(30*time.Second, nil, 0)
 
 	ctx, cancel := signal.NotifyContext(cmd.Context(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()

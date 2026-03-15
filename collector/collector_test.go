@@ -10,7 +10,7 @@ import (
 )
 
 func TestRecord(t *testing.T) {
-	c := New(30 * time.Second)
+	c := New(30*time.Second, nil, 0)
 
 	ev := FlowEvent{
 		Ifindex: 1,
@@ -42,7 +42,7 @@ func TestRecord(t *testing.T) {
 }
 
 func TestRecordDistinctFlows(t *testing.T) {
-	c := New(30 * time.Second)
+	c := New(30*time.Second, nil, 0)
 	now := time.Now()
 
 	ev1 := FlowEvent{
@@ -68,7 +68,7 @@ func TestRecordDistinctFlows(t *testing.T) {
 }
 
 func TestEvict(t *testing.T) {
-	c := New(10 * time.Second)
+	c := New(10*time.Second, nil, 0)
 
 	ev := FlowEvent{
 		Proto: 6, SrcPort: 1000, DstPort: 80,
@@ -94,7 +94,7 @@ func TestEvict(t *testing.T) {
 }
 
 func TestEvictKeepsFresh(t *testing.T) {
-	c := New(10 * time.Second)
+	c := New(10*time.Second, nil, 0)
 
 	stale := FlowEvent{
 		Proto: 6, SrcPort: 1000, DstPort: 80,
@@ -164,7 +164,7 @@ func TestRun(t *testing.T) {
 	raw := encodeWireEvent(ev)
 	mr := &mockReader{events: [][]byte{raw, raw, raw}}
 
-	c := New(30 * time.Second)
+	c := New(30*time.Second, nil, 0)
 	ctx, cancel := context.WithCancel(context.Background())
 
 	errCh := make(chan error, 1)
@@ -196,7 +196,7 @@ func TestRun(t *testing.T) {
 func TestRunDroppedEvents(t *testing.T) {
 	mr := &mockReader{drops: 42}
 
-	c := New(30 * time.Second)
+	c := New(30*time.Second, nil, 0)
 	ctx, cancel := context.WithCancel(context.Background())
 
 	errCh := make(chan error, 1)
@@ -241,7 +241,7 @@ func TestRunDroppedEventsUnderLoad(t *testing.T) {
 	mr := &sustainedReader{event: encodeWireEvent(ev), drops: 99}
 
 	// short timeout so the eviction ticker fires fast
-	c := New(200 * time.Millisecond)
+	c := New(200*time.Millisecond, nil, 0)
 	ctx, cancel := context.WithCancel(context.Background())
 
 	errCh := make(chan error, 1)
@@ -266,7 +266,7 @@ func TestRunDroppedEventsUnderLoad(t *testing.T) {
 
 func TestRunContextCancel(t *testing.T) {
 	mr := &mockReader{}
-	c := New(30 * time.Second)
+	c := New(30*time.Second, nil, 0)
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel() // cancel immediately
 
@@ -277,7 +277,7 @@ func TestRunContextCancel(t *testing.T) {
 }
 
 func TestStats(t *testing.T) {
-	c := New(30 * time.Second)
+	c := New(30*time.Second, nil, 0)
 	now := time.Now()
 
 	ev := FlowEvent{
@@ -296,5 +296,94 @@ func TestStats(t *testing.T) {
 	}
 	if s.TotalEvents != 2 {
 		t.Errorf("total events=%d want 2", s.TotalEvents)
+	}
+}
+
+func TestMaxFlows(t *testing.T) {
+	c := New(30*time.Second, nil, 2)
+
+	ev1 := FlowEvent{
+		Proto: 6, SrcPort: 1000, DstPort: 80,
+		SrcAddr: netip.MustParseAddr("::ffff:10.0.0.1"),
+		DstAddr: netip.MustParseAddr("::ffff:10.0.0.2"),
+		Len:     100,
+	}
+	ev2 := FlowEvent{
+		Proto: 6, SrcPort: 2000, DstPort: 80,
+		SrcAddr: netip.MustParseAddr("::ffff:10.0.0.1"),
+		DstAddr: netip.MustParseAddr("::ffff:10.0.0.2"),
+		Len:     200,
+	}
+	ev3 := FlowEvent{
+		Proto: 17, SrcPort: 3000, DstPort: 53,
+		SrcAddr: netip.MustParseAddr("::ffff:10.0.0.1"),
+		DstAddr: netip.MustParseAddr("::ffff:10.0.0.2"),
+		Len:     50,
+	}
+
+	t0 := time.Now()
+	c.Record(ev1, t0)
+	c.Record(ev2, t0.Add(time.Second))
+
+	// table is full (max 2), ev3 should evict oldest (ev1)
+	c.Record(ev3, t0.Add(2*time.Second))
+
+	flows := c.Flows()
+	if len(flows) != 2 {
+		t.Fatalf("flow count=%d want 2", len(flows))
+	}
+	if _, ok := flows[ev1.Key()]; ok {
+		t.Fatal("oldest flow should have been evicted")
+	}
+	if _, ok := flows[ev2.Key()]; !ok {
+		t.Fatal("ev2 should still be present")
+	}
+	if _, ok := flows[ev3.Key()]; !ok {
+		t.Fatal("ev3 should be present")
+	}
+}
+
+func TestMaxFlowsForcedEvictionStats(t *testing.T) {
+	c := New(30*time.Second, nil, 1)
+
+	ev1 := FlowEvent{
+		Proto: 6, SrcPort: 1000, DstPort: 80,
+		SrcAddr: netip.MustParseAddr("::ffff:10.0.0.1"),
+		DstAddr: netip.MustParseAddr("::ffff:10.0.0.2"),
+		Len:     100,
+	}
+	ev2 := FlowEvent{
+		Proto: 17, SrcPort: 2000, DstPort: 53,
+		SrcAddr: netip.MustParseAddr("::ffff:10.0.0.1"),
+		DstAddr: netip.MustParseAddr("::ffff:10.0.0.2"),
+		Len:     200,
+	}
+
+	now := time.Now()
+	c.Record(ev1, now)
+	c.Record(ev2, now.Add(time.Second))
+
+	s := c.Stats()
+	if s.ForcedEvictions != 1 {
+		t.Fatalf("forced evictions=%d want 1", s.ForcedEvictions)
+	}
+}
+
+func TestMaxFlowsZeroMeansUnlimited(t *testing.T) {
+	c := New(30*time.Second, nil, 0)
+
+	now := time.Now()
+	for i := range 100 {
+		ev := FlowEvent{
+			Proto: 6, SrcPort: uint16(i), DstPort: 80,
+			SrcAddr: netip.MustParseAddr("::ffff:10.0.0.1"),
+			DstAddr: netip.MustParseAddr("::ffff:10.0.0.2"),
+			Len:     100,
+		}
+		c.Record(ev, now)
+	}
+
+	if len(c.Flows()) != 100 {
+		t.Fatalf("flow count=%d want 100", len(c.Flows()))
 	}
 }
