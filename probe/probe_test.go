@@ -22,6 +22,7 @@ import (
 // ring buffer maps don't generate Go types, so we define it here.
 type rfmRfmFlowEvent struct {
 	_       structs.HostLayout
+	Tstamp  uint64
 	Ifindex uint32
 	Dir     uint8
 	Proto   uint8
