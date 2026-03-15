@@ -66,10 +66,6 @@ static __always_inline int rfm_tc(struct __sk_buff *skb, __u8 dir)
 		break;
 	}
 
-	// only count IP traffic in iface stats
-	if (iface_proto == 0)
-		return TC_ACT_OK;
-
 	// iface stats are always updated, not gated by sampling
 	struct rfm_iface_key ikey = {
 		.ifindex = skb->ifindex,
@@ -87,6 +83,10 @@ static __always_inline int rfm_tc(struct __sk_buff *skb, __u8 dir)
 						.bytes = skb->len };
 		bpf_map_update_elem(&rfm_iface_stats, &ikey, &init, BPF_ANY);
 	}
+
+	// skip non-IP traffic for flow events
+	if (iface_proto == 0)
+		return TC_ACT_OK;
 
 	__u32 cfg_key = 0;
 	struct rfm_config *cfg = bpf_map_lookup_elem(&rfm_config, &cfg_key);

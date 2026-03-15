@@ -34,9 +34,10 @@ flow events in userspace, and serves Prometheus metrics over HTTP.
 +------------------------------------+
 ```
 
-BPF programs are attached via TCX as link-based attachments. All BPF behavior is
-map-driven: sampling rates and feature flags are configured through a shared
-`rfm_config` map, so no program reloads are needed to change runtime parameters.
+BPF programs are attached via TCX as link-based attachments. BPF behavior is
+map-driven: sampling rates and feature flags live in a shared `rfm_config` map
+rather than compiled-in constants. Config changes currently trigger a full
+unload and reload of the BPF programs.
 
 ### Data path
 
@@ -114,7 +115,8 @@ and 65535.
 
 ## Prometheus metrics
 
-Interface counters (from BPF map, zero overhead):
+Interface counters (from BPF map, zero overhead). The `family` label is
+`"ipv4"`, `"ipv6"`, or `"other"` for non-IP traffic (e.g. ARP):
 
 - `rfm_interface_rx_bytes_total{ifname, family}`
 - `rfm_interface_tx_bytes_total{ifname, family}`

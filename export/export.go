@@ -130,9 +130,6 @@ func (mc *MetricsCollector) collectIfaceStats(ch chan<- prometheus.Metric) {
 	}
 
 	for _, e := range entries {
-		if e.Proto != 4 && e.Proto != 6 {
-			continue
-		}
 		ifname := ifnameFromIndex(e.Ifindex)
 		family := familyString(e.Proto)
 
@@ -237,7 +234,7 @@ func familyString(proto uint8) string {
 	case 6:
 		return "ipv6"
 	default:
-		return strconv.FormatUint(uint64(proto), 10)
+		return "other"
 	}
 }
 
