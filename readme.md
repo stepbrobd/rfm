@@ -1,11 +1,10 @@
 # RFM
 
 RFM (Router Flow Monitor) is an eBPF-based network flow analysis agent for Linux
-BGP routers (it doesn't need to run on a machine with BGP session though, it's a
-fairly generic flow collector and dumps everything to Prometheus. IPFIX export
-is planned). It attaches TC programs to network interfaces, collects per-flow
-traffic statistics with configurable sampling, enriches flows with BGP RIB
-metadata via BMP, and exports the results to Prometheus.
+routers. It attaches TC programs to network interfaces, collects per-flow
+traffic statistics with configurable sampling, optionally enriches flows from a
+live BMP-fed RIB and/or MMDB ASN/city databases, and exports the results to
+Prometheus. IPFIX export is planned.
 
 Requirements:
 
@@ -13,15 +12,19 @@ Requirements:
 - Go 1.23+
 - Root or `CAP_BPF` + `CAP_NET_ADMIN`
 
-The goal is a single `rfm` binary that:
+Current scope:
 
 - Attaches TC programs for bidirectional flow observation
 - Keeps BPF behavior fully map-driven and stateless
-- Enriches flows in userspace with BGP RIB data from BMP (or with MMDB ASN/city
-  or combination of both)
+- Optionally enriches flows in userspace with BMP/RIB data, MMDB data, or both
 - Exports Prometheus metrics
-- Exposes runtime control over a Unix domain socket
-- Reserves XDP for firewall fast-path features
+- Ships a typed NixOS module and VM coverage
+
+Planned:
+
+- Unix socket control plane
+- IPFIX export
+- XDP firewall fast-path features
 
 rfm runs as a single daemon (`rfm agent`) that loads eBPF programs, collects
 flow events in userspace, and serves Prometheus metrics over HTTP.
@@ -56,7 +59,8 @@ unload and reload of the BPF programs.
    full, the oldest flow is forcibly evicted.
 4. At scrape time, the Prometheus exporter reads the BPF interface counters map
    directly and iterates the flow table, rolling up flows by enrichment labels
-   (ASN, city) before emitting metrics.
+   (ASN, city) before emitting metrics. With no enrichment configured, those
+   labels stay empty and the agent still runs normally.
 
 ## Configuration
 
@@ -76,8 +80,16 @@ max_flows = 65536
 eviction_timeout = "30s"
 
 [agent.prometheus]
-host = "::"
+host = "::1"
 port = 9669
+
+[agent.enrich.mmdb]
+asn_db = "/var/lib/rfm/dbip-asn-lite.mmdb"
+city_db = "/var/lib/rfm/dbip-city-lite.mmdb"
+
+[agent.enrich.rib.bmp]
+host = "127.0.0.1"
+port = 11019
 ```
 
 ### `agent`
@@ -109,12 +121,36 @@ is 1s.
 
 ### `agent.prometheus`
 
-`host` (string, default "::"): Address to bind the Prometheus metrics HTTP
-server to. Use "::" for all interfaces (IPv4 and IPv6), "0.0.0.0" for IPv4 only,
-or "127.0.0.1" to restrict to localhost.
+`host` (string, default "::1"): Address to bind the Prometheus metrics HTTP
+server to. Use "::1" to restrict to local IPv6 loopback, "127.0.0.1" for local
+IPv4 only, "::" for all interfaces, or "0.0.0.0" for all IPv4 interfaces.
 
 `port` (int, default 9669): TCP port for the metrics server. Must be between 1
 and 65535.
+
+### `agent.enrich`
+
+All enrichment backends are optional. If `agent.enrich` is omitted, the agent
+still starts and `src_asn`, `dst_asn`, `src_city`, and `dst_city` stay empty.
+
+`mmdb.asn_db` (string, default ""): Path to an ASN MMDB database. Startup fails
+early if the configured path is missing or unreadable.
+
+`mmdb.city_db` (string, default ""): Path to a city MMDB database. Startup fails
+early if the configured path is missing or unreadable.
+
+`rib.bmp.host` (string, default ""): BMP listen host for live route updates. If
+`rib.bmp.host` and `rib.bmp.port` are both unset, the BMP listener stays
+disabled.
+
+`rib.bmp.port` (int, default 0): BMP listen port for live route updates. If only
+one BMP field is set, the other defaults to `::1` or `11019`.
+
+If configured with no BMP peer connected yet, the agent still runs and ASN
+labels stay empty until routes arrive.
+
+When both backends are enabled, ASN lookup uses the RIB first and MMDB as a
+fallback. City lookup comes from MMDB.
 
 ## Prometheus metrics
 
@@ -138,6 +174,16 @@ Collector health:
 - `rfm_collector_forced_evictions_total`
 - `rfm_errors_total{subsystem}`
 
+`rfm_errors_total{subsystem}` currently uses `bpf_map` and `ring_buffer`.
+
+## CLI
+
+The current CLI surface is intentionally small:
+
+- `rfm agent`
+
+Control plane subcommands, runtime status, and RIB inspection are planned.
+
 ## NixOS module
 
 Example:
@@ -149,12 +195,19 @@ services.rfm = {
     interfaces = [ "eth0" "tailscale0" ];
     bpf.sample_rate = 50;
     prometheus.port = 9669;
+    enrich.mmdb.asn_db =
+      "${pkgs.dbip-asn-lite}/share/dbip/dbip-asn-lite.mmdb";
+    enrich.mmdb.city_db =
+      "${pkgs.dbip-city-lite}/share/dbip/dbip-city-lite.mmdb";
+    enrich.rib.bmp.host = "127.0.0.1";
+    enrich.rib.bmp.port = 11019;
   };
 };
 ```
 
 The module generates a TOML config file and runs rfm as a systemd service with
-automatic restart on failure.
+automatic restart on failure. `agent.enrich.*` is available through typed module
+options.
 
 ## Comparison with other tools
 
