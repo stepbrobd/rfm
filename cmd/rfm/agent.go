@@ -16,6 +16,7 @@ import (
 	"github.com/spf13/cobra"
 	"ysun.co/rfm/collector"
 	"ysun.co/rfm/config"
+	"ysun.co/rfm/enrich"
 	"ysun.co/rfm/export"
 	"ysun.co/rfm/probe"
 )
@@ -39,6 +40,14 @@ func runAgent(cmd *cobra.Command, args []string) error {
 	indices, err := config.ResolveInterfaces(cfg.Agent.Interfaces)
 	if err != nil {
 		return err
+	}
+
+	enricher, enrichCloser, err := enrich.Build(cfg.Agent.Enrich)
+	if err != nil {
+		return err
+	}
+	if enrichCloser != nil {
+		defer enrichCloser.Close()
 	}
 
 	// 2 directions × 3 protos (ipv4, ipv6, other) per interface, rounded up
@@ -77,7 +86,7 @@ func runAgent(cmd *cobra.Command, args []string) error {
 
 	c := collector.New(
 		cfg.Agent.Collector.EvictionTimeout,
-		nil,
+		enricher,
 		cfg.Agent.Collector.MaxFlows,
 	)
 

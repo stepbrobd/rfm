@@ -20,6 +20,7 @@ buildGoApplication (
           ./cmd
           ./collector
           ./config
+          ./enrich
           ./export
           ./probe
           ./testutil

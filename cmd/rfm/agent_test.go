@@ -44,6 +44,23 @@ interfaces = ["doesnotexist999"]
 	}
 }
 
+func TestRunAgentBadMMDBPath(t *testing.T) {
+	cfgFile = writeTestConfig(t, `
+[agent]
+interfaces = ["lo"]
+
+[agent.enrich.mmdb]
+asn_db = "/does/not/exist.mmdb"
+`)
+	err := runAgent(&cobra.Command{}, nil)
+	if err == nil {
+		t.Fatal("should fail on bad MMDB path")
+	}
+	if !strings.Contains(err.Error(), "/does/not/exist.mmdb") {
+		t.Errorf("error should mention MMDB path, got: %v", err)
+	}
+}
+
 func TestRunAgentBadConfig(t *testing.T) {
 	cfgFile = writeTestConfig(t, `
 [agent]
