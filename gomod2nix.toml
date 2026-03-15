@@ -1,6 +1,10 @@
 schema = 3
 
 [mod]
+  [mod.'github.com/BurntSushi/toml']
+    version = 'v1.6.0'
+    hash = 'sha256-ptdUJvuc21ixeLt+M5way/na3aCnCO4MYHWulWp8NEY='
+
   [mod.'github.com/beorn7/perks']
     version = 'v1.0.1'
     hash = 'sha256-h75GUqfwJKngCJQVE5Ao5wnO3cfKD9lSIteoLp/3xJ4='
