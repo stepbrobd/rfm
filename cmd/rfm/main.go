@@ -15,7 +15,7 @@ var root = &cobra.Command{
 }
 
 func init() {
-	root.PersistentFlags().StringVar(&cfgFile, "config",
+	root.PersistentFlags().StringVarP(&cfgFile, "config", "c",
 		"/etc/rfm/rfm.toml", "config file path")
 }
 

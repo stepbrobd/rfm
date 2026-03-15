@@ -6,20 +6,19 @@ import (
 	"fmt"
 	"net"
 	"net/http"
-	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
-	"time"
 
+	"github.com/charmbracelet/log"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/spf13/cobra"
 	"ysun.co/rfm/collector"
+	"ysun.co/rfm/config"
 	"ysun.co/rfm/export"
 	"ysun.co/rfm/probe"
 )
-
-var agentIface string
 
 var agentCmd = &cobra.Command{
 	Use:   "agent",
@@ -28,25 +27,39 @@ var agentCmd = &cobra.Command{
 }
 
 func init() {
-	agentCmd.Flags().StringVarP(&agentIface, "interface", "i", "", "network interface to attach to (required)")
-	agentCmd.MarkFlagRequired("interface")
 	root.AddCommand(agentCmd)
 }
 
 func runAgent(cmd *cobra.Command, args []string) error {
-	iface, err := net.InterfaceByName(agentIface)
+	cfg, err := config.Load(cfgFile)
 	if err != nil {
-		return fmt.Errorf("interface %q: %w", agentIface, err)
+		return err
 	}
 
-	p, err := probe.Load(probe.Config{SampleRate: 100})
+	indices, err := config.ResolveInterfaces(cfg.Agent.Interfaces)
+	if err != nil {
+		return err
+	}
+
+	p, err := probe.Load(probe.Config{
+		SampleRate:  cfg.Agent.BPF.SampleRate,
+		RingBufSize: cfg.Agent.BPF.RingBufSize,
+	})
 	if err != nil {
 		return fmt.Errorf("load probe: %w", err)
 	}
 	defer p.Close()
 
-	if err := p.Attach(iface.Index); err != nil {
-		return fmt.Errorf("attach %s: %w", agentIface, err)
+	for _, idx := range indices {
+		iface, _ := net.InterfaceByIndex(idx)
+		name := strconv.Itoa(idx)
+		if iface != nil {
+			name = iface.Name
+		}
+		if err := p.Attach(idx); err != nil {
+			return fmt.Errorf("attach %s: %w", name, err)
+		}
+		log.Info("attached", "interface", name)
 	}
 
 	rd, err := collector.NewReader(p.FlowEvents(), p.FlowDrops())
@@ -55,22 +68,38 @@ func runAgent(cmd *cobra.Command, args []string) error {
 	}
 	defer rd.Close()
 
-	c := collector.New(30*time.Second, nil, 65536)
+	c := collector.New(
+		cfg.Agent.Collector.EvictionTimeout,
+		nil,
+		cfg.Agent.Collector.MaxFlows,
+	)
 
 	mc := export.New(&export.ProbeSource{Probe: p}, c)
-	prometheus.MustRegister(mc)
+
+	reg := prometheus.NewRegistry()
+	reg.MustRegister(mc)
+
+	addr := net.JoinHostPort(cfg.Agent.Prometheus.Host,
+		strconv.Itoa(cfg.Agent.Prometheus.Port))
 
 	mux := http.NewServeMux()
-	mux.Handle("/metrics", promhttp.Handler())
-	srv := &http.Server{Addr: ":9669", Handler: mux}
+	mux.Handle("/metrics", promhttp.HandlerFor(reg, promhttp.HandlerOpts{}))
+	srv := &http.Server{Addr: addr, Handler: mux}
 
+	// start listener and fail immediately if bind fails
+	ln, err := net.Listen("tcp", addr)
+	if err != nil {
+		return fmt.Errorf("listen %s: %w", addr, err)
+	}
+	log.Info("metrics server", "addr", addr)
 	go func() {
-		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			fmt.Fprintf(os.Stderr, "http: %v\n", err)
+		if err := srv.Serve(ln); err != nil && err != http.ErrServerClosed {
+			log.Error("http", "err", err)
 		}
 	}()
 
-	ctx, cancel := signal.NotifyContext(cmd.Context(), syscall.SIGINT, syscall.SIGTERM)
+	ctx, cancel := signal.NotifyContext(cmd.Context(),
+		syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
 
 	runErr := c.Run(ctx, rd)
