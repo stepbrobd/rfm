@@ -23,6 +23,7 @@ struct rfm_iface_value {
 };
 
 struct rfm_flow_event {
+	__u64 tstamp;
 	__u32 ifindex;
 	__u8 dir;
 	__u8 proto;
@@ -33,5 +34,7 @@ struct rfm_flow_event {
 	__u16 dst_port;
 	__u32 len;
 };
+
+#define RFM_WAKEUP_BATCH 64
 
 #endif

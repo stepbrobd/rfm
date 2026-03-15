@@ -9,6 +9,7 @@ import (
 
 func TestDecodeFlowEvent(t *testing.T) {
 	want := FlowEvent{
+		Tstamp:  123456789,
 		Ifindex: 42,
 		Dir:     1,
 		Proto:   6,
@@ -20,6 +21,7 @@ func TestDecodeFlowEvent(t *testing.T) {
 	}
 
 	wire := wireFlowEvent{
+		Tstamp:  want.Tstamp,
 		Ifindex: want.Ifindex,
 		Dir:     want.Dir,
 		Proto:   want.Proto,
@@ -56,6 +58,7 @@ func TestDecodeFlowEventShort(t *testing.T) {
 // Used by Run tests in collector_test.go.
 func encodeWireEvent(ev FlowEvent) []byte {
 	wire := wireFlowEvent{
+		Tstamp:  ev.Tstamp,
 		Ifindex: ev.Ifindex,
 		Dir:     ev.Dir,
 		Proto:   ev.Proto,

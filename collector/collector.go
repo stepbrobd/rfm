@@ -173,6 +173,6 @@ func (c *Collector) Run(ctx context.Context, rd Reader) error {
 			continue
 		}
 
-		c.Record(ev, time.Now())
+		c.Record(ev, eventTime(ev))
 	}
 }

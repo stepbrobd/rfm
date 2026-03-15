@@ -41,9 +41,16 @@ func runAgent(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	// 2 directions × 3 protos (ipv4, ipv6, other) per interface, rounded up
+	ifaceStatsSize := len(indices) * 8
+	if ifaceStatsSize < 64 {
+		ifaceStatsSize = 64
+	}
+
 	p, err := probe.Load(probe.Config{
-		SampleRate:  cfg.Agent.BPF.SampleRate,
-		RingBufSize: cfg.Agent.BPF.RingBufSize,
+		SampleRate:     cfg.Agent.BPF.SampleRate,
+		RingBufSize:    cfg.Agent.BPF.RingBufSize,
+		IfaceStatsSize: ifaceStatsSize,
 	})
 	if err != nil {
 		return fmt.Errorf("load probe: %w", err)

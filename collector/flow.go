@@ -20,6 +20,7 @@ type Labels struct {
 
 // FlowEvent represents a single packet observation from the BPF program
 type FlowEvent struct {
+	Tstamp  uint64 // CLOCK_BOOTTIME nanoseconds
 	Ifindex uint32
 	Dir     uint8
 	Proto   uint8

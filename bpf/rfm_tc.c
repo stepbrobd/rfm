@@ -38,6 +38,13 @@ struct {
 	__type(value, __u64);
 } rfm_flow_drops SEC(".maps");
 
+struct {
+	__uint(type, BPF_MAP_TYPE_PERCPU_ARRAY);
+	__uint(max_entries, 1);
+	__type(key, __u32);
+	__type(value, __u64);
+} rfm_submit_count SEC(".maps");
+
 static __always_inline int rfm_tc(struct __sk_buff *skb, __u8 dir)
 {
 	void *data = (void *)(long)skb->data;
@@ -91,6 +98,7 @@ static __always_inline int rfm_tc(struct __sk_buff *skb, __u8 dir)
 
 	// parse IP headers into a stack event
 	struct rfm_flow_event ev = {
+		.tstamp = bpf_ktime_get_boot_ns(),
 		.ifindex = skb->ifindex,
 		.dir = dir,
 		.len = skb->len,
@@ -152,7 +160,14 @@ static __always_inline int rfm_tc(struct __sk_buff *skb, __u8 dir)
 	}
 
 	__builtin_memcpy(ring_ev, &ev, sizeof(ev));
-	bpf_ringbuf_submit(ring_ev, 0);
+
+	// batch wakeups: only wake epoll every RFM_WAKEUP_BATCH events
+	__u64 flags = BPF_RB_NO_WAKEUP;
+	__u32 cnt_key = 0;
+	__u64 *cnt = bpf_map_lookup_elem(&rfm_submit_count, &cnt_key);
+	if (cnt && (++(*cnt) % RFM_WAKEUP_BATCH == 0))
+		flags = BPF_RB_FORCE_WAKEUP;
+	bpf_ringbuf_submit(ring_ev, flags);
 
 	return TC_ACT_OK;
 }

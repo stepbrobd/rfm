@@ -8,10 +8,11 @@ import (
 	"structs"
 )
 
-const wireFlowEventSize = 48
+const wireFlowEventSize = 56
 
 type wireFlowEvent struct {
 	_       structs.HostLayout
+	Tstamp  uint64
 	Ifindex uint32
 	Dir     uint8
 	Proto   uint8
@@ -34,6 +35,7 @@ func DecodeFlowEvent(raw []byte) (FlowEvent, error) {
 	}
 
 	return FlowEvent{
+		Tstamp:  wire.Tstamp,
 		Ifindex: wire.Ifindex,
 		Dir:     wire.Dir,
 		Proto:   wire.Proto,
