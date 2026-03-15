@@ -192,7 +192,23 @@ func TestResolveWildcard(t *testing.T) {
 }
 
 func TestResolveNamed(t *testing.T) {
-	indices, err := ResolveInterfaces([]string{"lo"})
+	// find the loopback interface name (lo on Linux, lo0 on macOS)
+	ifaces, err := net.Interfaces()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var loName string
+	for _, iface := range ifaces {
+		if iface.Flags&net.FlagLoopback != 0 {
+			loName = iface.Name
+			break
+		}
+	}
+	if loName == "" {
+		t.Skip("no loopback interface found")
+	}
+
+	indices, err := ResolveInterfaces([]string{loName})
 	if err != nil {
 		t.Fatalf("ResolveInterfaces: %v", err)
 	}
