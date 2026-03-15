@@ -16,7 +16,6 @@ type Collector struct {
 	timeout  time.Duration
 	enricher Enricher
 	maxFlows int
-	total    uint64
 	dropped  uint64
 	forced   uint64
 }
@@ -43,8 +42,6 @@ func (c *Collector) Record(ev FlowEvent, now time.Time) {
 
 	c.mu.Lock()
 	defer c.mu.Unlock()
-
-	c.total++
 
 	entry, ok := c.flows[key]
 	if !ok {
@@ -117,7 +114,6 @@ func (c *Collector) Stats() Stats {
 
 	return Stats{
 		ActiveFlows:     uint64(len(c.flows)),
-		TotalEvents:     c.total,
 		DroppedEvents:   c.dropped,
 		ForcedEvictions: c.forced,
 	}

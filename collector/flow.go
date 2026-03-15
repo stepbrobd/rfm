@@ -64,7 +64,6 @@ type FlowEntry struct {
 // Stats holds collector-level statistics
 type Stats struct {
 	ActiveFlows     uint64
-	TotalEvents     uint64
 	DroppedEvents   uint64
 	ForcedEvictions uint64
 }

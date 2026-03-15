@@ -162,8 +162,8 @@ func TestDescribe(t *testing.T) {
 		descs = append(descs, d)
 	}
 
-	if got := len(descs); got != 10 {
-		t.Fatalf("got %d descriptors, want 10", got)
+	if got := len(descs); got != 9 {
+		t.Fatalf("got %d descriptors, want 9", got)
 	}
 
 	names := make(map[string]bool)
@@ -179,7 +179,6 @@ func TestDescribe(t *testing.T) {
 		"rfm_flow_bytes",
 		"rfm_flow_packets",
 		"rfm_collector_active_flows",
-		"rfm_collector_events_total",
 		"rfm_collector_dropped_events_total",
 		"rfm_collector_forced_evictions_total",
 	}
@@ -207,7 +206,6 @@ func TestCollectHealth(t *testing.T) {
 	vals := collectAll(t, mc)
 
 	assertGauge(t, vals, "rfm_collector_active_flows", 1)
-	assertCounter(t, vals, "rfm_collector_events_total", 1)
 	assertCounter(t, vals, "rfm_collector_dropped_events_total", 0)
 	assertCounter(t, vals, "rfm_collector_forced_evictions_total", 0)
 }

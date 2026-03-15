@@ -170,9 +170,9 @@ func TestRun(t *testing.T) {
 	errCh := make(chan error, 1)
 	go func() { errCh <- c.Run(ctx, mr) }()
 
-	// wait for all 3 events to be recorded
+	// wait for at least one flow to be recorded
 	deadline := time.Now().Add(time.Second)
-	for c.Stats().TotalEvents < 3 {
+	for c.Stats().ActiveFlows < 1 {
 		if time.Now().After(deadline) {
 			t.Fatal("timed out waiting for events")
 		}
@@ -187,9 +187,6 @@ func TestRun(t *testing.T) {
 	s := c.Stats()
 	if s.ActiveFlows != 1 {
 		t.Errorf("active flows = %d, want 1", s.ActiveFlows)
-	}
-	if s.TotalEvents != 3 {
-		t.Errorf("total events = %d, want 3", s.TotalEvents)
 	}
 }
 
@@ -293,9 +290,6 @@ func TestStats(t *testing.T) {
 	s := c.Stats()
 	if s.ActiveFlows != 1 {
 		t.Errorf("active flows=%d want 1", s.ActiveFlows)
-	}
-	if s.TotalEvents != 2 {
-		t.Errorf("total events=%d want 2", s.TotalEvents)
 	}
 }
 

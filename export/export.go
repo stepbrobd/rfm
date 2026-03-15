@@ -48,11 +48,6 @@ var (
 		"Number of active flows in the collector.",
 		nil, nil,
 	)
-	descEventsTotal = prometheus.NewDesc(
-		"rfm_collector_events_total",
-		"Total flow events received by the collector.",
-		nil, nil,
-	)
 	descDroppedEvents = prometheus.NewDesc(
 		"rfm_collector_dropped_events_total",
 		"Total flow events dropped by the ring buffer.",
@@ -72,7 +67,6 @@ var (
 		descFlowBytes,
 		descFlowPackets,
 		descActiveFlows,
-		descEventsTotal,
 		descDroppedEvents,
 		descForcedEvictions,
 	}
@@ -200,7 +194,6 @@ func (mc *MetricsCollector) collectHealth(ch chan<- prometheus.Metric) {
 
 	stats := mc.col.Stats()
 	ch <- prometheus.MustNewConstMetric(descActiveFlows, prometheus.GaugeValue, float64(stats.ActiveFlows))
-	ch <- prometheus.MustNewConstMetric(descEventsTotal, prometheus.CounterValue, float64(stats.TotalEvents))
 	ch <- prometheus.MustNewConstMetric(descDroppedEvents, prometheus.CounterValue, float64(stats.DroppedEvents))
 	ch <- prometheus.MustNewConstMetric(descForcedEvictions, prometheus.CounterValue, float64(stats.ForcedEvictions))
 }
