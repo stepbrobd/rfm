@@ -104,8 +104,8 @@ Must be >= 0. When the table is full, the oldest flow is forcibly evicted. A
 value of 0 means unlimited.
 
 `eviction_timeout` (string, default "30s"): How long a flow can be idle before
-eviction. Accepts any Go duration string (e.g. "10s", "1m", "500ms"). Must parse
-to a positive duration.
+eviction. Accepts any Go duration string (e.g. "10s", "1m", "2s"). Minimum value
+is 1s.
 
 ### `agent.prometheus`
 

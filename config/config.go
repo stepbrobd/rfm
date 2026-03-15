@@ -173,8 +173,8 @@ func validate(cfg *Config) error {
 	if a.Collector.MaxFlows < 0 {
 		return fmt.Errorf("agent.collector.max_flows must be >= 0")
 	}
-	if a.Collector.EvictionTimeout <= 0 {
-		return fmt.Errorf("agent.collector.eviction_timeout must be > 0")
+	if a.Collector.EvictionTimeout < time.Second {
+		return fmt.Errorf("agent.collector.eviction_timeout must be >= 1s, got %v", a.Collector.EvictionTimeout)
 	}
 	if a.Prometheus.Port < 1 || a.Prometheus.Port > 65535 {
 		return fmt.Errorf("agent.prometheus.port must be between 1 and 65535, got %d", a.Prometheus.Port)

@@ -113,6 +113,12 @@ func (mc *MetricsCollector) Collect(ch chan<- prometheus.Metric) {
 	bpfErrs := mc.bpfMapErr
 	mc.mu.Unlock()
 	ch <- prometheus.MustNewConstMetric(descErrorsTotal, prometheus.CounterValue, float64(bpfErrs), "bpf_map")
+
+	if mc.col != nil {
+		stats := mc.col.Stats()
+		ch <- prometheus.MustNewConstMetric(descErrorsTotal, prometheus.CounterValue, float64(stats.DecodeErrors), "ring_buffer")
+		ch <- prometheus.MustNewConstMetric(descErrorsTotal, prometheus.CounterValue, float64(stats.ReadErrors), "drop_map")
+	}
 }
 
 func (mc *MetricsCollector) collectIfaceStats(ch chan<- prometheus.Metric) {

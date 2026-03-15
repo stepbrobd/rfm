@@ -99,15 +99,17 @@ func runAgent(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("listen %s: %w", addr, err)
 	}
 	log.Info("metrics server", "addr", addr)
-	go func() {
-		if err := srv.Serve(ln); err != nil && err != http.ErrServerClosed {
-			log.Error("http", "err", err)
-		}
-	}()
 
 	ctx, cancel := signal.NotifyContext(cmd.Context(),
 		syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
+
+	go func() {
+		if err := srv.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			log.Error("http server died, shutting down", "err", err)
+			cancel()
+		}
+	}()
 
 	runErr := c.Run(ctx, rd)
 	srv.Shutdown(context.Background())

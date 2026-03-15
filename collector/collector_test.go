@@ -401,6 +401,32 @@ func TestRunReaderErrorCleansUp(t *testing.T) {
 	}
 }
 
+func TestRunDecodeErrors(t *testing.T) {
+	// short garbage event that will fail DecodeFlowEvent
+	mr := &mockReader{events: [][]byte{{0x00, 0x01, 0x02}}}
+
+	c := New(30*time.Second, nil, 0)
+	ctx, cancel := context.WithCancel(context.Background())
+
+	errCh := make(chan error, 1)
+	go func() { errCh <- c.Run(ctx, mr) }()
+
+	deadline := time.Now().Add(time.Second)
+	for c.Stats().DecodeErrors == 0 {
+		if time.Now().After(deadline) {
+			t.Fatal("timed out waiting for decode error to be counted")
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+
+	cancel()
+	<-errCh
+
+	if s := c.Stats(); s.DecodeErrors != 1 {
+		t.Fatalf("decode errors = %d, want 1", s.DecodeErrors)
+	}
+}
+
 func TestMaxFlowsZeroMeansUnlimited(t *testing.T) {
 	c := New(30*time.Second, nil, 0)
 

@@ -151,6 +151,21 @@ eviction_timeout = "notaduration"
 	}
 }
 
+func TestLoadSubSecondEvictionTimeout(t *testing.T) {
+	path := writeTOML(t, `
+[agent]
+interfaces = ["eth0"]
+
+[agent.collector]
+eviction_timeout = "1ns"
+`)
+
+	_, err := Load(path)
+	if err == nil {
+		t.Fatal("expected error for sub-second eviction_timeout")
+	}
+}
+
 func TestLoadBadPort(t *testing.T) {
 	for _, port := range []int{0, -1, 70000} {
 		path := writeTOML(t, `
