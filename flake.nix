@@ -5,19 +5,39 @@
       systems = import inputs.systems;
 
       perSystem =
-        { pkgs, system, ... }:
         {
-          _module.args.pkgs = import inputs.nixpkgs {
-            inherit system;
-            config.allowDeprecatedx86_64Darwin = true;
-            overlays = [ inputs.gomod2nix.overlays.default ];
-          };
-
-          checks.default = pkgs.testers.runNixOSTest ./test.nix;
-          devShells.default = pkgs.callPackage ./shell.nix { };
-          formatter = pkgs.callPackage ./formatter.nix { };
-          packages.default = pkgs.callPackage ./default.nix { };
-        };
+          lib,
+          pkgs,
+          system,
+          ...
+        }:
+        (lib.recursiveUpdate
+          {
+            _module.args.pkgs = import inputs.nixpkgs {
+              inherit system;
+              config.allowDeprecatedx86_64Darwin = true;
+              overlays = [ inputs.gomod2nix.overlays.default ];
+            };
+          }
+          (
+            let
+              lift =
+                func: path:
+                func (
+                  lib.modules.importApply path {
+                    inherit inputs;
+                    std = builtins // lib;
+                  }
+                );
+            in
+            {
+              checks.default = lift pkgs.testers.runNixOSTest ./test.nix;
+              devShells.default = pkgs.callPackage ./shell.nix { };
+              formatter = pkgs.callPackage ./formatter.nix { };
+              packages.default = pkgs.callPackage ./default.nix { };
+            }
+          )
+        );
     };
 
   inputs.nixpkgs.url = "github:nixos/nixpkgs/nixos-unstable";
