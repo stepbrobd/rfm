@@ -40,6 +40,7 @@ let
         ethtool
         iperf3
         iproute2
+        netcat-openbsd
         tcpdump
         xdp-tools
       ];
@@ -114,7 +115,7 @@ in
     { pkgs, ... }:
     {
       imports = [ (mkBase "192.168.1.1") ];
-      # multi-interface: eth1 + lo, sample every packet, custom port
+
       services.rfm = {
         enable = true;
         settings.agent = {
@@ -131,15 +132,69 @@ in
             host = "::";
             port = 9669;
           };
+          enrich = {
+            mmdb = {
+              asn_db = "${pkgs.dbip-asn-lite}/share/dbip/dbip-asn-lite.mmdb";
+              city_db = "${pkgs.dbip-city-lite}/share/dbip/dbip-city-lite.mmdb";
+            };
+            rib.bmp_listen = "127.0.0.1:11019";
+          };
         };
       };
+
+      services.bird = {
+        enable = true;
+        package = pkgs.bird3;
+        config = ''
+          router id 192.168.1.1;
+
+          protocol device {
+          }
+
+          protocol kernel kernel4 {
+            ipv4 {
+              import none;
+              export all;
+            };
+          }
+
+          protocol bgp from_machine2 {
+            local 192.168.1.1 as 65001;
+            neighbor 192.168.1.2 as 65002;
+            ipv4 {
+              import all;
+              import table on;
+              export none;
+            };
+          }
+
+          protocol bgp from_machine3 {
+            local 192.168.1.1 as 65001;
+            neighbor 192.168.1.3 as 65003;
+            ipv4 {
+              import all;
+              import table on;
+              export none;
+            };
+          }
+
+          protocol bmp rfm {
+            station address ip 127.0.0.1 port 11019;
+            monitoring rib in pre_policy;
+            tx buffer limit 64;
+          }
+        '';
+      };
+
+      systemd.services.bird.after = [ "rfm.service" ];
+      systemd.services.bird.requires = [ "rfm.service" ];
     };
 
   nodes.machine2 =
     { pkgs, ... }:
     {
       imports = [ (mkBase "192.168.1.2") ];
-      # single interface, different sample rate, default port
+
       services.rfm = {
         enable = true;
         settings.agent = {
@@ -148,13 +203,48 @@ in
           prometheus.port = 9669;
         };
       };
+
+      services.bird = {
+        enable = true;
+        package = pkgs.bird3;
+        config = ''
+          router id 192.168.1.2;
+
+          protocol device {
+          }
+
+          filter export_machine1 {
+            if source = RTS_STATIC then {
+              bgp_community.add((65002, 100));
+              bgp_large_community.add((65002, 1, 100));
+              bgp_path.prepend(65002);
+              accept;
+            }
+            reject;
+          }
+
+          protocol static static4 {
+            ipv4;
+            route 203.0.113.0/24 blackhole;
+          }
+
+          protocol bgp to_machine1 {
+            local 192.168.1.2 as 65002;
+            neighbor 192.168.1.1 as 65001;
+            ipv4 {
+              import none;
+              export filter export_machine1;
+            };
+          }
+        '';
+      };
     };
 
   nodes.machine3 =
     { pkgs, ... }:
     {
       imports = [ (mkBase "192.168.1.3") ];
-      # multi-interface, sample every packet, larger flow table
+
       services.rfm = {
         enable = true;
         settings.agent = {
@@ -166,6 +256,41 @@ in
           collector.max_flows = 4096;
           prometheus.port = 9669;
         };
+      };
+
+      services.bird = {
+        enable = true;
+        package = pkgs.bird3;
+        config = ''
+          router id 192.168.1.3;
+
+          protocol device {
+          }
+
+          filter export_machine1 {
+            if source = RTS_STATIC then {
+              bgp_community.add((65003, 200));
+              bgp_large_community.add((65003, 2, 200));
+              bgp_path.prepend(65003);
+              accept;
+            }
+            reject;
+          }
+
+          protocol static static4 {
+            ipv4;
+            route 198.51.100.0/24 blackhole;
+          }
+
+          protocol bgp to_machine1 {
+            local 192.168.1.3 as 65003;
+            neighbor 192.168.1.1 as 65001;
+            ipv4 {
+              import none;
+              export filter export_machine1;
+            };
+          }
+        '';
       };
     };
 
@@ -190,6 +315,44 @@ in
   testScript = ''
     import time
 
+    def metric_lines(metrics, name):
+      prefix = name + "{"
+      bare = name + " "
+      return [
+        line for line in metrics.splitlines()
+        if line.startswith(prefix) or line.startswith(bare)
+      ]
+
+    def metric_values(metrics, name, **labels):
+      vals = []
+      for line in metric_lines(metrics, name):
+        if all(f'{key}="{value}"' in line for key, value in labels.items()):
+          vals.append(float(line.split()[-1]))
+      return vals
+
+    def require_metric(metrics, name, **labels):
+      vals = metric_values(metrics, name, **labels)
+      if vals:
+        return vals
+
+      lines = metric_lines(metrics, name)
+      raise AssertionError(
+        f"missing {name} with labels {labels}, candidates: {lines}"
+      )
+      return vals
+
+    def require_positive(metrics, name, **labels):
+      vals = require_metric(metrics, name, **labels)
+      assert any(val > 0 for val in vals), f"{name} {labels} has no positive samples: {vals}"
+      return vals
+
+    def send_bmp(machine):
+      machine.succeed(r"""
+        wire1='\x03\x00\x00\x00\x5d\x00\x03\x40\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\xc0\x00\x02\x02\x00\x00\xfd\xea\xc0\x00\x02\x02\x00\x00\x00\x00\x00\x00\x00\x00\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\x00\x2d\x02\x00\x00\x00\x12\x40\x01\x01\x00\x40\x02\x04\x02\x01\xfd\xea\x40\x03\x04\xc0\x00\x02\x01\x18\xcb\x00\x71'
+        wire2='\x03\x00\x00\x00\x5d\x00\x03\x40\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\xc0\x00\x02\x03\x00\x00\xfd\xeb\xc0\x00\x02\x03\x00\x00\x00\x00\x00\x00\x00\x00\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\x00\x2d\x02\x00\x00\x00\x12\x40\x01\x01\x00\x40\x02\x04\x02\x01\xfd\xeb\x40\x03\x04\xc0\x00\x02\x01\x18\xc6\x33\x64'
+        printf '%b%b' "$wire1" "$wire2" | nc -N 127.0.0.1 11019
+      """)
+
     start_all()
 
     # --- phase 1: service lifecycle and basic checks ---
@@ -202,21 +365,36 @@ in
       m.wait_for_open_port(9669)
       m.succeed("curl -sf http://localhost:9669/metrics | grep rfm_")
 
+    # machine1 exposes the local BMP listener for Bird
+    machine1.wait_until_succeeds("ss -ltn | grep LISTEN | grep ':11019'")
+    machine1.wait_until_succeeds("ss -tn | grep ESTAB | grep ':11019'")
+
+    # Bird runs on machine1-3 to feed controlled routes into BMP/RIB
+    for m in [machine1, machine2, machine3]:
+      m.wait_for_unit("bird.service")
+
+    machine1.wait_until_succeeds("birdc show protocols all from_machine2 | grep Established")
+    machine1.wait_until_succeeds("birdc show protocols all from_machine3 | grep Established")
+    machine2.wait_until_succeeds("birdc show protocols all to_machine1 | grep Established")
+    machine3.wait_until_succeeds("birdc show protocols all to_machine1 | grep Established")
+    machine1.wait_until_succeeds("birdc show route 203.0.113.0/24 all | grep 203.0.113.0/24")
+    machine1.wait_until_succeeds("birdc show route 198.51.100.0/24 all | grep 198.51.100.0/24")
+    machine1.wait_until_succeeds("ip route show 203.0.113.0/24 | grep 192.168.1.2")
+    machine1.wait_until_succeeds("ip route show 198.51.100.0/24 | grep 192.168.1.3")
+
     # --- phase 2: TCX program verification (bpftool, not tc filter) ---
-    # machine1 has multi-interface (eth1 + lo)
     machine1.succeed("bpftool net show | grep rfm_tc_ingress")
     machine1.succeed("bpftool net show | grep rfm_tc_egress")
 
-    # machine2 has single interface (eth1 only)
     machine2.succeed("bpftool net show | grep rfm_tc_ingress")
     machine2.succeed("bpftool net show | grep rfm_tc_egress")
 
     # --- phase 2b: multi-interface verification ---
-    # machine1 monitors eth1 + lo; generate loopback traffic and verify both
     machine1.succeed("ping -c 5 127.0.0.1")
     time.sleep(1)
     metrics1 = machine1.succeed("curl -sf http://localhost:9669/metrics")
-    assert 'ifname="lo"' in metrics1, "missing lo interface in metrics (multi-interface)"
+    require_positive(metrics1, "rfm_interface_rx_packets_total", ifname="lo", family="ipv4")
+    require_positive(metrics1, "rfm_interface_tx_packets_total", ifname="lo", family="ipv4")
     assert 'ifname="eth1"' in metrics1, "missing eth1 interface in metrics"
 
     # --- phase 3: TCP traffic with iperf3 ---
@@ -226,24 +404,20 @@ in
     machine1.succeed("iperf3 -c 192.168.1.2 -p 5201 -t 2 -P 1")
     time.sleep(2)
 
-    # sender should see tx bytes
     metrics1 = machine1.succeed("curl -sf http://localhost:9669/metrics")
-    assert "rfm_interface_tx_bytes_total" in metrics1, "missing tx bytes on sender"
+    require_positive(metrics1, "rfm_interface_tx_bytes_total", ifname="eth1", family="ipv4")
+    require_positive(metrics1, "rfm_flow_packets", ifname="eth1", direction="egress", proto="6")
 
-    # receiver should see rx bytes
     metrics2 = machine2.succeed("curl -sf http://localhost:9669/metrics")
-    assert "rfm_interface_rx_bytes_total" in metrics2, "missing rx bytes on receiver"
-
-    # TCP flow metrics with proto=6
-    assert 'proto="6"' in metrics1 or 'proto="6"' in metrics2, \
-      "missing TCP flow metric"
+    require_positive(metrics2, "rfm_interface_rx_bytes_total", ifname="eth1", family="ipv4")
+    require_positive(metrics2, "rfm_flow_packets", ifname="eth1", direction="ingress", proto="6")
 
     # --- phase 4: UDP traffic with iperf3 ---
     machine1.succeed("iperf3 -c 192.168.1.2 -p 5201 -u -t 2 -b 10M")
     time.sleep(2)
 
     metrics1 = machine1.succeed("curl -sf http://localhost:9669/metrics")
-    assert 'proto="17"' in metrics1, "missing UDP flow metric (proto=17)"
+    require_positive(metrics1, "rfm_flow_packets", ifname="eth1", direction="egress", proto="17")
 
     # --- phase 5: controlled ping with known packet size ---
     # 10 pings, 500 byte payload = 528 bytes/pkt (500 + 20 IP + 8 ICMP)
@@ -263,21 +437,41 @@ in
     time.sleep(2)
 
     metrics1 = machine1.succeed("curl -sf http://localhost:9669/metrics")
-    assert 'family="ipv6"' in metrics1, "missing ipv6 family label"
+    require_positive(metrics1, "rfm_interface_tx_packets_total", ifname="eth1", family="ipv6")
 
-    # --- phase 7: bidirectional verification ---
-    metrics2 = machine2.succeed("curl -sf http://localhost:9669/metrics")
-    assert 'direction="ingress"' in metrics2, "missing ingress direction on receiver"
+    # --- phase 7: optional enrichment backends ---
+    # Keep the Bird topology for real routes. Feed deterministic BMP updates
+    # into rfm because Bird 3 BMP in this topology only emits EOR.
+    send_bmp(machine1)
+    machine1.wait_until_succeeds(
+      "journalctl -u rfm --no-pager | grep 'bmp route monitoring applied' | grep 'reach=1'"
+    )
+
+    machine1.succeed("ping -c 2 -W 1 203.0.113.7 || true")
+    machine1.succeed("ping -c 2 -W 1 198.51.100.7 || true")
+    machine1.succeed("ip route add 8.8.8.0/24 via 192.168.1.2")
+    machine1.succeed("ping -c 2 -W 1 8.8.8.8 || true")
+    time.sleep(2)
 
     metrics1 = machine1.succeed("curl -sf http://localhost:9669/metrics")
-    assert 'direction="egress"' in metrics1, "missing egress direction on sender"
+    require_positive(metrics1, "rfm_flow_packets", ifname="eth1", direction="egress", dst_asn="65002")
+    require_positive(metrics1, "rfm_flow_packets", ifname="eth1", direction="egress", dst_asn="65003")
+    require_positive(metrics1, "rfm_flow_packets", ifname="eth1", direction="egress", dst_asn="15169")
 
-    # --- phase 8: health and error metrics ---
+    # --- phase 8: bidirectional verification ---
+    metrics2 = machine2.succeed("curl -sf http://localhost:9669/metrics")
+    require_positive(metrics2, "rfm_flow_packets", ifname="eth1", direction="ingress")
+
+    metrics1 = machine1.succeed("curl -sf http://localhost:9669/metrics")
+    require_positive(metrics1, "rfm_flow_packets", ifname="eth1", direction="egress")
+
+    # --- phase 9: health and error metrics ---
     for m in machines:
       metrics = m.succeed("curl -sf http://localhost:9669/metrics")
-      assert "rfm_collector_active_flows" in metrics, "missing active_flows"
-      assert "rfm_collector_dropped_events_total" in metrics, "missing dropped_events"
-      assert "rfm_collector_forced_evictions_total" in metrics, "missing forced_evictions"
-      assert "rfm_errors_total" in metrics, "missing errors_total"
+      require_metric(metrics, "rfm_collector_active_flows")
+      require_metric(metrics, "rfm_collector_dropped_events_total")
+      require_metric(metrics, "rfm_collector_forced_evictions_total")
+      require_metric(metrics, "rfm_errors_total", subsystem="bpf_map")
+      require_metric(metrics, "rfm_errors_total", subsystem="ring_buffer")
   '';
 }
