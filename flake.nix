@@ -16,7 +16,7 @@
       {
         systems = import inputs.systems;
 
-        flake.nixosModules.default = lift ./module.nix;
+        flake.nixosModules.default = lift lib.id ./module.nix;
 
         perSystem =
           { pkgs, system, ... }:
