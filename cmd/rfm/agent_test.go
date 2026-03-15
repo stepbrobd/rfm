@@ -1,12 +1,14 @@
 package main
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/spf13/cobra"
+	"ysun.co/rfm/testutil"
 )
 
 func writeTestConfig(t *testing.T, content string) string {
@@ -20,10 +22,11 @@ func writeTestConfig(t *testing.T, content string) string {
 }
 
 func TestRunAgentWithConfig(t *testing.T) {
-	cfgFile = writeTestConfig(t, `
+	lo := testutil.LoopbackName(t)
+	cfgFile = writeTestConfig(t, fmt.Sprintf(`
 [agent]
-interfaces = ["lo"]
-`)
+interfaces = [%q]
+`, lo))
 	err := runAgent(&cobra.Command{}, nil)
 	if err == nil {
 		t.Fatal("runAgent returned nil, want error")
@@ -45,13 +48,14 @@ interfaces = ["doesnotexist999"]
 }
 
 func TestRunAgentBadMMDBPath(t *testing.T) {
-	cfgFile = writeTestConfig(t, `
+	lo := testutil.LoopbackName(t)
+	cfgFile = writeTestConfig(t, fmt.Sprintf(`
 [agent]
-interfaces = ["lo"]
+interfaces = [%q]
 
 [agent.enrich.mmdb]
 asn_db = "/does/not/exist.mmdb"
-`)
+`, lo))
 	err := runAgent(&cobra.Command{}, nil)
 	if err == nil {
 		t.Fatal("should fail on bad MMDB path")
