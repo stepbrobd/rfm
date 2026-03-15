@@ -1,17 +1,12 @@
 { inputs, std, ... }:
 
 let
-  mkMachine =
+  # shared base config for all machines
+  mkBase =
     ip:
     { pkgs, ... }:
     {
       imports = [ inputs.self.nixosModules.default ];
-
-      services.rfm = {
-        enable = true;
-        interface = "eth1";
-        settings = { };
-      };
 
       boot.kernelPackages = pkgs.linuxPackages_latest;
       boot.supportedFilesystems.zfs = std.mkForce false;
@@ -23,18 +18,28 @@ let
       };
 
       networking.firewall.enable = false;
-      networking.interfaces.eth1.ipv4.addresses = [
-        {
-          address = ip;
-          prefixLength = 24;
-        }
-      ];
+      networking.interfaces.eth1 = {
+        ipv4.addresses = [
+          {
+            address = ip;
+            prefixLength = 24;
+          }
+        ];
+        ipv6.addresses = [
+          {
+            address = "fd00::${builtins.elemAt (std.splitString "." ip) 3}";
+            prefixLength = 64;
+          }
+        ];
+      };
 
       environment.systemPackages = with pkgs; [
         alacritty.terminfo
         bpftools
         bpftrace
         ethtool
+        iperf3
+        iproute2
         tcpdump
         xdp-tools
       ];
@@ -104,14 +109,90 @@ in
   # enableDebugHook = true;
   interactive.sshBackdoor.enable = true;
 
-  nodes.machine1 = mkMachine "192.168.1.1";
-  nodes.machine2 = mkMachine "192.168.1.2";
-  nodes.machine3 = mkMachine "192.168.1.3";
-  nodes.machine4 = mkMachine "192.168.1.4";
+  # each machine gets different config to exercise more code paths
+  nodes.machine1 =
+    { pkgs, ... }:
+    {
+      imports = [ (mkBase "192.168.1.1") ];
+      # multi-interface: eth1 + lo, sample every packet, custom port
+      services.rfm = {
+        enable = true;
+        settings.agent = {
+          interfaces = [
+            "eth1"
+            "lo"
+          ];
+          bpf.sample_rate = 1;
+          collector = {
+            max_flows = 1024;
+            eviction_timeout = "30s";
+          };
+          prometheus = {
+            host = "::";
+            port = 9669;
+          };
+        };
+      };
+    };
+
+  nodes.machine2 =
+    { pkgs, ... }:
+    {
+      imports = [ (mkBase "192.168.1.2") ];
+      # single interface, different sample rate, default port
+      services.rfm = {
+        enable = true;
+        settings.agent = {
+          interfaces = [ "eth1" ];
+          bpf.sample_rate = 10;
+          prometheus.port = 9669;
+        };
+      };
+    };
+
+  nodes.machine3 =
+    { pkgs, ... }:
+    {
+      imports = [ (mkBase "192.168.1.3") ];
+      # multi-interface, sample every packet, larger flow table
+      services.rfm = {
+        enable = true;
+        settings.agent = {
+          interfaces = [
+            "eth1"
+            "lo"
+          ];
+          bpf.sample_rate = 1;
+          collector.max_flows = 4096;
+          prometheus.port = 9669;
+        };
+      };
+    };
+
+  nodes.machine4 =
+    { pkgs, ... }:
+    {
+      imports = [ (mkBase "192.168.1.4") ];
+      # single interface, sample every packet, bind to specific address
+      services.rfm = {
+        enable = true;
+        settings.agent = {
+          interfaces = [ "eth1" ];
+          bpf.sample_rate = 1;
+          prometheus = {
+            host = "0.0.0.0";
+            port = 9669;
+          };
+        };
+      };
+    };
 
   testScript = ''
+    import time
+
     start_all()
 
+    # --- phase 1: service lifecycle and basic checks ---
     for m in machines:
       m.wait_for_unit("multi-user.target")
       m.succeed("which rfm")
@@ -120,5 +201,77 @@ in
       m.wait_for_unit("rfm.service")
       m.wait_for_open_port(9669)
       m.succeed("curl -sf http://localhost:9669/metrics | grep rfm_")
+
+    # --- phase 2: TC program verification ---
+    # machine1 has multi-interface (eth1 + lo)
+    machine1.succeed("tc filter show dev eth1 ingress | grep rfm")
+    machine1.succeed("tc filter show dev eth1 egress | grep rfm")
+    machine1.succeed("tc filter show dev lo ingress | grep rfm")
+    machine1.succeed("tc filter show dev lo egress | grep rfm")
+
+    # machine2 has single interface (eth1 only)
+    machine2.succeed("tc filter show dev eth1 ingress | grep rfm")
+    machine2.succeed("tc filter show dev eth1 egress | grep rfm")
+
+    # --- phase 3: TCP traffic with iperf3 ---
+    machine2.succeed("iperf3 -s -D -p 5201")
+    time.sleep(1)
+
+    machine1.succeed("iperf3 -c 192.168.1.2 -p 5201 -t 2 -P 1")
+    time.sleep(2)
+
+    # sender should see tx bytes
+    metrics1 = machine1.succeed("curl -sf http://localhost:9669/metrics")
+    assert "rfm_interface_tx_bytes_total" in metrics1, "missing tx bytes on sender"
+
+    # receiver should see rx bytes
+    metrics2 = machine2.succeed("curl -sf http://localhost:9669/metrics")
+    assert "rfm_interface_rx_bytes_total" in metrics2, "missing rx bytes on receiver"
+
+    # TCP flow metrics with proto=6
+    assert 'proto="6"' in metrics1 or 'proto="6"' in metrics2, \
+      "missing TCP flow metric"
+
+    # --- phase 4: UDP traffic with iperf3 ---
+    machine1.succeed("iperf3 -c 192.168.1.2 -p 5201 -u -t 2 -b 10M")
+    time.sleep(2)
+
+    metrics1 = machine1.succeed("curl -sf http://localhost:9669/metrics")
+    assert 'proto="17"' in metrics1, "missing UDP flow metric (proto=17)"
+
+    # --- phase 5: controlled ping with known packet size ---
+    # 10 pings, 500 byte payload = 528 bytes/pkt (500 + 20 IP + 8 ICMP)
+    machine3.succeed("ping -c 10 -s 500 192.168.1.4")
+    time.sleep(2)
+
+    metrics3 = machine3.succeed("curl -sf http://localhost:9669/metrics")
+    # tx bytes for eth1/ipv4 should reflect the ping traffic
+    for line in metrics3.splitlines():
+      if "rfm_interface_tx_bytes_total" in line and 'family="ipv4"' in line and 'ifname="eth1"' in line:
+        val = float(line.split()[-1])
+        assert val >= 5000, f"tx bytes too low: {val}, expected >= 5000"
+        break
+
+    # --- phase 6: IPv6 traffic ---
+    machine1.succeed("ping -6 -c 5 -s 100 fd00::2")
+    time.sleep(2)
+
+    metrics1 = machine1.succeed("curl -sf http://localhost:9669/metrics")
+    assert 'family="ipv6"' in metrics1, "missing ipv6 family label"
+
+    # --- phase 7: bidirectional verification ---
+    metrics2 = machine2.succeed("curl -sf http://localhost:9669/metrics")
+    assert 'direction="ingress"' in metrics2, "missing ingress direction on receiver"
+
+    metrics1 = machine1.succeed("curl -sf http://localhost:9669/metrics")
+    assert 'direction="egress"' in metrics1, "missing egress direction on sender"
+
+    # --- phase 8: health and error metrics ---
+    for m in machines:
+      metrics = m.succeed("curl -sf http://localhost:9669/metrics")
+      assert "rfm_collector_active_flows" in metrics, "missing active_flows"
+      assert "rfm_collector_dropped_events_total" in metrics, "missing dropped_events"
+      assert "rfm_collector_forced_evictions_total" in metrics, "missing forced_evictions"
+      assert "rfm_errors_total" in metrics, "missing errors_total"
   '';
 }
