@@ -1,7 +1,9 @@
 # RFM
 
 RFM (Router Flow Monitor) is an eBPF-based network flow analysis agent for Linux
-BGP routers. It attaches TC programs to network interfaces, collects per-flow
+BGP routers (it doesn't need to run on a machine with BGP session though, it's a
+fairly generic flow collector and dumps everything to Prometheus. IPFIX export
+is planned). It attaches TC programs to network interfaces, collects per-flow
 traffic statistics with configurable sampling, enriches flows with BGP RIB
 metadata via BMP, and exports the results to Prometheus.
 
@@ -15,7 +17,8 @@ The goal is a single `rfm` binary that:
 
 - Attaches TC programs for bidirectional flow observation
 - Keeps BPF behavior fully map-driven and stateless
-- Enriches flows in userspace with BGP RIB data from BMP
+- Enriches flows in userspace with BGP RIB data from BMP (or with MMDB ASN/city
+  or combination of both)
 - Exports Prometheus metrics
 - Exposes runtime control over a Unix domain socket
 - Reserves XDP for firewall fast-path features
