@@ -5,6 +5,19 @@ import (
 	"time"
 )
 
+// Enricher provides optional metadata for flow addresses.
+// Implementations include MMDB (GeoIP) and BMP/RIB lookups.
+// nil Enricher means zero-value labels.
+type Enricher interface {
+	Enrich(src, dst netip.Addr) (srcLabels, dstLabels Labels)
+}
+
+// Labels holds enrichment metadata for a single address
+type Labels struct {
+	ASN  uint32
+	City string
+}
+
 // FlowEvent represents a single packet observation from the BPF program
 type FlowEvent struct {
 	Ifindex uint32

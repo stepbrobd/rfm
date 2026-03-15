@@ -30,3 +30,13 @@ func TestFlowEventKey(t *testing.T) {
 		t.Fatal("different events produced same key")
 	}
 }
+
+func TestLabelsZeroValue(t *testing.T) {
+	var l Labels
+	if l.ASN != 0 {
+		t.Errorf("ASN=%d want 0", l.ASN)
+	}
+	if l.City != "" {
+		t.Errorf("City=%q want empty", l.City)
+	}
+}
