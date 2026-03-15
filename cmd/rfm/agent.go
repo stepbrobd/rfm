@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -66,5 +67,8 @@ func runAgent(cmd *cobra.Command, args []string) error {
 
 	runErr := c.Run(ctx, rd)
 	srv.Shutdown(context.Background())
+	if errors.Is(runErr, context.Canceled) {
+		return nil
+	}
 	return runErr
 }

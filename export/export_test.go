@@ -213,9 +213,9 @@ func TestCollectHealth(t *testing.T) {
 func TestCollectIfaceStats(t *testing.T) {
 	src := &mockIfaceStats{
 		entries: []IfaceStatsEntry{
-			{Ifindex: 1, Dir: 0, Proto: 6, Packets: 10, Bytes: 1000}, // rx
-			{Ifindex: 1, Dir: 1, Proto: 6, Packets: 5, Bytes: 500},   // tx
-			{Ifindex: 1, Dir: 0, Proto: 17, Packets: 3, Bytes: 300},  // rx udp
+			{Ifindex: 1, Dir: 0, Proto: 4, Packets: 10, Bytes: 1000}, // rx ipv4
+			{Ifindex: 1, Dir: 1, Proto: 4, Packets: 5, Bytes: 500},   // tx ipv4
+			{Ifindex: 1, Dir: 0, Proto: 6, Packets: 3, Bytes: 300},   // rx ipv6
 		},
 	}
 
@@ -328,4 +328,78 @@ func TestCollectNilSources(t *testing.T) {
 	vals := collectAll(t, mc)
 	// Should have no iface or flow metrics, but also no panic
 	_ = vals
+}
+
+func TestCollectFlowsAggregatesDuplicateLabels(t *testing.T) {
+	// two flows with different ports but same exported labels
+	// must produce one aggregated metric, not duplicate series
+	c := collector.New(time.Minute, nil, 0)
+	now := time.Now()
+	c.Record(collector.FlowEvent{
+		Ifindex: 1, Dir: 0, Proto: 6,
+		SrcAddr: netip.MustParseAddr("10.0.0.1"),
+		DstAddr: netip.MustParseAddr("10.0.0.2"),
+		SrcPort: 1000, DstPort: 80, Len: 100,
+	}, now)
+	c.Record(collector.FlowEvent{
+		Ifindex: 1, Dir: 0, Proto: 6,
+		SrcAddr: netip.MustParseAddr("10.0.0.1"),
+		DstAddr: netip.MustParseAddr("10.0.0.2"),
+		SrcPort: 2000, DstPort: 80, Len: 200,
+	}, now)
+
+	mc := New(nil, c)
+
+	// use a real registry to verify no duplicate series
+	reg := prometheus.NewRegistry()
+	reg.MustRegister(mc)
+	mfs, err := reg.Gather()
+	if err != nil {
+		t.Fatalf("gather: %v", err)
+	}
+
+	// find rfm_flow_bytes and check it has exactly one series
+	for _, mf := range mfs {
+		if mf.GetName() != "rfm_flow_bytes" {
+			continue
+		}
+		if got := len(mf.GetMetric()); got != 1 {
+			t.Fatalf("rfm_flow_bytes series count = %d, want 1 (aggregated)", got)
+		}
+		val := mf.GetMetric()[0].GetGauge().GetValue()
+		if val != 300 {
+			t.Fatalf("rfm_flow_bytes = %g, want 300 (100+200)", val)
+		}
+	}
+}
+
+func TestCollectIfaceStatsFamily(t *testing.T) {
+	// iface stats proto=4 is IPv4, proto=6 is IPv6
+	// the label should be "family" with values "ipv4" / "ipv6"
+	src := &mockIfaceStats{
+		entries: []IfaceStatsEntry{
+			{Ifindex: 1, Dir: 0, Proto: 4, Packets: 10, Bytes: 1000},
+			{Ifindex: 1, Dir: 0, Proto: 6, Packets: 5, Bytes: 500},
+		},
+	}
+
+	mc := New(src, nil)
+	metrics := collectMetrics(t, mc)
+
+	families := make(map[string]bool)
+	for _, m := range metrics {
+		name := extractName(m.Desc())
+		if name != "rfm_interface_rx_bytes_total" {
+			continue
+		}
+		labels := metricLabels(t, m)
+		families[labels["family"]] = true
+	}
+
+	if !families["ipv4"] {
+		t.Error("expected family=ipv4 label")
+	}
+	if !families["ipv6"] {
+		t.Error("expected family=ipv6 label")
+	}
 }

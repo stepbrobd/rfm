@@ -13,22 +13,22 @@ var (
 	descIfaceRxBytes = prometheus.NewDesc(
 		"rfm_interface_rx_bytes_total",
 		"Total bytes received on an interface.",
-		[]string{"ifname", "proto"}, nil,
+		[]string{"ifname", "family"}, nil,
 	)
 	descIfaceTxBytes = prometheus.NewDesc(
 		"rfm_interface_tx_bytes_total",
 		"Total bytes transmitted on an interface.",
-		[]string{"ifname", "proto"}, nil,
+		[]string{"ifname", "family"}, nil,
 	)
 	descIfaceRxPackets = prometheus.NewDesc(
 		"rfm_interface_rx_packets_total",
 		"Total packets received on an interface.",
-		[]string{"ifname", "proto"}, nil,
+		[]string{"ifname", "family"}, nil,
 	)
 	descIfaceTxPackets = prometheus.NewDesc(
 		"rfm_interface_tx_packets_total",
 		"Total packets transmitted on an interface.",
-		[]string{"ifname", "proto"}, nil,
+		[]string{"ifname", "family"}, nil,
 	)
 
 	descFlowBytes = prometheus.NewDesc(
@@ -113,16 +113,34 @@ func (mc *MetricsCollector) collectIfaceStats(ch chan<- prometheus.Metric) {
 
 	for _, e := range mc.source.IfaceStats() {
 		ifname := ifnameFromIndex(e.Ifindex)
-		proto := strconv.FormatUint(uint64(e.Proto), 10)
+		family := familyString(e.Proto)
 
 		if e.Dir == 0 { // ingress / rx
-			ch <- prometheus.MustNewConstMetric(descIfaceRxBytes, prometheus.CounterValue, float64(e.Bytes), ifname, proto)
-			ch <- prometheus.MustNewConstMetric(descIfaceRxPackets, prometheus.CounterValue, float64(e.Packets), ifname, proto)
+			ch <- prometheus.MustNewConstMetric(descIfaceRxBytes, prometheus.CounterValue, float64(e.Bytes), ifname, family)
+			ch <- prometheus.MustNewConstMetric(descIfaceRxPackets, prometheus.CounterValue, float64(e.Packets), ifname, family)
 		} else { // egress / tx
-			ch <- prometheus.MustNewConstMetric(descIfaceTxBytes, prometheus.CounterValue, float64(e.Bytes), ifname, proto)
-			ch <- prometheus.MustNewConstMetric(descIfaceTxPackets, prometheus.CounterValue, float64(e.Packets), ifname, proto)
+			ch <- prometheus.MustNewConstMetric(descIfaceTxBytes, prometheus.CounterValue, float64(e.Bytes), ifname, family)
+			ch <- prometheus.MustNewConstMetric(descIfaceTxPackets, prometheus.CounterValue, float64(e.Packets), ifname, family)
 		}
 	}
+}
+
+// flowRollupKey is the label tuple used to aggregate flows for Prometheus.
+// Multiple flows with different ports but the same enrichment labels
+// are summed into one series.
+type flowRollupKey struct {
+	ifname  string
+	dir     string
+	proto   string
+	srcASN  string
+	dstASN  string
+	srcCity string
+	dstCity string
+}
+
+type flowRollupValue struct {
+	bytes   uint64
+	packets uint64
 }
 
 func (mc *MetricsCollector) collectFlows(ch chan<- prometheus.Metric) {
@@ -133,24 +151,38 @@ func (mc *MetricsCollector) collectFlows(ch chan<- prometheus.Metric) {
 	enricher := mc.col.Enricher()
 	flows := mc.col.Flows()
 
-	for key, entry := range flows {
-		ifname := ifnameFromIndex(key.Ifindex)
-		dir := dirString(key.Dir)
-		proto := strconv.FormatUint(uint64(key.Proto), 10)
+	// aggregate by exported label tuple to avoid duplicate series
+	rollups := make(map[flowRollupKey]*flowRollupValue)
 
-		var srcASN, dstASN, srcCity, dstCity string
-		if enricher != nil {
-			srcLabels, dstLabels := enricher.Enrich(key.SrcAddr, key.DstAddr)
-			srcASN = formatASN(srcLabels.ASN)
-			dstASN = formatASN(dstLabels.ASN)
-			srcCity = srcLabels.City
-			dstCity = dstLabels.City
+	for key, entry := range flows {
+		rk := flowRollupKey{
+			ifname: ifnameFromIndex(key.Ifindex),
+			dir:    dirString(key.Dir),
+			proto:  strconv.FormatUint(uint64(key.Proto), 10),
 		}
 
+		if enricher != nil {
+			srcLabels, dstLabels := enricher.Enrich(key.SrcAddr, key.DstAddr)
+			rk.srcASN = formatASN(srcLabels.ASN)
+			rk.dstASN = formatASN(dstLabels.ASN)
+			rk.srcCity = srcLabels.City
+			rk.dstCity = dstLabels.City
+		}
+
+		rv, ok := rollups[rk]
+		if !ok {
+			rv = &flowRollupValue{}
+			rollups[rk] = rv
+		}
+		rv.bytes += entry.Bytes
+		rv.packets += entry.Packets
+	}
+
+	for rk, rv := range rollups {
 		ch <- prometheus.MustNewConstMetric(descFlowBytes, prometheus.GaugeValue,
-			float64(entry.Bytes), ifname, dir, proto, srcASN, dstASN, srcCity, dstCity)
+			float64(rv.bytes), rk.ifname, rk.dir, rk.proto, rk.srcASN, rk.dstASN, rk.srcCity, rk.dstCity)
 		ch <- prometheus.MustNewConstMetric(descFlowPackets, prometheus.GaugeValue,
-			float64(entry.Packets), ifname, dir, proto, srcASN, dstASN, srcCity, dstCity)
+			float64(rv.packets), rk.ifname, rk.dir, rk.proto, rk.srcASN, rk.dstASN, rk.srcCity, rk.dstCity)
 	}
 }
 
@@ -174,6 +206,19 @@ func ifnameFromIndex(ifindex uint32) string {
 		return fmt.Sprintf("%d", ifindex)
 	}
 	return iface.Name
+}
+
+// familyString maps BPF iface stats proto (IP version) to a label.
+// BPF stores 4 for IPv4, 6 for IPv6 — not L4 protocol numbers.
+func familyString(proto uint8) string {
+	switch proto {
+	case 4:
+		return "ipv4"
+	case 6:
+		return "ipv6"
+	default:
+		return strconv.FormatUint(uint64(proto), 10)
+	}
 }
 
 // dirString returns the human-readable direction label.
