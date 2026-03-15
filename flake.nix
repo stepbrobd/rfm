@@ -18,33 +18,9 @@
             overlays = [ inputs.gomod2nix.overlays.default ];
           };
 
-          packages.default = pkgs.buildGoApplication {
-            pname = "rfm";
-            version = "0.0.1";
-            src = ./.;
-            modules = ./gomod2nix.toml;
-            subPackages = [ "cmd/rfm" ];
-          };
+          packages.default = pkgs.callPackage ./default.nix { };
 
-          devShells.default = pkgs.mkShell {
-            packages =
-              with pkgs;
-              [
-                bear
-                go
-                go-tools
-                gomod2nix
-                gopls
-                llvmPackages.clang-tools
-                llvmPackages.clang-unwrapped
-                llvmPackages.libllvm
-                pkg-config
-              ]
-              ++ lib.optionals stdenv.isLinux [
-                bpftools
-                libbpf
-              ];
-          };
+          devShells.default = pkgs.callPackage ./shell.nix { };
 
           formatter = pkgs.writeShellScriptBin "formatter" ''
             set -eoux pipefail
