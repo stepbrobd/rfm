@@ -1,8 +1,10 @@
 package export
 
 import (
+	"context"
 	"fmt"
 	"net/netip"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -34,6 +36,29 @@ func (e *staticEnricher) Enrich(src, dst netip.Addr) (collector.Labels, collecto
 	return collector.Labels{ASN: e.srcASN, City: e.srcCity},
 		collector.Labels{ASN: e.dstASN, City: e.dstCity}
 }
+
+type exportMockReader struct {
+	events  [][]byte
+	idx     int
+	dropErr error
+}
+
+func (m *exportMockReader) ReadRawEvent() ([]byte, error) {
+	if m.idx >= len(m.events) {
+		return nil, os.ErrDeadlineExceeded
+	}
+	raw := m.events[m.idx]
+	m.idx++
+	return raw, nil
+}
+
+func (m *exportMockReader) SetDeadline(t time.Time) {}
+
+func (m *exportMockReader) DroppedEvents() (uint64, error) {
+	return 0, m.dropErr
+}
+
+func (m *exportMockReader) Close() error { return nil }
 
 // --- test helpers ---
 
@@ -452,6 +477,60 @@ func TestCollectErrorsTotal(t *testing.T) {
 	}
 	if !found {
 		t.Error("rfm_errors_total not found")
+	}
+}
+
+func TestCollectErrorsSubsystemLabels(t *testing.T) {
+	// exercise both subsystem labels via a collector that has
+	// accumulated ring_buffer and bpf_map errors through Run
+	c := collector.New(30*time.Second, nil, 0)
+
+	mr := &exportMockReader{
+		events:  [][]byte{{0xde, 0xad}}, // garbage -> decode error -> ring_buffer
+		dropErr: fmt.Errorf("map read failed"),
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	errCh := make(chan error, 1)
+	go func() { errCh <- c.Run(ctx, mr) }()
+
+	// wait for errors to be counted
+	deadline := time.Now().Add(time.Second)
+	for {
+		s := c.Stats()
+		if s.RingBufErrors > 0 && s.BPFMapErrors > 0 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("timed out waiting for error counters")
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	cancel()
+	<-errCh
+
+	mc := New(nil, c)
+	metrics := collectMetrics(t, mc)
+
+	subsystems := make(map[string]float64)
+	for _, m := range metrics {
+		if extractName(m.Desc()) != "rfm_errors_total" {
+			continue
+		}
+		labels := metricLabels(t, m)
+		subsystems[labels["subsystem"]] = metricValue(t, m)
+	}
+
+	if _, ok := subsystems["ring_buffer"]; !ok {
+		t.Error("missing rfm_errors_total{subsystem=\"ring_buffer\"}")
+	} else if subsystems["ring_buffer"] < 1 {
+		t.Errorf("ring_buffer errors = %g, want >= 1", subsystems["ring_buffer"])
+	}
+
+	if _, ok := subsystems["bpf_map"]; !ok {
+		t.Error("missing rfm_errors_total{subsystem=\"bpf_map\"}")
+	} else if subsystems["bpf_map"] < 1 {
+		t.Errorf("bpf_map errors = %g, want >= 1", subsystems["bpf_map"])
 	}
 }
 
