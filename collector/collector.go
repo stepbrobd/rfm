@@ -1,6 +1,10 @@
 package collector
 
 import (
+	"context"
+	"errors"
+	"fmt"
+	"os"
 	"sync"
 	"time"
 )
@@ -11,6 +15,7 @@ type Collector struct {
 	flows   map[FlowKey]*FlowEntry
 	timeout time.Duration
 	total   uint64
+	dropped uint64
 }
 
 // New creates a collector that evicts flows older than timeout
@@ -77,7 +82,52 @@ func (c *Collector) Stats() Stats {
 	defer c.mu.RUnlock()
 
 	return Stats{
-		ActiveFlows: uint64(len(c.flows)),
-		TotalEvents: c.total,
+		ActiveFlows:   uint64(len(c.flows)),
+		TotalEvents:   c.total,
+		DroppedEvents: c.dropped,
+	}
+}
+
+// Run reads events from rd, decodes them, and records them until ctx is done.
+// It also runs a background eviction goroutine at timeout/2 intervals.
+func (c *Collector) Run(ctx context.Context, rd Reader) error {
+	tick := time.NewTicker(c.timeout / 2)
+	defer tick.Stop()
+
+	go func() {
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case t := <-tick.C:
+				c.Evict(t)
+			}
+		}
+	}()
+
+	for {
+		rd.SetDeadline(time.Now().Add(100 * time.Millisecond))
+		raw, err := rd.ReadRawEvent()
+		if err != nil {
+			if errors.Is(err, os.ErrDeadlineExceeded) {
+				if ctx.Err() != nil {
+					return ctx.Err()
+				}
+				if dropped, derr := rd.DroppedEvents(); derr == nil {
+					c.mu.Lock()
+					c.dropped = dropped
+					c.mu.Unlock()
+				}
+				continue
+			}
+			return fmt.Errorf("read event: %w", err)
+		}
+
+		ev, err := DecodeFlowEvent(raw)
+		if err != nil {
+			continue
+		}
+
+		c.Record(ev, time.Now())
 	}
 }

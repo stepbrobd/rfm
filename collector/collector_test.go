@@ -1,7 +1,10 @@
 package collector
 
 import (
+	"context"
+	"errors"
 	"net/netip"
+	"os"
 	"testing"
 	"time"
 )
@@ -119,6 +122,112 @@ func TestEvictKeepsFresh(t *testing.T) {
 	}
 	if _, ok := flows[fresh.Key()]; !ok {
 		t.Fatal("fresh flow was evicted")
+	}
+}
+
+// mockReader returns pre-loaded events, then ErrDeadlineExceeded
+type mockReader struct {
+	events [][]byte
+	idx    int
+	drops  uint64
+}
+
+func (m *mockReader) ReadRawEvent() ([]byte, error) {
+	if m.idx >= len(m.events) {
+		return nil, os.ErrDeadlineExceeded
+	}
+	raw := m.events[m.idx]
+	m.idx++
+	return raw, nil
+}
+
+func (m *mockReader) SetDeadline(t time.Time) {}
+
+func (m *mockReader) DroppedEvents() (uint64, error) {
+	return m.drops, nil
+}
+
+func (m *mockReader) Close() error { return nil }
+
+func TestRun(t *testing.T) {
+	ev := FlowEvent{
+		Ifindex: 1,
+		Dir:     0,
+		Proto:   6,
+		SrcAddr: netip.MustParseAddr("::ffff:10.0.0.1"),
+		DstAddr: netip.MustParseAddr("::ffff:10.0.0.2"),
+		SrcPort: 12345,
+		DstPort: 80,
+		Len:     100,
+	}
+
+	raw := encodeWireEvent(ev)
+	mr := &mockReader{events: [][]byte{raw, raw, raw}}
+
+	c := New(30 * time.Second)
+	ctx, cancel := context.WithCancel(context.Background())
+
+	errCh := make(chan error, 1)
+	go func() { errCh <- c.Run(ctx, mr) }()
+
+	// wait for all 3 events to be recorded
+	deadline := time.Now().Add(time.Second)
+	for c.Stats().TotalEvents < 3 {
+		if time.Now().After(deadline) {
+			t.Fatal("timed out waiting for events")
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+
+	cancel()
+	if err := <-errCh; !errors.Is(err, context.Canceled) {
+		t.Fatalf("Run returned %v, want context.Canceled", err)
+	}
+
+	s := c.Stats()
+	if s.ActiveFlows != 1 {
+		t.Errorf("active flows = %d, want 1", s.ActiveFlows)
+	}
+	if s.TotalEvents != 3 {
+		t.Errorf("total events = %d, want 3", s.TotalEvents)
+	}
+}
+
+func TestRunDroppedEvents(t *testing.T) {
+	mr := &mockReader{drops: 42}
+
+	c := New(30 * time.Second)
+	ctx, cancel := context.WithCancel(context.Background())
+
+	errCh := make(chan error, 1)
+	go func() { errCh <- c.Run(ctx, mr) }()
+
+	// wait for dropped events to be polled
+	deadline := time.Now().Add(time.Second)
+	for c.Stats().DroppedEvents == 0 {
+		if time.Now().After(deadline) {
+			t.Fatal("timed out waiting for dropped events poll")
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+
+	cancel()
+	<-errCh
+
+	if s := c.Stats(); s.DroppedEvents != 42 {
+		t.Fatalf("dropped events = %d, want 42", s.DroppedEvents)
+	}
+}
+
+func TestRunContextCancel(t *testing.T) {
+	mr := &mockReader{}
+	c := New(30 * time.Second)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // cancel immediately
+
+	err := c.Run(ctx, mr)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("Run returned %v, want context.Canceled", err)
 	}
 }
 
