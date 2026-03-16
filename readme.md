@@ -188,6 +188,8 @@ Collector health:
 
 An early Grafana dashboard is included at `grafana/dashboard.json`.
 
+![RFM](grafana/screenshot.jpg)
+
 It is intentionally a starting point, not a finished observability product. The
 current dashboard covers the basic operational views:
 
