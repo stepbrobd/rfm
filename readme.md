@@ -184,6 +184,24 @@ Collector health:
 
 `rfm_errors_total{subsystem}` currently uses `bpf_map` and `ring_buffer`.
 
+## Grafana dashboard
+
+An early Grafana dashboard is included at `grafana/dashboard.json`.
+
+It is intentionally a starting point, not a finished observability product. The
+current dashboard covers the basic operational views:
+
+- aggregate ingress and egress traffic
+- per-interface traffic breakdown
+- protocol share
+- ASN and city summaries
+- collector health and error panels
+
+The exporter already exposes enough structure to build more visualizations than
+the bundled dashboard currently shows. The shipped dashboard should be treated
+as a reference layout for the current metric set, not as the limit of what can
+be derived from RFM data in Grafana.
+
 ## CLI
 
 The current CLI surface is intentionally small:
