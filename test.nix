@@ -316,9 +316,12 @@ in
     };
 
   testScript = ''
+    import base64
+    import ipaddress
+    import struct
     import time
 
-    def metric_lines(metrics, name):
+    def metric_lines(metrics: str, name: str) -> list[str]:
       prefix = name + "{"
       bare = name + " "
       return [
@@ -326,14 +329,14 @@ in
         if line.startswith(prefix) or line.startswith(bare)
       ]
 
-    def metric_values(metrics, name, **labels):
+    def metric_values(metrics: str, name: str, **labels: str) -> list[float]:
       vals = []
       for line in metric_lines(metrics, name):
         if all(f'{key}="{value}"' in line for key, value in labels.items()):
           vals.append(float(line.split()[-1]))
       return vals
 
-    def require_metric(metrics, name, **labels):
+    def require_metric(metrics: str, name: str, **labels: str) -> list[float]:
       vals = metric_values(metrics, name, **labels)
       if vals:
         return vals
@@ -344,17 +347,61 @@ in
       )
       return vals
 
-    def require_positive(metrics, name, **labels):
+    def require_positive(metrics: str, name: str, **labels: str) -> list[float]:
       vals = require_metric(metrics, name, **labels)
       assert any(val > 0 for val in vals), f"{name} {labels} has no positive samples: {vals}"
       return vals
 
-    def send_bmp(machine):
-      machine.succeed(r"""
-        wire1='\x03\x00\x00\x00\x5d\x00\x03\x40\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\xc0\x00\x02\x02\x00\x00\xfd\xea\xc0\x00\x02\x02\x00\x00\x00\x00\x00\x00\x00\x00\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\x00\x2d\x02\x00\x00\x00\x12\x40\x01\x01\x00\x40\x02\x04\x02\x01\xfd\xea\x40\x03\x04\xc0\x00\x02\x01\x18\xcb\x00\x71'
-        wire2='\x03\x00\x00\x00\x5d\x00\x03\x40\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\xc0\x00\x02\x03\x00\x00\xfd\xeb\xc0\x00\x02\x03\x00\x00\x00\x00\x00\x00\x00\x00\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\x00\x2d\x02\x00\x00\x00\x12\x40\x01\x01\x00\x40\x02\x04\x02\x01\xfd\xeb\x40\x03\x04\xc0\x00\x02\x01\x18\xc6\x33\x64'
-        printf '%b%b' "$wire1" "$wire2" | nc -N 127.0.0.1 11019
-      """)
+    def prefix_nlri(prefix: str) -> bytes:
+      net = ipaddress.ip_network(prefix, strict=True)
+      octets = (net.prefixlen + 7) // 8
+      return bytes([net.prefixlen]) + net.network_address.packed[:octets]
+
+    def bmp_route(prefix: str, origin: int, peer_addr: str, next_hop: str = "192.0.2.1") -> bytes:
+      peer = ipaddress.ip_address(peer_addr)
+      hop = ipaddress.ip_address(next_hop)
+      assert peer.version == 4
+      assert hop.version == 4
+      assert 0 <= origin <= 0xFFFF
+
+      as_path = bytes([2, 1]) + struct.pack(">H", origin)
+      path_attrs = b"".join(
+        [
+          bytes([0x40, 1, 1, 0]),
+          bytes([0x40, 2, len(as_path)]) + as_path,
+          bytes([0x40, 3, 4]) + hop.packed,
+        ]
+      )
+
+      bgp_payload = (
+        struct.pack(">H", 0)
+        + struct.pack(">H", len(path_attrs))
+        + path_attrs
+        + prefix_nlri(prefix)
+      )
+      bgp_update = b"\xff" * 16 + struct.pack(">HB", 19 + len(bgp_payload), 2) + bgp_payload
+      peer_header = b"".join(
+        [
+          bytes([0, 0x40]),
+          b"\x00" * 8,
+          b"\x00" * 12 + peer.packed,
+          struct.pack(">I", origin),
+          peer.packed,
+          b"\x00" * 8,
+        ]
+      )
+
+      return b"\x03" + struct.pack(">IB", 6 + len(peer_header) + len(bgp_update), 0) + peer_header + bgp_update
+
+    def send_bmp(machine: Machine) -> None:
+      wire = b"".join(
+        [
+          bmp_route("203.0.113.0/24", 65002, "192.0.2.2"),
+          bmp_route("198.51.100.0/24", 65003, "192.0.2.3"),
+        ]
+      )
+      payload = base64.b64encode(wire).decode()
+      machine.succeed(f"printf '%s' '{payload}' | base64 -d | nc -N 127.0.0.1 11019")
 
     start_all()
 
