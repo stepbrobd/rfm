@@ -1,6 +1,7 @@
 package collector
 
 import (
+	"container/heap"
 	"context"
 	"errors"
 	"fmt"
@@ -12,7 +13,8 @@ import (
 // Collector aggregates flow events into an in-memory flow table
 type Collector struct {
 	mu          sync.RWMutex
-	flows       map[FlowKey]*FlowEntry
+	flows       map[FlowKey]*flowState
+	eviction    flowHeap
 	timeout     time.Duration
 	enricher    Enricher
 	maxFlows    int
@@ -22,65 +24,68 @@ type Collector struct {
 	bpfMapErrs  uint64
 }
 
-// New creates a collector that evicts flows older than timeout.
-// enricher may be nil. maxFlows <= 0 means unlimited.
+// New creates a collector that evicts flows older than timeout
+// enricher may be nil
+// maxFlows <= 0 means unlimited
 func New(timeout time.Duration, enricher Enricher, maxFlows int) *Collector {
-	return &Collector{
-		flows:    make(map[FlowKey]*FlowEntry),
+	c := &Collector{
+		flows:    make(map[FlowKey]*flowState),
 		timeout:  timeout,
 		enricher: enricher,
 		maxFlows: maxFlows,
 	}
+	heap.Init(&c.eviction)
+	return c
 }
 
-// Enricher returns the enricher passed to New.
+// Enricher returns the enricher passed to New
 func (c *Collector) Enricher() Enricher {
 	return c.enricher
 }
 
-// Record adds a flow event to the table, creating or updating the entry
+// Record adds a flow event to the table
+// it creates or updates the entry
 func (c *Collector) Record(ev FlowEvent, now time.Time) {
 	key := ev.Key()
 
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	entry, ok := c.flows[key]
+	state, ok := c.flows[key]
 	if !ok {
 		if c.maxFlows > 0 && len(c.flows) >= c.maxFlows {
 			c.evictOldest()
 		}
-		c.flows[key] = &FlowEntry{
-			Packets:  1,
-			Bytes:    uint64(ev.Len),
-			LastSeen: now,
+		state = &flowState{
+			key: key,
+			entry: FlowEntry{
+				Packets:  1,
+				Bytes:    uint64(ev.Len),
+				LastSeen: now,
+			},
 		}
+		c.flows[key] = state
+		heap.Push(&c.eviction, state)
 		return
 	}
 
-	entry.Packets++
-	entry.Bytes += uint64(ev.Len)
-	entry.LastSeen = now
+	state.entry.Packets++
+	state.entry.Bytes += uint64(ev.Len)
+	state.entry.LastSeen = now
+	heap.Fix(&c.eviction, state.index)
 }
 
-// evictOldest removes the flow with the oldest LastSeen. Must be called with mu held.
+// evictOldest removes the flow with the oldest LastSeen
+// it must be called with mu held
 func (c *Collector) evictOldest() {
-	var oldestKey FlowKey
-	var oldestTime time.Time
-	first := true
-
-	for k, v := range c.flows {
-		if first || v.LastSeen.Before(oldestTime) {
-			oldestKey = k
-			oldestTime = v.LastSeen
-			first = false
-		}
+	oldest := c.eviction.peek()
+	if oldest == nil {
+		return
 	}
 
-	if !first {
-		delete(c.flows, oldestKey)
-		c.forced++
-	}
+	delete(c.flows, oldest.key)
+	heap.Pop(&c.eviction)
+	c.forced++
 }
 
 // Evict removes flows whose LastSeen is older than the configured timeout
@@ -90,10 +95,14 @@ func (c *Collector) Evict(now time.Time) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	for k, v := range c.flows {
-		if v.LastSeen.Before(cutoff) {
-			delete(c.flows, k)
+	for {
+		oldest := c.eviction.peek()
+		if oldest == nil || !oldest.entry.LastSeen.Before(cutoff) {
+			return
 		}
+
+		delete(c.flows, oldest.key)
+		heap.Pop(&c.eviction)
 	}
 }
 
@@ -103,8 +112,8 @@ func (c *Collector) Flows() map[FlowKey]FlowEntry {
 	defer c.mu.RUnlock()
 
 	snap := make(map[FlowKey]FlowEntry, len(c.flows))
-	for k, v := range c.flows {
-		snap[k] = *v
+	for k, state := range c.flows {
+		snap[k] = state.entry
 	}
 	return snap
 }
@@ -134,8 +143,8 @@ func (c *Collector) pollDrops(rd Reader) {
 	c.mu.Unlock()
 }
 
-// Run reads events from rd, decodes them, and records them until ctx is done.
-// It also runs a background goroutine for eviction and drop counter polling.
+// Run reads events from rd, decodes them, and records them until ctx is done
+// It also runs a background goroutine for eviction and drop counter polling
 func (c *Collector) Run(ctx context.Context, rd Reader) error {
 	if c.timeout <= 0 {
 		return fmt.Errorf("eviction timeout must be positive, got %v", c.timeout)

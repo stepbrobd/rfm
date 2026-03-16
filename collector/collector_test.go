@@ -87,7 +87,7 @@ func TestEvict(t *testing.T) {
 	}
 
 	// after timeout: flow should be evicted
-	c.Evict(t0.Add(11 * time.Second))
+	c.Evict(t0.Add(12 * time.Second))
 	if len(c.Flows()) != 0 {
 		t.Fatal("stale flow not evicted")
 	}
@@ -114,7 +114,7 @@ func TestEvictKeepsFresh(t *testing.T) {
 	c.Record(fresh, t0.Add(8*time.Second))
 
 	// at t0+11s: stale should be evicted, fresh should remain
-	c.Evict(t0.Add(11 * time.Second))
+	c.Evict(t0.Add(12 * time.Second))
 
 	flows := c.Flows()
 	if len(flows) != 1 {
@@ -122,6 +122,38 @@ func TestEvictKeepsFresh(t *testing.T) {
 	}
 	if _, ok := flows[fresh.Key()]; !ok {
 		t.Fatal("fresh flow was evicted")
+	}
+}
+
+func TestEvictUpdatedFlowKeepsFresh(t *testing.T) {
+	c := New(10*time.Second, nil, 0)
+
+	stale := FlowEvent{
+		Proto: 6, SrcPort: 1000, DstPort: 80,
+		SrcAddr: netip.MustParseAddr("::ffff:10.0.0.1"),
+		DstAddr: netip.MustParseAddr("::ffff:10.0.0.2"),
+		Len:     100,
+	}
+	fresh := FlowEvent{
+		Proto: 17, SrcPort: 5000, DstPort: 53,
+		SrcAddr: netip.MustParseAddr("::ffff:10.0.0.3"),
+		DstAddr: netip.MustParseAddr("::ffff:10.0.0.4"),
+		Len:     50,
+	}
+
+	t0 := time.Now()
+	c.Record(stale, t0)
+	c.Record(fresh, t0.Add(time.Second))
+	c.Record(stale, t0.Add(9*time.Second))
+
+	c.Evict(t0.Add(12 * time.Second))
+
+	flows := c.Flows()
+	if len(flows) != 1 {
+		t.Fatalf("flow count=%d want 1", len(flows))
+	}
+	if _, ok := flows[stale.Key()]; !ok {
+		t.Fatal("updated flow was evicted")
 	}
 }
 
@@ -360,6 +392,49 @@ func TestMaxFlowsForcedEvictionStats(t *testing.T) {
 	s := c.Stats()
 	if s.ForcedEvictions != 1 {
 		t.Fatalf("forced evictions=%d want 1", s.ForcedEvictions)
+	}
+}
+
+func TestMaxFlowsUpdatedFlowStaysResident(t *testing.T) {
+	c := New(30*time.Second, nil, 2)
+
+	ev1 := FlowEvent{
+		Proto: 6, SrcPort: 1000, DstPort: 80,
+		SrcAddr: netip.MustParseAddr("::ffff:10.0.0.1"),
+		DstAddr: netip.MustParseAddr("::ffff:10.0.0.2"),
+		Len:     100,
+	}
+	ev2 := FlowEvent{
+		Proto: 6, SrcPort: 2000, DstPort: 80,
+		SrcAddr: netip.MustParseAddr("::ffff:10.0.0.3"),
+		DstAddr: netip.MustParseAddr("::ffff:10.0.0.4"),
+		Len:     200,
+	}
+	ev3 := FlowEvent{
+		Proto: 17, SrcPort: 3000, DstPort: 53,
+		SrcAddr: netip.MustParseAddr("::ffff:10.0.0.5"),
+		DstAddr: netip.MustParseAddr("::ffff:10.0.0.6"),
+		Len:     50,
+	}
+
+	t0 := time.Now()
+	c.Record(ev1, t0)
+	c.Record(ev2, t0.Add(time.Second))
+	c.Record(ev1, t0.Add(2*time.Second))
+	c.Record(ev3, t0.Add(3*time.Second))
+
+	flows := c.Flows()
+	if len(flows) != 2 {
+		t.Fatalf("flow count=%d want 2", len(flows))
+	}
+	if _, ok := flows[ev1.Key()]; !ok {
+		t.Fatal("updated flow should still be present")
+	}
+	if _, ok := flows[ev2.Key()]; ok {
+		t.Fatal("stale flow should have been evicted")
+	}
+	if _, ok := flows[ev3.Key()]; !ok {
+		t.Fatal("new flow should be present")
 	}
 }
 
