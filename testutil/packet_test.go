@@ -33,7 +33,7 @@ func TestIPv6(t *testing.T) {
 	payload := []byte{0xaa, 0xbb}
 	src := net.ParseIP("fd00::1")
 	dst := net.ParseIP("fd00::2")
-	proto := uint8(6) // TCP
+	proto := uint8(6) // tcp
 
 	hdr := IPv6(proto, src, dst, payload)
 
@@ -76,22 +76,49 @@ func TestEthIPv4UDP(t *testing.T) {
 		t.Fatalf("want ethertype 0x0800, got 0x%04x", ethertype)
 	}
 
-	// IP proto = 17 (UDP)
+	// ip proto = 17
 	ipProto := frame[EthHdrLen+9]
 	if ipProto != 17 {
 		t.Fatalf("want IP proto 17, got %d", ipProto)
 	}
 }
 
+func TestEthVLANIPv4TCP(t *testing.T) {
+	src := net.ParseIP("10.0.0.1")
+	dst := net.ParseIP("10.0.0.2")
+
+	frame := EthVLANIPv4TCP(src, dst, 1234, 443, 42)
+
+	wantLen := EthHdrLen + VLANHdrLen + IPv4HdrLen + TCPHdrLen
+	if len(frame) != wantLen {
+		t.Fatalf("want len %d, got %d", wantLen, len(frame))
+	}
+
+	outer := binary.BigEndian.Uint16(frame[12:14])
+	if outer != EthP8021Q {
+		t.Fatalf("want outer ethertype 0x%04x, got 0x%04x", EthP8021Q, outer)
+	}
+
+	tci := binary.BigEndian.Uint16(frame[14:16])
+	if tci != 42 {
+		t.Fatalf("want vlan id 42, got %d", tci)
+	}
+
+	inner := binary.BigEndian.Uint16(frame[16:18])
+	if inner != EthPIPv4 {
+		t.Fatalf("want inner ethertype 0x%04x, got 0x%04x", EthPIPv4, inner)
+	}
+}
+
 func TestIPv4WithOptions(t *testing.T) {
 	src := net.ParseIP("10.0.0.1")
 	dst := net.ParseIP("10.0.0.2")
-	options := []byte{0x01, 0x01, 0x01, 0x01} // 4 NOP options
+	options := []byte{0x01, 0x01, 0x01, 0x01} // 4 nop options
 	payload := []byte{0xaa, 0xbb}
 
 	hdr := IPv4WithOptions(6, src, dst, options, payload)
 
-	// IHL should be 6 (24 bytes header = 20 base + 4 options)
+	// ihl should be 6
 	ihl := hdr[0] & 0x0f
 	if ihl != 6 {
 		t.Fatalf("ihl = %d, want 6", ihl)
@@ -129,5 +156,42 @@ func TestEthIPv6TCP(t *testing.T) {
 	ethertype := binary.BigEndian.Uint16(frame[12:14])
 	if ethertype != 0x86DD {
 		t.Fatalf("want ethertype 0x86DD, got 0x%04x", ethertype)
+	}
+}
+
+func TestEthQinQIPv6UDP(t *testing.T) {
+	src := net.ParseIP("fd00::1")
+	dst := net.ParseIP("fd00::2")
+
+	frame := EthQinQIPv6UDP(src, dst, 4000, 53, 100, 200)
+
+	wantLen := EthHdrLen + 2*VLANHdrLen + IPv6HdrLen + UDPHdrLen
+	if len(frame) != wantLen {
+		t.Fatalf("want len %d, got %d", wantLen, len(frame))
+	}
+
+	outer := binary.BigEndian.Uint16(frame[12:14])
+	if outer != EthP8021AD {
+		t.Fatalf("want outer ethertype 0x%04x, got 0x%04x", EthP8021AD, outer)
+	}
+
+	outerTCI := binary.BigEndian.Uint16(frame[14:16])
+	if outerTCI != 100 {
+		t.Fatalf("want outer vlan id 100, got %d", outerTCI)
+	}
+
+	middle := binary.BigEndian.Uint16(frame[16:18])
+	if middle != EthP8021Q {
+		t.Fatalf("want inner tag ethertype 0x%04x, got 0x%04x", EthP8021Q, middle)
+	}
+
+	innerTCI := binary.BigEndian.Uint16(frame[18:20])
+	if innerTCI != 200 {
+		t.Fatalf("want inner vlan id 200, got %d", innerTCI)
+	}
+
+	inner := binary.BigEndian.Uint16(frame[20:22])
+	if inner != EthPIPv6 {
+		t.Fatalf("want payload ethertype 0x%04x, got 0x%04x", EthPIPv6, inner)
 	}
 }

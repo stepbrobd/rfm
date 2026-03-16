@@ -11,6 +11,13 @@
 
 #define ETH_P_IP 0x0800
 #define ETH_P_IPV6 0x86DD
+#define ETH_P_8021Q 0x8100
+#define ETH_P_8021AD 0x88A8
+
+struct rfm_vlan_hdr {
+	__u16 tci;
+	__u16 encap_proto;
+};
 
 struct {
 	__uint(type, BPF_MAP_TYPE_ARRAY);
@@ -56,12 +63,25 @@ static __always_inline int rfm_tc(struct __sk_buff *skb, __u8 dir)
 	struct ethhdr *eth = data;
 	__u16 eth_proto = bpf_ntohs(eth->h_proto);
 	__u8 iface_proto = 0;
+	void *l3 = data + sizeof(struct ethhdr);
 
-	// TODO:
-	// - handle 802.1Q and 802.1ad tags before IP parsing
-	// - handle PPPoE session frames carrying IPv4 or IPv6
-	// - handle MPLS label stacks when the monitored link carries labeled IP
-	// - walk IPv6 extension headers when we need final L4 proto and ports
+// todo:
+// - handle PPPoE session frames carrying IPv4 or IPv6
+// - handle MPLS label stacks when the monitored link carries labeled IP
+// - walk IPv6 extension headers when we need final L4 proto and ports
+#pragma unroll
+	for (int i = 0; i < 2; i++) {
+		if (eth_proto != ETH_P_8021Q && eth_proto != ETH_P_8021AD)
+			break;
+
+		if (l3 + sizeof(struct rfm_vlan_hdr) > end)
+			return TC_ACT_OK;
+
+		struct rfm_vlan_hdr *vlan = l3;
+		eth_proto = bpf_ntohs(vlan->encap_proto);
+		l3 += sizeof(*vlan);
+	}
+
 	switch (eth_proto) {
 	case ETH_P_IP:
 		iface_proto = 4;
@@ -112,7 +132,7 @@ static __always_inline int rfm_tc(struct __sk_buff *skb, __u8 dir)
 	void *l4 = NULL;
 
 	if (eth_proto == ETH_P_IP) {
-		struct iphdr *ip = data + sizeof(struct ethhdr);
+		struct iphdr *ip = l3;
 		if ((void *)(ip + 1) > end)
 			return TC_ACT_OK;
 
@@ -134,7 +154,7 @@ static __always_inline int rfm_tc(struct __sk_buff *skb, __u8 dir)
 
 		l4 = (void *)ip + ((__u16)ihl << 2);
 	} else {
-		struct ipv6hdr *ip6 = data + sizeof(struct ethhdr);
+		struct ipv6hdr *ip6 = l3;
 		if ((void *)(ip6 + 1) > end)
 			return TC_ACT_OK;
 

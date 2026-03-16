@@ -18,8 +18,9 @@ import (
 	"ysun.co/rfm/testutil"
 )
 
-// rfmRfmFlowEvent matches the BPF struct rfm_flow_event.
-// ring buffer maps don't generate Go types, so we define it here.
+// rfmRfmFlowEvent matches the BPF struct rfm_flow_event
+// ring buffer maps do not generate Go types
+// define it here
 type rfmRfmFlowEvent struct {
 	_       structs.HostLayout
 	Tstamp  uint64
@@ -86,8 +87,8 @@ func TestIfaceCounters(t *testing.T) {
 	}
 	defer p.Close()
 
-	// no config setup required: iface stats must work independently
-	// of sampling configuration
+	// no config setup required
+	// iface stats must work independently of sampling configuration
 
 	if err := p.Attach(ns.Ifindex()); err != nil {
 		skipIfUnsupported(t, err)
@@ -105,8 +106,8 @@ func TestIfaceCounters(t *testing.T) {
 	// read iface stats
 	key := rfmRfmIfaceKey{
 		Ifindex: uint32(ns.Ifindex()),
-		Dir:     0, // ingress (packet sent to rfm0 via rfm1)
-		Proto:   4, // IPv4
+		Dir:     0, // ingress
+		Proto:   4, // ipv4
 	}
 
 	var packets, bytes uint64
@@ -135,9 +136,58 @@ func TestIfaceCounters(t *testing.T) {
 	t.Logf("packets=%d bytes=%d", packets, bytes)
 }
 
-// readFlowEvent sets up a probe with sampling, attaches it, sends a packet,
-// and reads flow events from the ring buffer until match returns true.
-// this filters out background traffic like ICMPv6 neighbor solicitations.
+func TestIfaceCountersVLAN(t *testing.T) {
+	testutil.RequireRoot(t)
+
+	ns := testutil.NewNS(t)
+
+	p, err := Load(Config{})
+	if err != nil {
+		skipIfUnsupported(t, err)
+		t.Fatal(err)
+	}
+	defer p.Close()
+
+	if err := p.Attach(ns.Ifindex()); err != nil {
+		skipIfUnsupported(t, err)
+		t.Fatal(err)
+	}
+
+	pkt := testutil.EthVLANIPv4TCP(
+		net.IPv4(10, 0, 1, 1),
+		net.IPv4(10, 0, 1, 2),
+		12000, 443, 42,
+	)
+	ns.SendRaw(t, pkt)
+
+	key := rfmRfmIfaceKey{
+		Ifindex: uint32(ns.Ifindex()),
+		Dir:     0,
+		Proto:   4,
+	}
+
+	testutil.Eventually(t, time.Second, 10*time.Millisecond, func() error {
+		var vals []rfmRfmIfaceValue
+		if err := p.IfaceStats().Lookup(key, &vals); err != nil {
+			return err
+		}
+
+		var packets uint64
+		for _, v := range vals {
+			packets += v.Packets
+		}
+
+		if packets == 0 {
+			return fmt.Errorf("expected vlan packets > 0")
+		}
+
+		return nil
+	})
+}
+
+// readFlowEvent sets up a probe with sampling, attaches it, sends a packet
+// and reads flow events from the ring buffer until match returns true
+// this filters out background traffic like ICMPv6 neighbor solicitations
 func readFlowEvent(t *testing.T, pkt []byte, match func(rfmRfmFlowEvent) bool) rfmRfmFlowEvent {
 	t.Helper()
 
@@ -296,5 +346,49 @@ func TestFlowEventUDP(t *testing.T) {
 
 	if ev.DstPort != 53 {
 		t.Fatalf("dst_port = %d, want 53", ev.DstPort)
+	}
+}
+
+func TestFlowEventVLANIPv4TCP(t *testing.T) {
+	testutil.RequireRoot(t)
+
+	pkt := testutil.EthVLANIPv4TCP(
+		net.IPv4(10, 0, 2, 1),
+		net.IPv4(10, 0, 2, 2),
+		33000, 8443, 123,
+	)
+
+	ev := readFlowEvent(t, pkt, func(e rfmRfmFlowEvent) bool {
+		return e.Proto == 6 && e.SrcPort == 33000
+	})
+
+	wantSrc := [16]uint8{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xff, 0xff, 10, 0, 2, 1}
+	if ev.SrcAddr != wantSrc {
+		t.Fatalf("src_addr = %v, want %v", ev.SrcAddr, wantSrc)
+	}
+	if ev.DstPort != 8443 {
+		t.Fatalf("dst_port = %d, want 8443", ev.DstPort)
+	}
+}
+
+func TestFlowEventQinQIPv6UDP(t *testing.T) {
+	testutil.RequireRoot(t)
+
+	pkt := testutil.EthQinQIPv6UDP(
+		net.ParseIP("fd00:1::1"),
+		net.ParseIP("fd00:1::2"),
+		5300, 5353, 10, 20,
+	)
+
+	ev := readFlowEvent(t, pkt, func(e rfmRfmFlowEvent) bool {
+		return e.Proto == 17 && e.SrcPort == 5300
+	})
+
+	wantDst := [16]uint8{0xfd, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2}
+	if ev.DstAddr != wantDst {
+		t.Fatalf("dst_addr = %v, want %v", ev.DstAddr, wantDst)
+	}
+	if ev.DstPort != 5353 {
+		t.Fatalf("dst_port = %d, want 5353", ev.DstPort)
 	}
 }
