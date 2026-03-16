@@ -94,17 +94,21 @@ var (
 // MetricsCollector implements prometheus.Collector, reading BPF iface
 // stats and the collector's flow table at scrape time.
 type MetricsCollector struct {
-	source    IfaceStatsSource
-	col       *collector.Collector
-	mu        sync.Mutex
-	bpfMapErr uint64
+	source        IfaceStatsSource
+	col           *collector.Collector
+	mu            sync.Mutex
+	bpfMapErr     uint64
+	ifnames       map[uint32]string
+	resolveIfname func(uint32) string
 }
 
 // New creates a MetricsCollector. Both source and c may be nil.
 func New(source IfaceStatsSource, c *collector.Collector) *MetricsCollector {
 	return &MetricsCollector{
-		source: source,
-		col:    c,
+		source:        source,
+		col:           c,
+		ifnames:       make(map[uint32]string),
+		resolveIfname: ifnameFromIndex,
 	}
 }
 
@@ -148,7 +152,7 @@ func (mc *MetricsCollector) collectIfaceStats(ch chan<- prometheus.Metric) {
 	}
 
 	for _, e := range entries {
-		ifname := ifnameFromIndex(e.Ifindex)
+		ifname := mc.ifname(e.Ifindex)
 		family := familyString(e.Proto)
 
 		if e.Dir == 0 { // ingress / rx
@@ -193,7 +197,7 @@ func (mc *MetricsCollector) collectFlows(ch chan<- prometheus.Metric) {
 
 	for key, entry := range flows {
 		rk := flowRollupKey{
-			ifname: ifnameFromIndex(key.Ifindex),
+			ifname: mc.ifname(key.Ifindex),
 			dir:    dirString(key.Dir),
 			proto:  strconv.FormatUint(uint64(key.Proto), 10),
 		}
@@ -249,6 +253,27 @@ func (mc *MetricsCollector) sampleRate() uint32 {
 		return 1
 	}
 	return rate
+}
+
+func (mc *MetricsCollector) ifname(ifindex uint32) string {
+	mc.mu.Lock()
+	if name, ok := mc.ifnames[ifindex]; ok {
+		mc.mu.Unlock()
+		return name
+	}
+	mc.mu.Unlock()
+
+	name := mc.resolveIfname(ifindex)
+
+	mc.mu.Lock()
+	if cached, ok := mc.ifnames[ifindex]; ok {
+		mc.mu.Unlock()
+		return cached
+	}
+	mc.ifnames[ifindex] = name
+	mc.mu.Unlock()
+
+	return name
 }
 
 func (mc *MetricsCollector) collectHealth(ch chan<- prometheus.Metric) {

@@ -268,6 +268,52 @@ func TestCollectIfaceStats(t *testing.T) {
 	assertCounter(t, vals, "rfm_interface_tx_packets_total", 5)
 }
 
+func TestCollectCachesIfnames(t *testing.T) {
+	src := &mockIfaceStats{
+		entries: []IfaceStatsEntry{
+			{Ifindex: 7, Dir: 0, Proto: 4, Packets: 10, Bytes: 1000},
+			{Ifindex: 7, Dir: 1, Proto: 6, Packets: 5, Bytes: 500},
+		},
+	}
+
+	c := collector.New(time.Minute, nil, 0)
+	now := time.Now()
+	c.Record(collector.FlowEvent{
+		Ifindex: 7,
+		Dir:     0,
+		Proto:   6,
+		SrcAddr: netip.MustParseAddr("10.0.0.1"),
+		DstAddr: netip.MustParseAddr("10.0.0.2"),
+		SrcPort: 1000,
+		DstPort: 80,
+		Len:     100,
+	}, now)
+	c.Record(collector.FlowEvent{
+		Ifindex: 7,
+		Dir:     1,
+		Proto:   17,
+		SrcAddr: netip.MustParseAddr("10.0.0.3"),
+		DstAddr: netip.MustParseAddr("10.0.0.4"),
+		SrcPort: 2000,
+		DstPort: 53,
+		Len:     200,
+	}, now)
+
+	mc := New(src, c)
+	calls := make(map[uint32]int)
+	mc.resolveIfname = func(ifindex uint32) string {
+		calls[ifindex]++
+		return fmt.Sprintf("if-%d", ifindex)
+	}
+
+	collectMetrics(t, mc)
+	collectMetrics(t, mc)
+
+	if got := calls[7]; got != 1 {
+		t.Fatalf("ifname resolver calls for ifindex 7 = %d, want 1", got)
+	}
+}
+
 func TestCollectFlowsNoEnricher(t *testing.T) {
 	c := collector.New(time.Minute, nil, 0)
 	c.Record(collector.FlowEvent{
