@@ -24,7 +24,7 @@ writeShellScriptBin "formatter" ''
   done
   pushd "$root" > /dev/null
 
-  ${lib.getExe deno} fmt readme.md
+  ${lib.getExe deno} fmt readme.md grafana/dashboard.json
   ${lib.getExe nixfmt-tree} .
   ${lib.getExe taplo} format **/*.toml
 
