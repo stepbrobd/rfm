@@ -94,6 +94,89 @@ func TestTableEnrich(t *testing.T) {
 	}
 }
 
+func TestTableDedupesMetadata(t *testing.T) {
+	tab := NewTable()
+
+	tab.Apply(Update{
+		Reach: []Route{
+			{
+				Prefix:      netip.MustParsePrefix("203.0.113.0/24"),
+				OriginASN:   64496,
+				ASPath:      []uint32{64501, 64496},
+				Communities: []uint32{64501<<16 | 100},
+				PeerASN:     64501,
+				PeerAddress: netip.MustParseAddr("192.0.2.2"),
+				PostPolicy:  true,
+			},
+			{
+				Prefix:      netip.MustParsePrefix("203.0.114.0/24"),
+				OriginASN:   64496,
+				ASPath:      []uint32{64501, 64496},
+				Communities: []uint32{64501<<16 | 100},
+				PeerASN:     64501,
+				PeerAddress: netip.MustParseAddr("192.0.2.2"),
+				PostPolicy:  true,
+			},
+		},
+	})
+
+	if got := len(tab.metas); got != 1 {
+		t.Fatalf("metadata entries = %d, want 1", got)
+	}
+
+	tab.Apply(Update{
+		Withdraw: []netip.Prefix{netip.MustParsePrefix("203.0.113.0/24")},
+	})
+	if got := len(tab.metas); got != 1 {
+		t.Fatalf("metadata entries after single withdraw = %d, want 1", got)
+	}
+
+	tab.Apply(Update{
+		Withdraw: []netip.Prefix{netip.MustParsePrefix("203.0.114.0/24")},
+	})
+	if got := len(tab.metas); got != 0 {
+		t.Fatalf("metadata entries after full withdraw = %d, want 0", got)
+	}
+}
+
+func TestLookupClonesMetadata(t *testing.T) {
+	tab := NewTable()
+	tab.Apply(Update{
+		Reach: []Route{
+			{
+				Prefix:           netip.MustParsePrefix("203.0.113.0/24"),
+				OriginASN:        64496,
+				ASPath:           []uint32{64501, 64496},
+				Communities:      []uint32{64501<<16 | 100},
+				LargeCommunities: []LargeCommunity{{GlobalAdmin: 64501, LocalData1: 1, LocalData2: 2}},
+			},
+		},
+	})
+
+	route, ok := tab.Lookup(netip.MustParseAddr("203.0.113.7"))
+	if !ok {
+		t.Fatal("Lookup should find prefix")
+	}
+
+	route.ASPath[0] = 1
+	route.Communities[0] = 2
+	route.LargeCommunities[0] = LargeCommunity{GlobalAdmin: 3, LocalData1: 4, LocalData2: 5}
+
+	again, ok := tab.Lookup(netip.MustParseAddr("203.0.113.7"))
+	if !ok {
+		t.Fatal("Lookup should find prefix")
+	}
+	if again.ASPath[0] != 64501 {
+		t.Fatalf("ASPath[0] = %d, want 64501", again.ASPath[0])
+	}
+	if again.Communities[0] != 64501<<16|100 {
+		t.Fatalf("Communities[0] = %d, want %d", again.Communities[0], 64501<<16|100)
+	}
+	if got := again.LargeCommunities[0]; got != (LargeCommunity{GlobalAdmin: 64501, LocalData1: 1, LocalData2: 2}) {
+		t.Fatalf("LargeCommunity = %+v, want {GlobalAdmin:64501 LocalData1:1 LocalData2:2}", got)
+	}
+}
+
 func TestUpdateFromBMPRouteMonitoring(t *testing.T) {
 	msg := mustBMPMessage(t, "203.0.113.0/24", 65002)
 

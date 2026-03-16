@@ -18,14 +18,14 @@ import (
 	"ysun.co/rfm/config"
 )
 
-// LargeCommunity is a decoded RFC 8092 large community.
+// LargeCommunity is a decoded RFC 8092 large community
 type LargeCommunity struct {
 	GlobalAdmin uint32
 	LocalData1  uint32
 	LocalData2  uint32
 }
 
-// Route is the internal route view exposed by the RIB backend.
+// Route is the internal route view exposed by the RIB backend
 type Route struct {
 	Prefix           netip.Prefix
 	OriginASN        uint32
@@ -37,52 +37,91 @@ type Route struct {
 	PostPolicy       bool
 }
 
-// Update is a batch of RIB changes.
+type routeValue struct {
+	Prefix    netip.Prefix
+	OriginASN uint32
+	MetaID    uint64
+}
+
+type routeMeta struct {
+	ASPath           []uint32
+	Communities      []uint32
+	LargeCommunities []LargeCommunity
+	PeerASN          uint32
+	PeerAddress      netip.Addr
+	PostPolicy       bool
+}
+
+type routeMetaKey struct {
+	ASPath           string
+	Communities      string
+	LargeCommunities string
+	PeerASN          uint32
+	PeerAddress      netip.Addr
+	PostPolicy       bool
+}
+
+type routeMetaState struct {
+	key  routeMetaKey
+	meta routeMeta
+	refs int
+}
+
+// Update is a batch of RIB changes
 type Update struct {
 	Reach    []Route
 	Withdraw []netip.Prefix
 }
 
-// Table is a longest-prefix-match routing table.
+// Table is a longest-prefix-match routing table
 type Table struct {
-	mu sync.RWMutex
-	v4 bart.Table[Route]
-	v6 bart.Table[Route]
+	mu       sync.RWMutex
+	v4       bart.Table[routeValue]
+	v6       bart.Table[routeValue]
+	entries  map[netip.Prefix]routeValue
+	metas    map[uint64]*routeMetaState
+	metaKeys map[routeMetaKey]uint64
+	nextMeta uint64
 }
 
-// NewTable creates an empty RIB table.
+// NewTable creates an empty RIB table
 func NewTable() *Table {
-	return &Table{}
+	return &Table{
+		entries:  make(map[netip.Prefix]routeValue),
+		metas:    make(map[uint64]*routeMetaState),
+		metaKeys: make(map[routeMetaKey]uint64),
+		nextMeta: 1,
+	}
 }
 
-// Apply applies a batch of route updates.
+// Apply applies a batch of route updates
 func (t *Table) Apply(update Update) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
 	for _, prefix := range update.Withdraw {
-		deletePrefix(&t.v4, &t.v6, prefix)
+		t.deletePrefix(prefix)
 	}
 	for _, route := range update.Reach {
-		insertRoute(&t.v4, &t.v6, route)
+		t.insertRoute(route)
 	}
 }
 
-// Lookup returns the best matching route for addr.
+// Lookup returns the best matching route for addr
 func (t *Table) Lookup(addr netip.Addr) (Route, bool) {
 	addr = addr.Unmap()
 
 	t.mu.RLock()
 	defer t.mu.RUnlock()
 
-	route, ok := lookupTable(&t.v4, &t.v6, addr)
+	value, ok := lookupTable(&t.v4, &t.v6, addr)
 	if !ok {
 		return Route{}, false
 	}
-	return cloneRoute(route), true
+	return t.route(value), true
 }
 
-// Enrich returns only the labels Prometheus needs.
+// Enrich returns only the labels Prometheus needs
 func (t *Table) Enrich(src, dst netip.Addr) (collector.Labels, collector.Labels) {
 	return t.labels(src), t.labels(dst)
 }
@@ -93,14 +132,14 @@ func (t *Table) labels(addr netip.Addr) collector.Labels {
 	t.mu.RLock()
 	defer t.mu.RUnlock()
 
-	route, ok := lookupTable(&t.v4, &t.v6, addr)
+	value, ok := lookupTable(&t.v4, &t.v6, addr)
 	if !ok {
 		return collector.Labels{}
 	}
-	return collector.Labels{ASN: route.OriginASN}
+	return collector.Labels{ASN: value.OriginASN}
 }
 
-// Server owns a BMP listener and an in-memory RIB.
+// Server owns a BMP listener and an in-memory RIB
 type Server struct {
 	listener net.Listener
 	table    *Table
@@ -108,8 +147,8 @@ type Server struct {
 	wg       sync.WaitGroup
 }
 
-// Listen starts a BMP listener when configured.
-// When BMP listen is unset, it returns nil, nil, nil.
+// Listen starts a BMP listener when configured
+// When BMP listen is unset, it returns nil, nil, nil
 func Listen(cfg config.RIBConfig) (collector.Enricher, io.Closer, error) {
 	bmpCfg := cfg.BMP.WithDefaults()
 	if !bmpCfg.Enabled() {
@@ -137,7 +176,7 @@ func (s *Server) Enrich(src, dst netip.Addr) (collector.Labels, collector.Labels
 	return s.table.Enrich(src, dst)
 }
 
-// Lookup returns the best matching route for addr.
+// Lookup returns the best matching route for addr
 func (s *Server) Lookup(addr netip.Addr) (Route, bool) {
 	return s.table.Lookup(addr)
 }
@@ -365,6 +404,97 @@ func describePrefix(nlri bgp.AddrPrefixInterface) string {
 	return fmt.Sprintf("%s flat=%v", nlri.String(), flat)
 }
 
+func (t *Table) insertRoute(route Route) {
+	route.Prefix = route.Prefix.Masked()
+
+	if current, ok := t.entries[route.Prefix]; ok {
+		t.releaseMeta(current.MetaID)
+	}
+
+	value := routeValue{
+		Prefix:    route.Prefix,
+		OriginASN: route.OriginASN,
+		MetaID:    t.internMeta(route.meta()),
+	}
+	t.entries[route.Prefix] = value
+	insertValue(&t.v4, &t.v6, value)
+}
+
+func (t *Table) deletePrefix(prefix netip.Prefix) {
+	prefix = prefix.Masked()
+
+	if current, ok := t.entries[prefix]; ok {
+		t.releaseMeta(current.MetaID)
+		delete(t.entries, prefix)
+	}
+	deletePrefix(&t.v4, &t.v6, prefix)
+}
+
+func (t *Table) route(value routeValue) Route {
+	route := Route{
+		Prefix:    value.Prefix,
+		OriginASN: value.OriginASN,
+	}
+	if value.MetaID == 0 {
+		return route
+	}
+
+	state, ok := t.metas[value.MetaID]
+	if !ok {
+		return route
+	}
+
+	routeMeta := state.meta.clone()
+	route.ASPath = routeMeta.ASPath
+	route.Communities = routeMeta.Communities
+	route.LargeCommunities = routeMeta.LargeCommunities
+	route.PeerASN = routeMeta.PeerASN
+	route.PeerAddress = routeMeta.PeerAddress
+	route.PostPolicy = routeMeta.PostPolicy
+	return route
+}
+
+func (t *Table) internMeta(meta routeMeta) uint64 {
+	if meta.empty() {
+		return 0
+	}
+
+	key := meta.key()
+	if id, ok := t.metaKeys[key]; ok {
+		t.metas[id].refs++
+		return id
+	}
+
+	id := t.nextMeta
+	t.nextMeta++
+	t.metaKeys[key] = id
+	t.metas[id] = &routeMetaState{
+		key:  key,
+		meta: meta.clone(),
+		refs: 1,
+	}
+	return id
+}
+
+func (t *Table) releaseMeta(id uint64) {
+	if id == 0 {
+		return
+	}
+
+	state, ok := t.metas[id]
+	if !ok {
+		return
+	}
+
+	state.refs--
+	if state.refs > 0 {
+		return
+	}
+
+	delete(t.metaKeys, state.key)
+	delete(t.metas, id)
+}
+
 type attrs struct {
 	originASN        uint32
 	asPath           []uint32
@@ -413,6 +543,44 @@ func (a attrs) route(prefix netip.Prefix, peer bmp.BMPPeerHeader) Route {
 	}
 
 	return route
+}
+
+func (r Route) meta() routeMeta {
+	return routeMeta{
+		ASPath:           append([]uint32(nil), r.ASPath...),
+		Communities:      append([]uint32(nil), r.Communities...),
+		LargeCommunities: append([]LargeCommunity(nil), r.LargeCommunities...),
+		PeerASN:          r.PeerASN,
+		PeerAddress:      r.PeerAddress,
+		PostPolicy:       r.PostPolicy,
+	}
+}
+
+func (m routeMeta) empty() bool {
+	return len(m.ASPath) == 0 &&
+		len(m.Communities) == 0 &&
+		len(m.LargeCommunities) == 0 &&
+		m.PeerASN == 0 &&
+		!m.PeerAddress.IsValid() &&
+		!m.PostPolicy
+}
+
+func (m routeMeta) clone() routeMeta {
+	m.ASPath = append([]uint32(nil), m.ASPath...)
+	m.Communities = append([]uint32(nil), m.Communities...)
+	m.LargeCommunities = append([]LargeCommunity(nil), m.LargeCommunities...)
+	return m
+}
+
+func (m routeMeta) key() routeMetaKey {
+	return routeMetaKey{
+		ASPath:           encodeUint32s(m.ASPath),
+		Communities:      encodeUint32s(m.Communities),
+		LargeCommunities: encodeLargeCommunities(m.LargeCommunities),
+		PeerASN:          m.PeerASN,
+		PeerAddress:      m.PeerAddress,
+		PostPolicy:       m.PostPolicy,
+	}
 }
 
 func flattenASPath(path []bgp.AsPathParamInterface) []uint32 {
@@ -467,16 +635,15 @@ func prefixFromFlat(flat map[string]string) (netip.Prefix, bool) {
 	return netip.PrefixFrom(addr.Unmap(), n).Masked(), true
 }
 
-func insertRoute(v4, v6 *bart.Table[Route], route Route) {
-	route.Prefix = route.Prefix.Masked()
-	if route.Prefix.Addr().Is4() {
-		v4.Insert(route.Prefix, route)
+func insertValue(v4, v6 *bart.Table[routeValue], value routeValue) {
+	if value.Prefix.Addr().Is4() {
+		v4.Insert(value.Prefix, value)
 		return
 	}
-	v6.Insert(route.Prefix, route)
+	v6.Insert(value.Prefix, value)
 }
 
-func deletePrefix(v4, v6 *bart.Table[Route], prefix netip.Prefix) {
+func deletePrefix(v4, v6 *bart.Table[routeValue], prefix netip.Prefix) {
 	prefix = prefix.Masked()
 	if prefix.Addr().Is4() {
 		v4.Delete(prefix)
@@ -485,16 +652,39 @@ func deletePrefix(v4, v6 *bart.Table[Route], prefix netip.Prefix) {
 	v6.Delete(prefix)
 }
 
-func lookupTable(v4, v6 *bart.Table[Route], addr netip.Addr) (Route, bool) {
+func lookupTable(v4, v6 *bart.Table[routeValue], addr netip.Addr) (routeValue, bool) {
 	if addr.Is4() {
 		return v4.Lookup(addr)
 	}
 	return v6.Lookup(addr)
 }
 
-func cloneRoute(route Route) Route {
-	route.ASPath = append([]uint32(nil), route.ASPath...)
-	route.Communities = append([]uint32(nil), route.Communities...)
-	route.LargeCommunities = append([]LargeCommunity(nil), route.LargeCommunities...)
-	return route
+func encodeUint32s(values []uint32) string {
+	if len(values) == 0 {
+		return ""
+	}
+
+	var b strings.Builder
+	for _, value := range values {
+		b.WriteString(strconv.FormatUint(uint64(value), 10))
+		b.WriteByte(',')
+	}
+	return b.String()
+}
+
+func encodeLargeCommunities(values []LargeCommunity) string {
+	if len(values) == 0 {
+		return ""
+	}
+
+	var b strings.Builder
+	for _, value := range values {
+		b.WriteString(strconv.FormatUint(uint64(value.GlobalAdmin), 10))
+		b.WriteByte(':')
+		b.WriteString(strconv.FormatUint(uint64(value.LocalData1), 10))
+		b.WriteByte(':')
+		b.WriteString(strconv.FormatUint(uint64(value.LocalData2), 10))
+		b.WriteByte(',')
+	}
+	return b.String()
 }
