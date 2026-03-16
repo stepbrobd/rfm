@@ -162,10 +162,16 @@ Interface counters (from BPF map, zero overhead). The `family` label is
 - `rfm_interface_rx_packets_total{ifname, family}`
 - `rfm_interface_tx_packets_total{ifname, family}`
 
-Sampled flow gauges (rolled up by enrichment labels):
+Flow gauges (rolled up by enrichment labels):
 
 - `rfm_flow_bytes{ifname, direction, proto, src_asn, dst_asn, src_city, dst_city}`
 - `rfm_flow_packets{ifname, direction, proto, src_asn, dst_asn, src_city, dst_city}`
+- `rfm_flow_sampled_bytes{ifname, direction, proto, src_asn, dst_asn, src_city, dst_city}`
+- `rfm_flow_sampled_packets{ifname, direction, proto, src_asn, dst_asn, src_city, dst_city}`
+
+`rfm_flow_bytes` and `rfm_flow_packets` are estimated values scaled by
+`agent.bpf.sample_rate`. `rfm_flow_sampled_bytes` and `rfm_flow_sampled_packets`
+are the raw sampled values before scaling.
 
 Collector health:
 
