@@ -182,8 +182,8 @@ func (s *Server) handleConn(conn net.Conn) {
 	var messages int
 	var changes int
 	var parseErrLogged bool
+	var appliedLogged bool
 	seenTypes := make(map[uint8]struct{})
-	var routeLogs int
 
 	for scanner.Scan() {
 		messages++
@@ -204,13 +204,12 @@ func (s *Server) handleConn(conn net.Conn) {
 			}
 		}
 
-		if msg.Header.Type == bmp.BMP_MSG_ROUTE_MONITORING && routeLogs < 20 {
-			log.Info(
+		if msg.Header.Type == bmp.BMP_MSG_ROUTE_MONITORING {
+			log.Debug(
 				"bmp route monitoring raw",
 				"remote", conn.RemoteAddr(),
 				"summary", describeRouteMonitoring(msg),
 			)
-			routeLogs++
 		}
 
 		update, ok := updateFromBMP(msg)
@@ -218,14 +217,23 @@ func (s *Server) handleConn(conn net.Conn) {
 			continue
 		}
 
-		if routeLogs < 40 {
-			log.Info(
+		if len(update.Reach) > 0 || len(update.Withdraw) > 0 {
+			if !appliedLogged {
+				log.Info(
+					"bmp route monitoring applied",
+					"remote", conn.RemoteAddr(),
+					"reach", len(update.Reach),
+					"withdraw", len(update.Withdraw),
+				)
+				appliedLogged = true
+			}
+
+			log.Debug(
 				"bmp route monitoring applied",
 				"remote", conn.RemoteAddr(),
 				"reach", len(update.Reach),
 				"withdraw", len(update.Withdraw),
 			)
-			routeLogs++
 		}
 
 		changes += len(update.Reach) + len(update.Withdraw)
