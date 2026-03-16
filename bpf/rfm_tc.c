@@ -57,6 +57,11 @@ static __always_inline int rfm_tc(struct __sk_buff *skb, __u8 dir)
 	__u16 eth_proto = bpf_ntohs(eth->h_proto);
 	__u8 iface_proto = 0;
 
+	// TODO:
+	// - handle 802.1Q and 802.1ad tags before IP parsing
+	// - handle PPPoE session frames carrying IPv4 or IPv6
+	// - handle MPLS label stacks when the monitored link carries labeled IP
+	// - walk IPv6 extension headers when we need final L4 proto and ports
 	switch (eth_proto) {
 	case ETH_P_IP:
 		iface_proto = 4;
