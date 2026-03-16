@@ -15,6 +15,7 @@ Requirements:
 Current scope:
 
 - Attaches TC programs for bidirectional flow observation
+- Parses ipv4 and ipv6 traffic on plain ethernet, VLAN, and QinQ links
 - Keeps BPF behavior fully map-driven and stateless
 - Optionally enriches flows in userspace with BMP/RIB data, MMDB data, or both
 - Exports Prometheus metrics
@@ -42,14 +43,15 @@ flow events in userspace, and serves Prometheus metrics over HTTP.
 
 BPF programs are attached via TCX as link-based attachments. BPF behavior is
 map-driven: sampling rates and feature flags live in a shared `rfm_config` map
-rather than compiled-in constants. Config changes currently trigger a full
-unload and reload of the BPF programs.
+rather than compiled-in constants. The config map is writable at runtime, though
+the current agent writes it during startup.
 
 ### Data path
 
-1. TC programs classify each packet by direction, protocol family, and 5-tuple.
-   Every packet updates per-CPU interface counters. Sampled packets (1-in-N)
-   emit a flow event to a ring buffer.
+1. TC programs classify each packet by direction, protocol family, and 5-tuple
+   after ethernet, VLAN, and QinQ parsing. Every packet updates per-CPU
+   interface counters. Sampled packets (1-in-N) emit a flow event to a ring
+   buffer.
 2. The userspace collector reads events from the ring buffer, converts
    `CLOCK_BOOTTIME` timestamps to wall clock time, and aggregates flows into an
    in-memory table keyed by
