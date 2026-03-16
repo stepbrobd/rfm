@@ -14,3 +14,8 @@ type ProbeSource struct {
 func (s *ProbeSource) IfaceStats() ([]IfaceStatsEntry, error) {
 	return nil, nil
 }
+
+// SampleRate returns the default no-sampling rate on non-Linux platforms.
+func (s *ProbeSource) SampleRate() (uint32, error) {
+	return 1, nil
+}

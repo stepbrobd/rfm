@@ -413,7 +413,11 @@ in
 
     metrics2 = machine2.succeed("curl -sf http://localhost:9669/metrics")
     require_positive(metrics2, "rfm_interface_rx_bytes_total", ifname="eth1", family="ipv4")
-    require_positive(metrics2, "rfm_flow_packets", ifname="eth1", direction="ingress", proto="6")
+    sampled = require_positive(metrics2, "rfm_flow_sampled_packets", ifname="eth1", direction="ingress", proto="6")
+    scaled = require_positive(metrics2, "rfm_flow_packets", ifname="eth1", direction="ingress", proto="6")
+    assert any(val == samp * 10 for val in scaled for samp in sampled), (
+      f"expected scaled flow packets to be sample_rate x sampled packets, got sampled={sampled} scaled={scaled}"
+    )
 
     # --- phase 4: UDP traffic with iperf3 ---
     machine1.succeed("iperf3 -c 192.168.1.2 -p 5201 -u -t 2 -b 10M")

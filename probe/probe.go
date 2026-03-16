@@ -65,6 +65,15 @@ func (p *Probe) Config() *ebpf.Map {
 	return p.objs.RfmConfig
 }
 
+func (p *Probe) SampleRate() (uint32, error) {
+	key := uint32(0)
+	var cfg rfmRfmConfig
+	if err := p.objs.RfmConfig.Lookup(key, &cfg); err != nil {
+		return 0, fmt.Errorf("read config: %w", err)
+	}
+	return cfg.SampleRate, nil
+}
+
 func (p *Probe) IfaceStats() *ebpf.Map {
 	return p.objs.RfmIfaceStats
 }

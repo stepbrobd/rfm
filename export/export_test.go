@@ -19,10 +19,22 @@ import (
 type mockIfaceStats struct {
 	entries []IfaceStatsEntry
 	err     error
+	rate    uint32
+	rateErr error
 }
 
 func (m *mockIfaceStats) IfaceStats() ([]IfaceStatsEntry, error) {
 	return m.entries, m.err
+}
+
+func (m *mockIfaceStats) SampleRate() (uint32, error) {
+	if m.rateErr != nil {
+		return 0, m.rateErr
+	}
+	if m.rate == 0 {
+		return 1, nil
+	}
+	return m.rate, nil
 }
 
 type staticEnricher struct {
@@ -187,8 +199,8 @@ func TestDescribe(t *testing.T) {
 		descs = append(descs, d)
 	}
 
-	if got := len(descs); got != 10 {
-		t.Fatalf("got %d descriptors, want 10", got)
+	if got := len(descs); got != 12 {
+		t.Fatalf("got %d descriptors, want 12", got)
 	}
 
 	names := make(map[string]bool)
@@ -203,6 +215,8 @@ func TestDescribe(t *testing.T) {
 		"rfm_interface_tx_packets_total",
 		"rfm_flow_bytes",
 		"rfm_flow_packets",
+		"rfm_flow_sampled_bytes",
+		"rfm_flow_sampled_packets",
 		"rfm_collector_active_flows",
 		"rfm_collector_dropped_events_total",
 		"rfm_collector_forced_evictions_total",
@@ -272,6 +286,8 @@ func TestCollectFlowsNoEnricher(t *testing.T) {
 
 	assertGauge(t, vals, "rfm_flow_bytes", 200)
 	assertGauge(t, vals, "rfm_flow_packets", 1)
+	assertGauge(t, vals, "rfm_flow_sampled_bytes", 200)
+	assertGauge(t, vals, "rfm_flow_sampled_packets", 1)
 
 	// Check labels - enrichment should be empty strings
 	metrics := collectMetrics(t, mc)
@@ -348,6 +364,30 @@ func TestCollectFlowsWithEnricher(t *testing.T) {
 	}
 }
 
+func TestCollectFlowsScalesBySampleRate(t *testing.T) {
+	src := &mockIfaceStats{rate: 10}
+
+	c := collector.New(time.Minute, nil, 0)
+	c.Record(collector.FlowEvent{
+		Ifindex: 2,
+		Dir:     0,
+		Proto:   6,
+		SrcAddr: netip.MustParseAddr("192.168.1.1"),
+		DstAddr: netip.MustParseAddr("192.168.1.2"),
+		SrcPort: 1234,
+		DstPort: 443,
+		Len:     200,
+	}, time.Now())
+
+	mc := New(src, c)
+	vals := collectAll(t, mc)
+
+	assertGauge(t, vals, "rfm_flow_sampled_bytes", 200)
+	assertGauge(t, vals, "rfm_flow_sampled_packets", 1)
+	assertGauge(t, vals, "rfm_flow_bytes", 2000)
+	assertGauge(t, vals, "rfm_flow_packets", 10)
+}
+
 func TestCollectNilSources(t *testing.T) {
 	mc := New(nil, nil)
 	// Must not panic
@@ -386,15 +426,16 @@ func TestCollectFlowsAggregatesDuplicateLabels(t *testing.T) {
 
 	// find rfm_flow_bytes and check it has exactly one series
 	for _, mf := range mfs {
-		if mf.GetName() != "rfm_flow_bytes" {
+		if mf.GetName() != "rfm_flow_bytes" &&
+			mf.GetName() != "rfm_flow_sampled_bytes" {
 			continue
 		}
 		if got := len(mf.GetMetric()); got != 1 {
-			t.Fatalf("rfm_flow_bytes series count = %d, want 1 (aggregated)", got)
+			t.Fatalf("%s series count = %d, want 1 (aggregated)", mf.GetName(), got)
 		}
 		val := mf.GetMetric()[0].GetGauge().GetValue()
 		if val != 300 {
-			t.Fatalf("rfm_flow_bytes = %g, want 300 (100+200)", val)
+			t.Fatalf("%s = %g, want 300 (100+200)", mf.GetName(), val)
 		}
 	}
 }
@@ -544,4 +585,43 @@ func TestCollectErrorsTotalZeroOnSuccess(t *testing.T) {
 	mc := New(src, nil)
 	vals := collectAll(t, mc)
 	assertCounter(t, vals, "rfm_errors_total", 0)
+}
+
+func TestCollectErrorsTotalOnSampleRateLookupError(t *testing.T) {
+	src := &mockIfaceStats{
+		rateErr: fmt.Errorf("config map broken"),
+	}
+
+	c := collector.New(time.Minute, nil, 0)
+	c.Record(collector.FlowEvent{
+		Ifindex: 2,
+		Dir:     0,
+		Proto:   6,
+		SrcAddr: netip.MustParseAddr("192.168.1.1"),
+		DstAddr: netip.MustParseAddr("192.168.1.2"),
+		SrcPort: 1234,
+		DstPort: 443,
+		Len:     200,
+	}, time.Now())
+
+	mc := New(src, c)
+	metrics := collectMetrics(t, mc)
+
+	var found bool
+	for _, m := range metrics {
+		if extractName(m.Desc()) != "rfm_errors_total" {
+			continue
+		}
+		labels := metricLabels(t, m)
+		if labels["subsystem"] != "bpf_map" {
+			continue
+		}
+		found = true
+		if val := metricValue(t, m); val != 1 {
+			t.Errorf("bpf_map errors = %g, want 1", val)
+		}
+	}
+	if !found {
+		t.Error("missing rfm_errors_total{subsystem=\"bpf_map\"}")
+	}
 }

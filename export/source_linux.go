@@ -61,3 +61,18 @@ func (s *ProbeSource) IfaceStats() ([]IfaceStatsEntry, error) {
 	}
 	return entries, nil
 }
+
+// SampleRate reads the current sample rate from the probe config map.
+func (s *ProbeSource) SampleRate() (uint32, error) {
+	if s.Probe == nil {
+		return 1, nil
+	}
+	rate, err := s.Probe.SampleRate()
+	if err != nil {
+		return 0, err
+	}
+	if rate == 0 {
+		return 1, nil
+	}
+	return rate, nil
+}
