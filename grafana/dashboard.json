@@ -1,0 +1,5935 @@
+{
+  "__inputs": [
+    {
+      "name": "DS_PROMETHEUS",
+      "label": "Prometheus",
+      "description": "Prometheus datasource for RFM metrics",
+      "type": "datasource",
+      "pluginId": "prometheus",
+      "pluginName": "Prometheus"
+    }
+  ],
+  "__requires": [
+    {
+      "type": "grafana",
+      "id": "grafana",
+      "name": "Grafana",
+      "version": "10.0.0"
+    },
+    {
+      "type": "datasource",
+      "id": "prometheus",
+      "name": "Prometheus",
+      "version": "1.0.0"
+    },
+    {
+      "type": "panel",
+      "id": "timeseries",
+      "name": "Time series",
+      "version": ""
+    },
+    {
+      "type": "panel",
+      "id": "stat",
+      "name": "Stat",
+      "version": ""
+    },
+    {
+      "type": "panel",
+      "id": "gauge",
+      "name": "Gauge",
+      "version": ""
+    },
+    {
+      "type": "panel",
+      "id": "piechart",
+      "name": "Pie chart",
+      "version": ""
+    },
+    {
+      "type": "panel",
+      "id": "barchart",
+      "name": "Bar chart",
+      "version": ""
+    },
+    {
+      "type": "panel",
+      "id": "table",
+      "name": "Table",
+      "version": ""
+    },
+    {
+      "type": "panel",
+      "id": "bargauge",
+      "name": "Bar gauge",
+      "version": ""
+    },
+    {
+      "type": "panel",
+      "id": "nodeGraph",
+      "name": "Node graph",
+      "version": ""
+    }
+  ],
+  "id": null,
+  "uid": "rfm",
+  "title": "RFM",
+  "description": "eBPF-based network flow analysis dashboard for RFM agents",
+  "tags": [
+    "rfm",
+    "network",
+    "ebpf",
+    "flow"
+  ],
+  "style": "dark",
+  "timezone": "browser",
+  "editable": true,
+  "graphTooltip": 1,
+  "fiscalYearStartMonth": 0,
+  "liveNow": false,
+  "refresh": "30s",
+  "schemaVersion": 39,
+  "version": 2,
+  "time": {
+    "from": "now-1h",
+    "to": "now"
+  },
+  "timepicker": {
+    "refresh_intervals": [
+      "5s",
+      "10s",
+      "30s",
+      "1m",
+      "5m"
+    ],
+    "time_options": [
+      "5m",
+      "15m",
+      "1h",
+      "6h",
+      "12h",
+      "24h",
+      "2d",
+      "7d"
+    ]
+  },
+  "templating": {
+    "list": [
+      {
+        "name": "datasource",
+        "type": "datasource",
+        "query": "prometheus",
+        "current": {},
+        "hide": 0,
+        "includeAll": false,
+        "multi": true,
+        "options": [],
+        "refresh": 1,
+        "regex": "",
+        "label": "Data Source"
+      }
+    ]
+  },
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": {
+          "type": "grafana",
+          "uid": "-- Grafana --"
+        },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "panels": [
+    {
+      "type": "stat",
+      "title": "Ingress Bandwidth",
+      "datasource": {
+        "type": "datasource",
+        "uid": "-- Mixed --"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 0,
+        "y": 0
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bps",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 100000000
+              },
+              {
+                "color": "red",
+                "value": 1000000000
+              }
+            ]
+          },
+          "mappings": []
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "sum(rate(rfm_interface_rx_bytes_total[$__rate_interval])) * 8",
+          "legendFormat": "Ingress",
+          "refId": "A",
+          "instant": true
+        }
+      ],
+      "transformations": [
+        {
+          "id": "seriesToRows",
+          "options": {}
+        },
+        {
+          "id": "groupBy",
+          "options": {
+            "fields": {
+              "Metric": {
+                "operation": "groupby"
+              },
+              "Value": {
+                "operation": "aggregate",
+                "aggregations": [
+                  "sum"
+                ]
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "Egress Bandwidth",
+      "datasource": {
+        "type": "datasource",
+        "uid": "-- Mixed --"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 4,
+        "y": 0
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bps",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 100000000
+              },
+              {
+                "color": "red",
+                "value": 1000000000
+              }
+            ]
+          },
+          "mappings": []
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "sum(rate(rfm_interface_tx_bytes_total[$__rate_interval])) * 8",
+          "legendFormat": "Egress",
+          "refId": "A",
+          "instant": true
+        }
+      ],
+      "transformations": [
+        {
+          "id": "seriesToRows",
+          "options": {}
+        },
+        {
+          "id": "groupBy",
+          "options": {
+            "fields": {
+              "Metric": {
+                "operation": "groupby"
+              },
+              "Value": {
+                "operation": "aggregate",
+                "aggregations": [
+                  "sum"
+                ]
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "Ingress Packets",
+      "datasource": {
+        "type": "datasource",
+        "uid": "-- Mixed --"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 8,
+        "y": 0
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "pps",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 50000
+              },
+              {
+                "color": "red",
+                "value": 500000
+              }
+            ]
+          },
+          "mappings": []
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "sum(rate(rfm_interface_rx_packets_total[$__rate_interval]))",
+          "legendFormat": "Ingress",
+          "refId": "A",
+          "instant": true
+        }
+      ],
+      "transformations": [
+        {
+          "id": "seriesToRows",
+          "options": {}
+        },
+        {
+          "id": "groupBy",
+          "options": {
+            "fields": {
+              "Metric": {
+                "operation": "groupby"
+              },
+              "Value": {
+                "operation": "aggregate",
+                "aggregations": [
+                  "sum"
+                ]
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "Egress Packets",
+      "datasource": {
+        "type": "datasource",
+        "uid": "-- Mixed --"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 12,
+        "y": 0
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "pps",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 50000
+              },
+              {
+                "color": "red",
+                "value": 500000
+              }
+            ]
+          },
+          "mappings": []
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "sum(rate(rfm_interface_tx_packets_total[$__rate_interval]))",
+          "legendFormat": "Egress",
+          "refId": "A",
+          "instant": true
+        }
+      ],
+      "transformations": [
+        {
+          "id": "seriesToRows",
+          "options": {}
+        },
+        {
+          "id": "groupBy",
+          "options": {
+            "fields": {
+              "Metric": {
+                "operation": "groupby"
+              },
+              "Value": {
+                "operation": "aggregate",
+                "aggregations": [
+                  "sum"
+                ]
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "Active Flows",
+      "datasource": {
+        "type": "datasource",
+        "uid": "-- Mixed --"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 16,
+        "y": 0
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 50000
+              },
+              {
+                "color": "red",
+                "value": 60000
+              }
+            ]
+          },
+          "mappings": []
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "sum(rfm_collector_active_flows)",
+          "legendFormat": "Active Flows",
+          "refId": "A",
+          "instant": true
+        }
+      ],
+      "transformations": [
+        {
+          "id": "seriesToRows",
+          "options": {}
+        },
+        {
+          "id": "groupBy",
+          "options": {
+            "fields": {
+              "Metric": {
+                "operation": "groupby"
+              },
+              "Value": {
+                "operation": "aggregate",
+                "aggregations": [
+                  "sum"
+                ]
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "type": "gauge",
+      "title": "Flow Table Utilization",
+      "datasource": {
+        "type": "datasource",
+        "uid": "-- Mixed --"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 20,
+        "y": 0
+      },
+      "description": "Percentage of max_flows capacity in use (default max: 65536)",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1,
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 0.75
+              },
+              {
+                "color": "red",
+                "value": 0.9
+              }
+            ]
+          },
+          "mappings": []
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "auto",
+        "showThresholdLabels": false,
+        "showThresholdMarkers": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "sum(rfm_collector_active_flows) / 65536",
+          "legendFormat": "Flow Table Utilization",
+          "refId": "A",
+          "instant": true
+        }
+      ],
+      "transformations": [
+        {
+          "id": "seriesToRows",
+          "options": {}
+        },
+        {
+          "id": "groupBy",
+          "options": {
+            "fields": {
+              "Metric": {
+                "operation": "groupby"
+              },
+              "Value": {
+                "operation": "aggregate",
+                "aggregations": [
+                  "sum"
+                ]
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Ingress / Egress Bandwidth",
+      "description": "Bidirectional bandwidth graph. Ingress shown above zero, egress below.",
+      "datasource": {
+        "type": "datasource",
+        "uid": "-- Mixed --"
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 12,
+        "x": 0,
+        "y": 4
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bps",
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "lineWidth": 1,
+            "fillOpacity": 25,
+            "gradientMode": "opacity",
+            "spanNulls": false,
+            "showPoints": "never",
+            "axisCenteredZero": true,
+            "axisLabel": "",
+            "scaleDistribution": {
+              "type": "linear"
+            }
+          },
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "/Ingress/"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#73BF69",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "/Egress/"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#F2495C",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "custom.transform",
+                "value": "negative-Y"
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        },
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max"
+          ]
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "sum(rate(rfm_interface_rx_bytes_total[$__rate_interval])) * 8",
+          "legendFormat": "Ingress",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "sum(rate(rfm_interface_tx_bytes_total[$__rate_interval])) * 8",
+          "legendFormat": "Egress",
+          "refId": "B"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "seriesToRows",
+          "options": {}
+        },
+        {
+          "id": "groupBy",
+          "options": {
+            "fields": {
+              "Time": {
+                "operation": "groupby"
+              },
+              "Metric": {
+                "operation": "groupby"
+              },
+              "Value": {
+                "operation": "aggregate",
+                "aggregations": [
+                  "sum"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "renameByName": {
+              "Value (sum)": "Value"
+            }
+          }
+        },
+        {
+          "id": "partitionByValues",
+          "options": {
+            "fields": [
+              "Metric"
+            ],
+            "keepFields": false,
+            "naming": {
+              "asLabels": false
+            }
+          }
+        },
+        {
+          "id": "prepareTimeSeries",
+          "options": {
+            "format": "multi"
+          }
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Ingress / Egress Packet Rate",
+      "description": "Bidirectional packet rate. Ingress shown above zero, egress below.",
+      "datasource": {
+        "type": "datasource",
+        "uid": "-- Mixed --"
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 12,
+        "x": 12,
+        "y": 4
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "pps",
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "lineWidth": 1,
+            "fillOpacity": 25,
+            "gradientMode": "opacity",
+            "spanNulls": false,
+            "showPoints": "never",
+            "axisCenteredZero": true,
+            "axisLabel": "",
+            "scaleDistribution": {
+              "type": "linear"
+            }
+          },
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "/Ingress/"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#73BF69",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "/Egress/"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#F2495C",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "custom.transform",
+                "value": "negative-Y"
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        },
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max"
+          ]
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "sum(rate(rfm_interface_rx_packets_total[$__rate_interval]))",
+          "legendFormat": "Ingress",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "sum(rate(rfm_interface_tx_packets_total[$__rate_interval]))",
+          "legendFormat": "Egress",
+          "refId": "B"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "seriesToRows",
+          "options": {}
+        },
+        {
+          "id": "groupBy",
+          "options": {
+            "fields": {
+              "Time": {
+                "operation": "groupby"
+              },
+              "Metric": {
+                "operation": "groupby"
+              },
+              "Value": {
+                "operation": "aggregate",
+                "aggregations": [
+                  "sum"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "renameByName": {
+              "Value (sum)": "Value"
+            }
+          }
+        },
+        {
+          "id": "partitionByValues",
+          "options": {
+            "fields": [
+              "Metric"
+            ],
+            "keepFields": false,
+            "naming": {
+              "asLabels": false
+            }
+          }
+        },
+        {
+          "id": "prepareTimeSeries",
+          "options": {
+            "format": "multi"
+          }
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Bandwidth by IP Family",
+      "description": "Traffic split by IPv4 vs IPv6.",
+      "datasource": {
+        "type": "datasource",
+        "uid": "-- Mixed --"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 14
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bps",
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "lineWidth": 1,
+            "fillOpacity": 20,
+            "gradientMode": "opacity",
+            "stacking": {
+              "mode": "normal"
+            },
+            "spanNulls": false,
+            "showPoints": "never",
+            "scaleDistribution": {
+              "type": "linear"
+            }
+          },
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        },
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": [
+            "mean"
+          ]
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "(sum by (family) (rate(rfm_interface_rx_bytes_total[$__rate_interval])) + sum by (family) (rate(rfm_interface_tx_bytes_total[$__rate_interval]))) * 8",
+          "legendFormat": "{{family}}",
+          "refId": "A"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "seriesToRows",
+          "options": {}
+        },
+        {
+          "id": "groupBy",
+          "options": {
+            "fields": {
+              "Time": {
+                "operation": "groupby"
+              },
+              "Metric": {
+                "operation": "groupby"
+              },
+              "Value": {
+                "operation": "aggregate",
+                "aggregations": [
+                  "sum"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "renameByName": {
+              "Value (sum)": "Value"
+            }
+          }
+        },
+        {
+          "id": "partitionByValues",
+          "options": {
+            "fields": [
+              "Metric"
+            ],
+            "keepFields": false,
+            "naming": {
+              "asLabels": false
+            }
+          }
+        },
+        {
+          "id": "prepareTimeSeries",
+          "options": {
+            "format": "multi"
+          }
+        }
+      ]
+    },
+    {
+      "type": "piechart",
+      "title": "IPv4 vs IPv6 Traffic Share",
+      "datasource": {
+        "type": "datasource",
+        "uid": "-- Mixed --"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 12,
+        "y": 14
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "Bps",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "pieType": "donut",
+        "tooltip": {
+          "mode": "single"
+        },
+        "legend": {
+          "displayMode": "list",
+          "placement": "right",
+          "values": [
+            "percent"
+          ]
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "sum by (family) (rate(rfm_interface_rx_bytes_total[$__rate_interval]) + rate(rfm_interface_tx_bytes_total[$__rate_interval]))",
+          "legendFormat": "{{family}}",
+          "refId": "A",
+          "instant": true
+        }
+      ],
+      "transformations": [
+        {
+          "id": "seriesToRows",
+          "options": {}
+        },
+        {
+          "id": "groupBy",
+          "options": {
+            "fields": {
+              "Metric": {
+                "operation": "groupby"
+              },
+              "Value": {
+                "operation": "aggregate",
+                "aggregations": [
+                  "sum"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "id": "rowsToFields",
+          "options": {}
+        }
+      ]
+    },
+    {
+      "type": "piechart",
+      "title": "Ingress vs Egress Share",
+      "datasource": {
+        "type": "datasource",
+        "uid": "-- Mixed --"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 18,
+        "y": 14
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "Bps",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "pieType": "donut",
+        "tooltip": {
+          "mode": "single"
+        },
+        "legend": {
+          "displayMode": "list",
+          "placement": "right",
+          "values": [
+            "percent"
+          ]
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "sum(rate(rfm_interface_rx_bytes_total[$__rate_interval]))",
+          "legendFormat": "Ingress",
+          "refId": "A",
+          "instant": true
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "sum(rate(rfm_interface_tx_bytes_total[$__rate_interval]))",
+          "legendFormat": "Egress",
+          "refId": "B",
+          "instant": true
+        }
+      ],
+      "transformations": [
+        {
+          "id": "seriesToRows",
+          "options": {}
+        },
+        {
+          "id": "groupBy",
+          "options": {
+            "fields": {
+              "Metric": {
+                "operation": "groupby"
+              },
+              "Value": {
+                "operation": "aggregate",
+                "aggregations": [
+                  "sum"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "id": "rowsToFields",
+          "options": {}
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Ingress Bandwidth by Interface",
+      "datasource": {
+        "type": "datasource",
+        "uid": "-- Mixed --"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 22
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bps",
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "lineWidth": 1,
+            "fillOpacity": 20,
+            "gradientMode": "opacity",
+            "stacking": {
+              "mode": "normal"
+            },
+            "spanNulls": false,
+            "showPoints": "never",
+            "scaleDistribution": {
+              "type": "linear"
+            }
+          },
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        },
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ]
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "sum by (ifname) (rate(rfm_interface_rx_bytes_total[$__rate_interval])) * 8",
+          "legendFormat": "${datasource:text} / {{ifname}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Egress Bandwidth by Interface",
+      "datasource": {
+        "type": "datasource",
+        "uid": "-- Mixed --"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 22
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bps",
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "lineWidth": 1,
+            "fillOpacity": 20,
+            "gradientMode": "opacity",
+            "stacking": {
+              "mode": "normal"
+            },
+            "spanNulls": false,
+            "showPoints": "never",
+            "scaleDistribution": {
+              "type": "linear"
+            }
+          },
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        },
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ]
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "sum by (ifname) (rate(rfm_interface_tx_bytes_total[$__rate_interval])) * 8",
+          "legendFormat": "${datasource:text} / {{ifname}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Ingress Packets by Interface",
+      "datasource": {
+        "type": "datasource",
+        "uid": "-- Mixed --"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 30
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "pps",
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "lineWidth": 1,
+            "fillOpacity": 20,
+            "gradientMode": "opacity",
+            "stacking": {
+              "mode": "normal"
+            },
+            "spanNulls": false,
+            "showPoints": "never",
+            "scaleDistribution": {
+              "type": "linear"
+            }
+          },
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        },
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ]
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "sum by (ifname) (rate(rfm_interface_rx_packets_total[$__rate_interval]))",
+          "legendFormat": "${datasource:text} / {{ifname}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Egress Packets by Interface",
+      "datasource": {
+        "type": "datasource",
+        "uid": "-- Mixed --"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 30
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "pps",
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "lineWidth": 1,
+            "fillOpacity": 20,
+            "gradientMode": "opacity",
+            "stacking": {
+              "mode": "normal"
+            },
+            "spanNulls": false,
+            "showPoints": "never",
+            "scaleDistribution": {
+              "type": "linear"
+            }
+          },
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        },
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ]
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "sum by (ifname) (rate(rfm_interface_tx_packets_total[$__rate_interval]))",
+          "legendFormat": "${datasource:text} / {{ifname}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "type": "piechart",
+      "title": "Traffic by Protocol",
+      "datasource": {
+        "type": "datasource",
+        "uid": "-- Mixed --"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 38
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "HOPOPT"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "1": {
+                  "text": "ICMP"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "2": {
+                  "text": "IGMP"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "3": {
+                  "text": "GGP"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "4": {
+                  "text": "IPv4"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "5": {
+                  "text": "ST"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "6": {
+                  "text": "TCP"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "7": {
+                  "text": "CBT"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "8": {
+                  "text": "EGP"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "10": {
+                  "text": "BBN-RCC-MON"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "11": {
+                  "text": "NVP-II"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "12": {
+                  "text": "PUP"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "14": {
+                  "text": "EMCON"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "15": {
+                  "text": "XNET"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "16": {
+                  "text": "CHAOS"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "17": {
+                  "text": "UDP"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "18": {
+                  "text": "MUX"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "19": {
+                  "text": "DCN-MEAS"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "20": {
+                  "text": "HMP"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "21": {
+                  "text": "PRM"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "22": {
+                  "text": "XNS-IDP"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "23": {
+                  "text": "TRUNK-1"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "24": {
+                  "text": "TRUNK-2"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "25": {
+                  "text": "LEAF-1"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "26": {
+                  "text": "LEAF-2"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "27": {
+                  "text": "RDP"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "28": {
+                  "text": "IRTP"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "29": {
+                  "text": "ISO-TP4"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "30": {
+                  "text": "NETBLT"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "31": {
+                  "text": "MFE-NSP"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "32": {
+                  "text": "MERIT-INP"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "33": {
+                  "text": "DCCP"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "34": {
+                  "text": "3PC"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "35": {
+                  "text": "IDPR"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "36": {
+                  "text": "XTP"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "37": {
+                  "text": "DDP"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "38": {
+                  "text": "IDPR-CMTP"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "39": {
+                  "text": "TP++"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "40": {
+                  "text": "IL"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "41": {
+                  "text": "IPv6"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "42": {
+                  "text": "SDRP"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "43": {
+                  "text": "IPv6-Route"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "44": {
+                  "text": "IPv6-Frag"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "45": {
+                  "text": "IDRP"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "46": {
+                  "text": "RSVP"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "47": {
+                  "text": "GRE"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "48": {
+                  "text": "DSR"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "49": {
+                  "text": "BNA"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "50": {
+                  "text": "ESP"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "51": {
+                  "text": "AH"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "52": {
+                  "text": "I-NLSP"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "54": {
+                  "text": "NARP"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "55": {
+                  "text": "Min-IPv4"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "57": {
+                  "text": "SKIP"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "58": {
+                  "text": "IPv6-ICMP"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "59": {
+                  "text": "IPv6-NoNxt"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "60": {
+                  "text": "IPv6-Opts"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "62": {
+                  "text": "CFTP"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "64": {
+                  "text": "SAT-EXPAK"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "65": {
+                  "text": "KRYPTOLAN"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "66": {
+                  "text": "RVD"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "67": {
+                  "text": "IPPC"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "69": {
+                  "text": "SAT-MON"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "70": {
+                  "text": "VISA"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "71": {
+                  "text": "IPCV"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "72": {
+                  "text": "CPNX"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "73": {
+                  "text": "CPHB"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "74": {
+                  "text": "WSN"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "75": {
+                  "text": "PVP"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "76": {
+                  "text": "BR-SAT-MON"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "77": {
+                  "text": "SUN-ND"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "78": {
+                  "text": "WB-MON"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "79": {
+                  "text": "WB-EXPAK"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "80": {
+                  "text": "ISO-IP"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "81": {
+                  "text": "VMTP"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "82": {
+                  "text": "SECURE-VMTP"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "83": {
+                  "text": "VINES"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "84": {
+                  "text": "IPTM"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "85": {
+                  "text": "NSFNET-IGP"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "86": {
+                  "text": "DGP"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "87": {
+                  "text": "TCF"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "88": {
+                  "text": "EIGRP"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "89": {
+                  "text": "OSPFIGP"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "90": {
+                  "text": "Sprite-RPC"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "91": {
+                  "text": "LARP"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "92": {
+                  "text": "MTP"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "93": {
+                  "text": "AX.25"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "94": {
+                  "text": "IPIP"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "96": {
+                  "text": "SCC-SP"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "97": {
+                  "text": "ETHERIP"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "98": {
+                  "text": "ENCAP"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "100": {
+                  "text": "GMTP"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "101": {
+                  "text": "IFMP"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "102": {
+                  "text": "PNNI"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "103": {
+                  "text": "PIM"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "104": {
+                  "text": "ARIS"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "105": {
+                  "text": "SCPS"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "106": {
+                  "text": "QNX"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "107": {
+                  "text": "A/N"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "108": {
+                  "text": "IPComp"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "109": {
+                  "text": "SNP"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "110": {
+                  "text": "Compaq-Peer"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "111": {
+                  "text": "IPX-in-IP"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "112": {
+                  "text": "VRRP"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "113": {
+                  "text": "PGM"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "115": {
+                  "text": "L2TP"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "116": {
+                  "text": "DDX"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "117": {
+                  "text": "IATP"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "118": {
+                  "text": "STP"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "119": {
+                  "text": "SRP"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "120": {
+                  "text": "UTI"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "121": {
+                  "text": "SMP"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "123": {
+                  "text": "PTP"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "126": {
+                  "text": "CRTP"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "127": {
+                  "text": "CRUDP"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "130": {
+                  "text": "SPS"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "131": {
+                  "text": "PIPE"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "132": {
+                  "text": "SCTP"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "133": {
+                  "text": "FC"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "138": {
+                  "text": "manet"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "139": {
+                  "text": "HIP"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "140": {
+                  "text": "Shim6"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "141": {
+                  "text": "WESP"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "142": {
+                  "text": "ROHC"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "143": {
+                  "text": "Ethernet"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "144": {
+                  "text": "AGGFRAG"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "145": {
+                  "text": "NSH"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "146": {
+                  "text": "Homa"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "147": {
+                  "text": "BIT-EMU"
+                }
+              }
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "0"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "HOPOPT"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "1"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "ICMP"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "2"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "IGMP"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "3"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "GGP"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "4"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "IPv4"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "5"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "ST"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "6"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "TCP"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "7"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "CBT"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "8"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "EGP"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "10"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "BBN-RCC-MON"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "11"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "NVP-II"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "12"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "PUP"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "14"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "EMCON"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "15"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "XNET"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "16"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "CHAOS"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "17"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "UDP"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "18"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "MUX"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "19"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "DCN-MEAS"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "20"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "HMP"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "21"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "PRM"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "22"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "XNS-IDP"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "23"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "TRUNK-1"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "24"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "TRUNK-2"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "25"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "LEAF-1"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "26"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "LEAF-2"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "27"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "RDP"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "28"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "IRTP"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "29"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "ISO-TP4"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "30"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "NETBLT"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "31"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "MFE-NSP"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "32"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "MERIT-INP"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "33"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "DCCP"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "34"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "3PC"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "35"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "IDPR"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "36"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "XTP"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "37"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "DDP"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "38"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "IDPR-CMTP"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "39"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "TP++"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "40"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "IL"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "41"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "IPv6"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "42"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "SDRP"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "43"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "IPv6-Route"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "44"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "IPv6-Frag"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "45"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "IDRP"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "46"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "RSVP"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "47"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "GRE"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "48"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "DSR"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "49"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "BNA"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "50"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "ESP"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "51"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "AH"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "52"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "I-NLSP"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "54"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "NARP"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "55"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Min-IPv4"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "57"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "SKIP"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "58"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "IPv6-ICMP"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "59"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "IPv6-NoNxt"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "60"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "IPv6-Opts"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "62"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "CFTP"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "64"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "SAT-EXPAK"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "65"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "KRYPTOLAN"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "66"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "RVD"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "67"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "IPPC"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "69"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "SAT-MON"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "70"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "VISA"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "71"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "IPCV"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "72"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "CPNX"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "73"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "CPHB"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "74"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "WSN"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "75"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "PVP"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "76"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "BR-SAT-MON"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "77"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "SUN-ND"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "78"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "WB-MON"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "79"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "WB-EXPAK"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "80"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "ISO-IP"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "81"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "VMTP"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "82"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "SECURE-VMTP"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "83"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "VINES"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "84"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "IPTM"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "85"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "NSFNET-IGP"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "86"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "DGP"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "87"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "TCF"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "88"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "EIGRP"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "89"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "OSPFIGP"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "90"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Sprite-RPC"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "91"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "LARP"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "92"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "MTP"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "93"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "AX.25"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "94"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "IPIP"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "96"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "SCC-SP"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "97"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "ETHERIP"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "98"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "ENCAP"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "100"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "GMTP"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "101"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "IFMP"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "102"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "PNNI"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "103"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "PIM"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "104"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "ARIS"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "105"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "SCPS"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "106"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "QNX"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "107"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "A/N"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "108"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "IPComp"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "109"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "SNP"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "110"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Compaq-Peer"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "111"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "IPX-in-IP"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "112"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "VRRP"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "113"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "PGM"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "115"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "L2TP"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "116"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "DDX"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "117"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "IATP"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "118"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "STP"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "119"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "SRP"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "120"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "UTI"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "121"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "SMP"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "123"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "PTP"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "126"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "CRTP"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "127"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "CRUDP"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "130"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "SPS"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "131"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "PIPE"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "132"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "SCTP"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "133"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "FC"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "138"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "manet"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "139"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "HIP"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "140"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Shim6"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "141"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "WESP"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "142"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "ROHC"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "143"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Ethernet"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "144"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "AGGFRAG"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "145"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "NSH"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "146"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Homa"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "147"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "BIT-EMU"
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "pieType": "donut",
+        "tooltip": {
+          "mode": "single"
+        },
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "values": [
+            "value",
+            "percent"
+          ]
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "sum by (proto) (rfm_flow_bytes)",
+          "legendFormat": "{{proto}}",
+          "refId": "A",
+          "instant": true
+        }
+      ],
+      "transformations": [
+        {
+          "id": "seriesToRows",
+          "options": {}
+        },
+        {
+          "id": "groupBy",
+          "options": {
+            "fields": {
+              "Metric": {
+                "operation": "groupby"
+              },
+              "Value": {
+                "operation": "aggregate",
+                "aggregations": [
+                  "sum"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "id": "rowsToFields",
+          "options": {}
+        }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "Avg Bytes per Flow",
+      "datasource": {
+        "type": "datasource",
+        "uid": "-- Mixed --"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 38
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          },
+          "mappings": []
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "sum(rfm_flow_bytes)",
+          "legendFormat": "Bytes",
+          "refId": "A",
+          "instant": true
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "sum(rfm_collector_active_flows)",
+          "legendFormat": "Flows",
+          "refId": "B",
+          "instant": true
+        }
+      ],
+      "transformations": [
+        {
+          "id": "seriesToRows",
+          "options": {}
+        },
+        {
+          "id": "groupBy",
+          "options": {
+            "fields": {
+              "Metric": {
+                "operation": "groupby"
+              },
+              "Value": {
+                "operation": "aggregate",
+                "aggregations": [
+                  "sum"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "id": "rowsToFields",
+          "options": {}
+        },
+        {
+          "id": "calculateField",
+          "options": {
+            "mode": "binary",
+            "binary": {
+              "left": "Bytes",
+              "operator": "/",
+              "right": "Flows"
+            },
+            "alias": "Avg Bytes per Flow",
+            "replaceFields": false
+          }
+        },
+        {
+          "id": "filterFieldsByName",
+          "options": {
+            "include": {
+              "names": [
+                "Avg Bytes per Flow"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "Avg Packets per Flow",
+      "datasource": {
+        "type": "datasource",
+        "uid": "-- Mixed --"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 38
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          },
+          "mappings": []
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "sum(rfm_flow_packets)",
+          "legendFormat": "Packets",
+          "refId": "A",
+          "instant": true
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "sum(rfm_collector_active_flows)",
+          "legendFormat": "Flows",
+          "refId": "B",
+          "instant": true
+        }
+      ],
+      "transformations": [
+        {
+          "id": "seriesToRows",
+          "options": {}
+        },
+        {
+          "id": "groupBy",
+          "options": {
+            "fields": {
+              "Metric": {
+                "operation": "groupby"
+              },
+              "Value": {
+                "operation": "aggregate",
+                "aggregations": [
+                  "sum"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "id": "rowsToFields",
+          "options": {}
+        },
+        {
+          "id": "calculateField",
+          "options": {
+            "mode": "binary",
+            "binary": {
+              "left": "Packets",
+              "operator": "/",
+              "right": "Flows"
+            },
+            "alias": "Avg Packets per Flow",
+            "replaceFields": false
+          }
+        },
+        {
+          "id": "filterFieldsByName",
+          "options": {
+            "include": {
+              "names": [
+                "Avg Packets per Flow"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "type": "bargauge",
+      "title": "Top Source ASNs by Traffic",
+      "datasource": {
+        "type": "datasource",
+        "uid": "-- Mixed --"
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 12,
+        "x": 0,
+        "y": 46
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "horizontal",
+        "displayMode": "gradient",
+        "showUnfilled": true,
+        "valueMode": "text",
+        "minVizWidth": 8,
+        "minVizHeight": 16
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "topk(20, sum by (src_asn) (rfm_flow_bytes{src_asn!=\"\"}))",
+          "legendFormat": "{{src_asn}}",
+          "refId": "A",
+          "instant": true
+        }
+      ],
+      "transformations": [
+        {
+          "id": "seriesToRows",
+          "options": {}
+        },
+        {
+          "id": "groupBy",
+          "options": {
+            "fields": {
+              "Metric": {
+                "operation": "groupby"
+              },
+              "Value": {
+                "operation": "aggregate",
+                "aggregations": [
+                  "sum"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "id": "rowsToFields",
+          "options": {}
+        }
+      ]
+    },
+    {
+      "type": "bargauge",
+      "title": "Top Destination ASNs by Traffic",
+      "datasource": {
+        "type": "datasource",
+        "uid": "-- Mixed --"
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 12,
+        "x": 12,
+        "y": 46
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "horizontal",
+        "displayMode": "gradient",
+        "showUnfilled": true,
+        "valueMode": "text",
+        "minVizWidth": 8,
+        "minVizHeight": 16
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "topk(20, sum by (dst_asn) (rfm_flow_bytes{dst_asn!=\"\"}))",
+          "legendFormat": "{{dst_asn}}",
+          "refId": "A",
+          "instant": true
+        }
+      ],
+      "transformations": [
+        {
+          "id": "seriesToRows",
+          "options": {}
+        },
+        {
+          "id": "groupBy",
+          "options": {
+            "fields": {
+              "Metric": {
+                "operation": "groupby"
+              },
+              "Value": {
+                "operation": "aggregate",
+                "aggregations": [
+                  "sum"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "id": "rowsToFields",
+          "options": {}
+        }
+      ]
+    },
+    {
+      "type": "table",
+      "title": "ASN Pair Traffic",
+      "description": "Traffic between source and destination ASN pairs",
+      "datasource": {
+        "type": "datasource",
+        "uid": "-- Mixed --"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 56
+      },
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Bytes"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "bytes"
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-background",
+                  "mode": "gradient"
+                }
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "continuous-GrYlRd"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Packets"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "short"
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "sortBy": [
+          {
+            "displayName": "Bytes",
+            "desc": true
+          }
+        ],
+        "footer": {
+          "show": true,
+          "reducer": [
+            "sum"
+          ]
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "topk(50, sum by (src_asn, dst_asn) (rfm_flow_bytes{src_asn!=\"\", dst_asn!=\"\"}))",
+          "legendFormat": "",
+          "refId": "A",
+          "instant": true,
+          "format": "table"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "topk(50, sum by (src_asn, dst_asn) (rfm_flow_packets{src_asn!=\"\", dst_asn!=\"\"}))",
+          "legendFormat": "",
+          "refId": "B",
+          "instant": true,
+          "format": "table"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "merge",
+          "options": {}
+        },
+        {
+          "id": "groupBy",
+          "options": {
+            "fields": {
+              "src_asn": {
+                "operation": "groupby"
+              },
+              "dst_asn": {
+                "operation": "groupby"
+              },
+              "Value #A": {
+                "operation": "aggregate",
+                "aggregations": [
+                  "sum"
+                ]
+              },
+              "Value #B": {
+                "operation": "aggregate",
+                "aggregations": [
+                  "sum"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true
+            },
+            "renameByName": {
+              "src_asn": "Source ASN",
+              "dst_asn": "Destination ASN",
+              "Value #A": "Bytes",
+              "Value #A (sum)": "Bytes",
+              "Value #B": "Packets",
+              "Value #B (sum)": "Packets"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "type": "bargauge",
+      "title": "Top Source Cities by Traffic",
+      "datasource": {
+        "type": "datasource",
+        "uid": "-- Mixed --"
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 12,
+        "x": 0,
+        "y": 64
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "horizontal",
+        "displayMode": "gradient",
+        "showUnfilled": true,
+        "valueMode": "text",
+        "minVizWidth": 8,
+        "minVizHeight": 16
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "topk(20, sum by (src_city) (rfm_flow_bytes{src_city!=\"\"}))",
+          "legendFormat": "{{src_city}}",
+          "refId": "A",
+          "instant": true
+        }
+      ],
+      "transformations": [
+        {
+          "id": "seriesToRows",
+          "options": {}
+        },
+        {
+          "id": "groupBy",
+          "options": {
+            "fields": {
+              "Metric": {
+                "operation": "groupby"
+              },
+              "Value": {
+                "operation": "aggregate",
+                "aggregations": [
+                  "sum"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "id": "rowsToFields",
+          "options": {}
+        }
+      ]
+    },
+    {
+      "type": "bargauge",
+      "title": "Top Destination Cities by Traffic",
+      "datasource": {
+        "type": "datasource",
+        "uid": "-- Mixed --"
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 12,
+        "x": 12,
+        "y": 64
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "horizontal",
+        "displayMode": "gradient",
+        "showUnfilled": true,
+        "valueMode": "text",
+        "minVizWidth": 8,
+        "minVizHeight": 16
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "topk(20, sum by (dst_city) (rfm_flow_bytes{dst_city!=\"\"}))",
+          "legendFormat": "{{dst_city}}",
+          "refId": "A",
+          "instant": true
+        }
+      ],
+      "transformations": [
+        {
+          "id": "seriesToRows",
+          "options": {}
+        },
+        {
+          "id": "groupBy",
+          "options": {
+            "fields": {
+              "Metric": {
+                "operation": "groupby"
+              },
+              "Value": {
+                "operation": "aggregate",
+                "aggregations": [
+                  "sum"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "id": "rowsToFields",
+          "options": {}
+        }
+      ]
+    },
+    {
+      "type": "table",
+      "title": "City-to-City Traffic",
+      "description": "Traffic between source and destination city pairs",
+      "datasource": {
+        "type": "datasource",
+        "uid": "-- Mixed --"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 74
+      },
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Bytes"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "bytes"
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-background",
+                  "mode": "gradient"
+                }
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "continuous-GrYlRd"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Packets"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "short"
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "sortBy": [
+          {
+            "displayName": "Bytes",
+            "desc": true
+          }
+        ],
+        "footer": {
+          "show": true,
+          "reducer": [
+            "sum"
+          ]
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "topk(50, sum by (src_city, dst_city) (rfm_flow_bytes{src_city!=\"\", dst_city!=\"\"}))",
+          "legendFormat": "",
+          "refId": "A",
+          "instant": true,
+          "format": "table"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "topk(50, sum by (src_city, dst_city) (rfm_flow_packets{src_city!=\"\", dst_city!=\"\"}))",
+          "legendFormat": "",
+          "refId": "B",
+          "instant": true,
+          "format": "table"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "merge",
+          "options": {}
+        },
+        {
+          "id": "groupBy",
+          "options": {
+            "fields": {
+              "src_city": {
+                "operation": "groupby"
+              },
+              "dst_city": {
+                "operation": "groupby"
+              },
+              "Value #A": {
+                "operation": "aggregate",
+                "aggregations": [
+                  "sum"
+                ]
+              },
+              "Value #B": {
+                "operation": "aggregate",
+                "aggregations": [
+                  "sum"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true
+            },
+            "renameByName": {
+              "src_city": "Source City",
+              "dst_city": "Destination City",
+              "Value #A": "Bytes",
+              "Value #A (sum)": "Bytes",
+              "Value #B": "Packets",
+              "Value #B (sum)": "Packets"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Ring Buffer Drop Rate",
+      "description": "Rate of flow events dropped by the BPF ring buffer. Non-zero indicates buffer saturation.",
+      "datasource": {
+        "type": "datasource",
+        "uid": "-- Mixed --"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 82
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "gradientMode": "opacity",
+            "spanNulls": false,
+            "showPoints": "never",
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "thresholdsStyle": {
+              "mode": "area"
+            }
+          },
+          "color": {
+            "fixedColor": "red",
+            "mode": "fixed"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "transparent",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        },
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max"
+          ]
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "rate(rfm_collector_dropped_events_total[$__rate_interval])",
+          "legendFormat": "${datasource:text}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Forced Eviction Rate",
+      "description": "Rate of flows forcibly evicted due to flow table overflow.",
+      "datasource": {
+        "type": "datasource",
+        "uid": "-- Mixed --"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 82
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "gradientMode": "opacity",
+            "spanNulls": false,
+            "showPoints": "never",
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "thresholdsStyle": {
+              "mode": "area"
+            }
+          },
+          "color": {
+            "fixedColor": "orange",
+            "mode": "fixed"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "transparent",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        },
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max"
+          ]
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "rate(rfm_collector_forced_evictions_total[$__rate_interval])",
+          "legendFormat": "${datasource:text}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Errors by Subsystem",
+      "description": "Error rate by subsystem (ring_buffer, bpf_map).",
+      "datasource": {
+        "type": "datasource",
+        "uid": "-- Mixed --"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 82
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "gradientMode": "opacity",
+            "spanNulls": false,
+            "showPoints": "never",
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "thresholdsStyle": {
+              "mode": "area"
+            }
+          },
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "transparent",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        },
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max"
+          ]
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "rate(rfm_errors_total[$__rate_interval])",
+          "legendFormat": "${datasource:text} / {{subsystem}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Active Flows vs Capacity",
+      "description": "Active flow count with a threshold line at max_flows (65536 default).",
+      "datasource": {
+        "type": "datasource",
+        "uid": "-- Mixed --"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 90
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "gradientMode": "opacity",
+            "spanNulls": false,
+            "showPoints": "never",
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "thresholdsStyle": {
+              "mode": "dashed"
+            }
+          },
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 49152
+              },
+              {
+                "color": "red",
+                "value": 65536
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        },
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max"
+          ]
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "rfm_collector_active_flows",
+          "legendFormat": "${datasource:text}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Sampling Efficiency",
+      "description": "Ratio of sampled bytes to estimated total bytes. Lower values indicate higher sample rates (fewer packets sampled).",
+      "datasource": {
+        "type": "datasource",
+        "uid": "-- Mixed --"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 90
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1,
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "gradientMode": "opacity",
+            "spanNulls": false,
+            "showPoints": "never",
+            "scaleDistribution": {
+              "type": "linear"
+            }
+          },
+          "color": {
+            "fixedColor": "purple",
+            "mode": "fixed"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        },
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": [
+            "mean"
+          ]
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "sum(rfm_flow_sampled_bytes) / (sum(rfm_flow_bytes) > 0)",
+          "legendFormat": "${datasource:text}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "Total Dropped Events",
+      "datasource": {
+        "type": "datasource",
+        "uid": "-- Mixed --"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 0,
+        "y": 98
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 100
+              },
+              {
+                "color": "red",
+                "value": 10000
+              }
+            ]
+          },
+          "mappings": []
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "sum(rfm_collector_dropped_events_total)",
+          "legendFormat": "Dropped Events",
+          "refId": "A",
+          "instant": true
+        }
+      ],
+      "transformations": [
+        {
+          "id": "seriesToRows",
+          "options": {}
+        },
+        {
+          "id": "groupBy",
+          "options": {
+            "fields": {
+              "Metric": {
+                "operation": "groupby"
+              },
+              "Value": {
+                "operation": "aggregate",
+                "aggregations": [
+                  "sum"
+                ]
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "Total Forced Evictions",
+      "datasource": {
+        "type": "datasource",
+        "uid": "-- Mixed --"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 6,
+        "y": 98
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 100
+              },
+              {
+                "color": "red",
+                "value": 10000
+              }
+            ]
+          },
+          "mappings": []
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "sum(rfm_collector_forced_evictions_total)",
+          "legendFormat": "Forced Evictions",
+          "refId": "A",
+          "instant": true
+        }
+      ],
+      "transformations": [
+        {
+          "id": "seriesToRows",
+          "options": {}
+        },
+        {
+          "id": "groupBy",
+          "options": {
+            "fields": {
+              "Metric": {
+                "operation": "groupby"
+              },
+              "Value": {
+                "operation": "aggregate",
+                "aggregations": [
+                  "sum"
+                ]
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "Total Ring Buffer Errors",
+      "datasource": {
+        "type": "datasource",
+        "uid": "-- Mixed --"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 12,
+        "y": 98
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          },
+          "mappings": []
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "sum(rfm_errors_total{subsystem=\"ring_buffer\"})",
+          "legendFormat": "Ring Buffer Errors",
+          "refId": "A",
+          "instant": true
+        }
+      ],
+      "transformations": [
+        {
+          "id": "seriesToRows",
+          "options": {}
+        },
+        {
+          "id": "groupBy",
+          "options": {
+            "fields": {
+              "Metric": {
+                "operation": "groupby"
+              },
+              "Value": {
+                "operation": "aggregate",
+                "aggregations": [
+                  "sum"
+                ]
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "Total BPF Map Errors",
+      "datasource": {
+        "type": "datasource",
+        "uid": "-- Mixed --"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 18,
+        "y": 98
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          },
+          "mappings": []
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "sum(rfm_errors_total{subsystem=\"bpf_map\"})",
+          "legendFormat": "BPF Map Errors",
+          "refId": "A",
+          "instant": true
+        }
+      ],
+      "transformations": [
+        {
+          "id": "seriesToRows",
+          "options": {}
+        },
+        {
+          "id": "groupBy",
+          "options": {
+            "fields": {
+              "Metric": {
+                "operation": "groupby"
+              },
+              "Value": {
+                "operation": "aggregate",
+                "aggregations": [
+                  "sum"
+                ]
+              }
+            }
+          }
+        }
+      ]
+    }
+  ]
+}
