@@ -145,6 +145,9 @@ type Server struct {
 	table    *Table
 	done     chan struct{}
 	wg       sync.WaitGroup
+	connsMu  sync.Mutex
+	conns    map[net.Conn]struct{}
+	closing  bool
 }
 
 // Listen starts a BMP listener when configured
@@ -165,6 +168,7 @@ func Listen(cfg config.RIBConfig) (collector.Enricher, io.Closer, error) {
 		listener: ln,
 		table:    NewTable(),
 		done:     make(chan struct{}),
+		conns:    make(map[net.Conn]struct{}),
 	}
 	s.wg.Add(1)
 	go s.accept()
@@ -182,7 +186,20 @@ func (s *Server) Lookup(addr netip.Addr) (Route, bool) {
 }
 
 func (s *Server) Close() error {
+	s.connsMu.Lock()
+	s.closing = true
+	conns := make([]net.Conn, 0, len(s.conns))
+	for conn := range s.conns {
+		conns = append(conns, conn)
+	}
+	s.connsMu.Unlock()
+
 	close(s.done)
+
+	for _, conn := range conns {
+		_ = conn.Close()
+	}
+
 	err := s.listener.Close()
 	s.wg.Wait()
 	return err
@@ -202,12 +219,17 @@ func (s *Server) accept() {
 			}
 		}
 
+		if !s.trackConn(conn) {
+			continue
+		}
+
 		s.wg.Add(1)
-		go func() {
+		go func(conn net.Conn) {
 			defer s.wg.Done()
+			defer s.untrackConn(conn)
 			defer conn.Close()
 			s.handleConn(conn)
-		}()
+		}(conn)
 	}
 }
 
@@ -279,11 +301,45 @@ func (s *Server) handleConn(conn net.Conn) {
 		s.table.Apply(update)
 	}
 
-	if err := scanner.Err(); err != nil {
+	if err := scanner.Err(); err != nil && !s.isClosing() {
 		log.Error("read bmp stream", "remote", conn.RemoteAddr(), "err", err)
 	}
 
 	log.Info("bmp session closed", "remote", conn.RemoteAddr(), "messages", messages, "changes", changes)
+}
+
+func (s *Server) trackConn(conn net.Conn) bool {
+	s.connsMu.Lock()
+	defer s.connsMu.Unlock()
+
+	if s.closing {
+		_ = conn.Close()
+		return false
+	}
+	if s.conns == nil {
+		s.conns = make(map[net.Conn]struct{})
+	}
+	s.conns[conn] = struct{}{}
+	return true
+}
+
+func (s *Server) untrackConn(conn net.Conn) {
+	s.connsMu.Lock()
+	defer s.connsMu.Unlock()
+
+	if s.conns == nil {
+		return
+	}
+	delete(s.conns, conn)
+}
+
+func (s *Server) isClosing() bool {
+	select {
+	case <-s.done:
+		return true
+	default:
+		return false
+	}
 }
 
 func updateFromBMP(msg *bmp.BMPMessage) (Update, bool) {

@@ -4,6 +4,7 @@ import (
 	"net"
 	"net/netip"
 	"testing"
+	"time"
 
 	"github.com/osrg/gobgp/v3/pkg/packet/bgp"
 	"github.com/osrg/gobgp/v3/pkg/packet/bmp"
@@ -235,6 +236,44 @@ func TestHandleConnAppliesBMPRouteMonitoring(t *testing.T) {
 	}
 	if route.OriginASN != 65003 {
 		t.Fatalf("OriginASN = %d, want 65003", route.OriginASN)
+	}
+}
+
+func TestServerCloseReturnsWithIdleConnection(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("Listen: %v", err)
+	}
+
+	s := &Server{
+		listener: ln,
+		table:    NewTable(),
+		done:     make(chan struct{}),
+	}
+	s.wg.Add(1)
+	go s.accept()
+
+	clientConn, err := net.Dial("tcp", ln.Addr().String())
+	if err != nil {
+		t.Fatalf("Dial: %v", err)
+	}
+	defer clientConn.Close()
+
+	time.Sleep(20 * time.Millisecond)
+
+	done := make(chan error, 1)
+	go func() {
+		done <- s.Close()
+	}()
+
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("Close: %v", err)
+		}
+	case <-time.After(200 * time.Millisecond):
+		_ = clientConn.Close()
+		t.Fatal("Close blocked with an idle BMP connection")
 	}
 }
 
