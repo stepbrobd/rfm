@@ -51,7 +51,9 @@ the current agent writes it during startup.
 1. TC programs classify each packet by direction, protocol family, and 5-tuple
    after ethernet, VLAN, and QinQ parsing. Every packet updates per-CPU
    interface counters. Sampled packets (1-in-N) emit a flow event to a ring
-   buffer.
+   buffer. IPv4 non-initial fragments keep the IP protocol but export
+   `src_port=0` and `dst_port=0` because later fragments do not carry the
+   transport header.
 2. The userspace collector reads events from the ring buffer, converts
    `CLOCK_BOOTTIME` timestamps to wall clock time, and aggregates flows into an
    in-memory table keyed by
@@ -108,8 +110,9 @@ events. Must be greater than 0. A value of 1 samples every packet. Higher values
 reduce ring buffer throughput at the cost of flow granularity.
 
 `ring_buf_size` (int, default 262144): Size of the BPF ring buffer in bytes.
-Must be greater than 0 and should be a power of two. Larger buffers reduce the
-chance of dropped events under burst traffic.
+Must be greater than 0 and a power of two. Invalid values are rejected at config
+load time. Larger buffers reduce the chance of dropped events under burst
+traffic.
 
 ### `agent.collector`
 
