@@ -349,6 +349,55 @@ func TestFlowEventUDP(t *testing.T) {
 	}
 }
 
+func TestFlowEventIPv4FirstFragmentKeepsPorts(t *testing.T) {
+	testutil.RequireRoot(t)
+
+	pkt := testutil.EthIPv4UDPFragment(
+		net.IPv4(10, 0, 3, 1),
+		net.IPv4(10, 0, 3, 2),
+		0x1234,
+		0,
+		true,
+		testutil.UDP(5001, 53),
+	)
+
+	ev := readFlowEvent(t, pkt, func(e rfmRfmFlowEvent) bool {
+		return e.Proto == 17 && e.SrcPort == 5001
+	})
+
+	if ev.SrcPort != 5001 {
+		t.Fatalf("src_port = %d, want 5001", ev.SrcPort)
+	}
+	if ev.DstPort != 53 {
+		t.Fatalf("dst_port = %d, want 53", ev.DstPort)
+	}
+}
+
+func TestFlowEventIPv4NonInitialFragmentZeroPorts(t *testing.T) {
+	testutil.RequireRoot(t)
+
+	pkt := testutil.EthIPv4UDPFragment(
+		net.IPv4(10, 0, 4, 1),
+		net.IPv4(10, 0, 4, 2),
+		0x1234,
+		8,
+		true,
+		[]byte{0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff, 0x11, 0x22},
+	)
+
+	ev := readFlowEvent(t, pkt, func(e rfmRfmFlowEvent) bool {
+		wantSrc := [16]uint8{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xff, 0xff, 10, 0, 4, 1}
+		return e.Proto == 17 && e.SrcAddr == wantSrc && e.DstPort == 0
+	})
+
+	if ev.SrcPort != 0 {
+		t.Fatalf("src_port = %d, want 0", ev.SrcPort)
+	}
+	if ev.DstPort != 0 {
+		t.Fatalf("dst_port = %d, want 0", ev.DstPort)
+	}
+}
+
 func TestFlowEventVLANIPv4TCP(t *testing.T) {
 	testutil.RequireRoot(t)
 

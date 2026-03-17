@@ -141,6 +141,54 @@ func TestIPv4WithOptions(t *testing.T) {
 	}
 }
 
+func TestIPv4Fragment(t *testing.T) {
+	src := net.ParseIP("10.0.0.1")
+	dst := net.ParseIP("10.0.0.2")
+	payload := []byte{0xaa, 0xbb, 0xcc, 0xdd}
+
+	hdr := IPv4Fragment(17, src, dst, 0x1234, 8, true, payload)
+
+	if len(hdr) != IPv4HdrLen+len(payload) {
+		t.Fatalf("want len %d, got %d", IPv4HdrLen+len(payload), len(hdr))
+	}
+
+	if binary.BigEndian.Uint16(hdr[4:6]) != 0x1234 {
+		t.Fatalf("id = 0x%04x, want 0x1234", binary.BigEndian.Uint16(hdr[4:6]))
+	}
+
+	frag := binary.BigEndian.Uint16(hdr[6:8])
+	if frag != 0x2001 {
+		t.Fatalf("frag_off = 0x%04x, want 0x2001", frag)
+	}
+
+	if hdr[9] != 17 {
+		t.Fatalf("proto = %d, want 17", hdr[9])
+	}
+}
+
+func TestEthIPv4UDPFragment(t *testing.T) {
+	src := net.ParseIP("10.0.0.1")
+	dst := net.ParseIP("10.0.0.2")
+	payload := []byte{0xaa, 0xbb, 0xcc, 0xdd}
+
+	frame := EthIPv4UDPFragment(src, dst, 0x1234, 8, true, payload)
+
+	wantLen := EthHdrLen + IPv4HdrLen + len(payload)
+	if len(frame) != wantLen {
+		t.Fatalf("want len %d, got %d", wantLen, len(frame))
+	}
+
+	ethertype := binary.BigEndian.Uint16(frame[12:14])
+	if ethertype != EthPIPv4 {
+		t.Fatalf("want ethertype 0x%04x, got 0x%04x", EthPIPv4, ethertype)
+	}
+
+	frag := binary.BigEndian.Uint16(frame[EthHdrLen+6 : EthHdrLen+8])
+	if frag != 0x2001 {
+		t.Fatalf("frag_off = 0x%04x, want 0x2001", frag)
+	}
+}
+
 func TestEthIPv6TCP(t *testing.T) {
 	src := net.ParseIP("fd00::1")
 	dst := net.ParseIP("fd00::2")

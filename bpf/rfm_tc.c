@@ -137,6 +137,7 @@ static __always_inline int rfm_tc(struct __sk_buff *skb, __u8 dir)
 			return TC_ACT_OK;
 
 		ev.proto = ip->protocol;
+		__u16 frag_off = bpf_ntohs(ip->frag_off);
 
 		// map IPv4 to v6: ::ffff:x.x.x.x
 		ev.src_addr[10] = 0xff;
@@ -153,6 +154,10 @@ static __always_inline int rfm_tc(struct __sk_buff *skb, __u8 dir)
 			return TC_ACT_OK;
 
 		l4 = (void *)ip + ((__u16)ihl << 2);
+
+		// only the first fragment carries the transport header
+		if ((frag_off & 0x1FFF) != 0)
+			l4 = NULL;
 	} else {
 		struct ipv6hdr *ip6 = l3;
 		if ((void *)(ip6 + 1) > end)
@@ -166,7 +171,7 @@ static __always_inline int rfm_tc(struct __sk_buff *skb, __u8 dir)
 	}
 
 	// extract ports for TCP and UDP
-	if (ev.proto == 6 || ev.proto == 17) {
+	if (l4 && (ev.proto == 6 || ev.proto == 17)) {
 		if (l4 + 4 > end)
 			return TC_ACT_OK;
 		ev.src_port = bpf_ntohs(*(__u16 *)l4);

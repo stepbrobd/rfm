@@ -119,6 +119,33 @@ func IPv4WithOptions(proto uint8, src, dst net.IP, options, payload []byte) []by
 	return hdr
 }
 
+// IPv4Fragment builds a minimal IPv4 fragment header.
+// offsetBytes must be a multiple of 8.
+func IPv4Fragment(proto uint8, src, dst net.IP, id uint16, offsetBytes uint16, more bool, payload []byte) []byte {
+	if offsetBytes%8 != 0 {
+		panic("offsetBytes must be a multiple of 8")
+	}
+
+	total := IPv4HdrLen + len(payload)
+	hdr := make([]byte, total)
+	hdr[0] = 0x45 // version=4, ihl=5
+	binary.BigEndian.PutUint16(hdr[2:4], uint16(total))
+	binary.BigEndian.PutUint16(hdr[4:6], id)
+
+	frag := offsetBytes / 8
+	if more {
+		frag |= 0x2000
+	}
+	binary.BigEndian.PutUint16(hdr[6:8], frag)
+
+	hdr[8] = 64 // ttl
+	hdr[9] = proto
+	copy(hdr[12:16], src.To4())
+	copy(hdr[16:20], dst.To4())
+	copy(hdr[IPv4HdrLen:], payload)
+	return hdr
+}
+
 // EthIPv4TCPWithOptions builds an eth+ipv4+tcp frame with IP options
 func EthIPv4TCPWithOptions(srcIP, dstIP net.IP, srcPort, dstPort uint16, options []byte) []byte {
 	tcp := TCP(srcPort, dstPort)
@@ -163,6 +190,17 @@ func EthIPv4UDP(srcIP, dstIP net.IP, srcPort, dstPort uint16) []byte {
 		defaultDstMAC(),
 		defaultSrcMAC(),
 		EthPIPv4, // eth p ip
+		ip,
+	)
+}
+
+// EthIPv4UDPFragment builds an eth+ipv4 fragment frame for UDP traffic.
+func EthIPv4UDPFragment(srcIP, dstIP net.IP, id uint16, offsetBytes uint16, more bool, payload []byte) []byte {
+	ip := IPv4Fragment(17, srcIP, dstIP, id, offsetBytes, more, payload)
+	return Eth(
+		defaultDstMAC(),
+		defaultSrcMAC(),
+		EthPIPv4,
 		ip,
 	)
 }
