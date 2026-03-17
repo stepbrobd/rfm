@@ -227,6 +227,9 @@ func validate(cfg *Config) error {
 	if a.BPF.RingBufSize <= 0 {
 		return fmt.Errorf("agent.bpf.ring_buf_size must be > 0")
 	}
+	if a.BPF.RingBufSize&(a.BPF.RingBufSize-1) != 0 {
+		return fmt.Errorf("agent.bpf.ring_buf_size must be a power of two, got %d", a.BPF.RingBufSize)
+	}
 	if a.Collector.MaxFlows < 0 {
 		return fmt.Errorf("agent.collector.max_flows must be >= 0")
 	}

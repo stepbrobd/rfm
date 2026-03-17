@@ -202,6 +202,21 @@ sample_rate = 0
 	}
 }
 
+func TestLoadRingBufSizeMustBePowerOfTwo(t *testing.T) {
+	path := writeTOML(t, `
+[agent]
+interfaces = ["eth0"]
+
+[agent.bpf]
+ring_buf_size = 12345
+`)
+
+	_, err := Load(path)
+	if err == nil {
+		t.Fatal("expected error for non-power-of-two ring_buf_size")
+	}
+}
+
 func TestLoadBadEvictionTimeout(t *testing.T) {
 	path := writeTOML(t, `
 [agent]
