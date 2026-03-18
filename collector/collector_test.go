@@ -520,3 +520,134 @@ func TestMaxFlowsZeroMeansUnlimited(t *testing.T) {
 		t.Fatalf("flow count=%d want 100", len(c.Flows()))
 	}
 }
+
+type mockFlowExporter struct {
+	flows []ExportedFlow
+	err   error
+}
+
+func (m *mockFlowExporter) ExportFlow(flow ExportedFlow) error {
+	m.flows = append(m.flows, flow)
+	return m.err
+}
+
+func TestEvictExportsExpiredFlow(t *testing.T) {
+	exp := &mockFlowExporter{}
+	c := New(10*time.Second, nil, 0)
+	c.SetFlowExporter(exp)
+
+	t0 := time.Now()
+	ev := FlowEvent{
+		Ifindex: 7,
+		Dir:     0,
+		Proto:   6,
+		SrcAddr: netip.MustParseAddr("::ffff:10.0.0.1"),
+		DstAddr: netip.MustParseAddr("::ffff:10.0.0.2"),
+		SrcPort: 12345,
+		DstPort: 80,
+		Len:     100,
+	}
+
+	c.Record(ev, t0)
+	c.Evict(t0.Add(11 * time.Second))
+
+	if got := len(exp.flows); got != 1 {
+		t.Fatalf("exported flows = %d, want 1", got)
+	}
+	flow := exp.flows[0]
+	if flow.Key != ev.Key() {
+		t.Fatalf("exported key = %+v, want %+v", flow.Key, ev.Key())
+	}
+	if flow.Entry.FirstSeen != t0 {
+		t.Fatalf("first seen = %v, want %v", flow.Entry.FirstSeen, t0)
+	}
+	if flow.Entry.LastSeen != t0 {
+		t.Fatalf("last seen = %v, want %v", flow.Entry.LastSeen, t0)
+	}
+	if flow.EndReason != FlowEndReasonIdleTimeout {
+		t.Fatalf("end reason = %d, want %d", flow.EndReason, FlowEndReasonIdleTimeout)
+	}
+}
+
+func TestRecordForcedEvictionExportsOldestFlow(t *testing.T) {
+	exp := &mockFlowExporter{}
+	c := New(30*time.Second, nil, 1)
+	c.SetFlowExporter(exp)
+
+	t0 := time.Now()
+	ev1 := FlowEvent{
+		Proto: 6, SrcPort: 1000, DstPort: 80,
+		SrcAddr: netip.MustParseAddr("::ffff:10.0.0.1"),
+		DstAddr: netip.MustParseAddr("::ffff:10.0.0.2"),
+		Len:     100,
+	}
+	ev2 := FlowEvent{
+		Proto: 17, SrcPort: 2000, DstPort: 53,
+		SrcAddr: netip.MustParseAddr("::ffff:10.0.0.3"),
+		DstAddr: netip.MustParseAddr("::ffff:10.0.0.4"),
+		Len:     50,
+	}
+
+	c.Record(ev1, t0)
+	c.Record(ev2, t0.Add(time.Second))
+
+	if got := len(exp.flows); got != 1 {
+		t.Fatalf("exported flows = %d, want 1", got)
+	}
+	if exp.flows[0].Key != ev1.Key() {
+		t.Fatalf("exported key = %+v, want %+v", exp.flows[0].Key, ev1.Key())
+	}
+	if exp.flows[0].EndReason != FlowEndReasonEndOfFlow {
+		t.Fatalf("end reason = %d, want %d", exp.flows[0].EndReason, FlowEndReasonEndOfFlow)
+	}
+	if _, ok := c.Flows()[ev2.Key()]; !ok {
+		t.Fatal("new flow missing after forced eviction")
+	}
+}
+
+func TestFlushExportsRemainingFlows(t *testing.T) {
+	exp := &mockFlowExporter{}
+	c := New(30*time.Second, nil, 0)
+	c.SetFlowExporter(exp)
+
+	t0 := time.Now()
+	ev := FlowEvent{
+		Proto: 6, SrcPort: 1000, DstPort: 80,
+		SrcAddr: netip.MustParseAddr("::ffff:10.0.0.1"),
+		DstAddr: netip.MustParseAddr("::ffff:10.0.0.2"),
+		Len:     100,
+	}
+
+	c.Record(ev, t0)
+	c.Flush(FlowEndReasonEndOfFlow)
+
+	if got := len(exp.flows); got != 1 {
+		t.Fatalf("exported flows = %d, want 1", got)
+	}
+	if exp.flows[0].EndReason != FlowEndReasonEndOfFlow {
+		t.Fatalf("end reason = %d, want %d", exp.flows[0].EndReason, FlowEndReasonEndOfFlow)
+	}
+	if len(c.Flows()) != 0 {
+		t.Fatalf("flow count after flush = %d, want 0", len(c.Flows()))
+	}
+}
+
+func TestExportErrorIncrementsStats(t *testing.T) {
+	c := New(10*time.Second, nil, 0)
+	c.SetFlowExporter(&mockFlowExporter{err: errors.New("write failed")})
+
+	t0 := time.Now()
+	ev := FlowEvent{
+		Proto: 6, SrcPort: 1000, DstPort: 80,
+		SrcAddr: netip.MustParseAddr("::ffff:10.0.0.1"),
+		DstAddr: netip.MustParseAddr("::ffff:10.0.0.2"),
+		Len:     100,
+	}
+
+	c.Record(ev, t0)
+	c.Evict(t0.Add(11 * time.Second))
+
+	if s := c.Stats(); s.IPFIXErrors != 1 {
+		t.Fatalf("ipfix errors = %d, want 1", s.IPFIXErrors)
+	}
+}

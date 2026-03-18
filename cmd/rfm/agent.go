@@ -90,6 +90,16 @@ func runAgent(cmd *cobra.Command, args []string) error {
 		cfg.Agent.Collector.MaxFlows,
 	)
 
+	var ipfixExp *export.IPFIXExporter
+	if cfg.Agent.IPFIX.Enabled() {
+		ipfixExp, err = export.NewIPFIX(cfg.Agent.IPFIX, cfg.Agent.BPF.SampleRate)
+		if err != nil {
+			return fmt.Errorf("init ipfix exporter: %w", err)
+		}
+		c.SetFlowExporter(ipfixExp)
+		log.Info("ipfix exporter", "addr", cfg.Agent.IPFIX.Addr())
+	}
+
 	mc := export.New(&export.ProbeSource{Probe: p}, c)
 
 	reg := prometheus.NewRegistry()
@@ -121,6 +131,12 @@ func runAgent(cmd *cobra.Command, args []string) error {
 	}()
 
 	runErr := c.Run(ctx, rd)
+	if ipfixExp != nil {
+		c.Flush(collector.FlowEndReasonEndOfFlow)
+		if err := ipfixExp.Close(); err != nil {
+			log.Error("close ipfix exporter", "err", err)
+		}
+	}
 	srv.Shutdown(context.Background())
 	if errors.Is(runErr, context.Canceled) {
 		return nil

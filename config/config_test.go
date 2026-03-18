@@ -115,6 +115,12 @@ interfaces = ["eth0"]
 	if cfg.Agent.Prometheus.Port != 9669 {
 		t.Fatalf("port = %d, want 9669", cfg.Agent.Prometheus.Port)
 	}
+	if cfg.Agent.IPFIX.Host != "" {
+		t.Fatalf("ipfix.host = %q, want empty", cfg.Agent.IPFIX.Host)
+	}
+	if cfg.Agent.IPFIX.Port != 0 {
+		t.Fatalf("ipfix.port = %d, want 0", cfg.Agent.IPFIX.Port)
+	}
 }
 
 func TestLoadRIBBMPDefaultsHost(t *testing.T) {
@@ -158,6 +164,50 @@ host = "127.0.0.1"
 	}
 	if cfg.Agent.Enrich.RIB.BMP.Port != 11019 {
 		t.Fatalf("bmp.port = %d, want 11019", cfg.Agent.Enrich.RIB.BMP.Port)
+	}
+}
+
+func TestLoadIPFIXDefaultsHost(t *testing.T) {
+	path := writeTOML(t, `
+[agent]
+interfaces = ["eth0"]
+
+[agent.ipfix]
+port = 4739
+`)
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+
+	if cfg.Agent.IPFIX.Host != "::1" {
+		t.Fatalf("ipfix.host = %q, want ::1", cfg.Agent.IPFIX.Host)
+	}
+	if cfg.Agent.IPFIX.Port != 4739 {
+		t.Fatalf("ipfix.port = %d, want 4739", cfg.Agent.IPFIX.Port)
+	}
+}
+
+func TestLoadIPFIXDefaultsPort(t *testing.T) {
+	path := writeTOML(t, `
+[agent]
+interfaces = ["eth0"]
+
+[agent.ipfix]
+host = "127.0.0.1"
+`)
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+
+	if cfg.Agent.IPFIX.Host != "127.0.0.1" {
+		t.Fatalf("ipfix.host = %q, want 127.0.0.1", cfg.Agent.IPFIX.Host)
+	}
+	if cfg.Agent.IPFIX.Port != 4739 {
+		t.Fatalf("ipfix.port = %d, want 4739", cfg.Agent.IPFIX.Port)
 	}
 }
 
@@ -260,6 +310,24 @@ port = `+itoa(port)+`
 		_, err := Load(path)
 		if err == nil {
 			t.Fatalf("expected error for port=%d", port)
+		}
+	}
+}
+
+func TestLoadBadIPFIXPort(t *testing.T) {
+	for _, port := range []int{-1, 70000} {
+		path := writeTOML(t, `
+[agent]
+interfaces = ["eth0"]
+
+[agent.ipfix]
+host = "127.0.0.1"
+port = `+itoa(port)+`
+`)
+
+		_, err := Load(path)
+		if err == nil {
+			t.Fatalf("expected error for ipfix port=%d", port)
 		}
 	}
 }

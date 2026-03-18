@@ -20,6 +20,7 @@ type AgentConfig struct {
 	Interfaces []string         `toml:"interfaces"`
 	BPF        BPFConfig        `toml:"bpf"`
 	Collector  CollectorConfig  `toml:"collector"`
+	IPFIX      IPFIXConfig      `toml:"ipfix"`
 	Prometheus PrometheusConfig `toml:"prometheus"`
 	Enrich     EnrichConfig     `toml:"enrich"`
 }
@@ -34,6 +35,40 @@ type BPFConfig struct {
 type CollectorConfig struct {
 	MaxFlows        int           `toml:"-"`
 	EvictionTimeout time.Duration `toml:"-"`
+}
+
+// IPFIXConfig controls export to a single IPFIX collector.
+type IPFIXConfig struct {
+	Host string `toml:"host"`
+	Port int    `toml:"port"`
+}
+
+// Enabled reports whether IPFIX export should be configured.
+func (c IPFIXConfig) Enabled() bool {
+	return c.Host != "" || c.Port != 0
+}
+
+// WithDefaults fills in collector defaults when IPFIX export is enabled.
+func (c IPFIXConfig) WithDefaults() IPFIXConfig {
+	if !c.Enabled() {
+		return c
+	}
+	if c.Host == "" {
+		c.Host = "::1"
+	}
+	if c.Port == 0 {
+		c.Port = 4739
+	}
+	return c
+}
+
+// Addr formats the collector address.
+func (c IPFIXConfig) Addr() string {
+	c = c.WithDefaults()
+	if !c.Enabled() {
+		return ""
+	}
+	return net.JoinHostPort(c.Host, strconv.Itoa(c.Port))
 }
 
 // PrometheusConfig controls the Prometheus metrics endpoint.
@@ -105,6 +140,7 @@ type rawConfig struct {
 		Interfaces []string           `toml:"interfaces"`
 		BPF        BPFConfig          `toml:"bpf"`
 		Collector  rawCollectorConfig `toml:"collector"`
+		IPFIX      IPFIXConfig        `toml:"ipfix"`
 		Prometheus PrometheusConfig   `toml:"prometheus"`
 		Enrich     EnrichConfig       `toml:"enrich"`
 	} `toml:"agent"`
@@ -123,6 +159,7 @@ func Load(path string) (*Config, error) {
 	raw.Agent.BPF.RingBufSize = 262144
 	raw.Agent.Collector.MaxFlows = 65536
 	raw.Agent.Collector.EvictionTimeout = "30s"
+	raw.Agent.IPFIX = IPFIXConfig{}
 	raw.Agent.Prometheus.Host = "::1"
 	raw.Agent.Prometheus.Port = 9669
 
@@ -141,6 +178,7 @@ func Load(path string) (*Config, error) {
 	}
 
 	raw.Agent.Enrich.RIB.BMP = raw.Agent.Enrich.RIB.BMP.WithDefaults()
+	raw.Agent.IPFIX = raw.Agent.IPFIX.WithDefaults()
 
 	cfg := &Config{
 		Agent: AgentConfig{
@@ -150,6 +188,7 @@ func Load(path string) (*Config, error) {
 				MaxFlows:        raw.Agent.Collector.MaxFlows,
 				EvictionTimeout: evictionTimeout,
 			},
+			IPFIX:      raw.Agent.IPFIX,
 			Prometheus: raw.Agent.Prometheus,
 			Enrich:     raw.Agent.Enrich,
 		},
@@ -235,6 +274,9 @@ func validate(cfg *Config) error {
 	}
 	if a.Collector.EvictionTimeout < time.Second {
 		return fmt.Errorf("agent.collector.eviction_timeout must be >= 1s, got %v", a.Collector.EvictionTimeout)
+	}
+	if a.IPFIX.Enabled() && (a.IPFIX.Port < 1 || a.IPFIX.Port > 65535) {
+		return fmt.Errorf("agent.ipfix.port must be between 1 and 65535, got %d", a.IPFIX.Port)
 	}
 	if a.Prometheus.Port < 1 || a.Prometheus.Port > 65535 {
 		return fmt.Errorf("agent.prometheus.port must be between 1 and 65535, got %d", a.Prometheus.Port)

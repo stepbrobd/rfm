@@ -133,6 +133,7 @@ func (mc *MetricsCollector) Collect(ch chan<- prometheus.Metric) {
 		stats := mc.col.Stats()
 		bpfErrs += stats.BPFMapErrors
 		ch <- prometheus.MustNewConstMetric(descErrorsTotal, prometheus.CounterValue, float64(stats.RingBufErrors), "ring_buffer")
+		ch <- prometheus.MustNewConstMetric(descErrorsTotal, prometheus.CounterValue, float64(stats.IPFIXErrors), "ipfix")
 	}
 	ch <- prometheus.MustNewConstMetric(descErrorsTotal, prometheus.CounterValue, float64(bpfErrs), "bpf_map")
 }

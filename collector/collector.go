@@ -17,11 +17,13 @@ type Collector struct {
 	eviction    flowHeap
 	timeout     time.Duration
 	enricher    Enricher
+	exporter    FlowExporter
 	maxFlows    int
 	dropped     uint64
 	forced      uint64
 	ringBufErrs uint64
 	bpfMapErrs  uint64
+	ipfixErrs   uint64
 }
 
 // New creates a collector that evicts flows older than timeout
@@ -43,29 +45,43 @@ func (c *Collector) Enricher() Enricher {
 	return c.enricher
 }
 
+// SetFlowExporter sets the exporter for completed flows
+func (c *Collector) SetFlowExporter(exp FlowExporter) {
+	c.mu.Lock()
+	c.exporter = exp
+	c.mu.Unlock()
+}
+
 // Record adds a flow event to the table
 // it creates or updates the entry
 func (c *Collector) Record(ev FlowEvent, now time.Time) {
 	key := ev.Key()
+	var expired []ExportedFlow
+	var exp FlowExporter
 
 	c.mu.Lock()
-	defer c.mu.Unlock()
 
 	state, ok := c.flows[key]
 	if !ok {
 		if c.maxFlows > 0 && len(c.flows) >= c.maxFlows {
-			c.evictOldest()
+			if ended, ok := c.evictOldestLocked(FlowEndReasonEndOfFlow); ok {
+				expired = append(expired, ended)
+			}
 		}
 		state = &flowState{
 			key: key,
 			entry: FlowEntry{
-				Packets:  1,
-				Bytes:    uint64(ev.Len),
-				LastSeen: now,
+				FirstSeen: now,
+				Packets:   1,
+				Bytes:     uint64(ev.Len),
+				LastSeen:  now,
 			},
 		}
 		c.flows[key] = state
 		heap.Push(&c.eviction, state)
+		exp = c.exporter
+		c.mu.Unlock()
+		c.exportFlows(exp, expired)
 		return
 	}
 
@@ -73,36 +89,53 @@ func (c *Collector) Record(ev FlowEvent, now time.Time) {
 	state.entry.Bytes += uint64(ev.Len)
 	state.entry.LastSeen = now
 	heap.Fix(&c.eviction, state.index)
+	exp = c.exporter
+	c.mu.Unlock()
+	c.exportFlows(exp, expired)
 }
 
-// evictOldest removes the flow with the oldest LastSeen
+// evictOldestLocked removes the flow with the oldest LastSeen
 // it must be called with mu held
-func (c *Collector) evictOldest() {
+func (c *Collector) evictOldestLocked(reason uint8) (ExportedFlow, bool) {
 	oldest := c.eviction.peek()
 	if oldest == nil {
-		return
+		return ExportedFlow{}, false
 	}
 
 	delete(c.flows, oldest.key)
 	heap.Pop(&c.eviction)
 	c.forced++
+	return ExportedFlow{
+		Key:       oldest.key,
+		Entry:     oldest.entry,
+		EndReason: reason,
+	}, true
 }
 
 // Evict removes flows whose LastSeen is older than the configured timeout
 func (c *Collector) Evict(now time.Time) {
 	cutoff := now.Add(-c.timeout)
+	var expired []ExportedFlow
+	var exp FlowExporter
 
 	c.mu.Lock()
-	defer c.mu.Unlock()
 
 	for {
 		oldest := c.eviction.peek()
 		if oldest == nil || !oldest.entry.LastSeen.Before(cutoff) {
+			exp = c.exporter
+			c.mu.Unlock()
+			c.exportFlows(exp, expired)
 			return
 		}
 
 		delete(c.flows, oldest.key)
 		heap.Pop(&c.eviction)
+		expired = append(expired, ExportedFlow{
+			Key:       oldest.key,
+			Entry:     oldest.entry,
+			EndReason: FlowEndReasonIdleTimeout,
+		})
 	}
 }
 
@@ -129,6 +162,45 @@ func (c *Collector) Stats() Stats {
 		ForcedEvictions: c.forced,
 		RingBufErrors:   c.ringBufErrs,
 		BPFMapErrors:    c.bpfMapErrs,
+		IPFIXErrors:     c.ipfixErrs,
+	}
+}
+
+// Flush exports all remaining flows and clears the flow table
+func (c *Collector) Flush(reason uint8) {
+	var expired []ExportedFlow
+	var exp FlowExporter
+
+	c.mu.Lock()
+	if len(c.flows) > 0 {
+		expired = make([]ExportedFlow, 0, len(c.flows))
+		for _, state := range c.flows {
+			expired = append(expired, ExportedFlow{
+				Key:       state.key,
+				Entry:     state.entry,
+				EndReason: reason,
+			})
+		}
+	}
+	c.flows = make(map[FlowKey]*flowState)
+	c.eviction = nil
+	heap.Init(&c.eviction)
+	exp = c.exporter
+	c.mu.Unlock()
+
+	c.exportFlows(exp, expired)
+}
+
+func (c *Collector) exportFlows(exp FlowExporter, flows []ExportedFlow) {
+	if exp == nil {
+		return
+	}
+	for _, flow := range flows {
+		if err := exp.ExportFlow(flow); err != nil {
+			c.mu.Lock()
+			c.ipfixErrs++
+			c.mu.Unlock()
+		}
 	}
 }
 

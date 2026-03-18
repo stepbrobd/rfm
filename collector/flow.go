@@ -57,9 +57,10 @@ type FlowKey struct {
 
 // FlowEntry holds aggregated counters for a single flow
 type FlowEntry struct {
-	Packets  uint64
-	Bytes    uint64
-	LastSeen time.Time
+	FirstSeen time.Time
+	Packets   uint64
+	Bytes     uint64
+	LastSeen  time.Time
 }
 
 // Stats holds collector-level statistics
@@ -69,4 +70,5 @@ type Stats struct {
 	ForcedEvictions uint64
 	RingBufErrors   uint64
 	BPFMapErrors    uint64
+	IPFIXErrors     uint64
 }
