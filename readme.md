@@ -307,6 +307,18 @@ already run Prometheus. It trades breadth of features for minimal resource usage
 and operational simplicity. The entire deployment is one binary, one config
 file, and one metrics endpoint.
 
+## Sponsorship disclaimer
+
+[![NetActuate](https://cdn.prod.website-files.com/68079f156771d94adbf74490/6808bfbb66d18fea1371c72b_logo.svg)](https://netactuate.com)
+
+This project is generously supported and tested on infrastructure provided by
+[NetActuate](https://netactuate.com). The views and content of this project are
+solely those of the authors and do not imply endorsement by NetActuate.
+NetActuate provides global bare metal and cloud infrastructure with a strong
+focus on performance, reliability, and geographic reach. Their platform enables
+rapid deployment across diverse regions, making it well suited for
+network-intensive and distributed systems workloads.
+
 ## License
 
 Everything under `bpf/` is GPLv2 to satisfy kernel BPF requirements. Everything
