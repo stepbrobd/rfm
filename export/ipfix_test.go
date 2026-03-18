@@ -231,6 +231,30 @@ func TestIPFIXExportsTrafficToCollectorDestinationFromOtherSocket(t *testing.T) 
 	assertIPFIXDataUInt64(t, record, "octetDeltaCount", 384)
 }
 
+func TestIPFIXUsesConfiguredBindHost(t *testing.T) {
+	conn := startIPFIXListener(t)
+	addr := conn.LocalAddr().(*net.UDPAddr)
+
+	exp, err := NewIPFIX(config.IPFIXConfig{
+		Host: addr.IP.String(),
+		Port: addr.Port,
+		Bind: config.IPFIXBindConfig{
+			Host: "127.0.0.1",
+		},
+	}, 1)
+	if err != nil {
+		t.Fatalf("NewIPFIX: %v", err)
+	}
+	defer exp.Close()
+
+	if exp.localAddr != netip.MustParseAddr("127.0.0.1") {
+		t.Fatalf("localAddr = %s, want 127.0.0.1", exp.localAddr)
+	}
+	if exp.localPort == 0 {
+		t.Fatal("localPort = 0, want ephemeral port")
+	}
+}
+
 func startIPFIXListener(t *testing.T) *net.UDPConn {
 	t.Helper()
 

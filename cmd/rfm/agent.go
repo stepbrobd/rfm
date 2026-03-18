@@ -97,7 +97,11 @@ func runAgent(cmd *cobra.Command, args []string) error {
 			return fmt.Errorf("init ipfix exporter: %w", err)
 		}
 		c.SetFlowExporter(ipfixExp)
-		log.Info("ipfix exporter", "addr", cfg.Agent.IPFIX.Addr())
+		if cfg.Agent.IPFIX.Bind.Enabled() {
+			log.Info("ipfix exporter", "addr", cfg.Agent.IPFIX.Addr(), "bind", cfg.Agent.IPFIX.Bind.Addr())
+		} else {
+			log.Info("ipfix exporter", "addr", cfg.Agent.IPFIX.Addr())
+		}
 	}
 
 	mc := export.New(&export.ProbeSource{Probe: p}, c)

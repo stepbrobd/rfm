@@ -39,6 +39,13 @@ type CollectorConfig struct {
 
 // IPFIXConfig controls export to a single IPFIX collector.
 type IPFIXConfig struct {
+	Host string          `toml:"host"`
+	Port int             `toml:"port"`
+	Bind IPFIXBindConfig `toml:"bind"`
+}
+
+// IPFIXBindConfig controls the local UDP bind used by the IPFIX exporter.
+type IPFIXBindConfig struct {
 	Host string `toml:"host"`
 	Port int    `toml:"port"`
 }
@@ -65,6 +72,19 @@ func (c IPFIXConfig) WithDefaults() IPFIXConfig {
 // Addr formats the collector address.
 func (c IPFIXConfig) Addr() string {
 	c = c.WithDefaults()
+	if !c.Enabled() {
+		return ""
+	}
+	return net.JoinHostPort(c.Host, strconv.Itoa(c.Port))
+}
+
+// Enabled reports whether a local source bind should be configured.
+func (c IPFIXBindConfig) Enabled() bool {
+	return c.Host != "" || c.Port != 0
+}
+
+// Addr formats the local bind address.
+func (c IPFIXBindConfig) Addr() string {
 	if !c.Enabled() {
 		return ""
 	}
@@ -277,6 +297,12 @@ func validate(cfg *Config) error {
 	}
 	if a.IPFIX.Enabled() && (a.IPFIX.Port < 1 || a.IPFIX.Port > 65535) {
 		return fmt.Errorf("agent.ipfix.port must be between 1 and 65535, got %d", a.IPFIX.Port)
+	}
+	if a.IPFIX.Bind.Enabled() && !a.IPFIX.Enabled() {
+		return fmt.Errorf("agent.ipfix.bind requires agent.ipfix.host or port")
+	}
+	if a.IPFIX.Bind.Port < 0 || a.IPFIX.Bind.Port > 65535 {
+		return fmt.Errorf("agent.ipfix.bind.port must be between 0 and 65535, got %d", a.IPFIX.Bind.Port)
 	}
 	if a.Prometheus.Port < 1 || a.Prometheus.Port > 65535 {
 		return fmt.Errorf("agent.prometheus.port must be between 1 and 65535, got %d", a.Prometheus.Port)

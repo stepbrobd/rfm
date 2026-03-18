@@ -90,6 +90,10 @@ eviction_timeout = "30s"
 host = "127.0.0.1"
 port = 4739
 
+[agent.ipfix.bind]
+host = "192.0.2.10"
+port = 0
+
 [agent.prometheus]
 host = "::1"
 port = 9669
@@ -139,6 +143,12 @@ disabled.
 
 `port` (int, default 0): Collector UDP port for IPFIX export. If only one IPFIX
 field is set, the other defaults to `::1` or `4739`.
+
+`bind.host` (string, default ""): Local source address for the exporter UDP
+socket. When unset, the kernel picks the source address from routing.
+
+`bind.port` (int, default 0): Local source port for the exporter UDP socket. `0`
+keeps the current behavior and uses an ephemeral port chosen by the kernel.
 
 ### `agent.prometheus`
 

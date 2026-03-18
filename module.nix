@@ -95,6 +95,27 @@ in
                       default = 0;
                       description = "IPFIX collector UDP port.";
                     };
+
+                    bind = std.mkOption {
+                      default = { };
+                      type = std.types.submodule {
+                        freeformType = toml.type;
+
+                        options = {
+                          host = std.mkOption {
+                            type = std.types.str;
+                            default = "";
+                            description = "IPFIX exporter local source address.";
+                          };
+
+                          port = std.mkOption {
+                            type = std.types.ints.between 0 65535;
+                            default = 0;
+                            description = "IPFIX exporter local source port (0 = ephemeral).";
+                          };
+                        };
+                      };
+                    };
                   };
                 };
               };

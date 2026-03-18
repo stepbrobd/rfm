@@ -78,7 +78,16 @@ func NewIPFIX(cfg config.IPFIXConfig, sampleRate uint32) (*IPFIXExporter, error)
 	if err != nil {
 		return nil, err
 	}
-	conn, err := net.DialUDP("udp", nil, remote)
+
+	var localBind *net.UDPAddr
+	if cfg.Bind.Enabled() {
+		localBind, err = net.ResolveUDPAddr("udp", cfg.Bind.Addr())
+		if err != nil {
+			return nil, fmt.Errorf("resolve ipfix bind address %q: %w", cfg.Bind.Addr(), err)
+		}
+	}
+
+	conn, err := net.DialUDP("udp", localBind, remote)
 	if err != nil {
 		return nil, fmt.Errorf("dial ipfix collector %q: %w", cfg.Addr(), err)
 	}

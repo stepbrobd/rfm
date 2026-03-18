@@ -137,6 +137,7 @@ in
           ipfix = {
             host = "127.0.0.1";
             port = 4739;
+            bind.host = "127.0.0.1";
           };
           prometheus = {
             host = "::1";

@@ -211,6 +211,33 @@ host = "127.0.0.1"
 	}
 }
 
+func TestLoadIPFIXBind(t *testing.T) {
+	path := writeTOML(t, `
+[agent]
+interfaces = ["eth0"]
+
+[agent.ipfix]
+host = "192.0.2.10"
+port = 2055
+
+[agent.ipfix.bind]
+host = "192.0.2.20"
+port = 0
+`)
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+
+	if cfg.Agent.IPFIX.Bind.Host != "192.0.2.20" {
+		t.Fatalf("ipfix.bind.host = %q, want 192.0.2.20", cfg.Agent.IPFIX.Bind.Host)
+	}
+	if cfg.Agent.IPFIX.Bind.Port != 0 {
+		t.Fatalf("ipfix.bind.port = %d, want 0", cfg.Agent.IPFIX.Bind.Port)
+	}
+}
+
 func TestLoadMissingInterfaces(t *testing.T) {
 	path := writeTOML(t, `
 [agent]
@@ -329,6 +356,43 @@ port = `+itoa(port)+`
 		if err == nil {
 			t.Fatalf("expected error for ipfix port=%d", port)
 		}
+	}
+}
+
+func TestLoadBadIPFIXBindPort(t *testing.T) {
+	for _, port := range []int{-1, 70000} {
+		path := writeTOML(t, `
+[agent]
+interfaces = ["eth0"]
+
+[agent.ipfix]
+host = "127.0.0.1"
+port = 4739
+
+[agent.ipfix.bind]
+host = "127.0.0.1"
+port = `+itoa(port)+`
+`)
+
+		_, err := Load(path)
+		if err == nil {
+			t.Fatalf("expected error for ipfix.bind.port=%d", port)
+		}
+	}
+}
+
+func TestLoadIPFIXBindWithoutCollector(t *testing.T) {
+	path := writeTOML(t, `
+[agent]
+interfaces = ["eth0"]
+
+[agent.ipfix.bind]
+host = "127.0.0.1"
+`)
+
+	_, err := Load(path)
+	if err == nil {
+		t.Fatal("expected error for ipfix.bind without collector")
 	}
 }
 
