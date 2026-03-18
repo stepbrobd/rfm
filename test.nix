@@ -117,8 +117,10 @@ in
       imports = [ (mkBase "192.168.1.1") ];
 
       environment.systemPackages = with pkgs; [
+        libmaxminddb
         python3
       ];
+      environment.etc."rfm-test-asn-db".text = "${pkgs.dbip-asn-lite}/share/dbip/dbip-asn-lite.mmdb";
 
       services.rfm = {
         enable = true;
@@ -361,6 +363,24 @@ in
       assert any(val > 0 for val in vals), f"{name} {labels} has no positive samples: {vals}"
       return vals
 
+    def wait_for_positive_metric(machine: Machine, name: str, timeout_s: float = 10, **labels: str) -> list[float]:
+      deadline = time.time() + timeout_s
+      last_metrics = ""
+      while time.time() < deadline:
+        last_metrics = machine.succeed("curl -sf http://localhost:9669/metrics")
+        vals = metric_values(last_metrics, name, **labels)
+        if any(val > 0 for val in vals):
+          return vals
+        time.sleep(1)
+      return require_positive(last_metrics, name, **labels)
+
+    def lookup_mmdb_asn(machine: Machine, ip: str) -> str:
+      return machine.succeed(
+        "mmdblookup --file \"$(cat /etc/rfm-test-asn-db)\" "
+        f"--ip {ip} autonomous_system_number "
+        "| grep -Eo '[0-9]+ <uint32>' | cut -d' ' -f1"
+      ).strip()
+
     def json_lines(machine: Machine, path: str) -> list[dict]:
       raw = machine.succeed(f"test -s {path} && cat {path}")
       return [json.loads(line) for line in raw.splitlines() if line.strip()]
@@ -590,13 +610,15 @@ in
     machine1.succeed("ping -c 2 -W 1 203.0.113.7 || true")
     machine1.succeed("ping -c 2 -W 1 198.51.100.7 || true")
     machine1.succeed("ip route add 8.8.8.0/24 via 192.168.1.2")
-    machine1.succeed("ping -c 2 -W 1 8.8.8.8 || true")
-    time.sleep(2)
+    machine1.succeed(
+      "python3 -c 'import socket; sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM); "
+      "[sock.sendto(b\"rfm-mmdb-test\", (\"8.8.8.8\", 33434)) for _ in range(5)]; sock.close()'"
+    )
 
-    metrics1 = machine1.succeed("curl -sf http://localhost:9669/metrics")
-    require_positive(metrics1, "rfm_flow_packets", ifname="eth1", direction="egress", dst_asn="65002")
-    require_positive(metrics1, "rfm_flow_packets", ifname="eth1", direction="egress", dst_asn="65003")
-    require_positive(metrics1, "rfm_flow_packets", ifname="eth1", direction="egress", dst_asn="15169")
+    google_asn = lookup_mmdb_asn(machine1, "8.8.8.8")
+    wait_for_positive_metric(machine1, "rfm_flow_packets", ifname="eth1", direction="egress", dst_asn="65002")
+    wait_for_positive_metric(machine1, "rfm_flow_packets", ifname="eth1", direction="egress", dst_asn="65003")
+    wait_for_positive_metric(machine1, "rfm_flow_packets", ifname="eth1", direction="egress", dst_asn=google_asn)
 
     # --- phase 8: bidirectional verification ---
     metrics2 = machine2.succeed("curl -sf http://localhost:9669/metrics")
