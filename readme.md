@@ -4,7 +4,7 @@ RFM (Router Flow Monitor) is an eBPF-based network flow analysis agent for Linux
 routers. It attaches TC programs to network interfaces, collects per-flow
 traffic statistics with configurable sampling, optionally enriches flows from a
 live BMP-fed RIB and/or MMDB ASN/city databases, and exports the results to
-Prometheus. IPFIX export is planned.
+Prometheus and IPFIX.
 
 Requirements:
 
@@ -19,12 +19,12 @@ Current scope:
 - Keeps BPF behavior fully map-driven and stateless
 - Optionally enriches flows in userspace with BMP/RIB data, MMDB data, or both
 - Exports Prometheus metrics
+- Optionally exports completed flows to one UDP IPFIX collector
 - Ships a typed NixOS module and VM coverage
 
 Planned:
 
 - Unix socket control plane
-- IPFIX export
 - XDP firewall fast-path features
 
 rfm runs as a single daemon (`rfm agent`) that loads eBPF programs, collects
@@ -65,6 +65,9 @@ the current agent writes it during startup.
    directly and iterates the flow table, rolling up flows by enrichment labels
    (ASN, city) before emitting metrics. With no enrichment configured, those
    labels stay empty and the agent still runs normally.
+5. When IPFIX is enabled, completed flows are exported on eviction and agent
+   shutdown. The exporter owns its UDP socket and excludes only that exact
+   socket tuple from recursive self-export.
 
 ## Configuration
 
@@ -82,6 +85,10 @@ ring_buf_size = 262144
 [agent.collector]
 max_flows = 65536
 eviction_timeout = "30s"
+
+[agent.ipfix]
+host = "127.0.0.1"
+port = 4739
 
 [agent.prometheus]
 host = "::1"
@@ -123,6 +130,15 @@ value of 0 means unlimited.
 `eviction_timeout` (string, default "30s"): How long a flow can be idle before
 eviction. Accepts any Go duration string (e.g. "10s", "1m", "2s"). Minimum value
 is 1s.
+
+### `agent.ipfix`
+
+`host` (string, default ""): Collector host for UDP IPFIX export. If
+`agent.ipfix.host` and `agent.ipfix.port` are both unset, IPFIX export stays
+disabled.
+
+`port` (int, default 0): Collector UDP port for IPFIX export. If only one IPFIX
+field is set, the other defaults to `::1` or `4739`.
 
 ### `agent.prometheus`
 
@@ -185,7 +201,8 @@ Collector health:
 - `rfm_collector_forced_evictions_total`
 - `rfm_errors_total{subsystem}`
 
-`rfm_errors_total{subsystem}` currently uses `bpf_map` and `ring_buffer`.
+`rfm_errors_total{subsystem}` currently uses `bpf_map`, `ring_buffer`, and
+`ipfix`.
 
 ## Grafana dashboard
 
@@ -215,6 +232,16 @@ The current CLI surface is intentionally small:
 
 Control plane subcommands, runtime status, and RIB inspection are planned.
 
+## IPFIX export
+
+IPFIX export is optional and uses one UDP collector configured by
+`agent.ipfix.host` and `agent.ipfix.port`.
+
+The exporter uses `vmware/go-ipfix` for standards-compliant message encoding and
+owns the UDP socket itself. That lets RFM exclude only its own export traffic
+from recursive re-export while still observing unrelated traffic sent to the
+same collector address and port.
+
 ## NixOS module
 
 Example:
@@ -225,6 +252,8 @@ services.rfm = {
   settings.agent = {
     interfaces = [ "eth0" "tailscale0" ];
     bpf.sample_rate = 50;
+    ipfix.host = "127.0.0.1";
+    ipfix.port = 4739;
     prometheus.port = 9669;
     enrich.mmdb.asn_db =
       "${pkgs.dbip-asn-lite}/share/dbip/dbip-asn-lite.mmdb";
@@ -237,8 +266,8 @@ services.rfm = {
 ```
 
 The module generates a TOML config file and runs rfm as a systemd service with
-automatic restart on failure. `agent.enrich.*` is available through typed module
-options.
+automatic restart on failure. `agent.ipfix.*` and `agent.enrich.*` are available
+through typed module options.
 
 ## Comparison with other tools
 
