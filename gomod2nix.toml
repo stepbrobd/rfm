@@ -61,10 +61,6 @@ schema = 3
     version = 'v0.6.1'
     hash = 'sha256-+gUGmdR/QOsB9qKESLrsbq6tK2VssNT/kDbRFpgrZL4='
 
-  [mod.'github.com/go-logr/logr']
-    version = 'v1.4.2'
-    hash = 'sha256-/W6qGilFlZNTb9Uq48xGZ4IbsVeSwJiAMLw4wiNYHLI='
-
   [mod.'github.com/inconshreveable/mousetrap']
     version = 'v1.1.0'
     hash = 'sha256-XWlYH0c8IcxAwQTnIi6WYqq44nOKUylSWxWO/vi+8pE='
@@ -96,18 +92,6 @@ schema = 3
   [mod.'github.com/osrg/gobgp/v3']
     version = 'v3.37.0'
     hash = 'sha256-okiSm28hYGLaO/v69lUFjIzvNBPHFZ9yrlSdhpfYc1c='
-
-  [mod.'github.com/pion/dtls/v2']
-    version = 'v2.2.12'
-    hash = 'sha256-NLz6Aa6sg8sre7yKoiE0TdOtzyDxlnkYldByveCUNww='
-
-  [mod.'github.com/pion/logging']
-    version = 'v0.2.2'
-    hash = 'sha256-e/RKIPmZ6w3CehT7YzpAJLI65tcANZv82XfMXgJDXoU='
-
-  [mod.'github.com/pion/transport/v2']
-    version = 'v2.2.10'
-    hash = 'sha256-YTMWnXUqAsoigVg+D6xfEFJcXCwU7JYEJWQNG167Nr8='
 
   [mod.'github.com/prometheus/client_golang']
     version = 'v1.23.2'
@@ -157,17 +141,9 @@ schema = 3
     version = 'v2.4.4'
     hash = 'sha256-ecT2ZXw7iT+63J4210xA6sMz0fUFXmDzLwZe2FzaNFU='
 
-  [mod.'golang.org/x/crypto']
-    version = 'v0.46.0'
-    hash = 'sha256-I8N/spcw3/h0DFA+V1WK38HctckWIB9ep93DEVCALxU='
-
   [mod.'golang.org/x/exp']
     version = 'v0.0.0-20260312153236-7ab1446f8b90'
     hash = 'sha256-q4a4MK4pVmaazKo9DTOwocH6Fvo8NsO96YeY9FJmNyo='
-
-  [mod.'golang.org/x/net']
-    version = 'v0.48.0'
-    hash = 'sha256-oZpddsiJwWCH3Aipa+XXpy7G/xHY5fEagUSok7T0bXE='
 
   [mod.'golang.org/x/sys']
     version = 'v0.42.0'
@@ -176,7 +152,3 @@ schema = 3
   [mod.'google.golang.org/protobuf']
     version = 'v1.36.11'
     hash = 'sha256-7W+6jntfI/awWL3JP6yQedxqP5S9o3XvPgJ2XxxsIeE='
-
-  [mod.'k8s.io/klog/v2']
-    version = 'v2.130.1'
-    hash = 'sha256-n5vls1o1a0V0KYv+3SULq4q3R2Is15K8iDHhFlsSH4o='
