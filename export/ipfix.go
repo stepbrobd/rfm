@@ -75,6 +75,11 @@ func NewIPFIX(cfg config.IPFIXConfig, sampleRate uint32) (*IPFIXExporter, error)
 
 	loadIPFIXRegistry.Do(registry.LoadRegistry)
 
+	// verify the registry loaded correctly before continuing
+	if _, err := registry.GetInfoElement("protocolIdentifier", registry.IANAEnterpriseID); err != nil {
+		return nil, fmt.Errorf("ipfix registry failed to load: %w", err)
+	}
+
 	remote, err := net.ResolveUDPAddr("udp", cfg.Addr())
 	if err != nil {
 		return nil, err
