@@ -4,6 +4,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"strconv"
 	"testing"
 	"time"
 
@@ -331,7 +332,7 @@ func TestLoadBadPort(t *testing.T) {
 interfaces = ["eth0"]
 
 [agent.prometheus]
-port = `+itoa(port)+`
+port = `+strconv.Itoa(port)+`
 `)
 
 		_, err := Load(path)
@@ -349,7 +350,7 @@ interfaces = ["eth0"]
 
 [agent.ipfix]
 host = "127.0.0.1"
-port = `+itoa(port)+`
+port = `+strconv.Itoa(port)+`
 `)
 
 		_, err := Load(path)
@@ -371,7 +372,7 @@ port = 4739
 
 [agent.ipfix.bind]
 host = "127.0.0.1"
-port = `+itoa(port)+`
+port = `+strconv.Itoa(port)+`
 `)
 
 		_, err := Load(path)
@@ -479,27 +480,4 @@ interfaces = ["eth0", "eth0"]
 	if err == nil {
 		t.Fatal("expected error for duplicate interface")
 	}
-}
-
-func itoa(n int) string {
-	if n == 0 {
-		return "0"
-	}
-	neg := false
-	if n < 0 {
-		neg = true
-		n = -n
-	}
-	var buf [20]byte
-	i := len(buf)
-	for n > 0 {
-		i--
-		buf[i] = byte('0' + n%10)
-		n /= 10
-	}
-	if neg {
-		i--
-		buf[i] = '-'
-	}
-	return string(buf[i:])
 }
