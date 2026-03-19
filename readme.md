@@ -257,22 +257,24 @@ same collector address and port.
 Example:
 
 ```nix
-services.rfm = {
-  enable = true;
-  settings.agent = {
-    interfaces = [ "eth0" "tailscale0" ];
-    bpf.sample_rate = 50;
-    ipfix.host = "127.0.0.1";
-    ipfix.port = 4739;
-    prometheus.port = 9669;
-    enrich.mmdb.asn_db =
-      "${pkgs.dbip-asn-lite}/share/dbip/dbip-asn-lite.mmdb";
-    enrich.mmdb.city_db =
-      "${pkgs.dbip-city-lite}/share/dbip/dbip-city-lite.mmdb";
-    enrich.rib.bmp.host = "127.0.0.1";
-    enrich.rib.bmp.port = 11019;
+{ pkgs, ... }:
+
+{
+  services.rfm = {
+    enable = true;
+    settings.agent = {
+      interfaces = [ "eth0" "tailscale0" ];
+      bpf.sample_rate = 50;
+      ipfix.host = "127.0.0.1";
+      ipfix.port = 4739;
+      prometheus.port = 9669;
+      enrich.mmdb.asn_db = "${pkgs.dbip-asn-lite}/share/dbip/dbip-asn-lite.mmdb";
+      enrich.mmdb.city_db = "${pkgs.dbip-city-lite}/share/dbip/dbip-city-lite.mmdb";
+      enrich.rib.bmp.host = "127.0.0.1";
+      enrich.rib.bmp.port = 11019;
+    };
   };
-};
+}
 ```
 
 The module generates a TOML config file and runs rfm as a systemd service with
