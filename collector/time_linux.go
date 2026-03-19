@@ -9,9 +9,12 @@ import (
 )
 
 // bootTimeToWall converts a CLOCK_BOOTTIME nanosecond timestamp to wall time.
+// falls back to time.Now() if the clock read fails
 func bootTimeToWall(bootNs uint64) time.Time {
 	var ts unix.Timespec
-	_ = unix.ClockGettime(unix.CLOCK_BOOTTIME, &ts)
+	if err := unix.ClockGettime(unix.CLOCK_BOOTTIME, &ts); err != nil {
+		return time.Now()
+	}
 	bootNow := time.Duration(ts.Sec)*time.Second + time.Duration(ts.Nsec)*time.Nanosecond
 	wall := time.Now().Add(-bootNow)
 	return wall.Add(time.Duration(bootNs))
