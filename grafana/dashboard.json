@@ -5353,7 +5353,7 @@
     {
       "type": "timeseries",
       "title": "Errors by Subsystem",
-      "description": "Error rate by subsystem (ring_buffer, bpf_map).",
+      "description": "Error rate by subsystem (ring_buffer, bpf_map, ipfix).",
       "datasource": {
         "type": "datasource",
         "uid": "-- Mixed --"
@@ -5592,7 +5592,7 @@
       },
       "gridPos": {
         "h": 4,
-        "w": 6,
+        "w": 5,
         "x": 0,
         "y": 98
       },
@@ -5681,8 +5681,8 @@
       },
       "gridPos": {
         "h": 4,
-        "w": 6,
-        "x": 6,
+        "w": 5,
+        "x": 5,
         "y": 98
       },
       "fieldConfig": {
@@ -5770,8 +5770,8 @@
       },
       "gridPos": {
         "h": 4,
-        "w": 6,
-        "x": 12,
+        "w": 5,
+        "x": 10,
         "y": 98
       },
       "fieldConfig": {
@@ -5855,8 +5855,8 @@
       },
       "gridPos": {
         "h": 4,
-        "w": 6,
-        "x": 18,
+        "w": 5,
+        "x": 15,
         "y": 98
       },
       "fieldConfig": {
@@ -5904,6 +5904,91 @@
           },
           "expr": "sum(rfm_errors_total{subsystem=\"bpf_map\"})",
           "legendFormat": "BPF Map Errors",
+          "refId": "A",
+          "instant": true
+        }
+      ],
+      "transformations": [
+        {
+          "id": "seriesToRows",
+          "options": {}
+        },
+        {
+          "id": "groupBy",
+          "options": {
+            "fields": {
+              "Metric": {
+                "operation": "groupby"
+              },
+              "Value": {
+                "operation": "aggregate",
+                "aggregations": [
+                  "sum"
+                ]
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "Total IPFIX Errors",
+      "datasource": {
+        "type": "datasource",
+        "uid": "-- Mixed --"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 20,
+        "y": 98
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          },
+          "mappings": []
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "sum(rfm_errors_total{subsystem=\"ipfix\"})",
+          "legendFormat": "IPFIX Errors",
           "refId": "A",
           "instant": true
         }
