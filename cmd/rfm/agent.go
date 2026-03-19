@@ -9,6 +9,7 @@ import (
 	"os/signal"
 	"strconv"
 	"syscall"
+	"time"
 
 	"github.com/charmbracelet/log"
 	"github.com/prometheus/client_golang/prometheus"
@@ -141,7 +142,9 @@ func runAgent(cmd *cobra.Command, args []string) error {
 			log.Error("close ipfix exporter", "err", err)
 		}
 	}
-	srv.Shutdown(context.Background())
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer shutdownCancel()
+	srv.Shutdown(shutdownCtx)
 	if errors.Is(runErr, context.Canceled) {
 		return nil
 	}
