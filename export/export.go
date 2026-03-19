@@ -123,14 +123,17 @@ func (mc *MetricsCollector) Describe(ch chan<- *prometheus.Desc) {
 func (mc *MetricsCollector) Collect(ch chan<- prometheus.Metric) {
 	mc.collectIfaceStats(ch)
 	mc.collectFlows(ch)
-	mc.collectHealth(ch)
 
 	mc.mu.Lock()
 	bpfErrs := mc.bpfMapErr
 	mc.mu.Unlock()
 
 	if mc.col != nil {
+		// single Stats() call for a consistent snapshot
 		stats := mc.col.Stats()
+		ch <- prometheus.MustNewConstMetric(descActiveFlows, prometheus.GaugeValue, float64(stats.ActiveFlows))
+		ch <- prometheus.MustNewConstMetric(descDroppedEvents, prometheus.CounterValue, float64(stats.DroppedEvents))
+		ch <- prometheus.MustNewConstMetric(descForcedEvictions, prometheus.CounterValue, float64(stats.ForcedEvictions))
 		bpfErrs += stats.BPFMapErrors
 		ch <- prometheus.MustNewConstMetric(descErrorsTotal, prometheus.CounterValue, float64(stats.RingBufErrors), "ring_buffer")
 		ch <- prometheus.MustNewConstMetric(descErrorsTotal, prometheus.CounterValue, float64(stats.IPFIXErrors), "ipfix")
@@ -275,17 +278,6 @@ func (mc *MetricsCollector) ifname(ifindex uint32) string {
 	mc.mu.Unlock()
 
 	return name
-}
-
-func (mc *MetricsCollector) collectHealth(ch chan<- prometheus.Metric) {
-	if mc.col == nil {
-		return
-	}
-
-	stats := mc.col.Stats()
-	ch <- prometheus.MustNewConstMetric(descActiveFlows, prometheus.GaugeValue, float64(stats.ActiveFlows))
-	ch <- prometheus.MustNewConstMetric(descDroppedEvents, prometheus.CounterValue, float64(stats.DroppedEvents))
-	ch <- prometheus.MustNewConstMetric(descForcedEvictions, prometheus.CounterValue, float64(stats.ForcedEvictions))
 }
 
 // ifnameFromIndex resolves an interface index to a name, falling back
