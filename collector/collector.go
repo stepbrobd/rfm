@@ -8,6 +8,8 @@ import (
 	"os"
 	"sync"
 	"time"
+
+	"github.com/charmbracelet/log"
 )
 
 // Collector aggregates flow events into an in-memory flow table
@@ -195,12 +197,20 @@ func (c *Collector) exportFlows(exp FlowExporter, flows []ExportedFlow) {
 	if exp == nil {
 		return
 	}
+	var failed int
 	for _, flow := range flows {
 		if err := exp.ExportFlow(flow); err != nil {
+			failed++
+			if failed == 1 {
+				log.Error("export flow", "err", err)
+			}
 			c.mu.Lock()
 			c.ipfixErrs++
 			c.mu.Unlock()
 		}
+	}
+	if failed > 1 {
+		log.Error("export flow batch", "failed", failed, "total", len(flows))
 	}
 }
 
@@ -208,6 +218,7 @@ func (c *Collector) pollDrops(rd Reader) {
 	dropped, err := rd.DroppedEvents()
 	c.mu.Lock()
 	if err != nil {
+		log.Error("poll dropped events", "err", err)
 		c.bpfMapErrs++
 	} else {
 		c.dropped = dropped
@@ -261,6 +272,7 @@ func (c *Collector) Run(ctx context.Context, rd Reader) error {
 
 		ev, err := DecodeFlowEvent(raw)
 		if err != nil {
+			log.Error("decode flow event", "err", err, "raw_len", len(raw))
 			c.mu.Lock()
 			c.ringBufErrs++
 			c.mu.Unlock()
