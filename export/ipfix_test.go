@@ -511,4 +511,107 @@ func assertIPFIXDataFloat64Range(t *testing.T, record map[string][]byte, name st
 	}
 }
 
+func TestIPFIXTemplateSuppressedWithinRefreshWindow(t *testing.T) {
+	loadIPFIXRegistry.Do(registry.LoadRegistry)
+
+	conn := startIPFIXListener(t)
+	addr := conn.LocalAddr().(*net.UDPAddr)
+
+	now := time.Unix(1_700_000_000, 0).UTC()
+	exp, err := NewIPFIX(config.IPFIXConfig{
+		Host: addr.IP.String(),
+		Port: addr.Port,
+	}, 1)
+	if err != nil {
+		t.Fatalf("NewIPFIX: %v", err)
+	}
+	defer exp.Close()
+	exp.nowFunc = func() time.Time { return now }
+
+	flow := collector.ExportedFlow{
+		Key: collector.FlowKey{
+			Ifindex: 1, Dir: 0, Proto: 6,
+			SrcAddr: netip.MustParseAddr("::ffff:10.0.0.1"),
+			DstAddr: netip.MustParseAddr("::ffff:10.0.0.2"),
+			SrcPort: 1234, DstPort: 80,
+		},
+		Entry: collector.FlowEntry{
+			FirstSeen: now, LastSeen: now, Packets: 1, Bytes: 100,
+		},
+		EndReason: collector.FlowEndReasonIdleTimeout,
+	}
+
+	// first export should include template + data
+	if err := exp.ExportFlow(flow); err != nil {
+		t.Fatalf("first ExportFlow: %v", err)
+	}
+	msg := mustReadIPFIXDatagram(t, conn)
+	if got := len(msg.Sets); got != 2 {
+		t.Fatalf("first export set count = %d, want 2 (template + data)", got)
+	}
+
+	// second export within refresh window should have data only
+	now = now.Add(1 * time.Second)
+	if err := exp.ExportFlow(flow); err != nil {
+		t.Fatalf("second ExportFlow: %v", err)
+	}
+	msg = mustReadIPFIXDatagram(t, conn)
+	if got := len(msg.Sets); got != 1 {
+		t.Fatalf("second export set count = %d, want 1 (data only)", got)
+	}
+	if msg.Sets[0].ID == entitiesTemplateSetID {
+		t.Fatal("second export should not contain a template set")
+	}
+}
+
+func TestIPFIXTemplateResendAfterRefreshTimeout(t *testing.T) {
+	loadIPFIXRegistry.Do(registry.LoadRegistry)
+
+	conn := startIPFIXListener(t)
+	addr := conn.LocalAddr().(*net.UDPAddr)
+
+	now := time.Unix(1_700_000_000, 0).UTC()
+	exp, err := NewIPFIX(config.IPFIXConfig{
+		Host: addr.IP.String(),
+		Port: addr.Port,
+	}, 1)
+	if err != nil {
+		t.Fatalf("NewIPFIX: %v", err)
+	}
+	defer exp.Close()
+	exp.nowFunc = func() time.Time { return now }
+
+	flow := collector.ExportedFlow{
+		Key: collector.FlowKey{
+			Ifindex: 1, Dir: 0, Proto: 6,
+			SrcAddr: netip.MustParseAddr("::ffff:10.0.0.1"),
+			DstAddr: netip.MustParseAddr("::ffff:10.0.0.2"),
+			SrcPort: 1234, DstPort: 80,
+		},
+		Entry: collector.FlowEntry{
+			FirstSeen: now, LastSeen: now, Packets: 1, Bytes: 100,
+		},
+		EndReason: collector.FlowEndReasonIdleTimeout,
+	}
+
+	// first export includes template
+	if err := exp.ExportFlow(flow); err != nil {
+		t.Fatalf("first ExportFlow: %v", err)
+	}
+	_ = mustReadIPFIXDatagram(t, conn)
+
+	// advance past the refresh timeout
+	now = now.Add(exp.templateRefreshTimeout + 1*time.Second)
+	if err := exp.ExportFlow(flow); err != nil {
+		t.Fatalf("refresh ExportFlow: %v", err)
+	}
+	msg := mustReadIPFIXDatagram(t, conn)
+	if got := len(msg.Sets); got != 2 {
+		t.Fatalf("refresh export set count = %d, want 2 (template + data)", got)
+	}
+	if msg.Sets[0].ID != entitiesTemplateSetID {
+		t.Fatalf("refresh export first set id = %d, want %d", msg.Sets[0].ID, entitiesTemplateSetID)
+	}
+}
+
 const entitiesTemplateSetID uint16 = 2

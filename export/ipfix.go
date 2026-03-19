@@ -59,6 +59,7 @@ type IPFIXExporter struct {
 	ipv4TemplateSentAt     time.Time
 	ipv6TemplateSentAt     time.Time
 	templateRefreshTimeout time.Duration
+	nowFunc                func() time.Time
 }
 
 // NewIPFIX creates an IPFIX exporter for a single configured collector
@@ -119,6 +120,7 @@ func NewIPFIX(cfg config.IPFIXConfig, sampleRate uint32) (*IPFIXExporter, error)
 		ipv4TemplateID:         256,
 		ipv6TemplateID:         257,
 		templateRefreshTimeout: time.Duration(entities.TemplateRefreshTimeOut) * time.Second,
+		nowFunc:                time.Now,
 	}, nil
 }
 
@@ -147,7 +149,7 @@ func (e *IPFIXExporter) ExportFlow(flow collector.ExportedFlow) error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
-	now := time.Now()
+	now := e.nowFunc()
 	templateID, templateSet, err := e.templateSetIfNeededLocked(isIPv6, now)
 	if err != nil {
 		return err
