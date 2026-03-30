@@ -215,11 +215,17 @@ Collector health:
 `rfm_errors_total{subsystem}` currently uses `bpf_map`, `ring_buffer`, and
 `ipfix`.
 
-## Grafana dashboard
+## Visualization
 
 An early Grafana dashboard is included at `grafana/dashboard.json`.
 
-![RFM](grafana/screenshot.jpg)
+![Prometheus](grafana/prometheus.jpg)
+
+Screenshot from
+[Cloudflare Network Flow](https://developers.cloudflare.com/network-flow/)
+(free):
+
+![IPFIX](grafana/ipfix.jpg)
 
 It is intentionally a starting point, not a finished observability product. The
 current dashboard covers the basic operational views:
