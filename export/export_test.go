@@ -119,11 +119,11 @@ func extractName(desc *prometheus.Desc) string {
 		return ""
 	}
 	s = s[i+len(prefix):]
-	j := strings.Index(s, "\"")
-	if j < 0 {
+	before, _, ok := strings.Cut(s, "\"")
+	if !ok {
 		return ""
 	}
-	return s[:j]
+	return before
 }
 
 // assertCounter checks that the named metric has the expected value.

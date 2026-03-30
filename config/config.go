@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"slices"
 	"strconv"
 	"time"
 
@@ -228,10 +229,8 @@ func ResolveInterfaces(names []string) ([]int, error) {
 	if len(names) == 1 && names[0] == "*" {
 		return resolveWildcard()
 	}
-	for _, n := range names {
-		if n == "*" {
-			return nil, fmt.Errorf("\"*\" cannot be mixed with named interfaces")
-		}
+	if slices.Contains(names, "*") {
+		return nil, fmt.Errorf("\"*\" cannot be mixed with named interfaces")
 	}
 	indices := make([]int, 0, len(names))
 	for _, name := range names {

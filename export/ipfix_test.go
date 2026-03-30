@@ -350,7 +350,7 @@ func parseTemplateSet(t *testing.T, set decodedIPFIXSet) (uint16, []decodedTempl
 
 	fields := make([]decodedTemplateField, 0, fieldCount)
 	offset := 4
-	for i := 0; i < fieldCount; i++ {
+	for i := range fieldCount {
 		if offset+4 > len(set.Payload) {
 			t.Fatalf("truncated template field %d", i)
 		}
