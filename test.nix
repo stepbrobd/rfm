@@ -364,7 +364,7 @@ in
       assert any(val > 0 for val in vals), f"{name} {labels} has no positive samples: {vals}"
       return vals
 
-    def wait_for_positive_metric(machine: Machine, name: str, timeout_s: float = 10, **labels: str) -> list[float]:
+    def wait_for_positive_metric(machine, name: str, timeout_s: float = 10, **labels: str) -> list[float]:
       deadline = time.time() + timeout_s
       last_metrics = ""
       while time.time() < deadline:
@@ -375,14 +375,14 @@ in
         time.sleep(1)
       return require_positive(last_metrics, name, **labels)
 
-    def lookup_mmdb_asn(machine: Machine, ip: str) -> str:
+    def lookup_mmdb_asn(machine, ip: str) -> str:
       return machine.succeed(
         "mmdblookup --file \"$(cat /etc/rfm-test-asn-db)\" "
         f"--ip {ip} autonomous_system_number "
         "| grep -Eo '[0-9]+ <uint32>' | cut -d' ' -f1"
       ).strip()
 
-    def json_lines(machine: Machine, path: str) -> list[dict]:
+    def json_lines(machine, path: str) -> list[dict]:
       raw = machine.succeed(f"test -s {path} && cat {path}")
       return [json.loads(line) for line in raw.splitlines() if line.strip()]
 
@@ -427,7 +427,7 @@ in
 
       return b"\x03" + struct.pack(">IB", 6 + len(peer_header) + len(bgp_update), 0) + peer_header + bgp_update
 
-    def send_bmp(machine: Machine) -> None:
+    def send_bmp(machine) -> None:
       wire = b"".join(
         [
           bmp_route("203.0.113.0/24", 65002, "192.0.2.2"),
@@ -437,7 +437,7 @@ in
       payload = base64.b64encode(wire).decode()
       machine.succeed(f"printf '%s' '{payload}' | base64 -d | nc -N 127.0.0.1 11019")
 
-    def start_ipfix_listener(machine: Machine) -> None:
+    def start_ipfix_listener(machine) -> None:
       script = base64.b64encode(
         b"import json\n"
         b"import socket\n"
@@ -490,6 +490,7 @@ in
       machine.wait_until_succeeds("test -s /tmp/ipfix.ready")
 
     start_all()
+    machines = [machine1, machine2, machine3, machine4]
 
     # --- phase 1: service lifecycle and basic checks ---
     for m in machines:
