@@ -74,8 +74,8 @@ schema = 3
     hash = 'sha256-qhw9hWtU5wnyFyuMbKx+7RB8ckQaFQ8D+8GKPkN3HHQ='
 
   [mod.'github.com/mattn/go-runewidth']
-    version = 'v0.0.21'
-    hash = 'sha256-JU+ZijAu0o+5jzfLC8ytQzxIAKYr5ow3nCjFf0ehpiA='
+    version = 'v0.0.22'
+    hash = 'sha256-3LxD1qAAiNBRwQho5cEXNkjhSy4U5CakoAmyfAIBIPk='
 
   [mod.'github.com/muesli/termenv']
     version = 'v0.16.0'
