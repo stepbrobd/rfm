@@ -1,0 +1,16 @@
+version: 2
+
+updates:
+  - package-ecosystem: nix
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: saturday
+      time: "03:00"
+      timezone: "Etc/UTC"
+    commit-message:
+      prefix: "flake"
+    groups:
+      inputs:
+        patterns:
+          - "*"
