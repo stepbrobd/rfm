@@ -28,9 +28,10 @@ type AgentConfig struct {
 
 // BPFConfig controls the eBPF probe
 type BPFConfig struct {
-	SampleRate  uint32 `toml:"sample_rate"`
-	RingBufSize int    `toml:"ring_buf_size"`
-	WakeupBatch uint32 `toml:"wakeup_batch"`
+	SampleRate     uint32 `toml:"sample_rate"`
+	RingBufSize    int    `toml:"ring_buf_size"`
+	WakeupBatch    uint32 `toml:"wakeup_batch"`
+	IfaceStatsSize int    `toml:"iface_stats_size"`
 }
 
 // CollectorConfig controls flow collection and eviction
@@ -315,6 +316,9 @@ func validate(cfg *Config) error {
 	}
 	if a.BPF.WakeupBatch == 0 {
 		return fmt.Errorf("agent.bpf.wakeup_batch must be > 0")
+	}
+	if a.BPF.IfaceStatsSize < 0 {
+		return fmt.Errorf("agent.bpf.iface_stats_size must be >= 0, got %d", a.BPF.IfaceStatsSize)
 	}
 	if a.Collector.MaxFlows < 0 {
 		return fmt.Errorf("agent.collector.max_flows must be >= 0")

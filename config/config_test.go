@@ -300,6 +300,50 @@ wakeup_batch = 256
 	}
 }
 
+func TestLoadIfaceStatsSize(t *testing.T) {
+	path := writeTOML(t, `
+[agent]
+interfaces = ["eth0"]
+
+[agent.bpf]
+iface_stats_size = 8192
+`)
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.Agent.BPF.IfaceStatsSize != 8192 {
+		t.Fatalf("iface_stats_size = %d, want 8192", cfg.Agent.BPF.IfaceStatsSize)
+	}
+}
+
+func TestLoadIfaceStatsSizeDefault(t *testing.T) {
+	path := writeTOML(t, `
+[agent]
+interfaces = ["eth0"]
+`)
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.Agent.BPF.IfaceStatsSize != 0 {
+		t.Fatalf("iface_stats_size default = %d, want 0 (auto)", cfg.Agent.BPF.IfaceStatsSize)
+	}
+}
+
+func TestLoadNegativeIfaceStatsSize(t *testing.T) {
+	path := writeTOML(t, `
+[agent]
+interfaces = ["eth0"]
+
+[agent.bpf]
+iface_stats_size = -1
+`)
+	if _, err := Load(path); err == nil {
+		t.Fatal("expected error for negative iface_stats_size")
+	}
+}
+
 func TestLoadZeroWakeupBatch(t *testing.T) {
 	path := writeTOML(t, `
 [agent]

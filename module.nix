@@ -59,6 +59,12 @@ in
                       default = 64;
                       description = "Send a ring buffer wakeup every N submitted flow events.";
                     };
+
+                    iface_stats_size = std.mkOption {
+                      type = std.types.ints.unsigned;
+                      default = 0;
+                      description = "Override the BPF iface stats map capacity, 0 means auto-compute from interface count.";
+                    };
                   };
                 };
               };

@@ -135,6 +135,11 @@ reduce flow event delivery latency at the cost of more userspace wakeups; higher
 values amortize wakeups but make Run loop iterations slower to react. Must be
 greater than 0.
 
+`iface_stats_size` (int, default 0): Override the BPF iface stats hash map
+capacity. `0` means auto-compute as `max(len(interfaces) * 8, 64)`. Set
+explicitly when running on a router with many subinterfaces or known high
+cardinality where the auto-compute is too small.
+
 ### `agent.collector`
 
 `max_flows` (int, default 65536): Maximum number of active flows held in memory.

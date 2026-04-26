@@ -51,8 +51,11 @@ func runAgent(cmd *cobra.Command, args []string) error {
 		defer enrichCloser.Close()
 	}
 
-	// 2 directions and 3 protos (ipv4, ipv6, other) per interface, rounded up
-	ifaceStatsSize := max(len(indices)*8, 64)
+	ifaceStatsSize := cfg.Agent.BPF.IfaceStatsSize
+	if ifaceStatsSize == 0 {
+		// 2 directions and 3 protos (ipv4, ipv6, other) per interface, rounded up
+		ifaceStatsSize = max(len(indices)*8, 64)
+	}
 
 	p, err := probe.Load(probe.Config{
 		SampleRate:     cfg.Agent.BPF.SampleRate,
