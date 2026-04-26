@@ -38,10 +38,15 @@ func runAgent(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	indices, err := config.ResolveInterfaces(cfg.Agent.Interfaces)
+	ifaces, err := config.ResolveInterfaces(cfg.Agent.Interfaces)
 	if err != nil {
 		return err
 	}
+	names := make([]string, len(ifaces))
+	for i, iface := range ifaces {
+		names[i] = iface.Name
+	}
+	log.Info("interfaces matched", "count", len(ifaces), "names", names)
 
 	enricher, enrichCloser, err := enrich.Build(cfg.Agent.Enrich)
 	if err != nil {
@@ -54,7 +59,7 @@ func runAgent(cmd *cobra.Command, args []string) error {
 	ifaceStatsSize := cfg.Agent.BPF.IfaceStatsSize
 	if ifaceStatsSize == 0 {
 		// 2 directions and 3 protos (ipv4, ipv6, other) per interface, rounded up
-		ifaceStatsSize = max(len(indices)*8, 64)
+		ifaceStatsSize = max(len(ifaces)*8, 64)
 	}
 
 	p, err := probe.Load(probe.Config{
@@ -68,16 +73,11 @@ func runAgent(cmd *cobra.Command, args []string) error {
 	}
 	defer p.Close()
 
-	for _, idx := range indices {
-		iface, _ := net.InterfaceByIndex(idx)
-		name := strconv.Itoa(idx)
-		if iface != nil {
-			name = iface.Name
+	for _, iface := range ifaces {
+		if err := p.Attach(iface.Index); err != nil {
+			return fmt.Errorf("attach %s: %w", iface.Name, err)
 		}
-		if err := p.Attach(idx); err != nil {
-			return fmt.Errorf("attach %s: %w", name, err)
-		}
-		log.Info("attached", "interface", name)
+		log.Info("attached", "interface", iface.Name)
 	}
 
 	rd, err := collector.NewReader(p.FlowEvents(), p.FlowDrops())

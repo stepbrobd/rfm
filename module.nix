@@ -27,12 +27,17 @@ in
               interfaces = std.mkOption {
                 type = std.types.listOf std.types.str;
                 description = ''
-                  Network interfaces to monitor.
-                  Use `["*"]` for all non-loopback interfaces.
+                  Network interfaces to monitor. Each entry is a Go regular
+                  expression matched against system interface names with
+                  implicit full-string anchoring. Use `[".*"]` for all
+                  interfaces, `["ranet.*"]` for the ranet prefix, or list
+                  exact names like `["eth0"]`. Overlapping patterns are
+                  deduplicated by interface index, so `["eth0", "eth.*"]`
+                  attaches each interface at most once.
                 '';
                 example = [
                   "eth0"
-                  "tailscale0"
+                  "ranet.*"
                 ];
               };
 

@@ -1,7 +1,6 @@
 package config
 
 import (
-	"net"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -565,45 +564,72 @@ func TestLoadNonexistentFile(t *testing.T) {
 	}
 }
 
-func TestResolveWildcard(t *testing.T) {
-	indices, err := ResolveInterfaces([]string{"*"})
+func TestResolveMatchAll(t *testing.T) {
+	ifaces, err := ResolveInterfaces([]string{".*"})
 	if err != nil {
 		t.Fatalf("ResolveInterfaces: %v", err)
 	}
-	if len(indices) == 0 {
-		t.Fatal("wildcard resolved to zero interfaces")
-	}
-	for _, idx := range indices {
-		iface, _ := net.InterfaceByIndex(idx)
-		if iface != nil && iface.Flags&net.FlagLoopback != 0 {
-			t.Errorf("wildcard should skip loopback, got %s", iface.Name)
-		}
+	if len(ifaces) == 0 {
+		t.Fatal(".* resolved to zero interfaces")
 	}
 }
 
-func TestResolveNamed(t *testing.T) {
+func TestResolveExactName(t *testing.T) {
 	loName := testutil.LoopbackName(t)
 
-	indices, err := ResolveInterfaces([]string{loName})
+	ifaces, err := ResolveInterfaces([]string{loName})
 	if err != nil {
 		t.Fatalf("ResolveInterfaces: %v", err)
 	}
-	if len(indices) != 1 {
-		t.Fatalf("got %d indices, want 1", len(indices))
+	if len(ifaces) != 1 {
+		t.Fatalf("got %d interfaces, want 1", len(ifaces))
+	}
+	if ifaces[0].Name != loName {
+		t.Fatalf("matched %q, want %q", ifaces[0].Name, loName)
 	}
 }
 
-func TestResolveBadInterface(t *testing.T) {
+func TestResolveAnchoredExactNotPrefix(t *testing.T) {
+	loName := testutil.LoopbackName(t)
+
+	// the anchored regex for "lo" must not match "lo0", and vice versa
+	other := loName + "x"
+	ifaces, err := ResolveInterfaces([]string{other})
+	if err == nil && len(ifaces) > 0 {
+		t.Fatalf("anchored pattern %q matched unexpected interfaces: %v", other, ifaces)
+	}
+}
+
+func TestResolveNoMatch(t *testing.T) {
 	_, err := ResolveInterfaces([]string{"doesnotexist999"})
 	if err == nil {
-		t.Fatal("should fail on nonexistent interface")
+		t.Fatal("should fail when no interface matches")
 	}
 }
 
-func TestResolveWildcardWithOthers(t *testing.T) {
-	_, err := ResolveInterfaces([]string{"*", "eth0"})
+func TestResolveBadRegex(t *testing.T) {
+	_, err := ResolveInterfaces([]string{"["})
 	if err == nil {
-		t.Fatal("should fail when * is mixed with named interfaces")
+		t.Fatal("should fail on invalid regex")
+	}
+}
+
+func TestResolveDedupAcrossPatterns(t *testing.T) {
+	loName := testutil.LoopbackName(t)
+
+	// the two patterns both match the loopback, but it should appear once
+	ifaces, err := ResolveInterfaces([]string{loName, ".*"})
+	if err != nil {
+		t.Fatalf("ResolveInterfaces: %v", err)
+	}
+	seen := make(map[int]int)
+	for _, iface := range ifaces {
+		seen[iface.Index]++
+	}
+	for idx, count := range seen {
+		if count > 1 {
+			t.Fatalf("interface index %d returned %d times", idx, count)
+		}
 	}
 }
 
@@ -621,24 +647,12 @@ sample_rte = 1
 	}
 }
 
-func TestLoadWildcardMixed(t *testing.T) {
+func TestLoadInvalidInterfaceRegex(t *testing.T) {
 	path := writeTOML(t, `
 [agent]
-interfaces = ["*", "lo"]
+interfaces = ["["]
 `)
-	_, err := Load(path)
-	if err == nil {
-		t.Fatal("expected error for wildcard mixed with named interfaces")
-	}
-}
-
-func TestLoadDuplicateInterface(t *testing.T) {
-	path := writeTOML(t, `
-[agent]
-interfaces = ["eth0", "eth0"]
-`)
-	_, err := Load(path)
-	if err == nil {
-		t.Fatal("expected error for duplicate interface")
+	if _, err := Load(path); err == nil {
+		t.Fatal("expected error for invalid interface regex")
 	}
 }

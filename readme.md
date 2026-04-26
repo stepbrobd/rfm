@@ -114,9 +114,18 @@ port = 11019
 ### `agent`
 
 `interfaces` (required, list of strings): Network interfaces to attach BPF
-programs to. Each entry must be a valid interface name present on the system.
-Duplicates are rejected. Set to `["*"]` to monitor all non-loopback interfaces.
-The wildcard cannot be mixed with named interfaces.
+programs to. Each entry is a Go regular expression matched against system
+interface names with implicit full-string anchoring. Use `[".*"]` for every
+interface, `["ranet.*"]` for the ranet prefix, or list exact names like
+`["eth0", "wlan0"]`.
+
+Patterns may overlap. For example `["eth0", "eth.*"]` matches `eth0` once even
+though both patterns apply, and a TC program is attached at most once per
+interface. Resolution walks the system interface list once, evaluates each
+pattern against each name, and deduplicates by interface index.
+
+Startup fails when no interface matches any pattern. A pattern that fails to
+compile as a regex is rejected at config load.
 
 ### `agent.bpf`
 

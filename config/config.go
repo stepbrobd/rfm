@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"net"
 	"os"
-	"slices"
+	"regexp"
 	"strconv"
 	"time"
 
@@ -248,43 +248,58 @@ func Load(path string) (*Config, error) {
 	return cfg, nil
 }
 
-// ResolveInterfaces converts interface names to indices
-// ["*"] expands to all non-loopback interfaces
-// "*" cannot be mixed with named interfaces
-func ResolveInterfaces(names []string) ([]int, error) {
-	if len(names) == 1 && names[0] == "*" {
-		return resolveWildcard()
-	}
-	if slices.Contains(names, "*") {
-		return nil, fmt.Errorf("\"*\" cannot be mixed with named interfaces")
-	}
-	indices := make([]int, 0, len(names))
-	for _, name := range names {
-		iface, err := net.InterfaceByName(name)
-		if err != nil {
-			return nil, fmt.Errorf("interface %q: %w", name, err)
-		}
-		indices = append(indices, iface.Index)
-	}
-	return indices, nil
+// Interface is one resolved network interface, ready to attach to
+type Interface struct {
+	Name  string
+	Index int
 }
 
-func resolveWildcard() ([]int, error) {
-	ifaces, err := net.Interfaces()
+// ResolveInterfaces matches each pattern against the system interface list
+// patterns are Go regular expressions, anchored full-string
+// for example ".*" matches every interface, "ranet.*" matches the ranet prefix
+// duplicates across patterns are merged, returning each interface once
+func ResolveInterfaces(patterns []string) ([]Interface, error) {
+	compiled, err := compileInterfacePatterns(patterns)
+	if err != nil {
+		return nil, err
+	}
+
+	sysIfaces, err := net.Interfaces()
 	if err != nil {
 		return nil, fmt.Errorf("list interfaces: %w", err)
 	}
-	var indices []int
-	for _, iface := range ifaces {
-		if iface.Flags&net.FlagLoopback != 0 {
-			continue
+
+	seen := make(map[int]bool, len(sysIfaces))
+	matches := make([]Interface, 0, len(sysIfaces))
+	for _, sys := range sysIfaces {
+		for _, re := range compiled {
+			if re.MatchString(sys.Name) {
+				if !seen[sys.Index] {
+					matches = append(matches, Interface{Name: sys.Name, Index: sys.Index})
+					seen[sys.Index] = true
+				}
+				break
+			}
 		}
-		indices = append(indices, iface.Index)
 	}
-	if len(indices) == 0 {
-		return nil, fmt.Errorf("no non-loopback interfaces found")
+
+	if len(matches) == 0 {
+		return nil, fmt.Errorf("no interfaces matched patterns %v", patterns)
 	}
-	return indices, nil
+
+	return matches, nil
+}
+
+func compileInterfacePatterns(patterns []string) ([]*regexp.Regexp, error) {
+	out := make([]*regexp.Regexp, len(patterns))
+	for i, p := range patterns {
+		re, err := regexp.Compile("^(?:" + p + ")$")
+		if err != nil {
+			return nil, fmt.Errorf("interface pattern %q: %w", p, err)
+		}
+		out[i] = re
+	}
+	return out, nil
 }
 
 func validate(cfg *Config) error {
@@ -293,17 +308,8 @@ func validate(cfg *Config) error {
 	if len(a.Interfaces) == 0 {
 		return fmt.Errorf("agent.interfaces must be non-empty")
 	}
-	for _, name := range a.Interfaces {
-		if name == "*" && len(a.Interfaces) > 1 {
-			return fmt.Errorf("agent.interfaces: \"*\" cannot be mixed with named interfaces")
-		}
-	}
-	seen := make(map[string]bool, len(a.Interfaces))
-	for _, name := range a.Interfaces {
-		if seen[name] {
-			return fmt.Errorf("agent.interfaces: duplicate interface %q", name)
-		}
-		seen[name] = true
+	if _, err := compileInterfacePatterns(a.Interfaces); err != nil {
+		return fmt.Errorf("agent.interfaces: %w", err)
 	}
 	if a.BPF.SampleRate == 0 {
 		return fmt.Errorf("agent.bpf.sample_rate must be > 0")
