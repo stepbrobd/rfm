@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/charmbracelet/log"
@@ -14,18 +15,19 @@ import (
 
 // Collector aggregates flow events into an in-memory flow table
 type Collector struct {
-	mu          sync.RWMutex
-	flows       map[FlowKey]*flowState
-	eviction    flowHeap
-	timeout     time.Duration
-	enricher    Enricher
-	exporter    FlowExporter
-	maxFlows    int
-	dropped     uint64
-	forced      uint64
-	ringBufErrs uint64
-	bpfMapErrs  uint64
-	ipfixErrs   uint64
+	mu       sync.RWMutex
+	flows    map[FlowKey]*flowState
+	eviction flowHeap
+	timeout  time.Duration
+	enricher Enricher
+	exporter FlowExporter
+	maxFlows int
+
+	dropped     atomic.Uint64
+	forced      atomic.Uint64
+	ringBufErrs atomic.Uint64
+	bpfMapErrs  atomic.Uint64
+	ipfixErrs   atomic.Uint64
 }
 
 // New creates a collector that evicts flows older than timeout
@@ -106,7 +108,7 @@ func (c *Collector) evictOldestLocked(reason uint8) (ExportedFlow, bool) {
 
 	delete(c.flows, oldest.key)
 	heap.Pop(&c.eviction)
-	c.forced++
+	c.forced.Add(1)
 	return ExportedFlow{
 		Key:       oldest.key,
 		Entry:     oldest.entry,
@@ -156,15 +158,16 @@ func (c *Collector) Flows() map[FlowKey]FlowEntry {
 // Stats returns collector-level statistics
 func (c *Collector) Stats() Stats {
 	c.mu.RLock()
-	defer c.mu.RUnlock()
+	activeFlows := uint64(len(c.flows))
+	c.mu.RUnlock()
 
 	return Stats{
-		ActiveFlows:     uint64(len(c.flows)),
-		DroppedEvents:   c.dropped,
-		ForcedEvictions: c.forced,
-		RingBufErrors:   c.ringBufErrs,
-		BPFMapErrors:    c.bpfMapErrs,
-		IPFIXErrors:     c.ipfixErrs,
+		ActiveFlows:     activeFlows,
+		DroppedEvents:   c.dropped.Load(),
+		ForcedEvictions: c.forced.Load(),
+		RingBufErrors:   c.ringBufErrs.Load(),
+		BPFMapErrors:    c.bpfMapErrs.Load(),
+		IPFIXErrors:     c.ipfixErrs.Load(),
 	}
 }
 
@@ -212,21 +215,17 @@ func (c *Collector) exportFlows(exp FlowExporter, flows []ExportedFlow) {
 	if failed > 1 {
 		log.Error("export flow batch", "failed", failed, "total", len(flows))
 	}
-	c.mu.Lock()
-	c.ipfixErrs += uint64(failed)
-	c.mu.Unlock()
+	c.ipfixErrs.Add(uint64(failed))
 }
 
 func (c *Collector) pollDrops(rd Reader) {
 	dropped, err := rd.DroppedEvents()
-	c.mu.Lock()
 	if err != nil {
 		log.Error("poll dropped events", "err", err)
-		c.bpfMapErrs++
-	} else {
-		c.dropped = dropped
+		c.bpfMapErrs.Add(1)
+		return
 	}
-	c.mu.Unlock()
+	c.dropped.Store(dropped)
 }
 
 // Run reads events from rd, decodes them, and records them until ctx is done
@@ -250,6 +249,7 @@ func (c *Collector) Run(ctx context.Context, rd Reader) error {
 			case <-ctx.Done():
 				return
 			case t := <-tick.C:
+				refreshBootOffset()
 				c.Evict(t)
 				c.pollDrops(rd)
 			}
@@ -267,18 +267,14 @@ func (c *Collector) Run(ctx context.Context, rd Reader) error {
 				c.pollDrops(rd)
 				continue
 			}
-			c.mu.Lock()
-			c.ringBufErrs++
-			c.mu.Unlock()
+			c.ringBufErrs.Add(1)
 			return fmt.Errorf("read event: %w", err)
 		}
 
 		ev, err := DecodeFlowEvent(raw)
 		if err != nil {
 			log.Error("decode flow event", "err", err, "raw_len", len(raw))
-			c.mu.Lock()
-			c.ringBufErrs++
-			c.mu.Unlock()
+			c.ringBufErrs.Add(1)
 			continue
 		}
 
