@@ -138,6 +138,7 @@ in
             host = "127.0.0.1";
             port = 4739;
             bind.host = "127.0.0.1";
+            template_refresh = "1s";
           };
           prometheus = {
             host = "::1";
