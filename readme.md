@@ -90,6 +90,8 @@ eviction_timeout = "30s"
 [agent.ipfix]
 host = "127.0.0.1"
 port = 4739
+template_refresh = "60s"
+observation_domain_id = 1
 
 [agent.ipfix.bind]
 host = "192.0.2.10"
@@ -150,6 +152,16 @@ socket. When unset, the kernel picks the source address from routing.
 
 `bind.port` (int, default 0): Local source port for the exporter UDP socket. `0`
 keeps the current behavior and uses an ephemeral port chosen by the kernel.
+
+`template_refresh` (string, default "60s"): How often UDP IPFIX templates are
+re-sent. Accepts any Go duration string. Minimum 1s. RFC 7011 requires UDP
+exporters to re-send templates regularly because the transport is lossy. The
+default of 60s lets a collector that loses or restarts during a packet recover
+within one refresh window.
+
+`observation_domain_id` (uint32, default 1): IPFIX observation domain id placed
+in exported message headers. Must be > 0. Set distinct values when multiple rfm
+agents export to one collector and downstream needs to demultiplex by source.
 
 ### `agent.prometheus`
 

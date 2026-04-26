@@ -14,8 +14,6 @@ import (
 	"ysun.co/rfm/config"
 )
 
-const ipfixObservationDomainID uint32 = 1
-
 var loadIPFIXRegistry sync.Once
 
 var (
@@ -52,6 +50,7 @@ type IPFIXExporter struct {
 	localPort              uint16
 	collectorAddr          netip.Addr
 	collectorPort          uint16
+	observationDomainID    uint32
 	samplingProb           float64
 	seqNumber              uint32
 	ipv4TemplateID         uint16
@@ -133,10 +132,11 @@ func NewIPFIX(cfg config.IPFIXConfig, sampleRate uint32) (*IPFIXExporter, error)
 		localPort:              uint16(local.Port),
 		collectorAddr:          collectorAddr.Unmap(),
 		collectorPort:          uint16(remote.Port),
+		observationDomainID:    cfg.ObservationDomainID,
 		samplingProb:           1 / float64(sampleRate),
 		ipv4TemplateID:         256,
 		ipv6TemplateID:         257,
-		templateRefreshTimeout: time.Duration(entities.TemplateRefreshTimeOut) * time.Second,
+		templateRefreshTimeout: cfg.TemplateRefresh,
 		nowFunc:                time.Now,
 		ipv4Fields:             ipv4Fields,
 		ipv6Fields:             ipv6Fields,
@@ -251,7 +251,7 @@ func (e *IPFIXExporter) sendSetsLocked(now time.Time, sets ...entities.Set) erro
 
 	msg := entities.NewMessage(false)
 	msg.SetVersion(10)
-	msg.SetObsDomainID(ipfixObservationDomainID)
+	msg.SetObsDomainID(e.observationDomainID)
 	msg.SetMessageLen(uint16(msgLen))
 	msg.SetExportTime(uint32(now.Unix()))
 	msg.SetSequenceNum(e.seqNumber)

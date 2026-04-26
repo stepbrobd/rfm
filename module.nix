@@ -116,6 +116,18 @@ in
                         };
                       };
                     };
+
+                    template_refresh = std.mkOption {
+                      type = std.types.str;
+                      default = "60s";
+                      description = "How often UDP IPFIX templates are re-sent (Go duration).";
+                    };
+
+                    observation_domain_id = std.mkOption {
+                      type = std.types.ints.positive;
+                      default = 1;
+                      description = "IPFIX observation domain id used in exported messages.";
+                    };
                   };
                 };
               };

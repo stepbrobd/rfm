@@ -382,6 +382,90 @@ port = `+strconv.Itoa(port)+`
 	}
 }
 
+func TestLoadIPFIXTemplateRefreshAndODID(t *testing.T) {
+	path := writeTOML(t, `
+[agent]
+interfaces = ["eth0"]
+
+[agent.ipfix]
+host = "127.0.0.1"
+port = 4739
+template_refresh = "30s"
+observation_domain_id = 42
+`)
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.Agent.IPFIX.TemplateRefresh != 30*time.Second {
+		t.Fatalf("template_refresh = %v, want 30s", cfg.Agent.IPFIX.TemplateRefresh)
+	}
+	if cfg.Agent.IPFIX.ObservationDomainID != 42 {
+		t.Fatalf("observation_domain_id = %d, want 42", cfg.Agent.IPFIX.ObservationDomainID)
+	}
+}
+
+func TestLoadIPFIXDefaultsTemplateRefreshAndODID(t *testing.T) {
+	path := writeTOML(t, `
+[agent]
+interfaces = ["eth0"]
+`)
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.Agent.IPFIX.TemplateRefresh != 60*time.Second {
+		t.Fatalf("template_refresh default = %v, want 60s", cfg.Agent.IPFIX.TemplateRefresh)
+	}
+	if cfg.Agent.IPFIX.ObservationDomainID != 1 {
+		t.Fatalf("observation_domain_id default = %d, want 1", cfg.Agent.IPFIX.ObservationDomainID)
+	}
+}
+
+func TestLoadBadIPFIXTemplateRefresh(t *testing.T) {
+	path := writeTOML(t, `
+[agent]
+interfaces = ["eth0"]
+
+[agent.ipfix]
+template_refresh = "notaduration"
+`)
+
+	if _, err := Load(path); err == nil {
+		t.Fatal("expected error for unparseable template_refresh")
+	}
+}
+
+func TestLoadSubSecondIPFIXTemplateRefresh(t *testing.T) {
+	path := writeTOML(t, `
+[agent]
+interfaces = ["eth0"]
+
+[agent.ipfix]
+template_refresh = "100ms"
+`)
+
+	if _, err := Load(path); err == nil {
+		t.Fatal("expected error for sub-second template_refresh")
+	}
+}
+
+func TestLoadZeroIPFIXObservationDomainID(t *testing.T) {
+	path := writeTOML(t, `
+[agent]
+interfaces = ["eth0"]
+
+[agent.ipfix]
+observation_domain_id = 0
+`)
+
+	if _, err := Load(path); err == nil {
+		t.Fatal("expected error for observation_domain_id = 0")
+	}
+}
+
 func TestLoadIPFIXBindWithoutCollector(t *testing.T) {
 	path := writeTOML(t, `
 [agent]

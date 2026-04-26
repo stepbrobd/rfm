@@ -40,9 +40,11 @@ type CollectorConfig struct {
 
 // IPFIXConfig controls export to a single IPFIX collector
 type IPFIXConfig struct {
-	Host string          `toml:"host"`
-	Port int             `toml:"port"`
-	Bind IPFIXBindConfig `toml:"bind"`
+	Host                string
+	Port                int
+	Bind                IPFIXBindConfig
+	TemplateRefresh     time.Duration
+	ObservationDomainID uint32
 }
 
 // IPFIXBindConfig controls the local UDP bind used by the IPFIX exporter
@@ -155,13 +157,22 @@ type rawCollectorConfig struct {
 	EvictionTimeout string `toml:"eviction_timeout"`
 }
 
+// rawIPFIXConfig mirrors IPFIXConfig with string-typed fields for TOML decoding
+type rawIPFIXConfig struct {
+	Host                string          `toml:"host"`
+	Port                int             `toml:"port"`
+	Bind                IPFIXBindConfig `toml:"bind"`
+	TemplateRefresh     string          `toml:"template_refresh"`
+	ObservationDomainID uint32          `toml:"observation_domain_id"`
+}
+
 // rawConfig is the wire format for TOML decoding, before duration parsing
 type rawConfig struct {
 	Agent struct {
 		Interfaces []string           `toml:"interfaces"`
 		BPF        BPFConfig          `toml:"bpf"`
 		Collector  rawCollectorConfig `toml:"collector"`
-		IPFIX      IPFIXConfig        `toml:"ipfix"`
+		IPFIX      rawIPFIXConfig     `toml:"ipfix"`
 		Prometheus PrometheusConfig   `toml:"prometheus"`
 		Enrich     EnrichConfig       `toml:"enrich"`
 	} `toml:"agent"`
@@ -180,6 +191,8 @@ func Load(path string) (*Config, error) {
 	raw.Agent.BPF.RingBufSize = 262144
 	raw.Agent.Collector.MaxFlows = 65536
 	raw.Agent.Collector.EvictionTimeout = "30s"
+	raw.Agent.IPFIX.TemplateRefresh = "60s"
+	raw.Agent.IPFIX.ObservationDomainID = 1
 	raw.Agent.Prometheus.Host = "::1"
 	raw.Agent.Prometheus.Port = 9669
 
@@ -197,8 +210,19 @@ func Load(path string) (*Config, error) {
 		return nil, fmt.Errorf("parsing eviction_timeout %q: %w", raw.Agent.Collector.EvictionTimeout, err)
 	}
 
+	templateRefresh, err := time.ParseDuration(raw.Agent.IPFIX.TemplateRefresh)
+	if err != nil {
+		return nil, fmt.Errorf("parsing ipfix.template_refresh %q: %w", raw.Agent.IPFIX.TemplateRefresh, err)
+	}
+
 	raw.Agent.Enrich.RIB.BMP = raw.Agent.Enrich.RIB.BMP.WithDefaults()
-	raw.Agent.IPFIX = raw.Agent.IPFIX.WithDefaults()
+	ipfixCfg := IPFIXConfig{
+		Host:                raw.Agent.IPFIX.Host,
+		Port:                raw.Agent.IPFIX.Port,
+		Bind:                raw.Agent.IPFIX.Bind,
+		TemplateRefresh:     templateRefresh,
+		ObservationDomainID: raw.Agent.IPFIX.ObservationDomainID,
+	}.WithDefaults()
 
 	cfg := &Config{
 		Agent: AgentConfig{
@@ -208,7 +232,7 @@ func Load(path string) (*Config, error) {
 				MaxFlows:        raw.Agent.Collector.MaxFlows,
 				EvictionTimeout: evictionTimeout,
 			},
-			IPFIX:      raw.Agent.IPFIX,
+			IPFIX:      ipfixCfg,
 			Prometheus: raw.Agent.Prometheus,
 			Enrich:     raw.Agent.Enrich,
 		},
@@ -301,6 +325,12 @@ func validate(cfg *Config) error {
 	}
 	if a.IPFIX.Bind.Port < 0 || a.IPFIX.Bind.Port > 65535 {
 		return fmt.Errorf("agent.ipfix.bind.port must be between 0 and 65535, got %d", a.IPFIX.Bind.Port)
+	}
+	if a.IPFIX.TemplateRefresh < time.Second {
+		return fmt.Errorf("agent.ipfix.template_refresh must be >= 1s, got %v", a.IPFIX.TemplateRefresh)
+	}
+	if a.IPFIX.ObservationDomainID == 0 {
+		return fmt.Errorf("agent.ipfix.observation_domain_id must be > 0")
 	}
 	if a.Prometheus.Port < 1 || a.Prometheus.Port > 65535 {
 		return fmt.Errorf("agent.prometheus.port must be between 1 and 65535, got %d", a.Prometheus.Port)

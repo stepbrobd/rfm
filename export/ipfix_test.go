@@ -14,6 +14,17 @@ import (
 	"ysun.co/rfm/config"
 )
 
+// testIPFIXConfig returns an IPFIXConfig with sane defaults filled in
+// the agent gets these from config.Load, but tests construct the config directly
+func testIPFIXConfig(host string, port int) config.IPFIXConfig {
+	return config.IPFIXConfig{
+		Host:                host,
+		Port:                port,
+		TemplateRefresh:     60 * time.Second,
+		ObservationDomainID: 1,
+	}
+}
+
 type decodedIPFIXMessage struct {
 	Version             uint16
 	Length              uint16
@@ -72,10 +83,7 @@ func TestIPFIXExportsEvictedFlowsOverUDP(t *testing.T) {
 			conn := startIPFIXListener(t)
 			addr := conn.LocalAddr().(*net.UDPAddr)
 
-			exp, err := NewIPFIX(config.IPFIXConfig{
-				Host: addr.IP.String(),
-				Port: addr.Port,
-			}, 100)
+			exp, err := NewIPFIX(testIPFIXConfig(addr.IP.String(), addr.Port), 100)
 			if err != nil {
 				t.Fatalf("NewIPFIX: %v", err)
 			}
@@ -137,14 +145,48 @@ func TestIPFIXExportsEvictedFlowsOverUDP(t *testing.T) {
 	}
 }
 
+func TestIPFIXUsesConfiguredObservationDomainID(t *testing.T) {
+	loadIPFIXRegistry.Do(registry.LoadRegistry)
+
+	conn := startIPFIXListener(t)
+	addr := conn.LocalAddr().(*net.UDPAddr)
+
+	cfg := testIPFIXConfig(addr.IP.String(), addr.Port)
+	cfg.ObservationDomainID = 4242
+	exp, err := NewIPFIX(cfg, 1)
+	if err != nil {
+		t.Fatalf("NewIPFIX: %v", err)
+	}
+	defer exp.Close()
+
+	now := time.Unix(1_700_000_000, 0).UTC()
+	flow := collector.ExportedFlow{
+		Key: collector.FlowKey{
+			Ifindex: 1, Dir: 0, Proto: 6,
+			SrcAddr: netip.MustParseAddr("::ffff:10.0.0.1"),
+			DstAddr: netip.MustParseAddr("::ffff:10.0.0.2"),
+			SrcPort: 1234, DstPort: 80,
+		},
+		Entry: collector.FlowEntry{
+			FirstSeen: now, LastSeen: now, Packets: 1, Bytes: 100,
+		},
+		EndReason: collector.FlowEndReasonIdleTimeout,
+	}
+
+	if err := exp.ExportFlow(flow); err != nil {
+		t.Fatalf("ExportFlow: %v", err)
+	}
+	msg := mustReadIPFIXDatagram(t, conn)
+	if got := msg.ObservationDomainID; got != 4242 {
+		t.Fatalf("observation domain id = %d, want 4242", got)
+	}
+}
+
 func TestIPFIXSkipsCollectorTraffic(t *testing.T) {
 	conn := startIPFIXListener(t)
 	addr := conn.LocalAddr().(*net.UDPAddr)
 
-	exp, err := NewIPFIX(config.IPFIXConfig{
-		Host: addr.IP.String(),
-		Port: addr.Port,
-	}, 1)
+	exp, err := NewIPFIX(testIPFIXConfig(addr.IP.String(), addr.Port), 1)
 	if err != nil {
 		t.Fatalf("NewIPFIX: %v", err)
 	}
@@ -181,10 +223,7 @@ func TestIPFIXExportsTrafficToCollectorDestinationFromOtherSocket(t *testing.T) 
 	conn := startIPFIXListener(t)
 	addr := conn.LocalAddr().(*net.UDPAddr)
 
-	exp, err := NewIPFIX(config.IPFIXConfig{
-		Host: addr.IP.String(),
-		Port: addr.Port,
-	}, 1)
+	exp, err := NewIPFIX(testIPFIXConfig(addr.IP.String(), addr.Port), 1)
 	if err != nil {
 		t.Fatalf("NewIPFIX: %v", err)
 	}
@@ -235,13 +274,9 @@ func TestIPFIXUsesConfiguredBindHost(t *testing.T) {
 	conn := startIPFIXListener(t)
 	addr := conn.LocalAddr().(*net.UDPAddr)
 
-	exp, err := NewIPFIX(config.IPFIXConfig{
-		Host: addr.IP.String(),
-		Port: addr.Port,
-		Bind: config.IPFIXBindConfig{
-			Host: "127.0.0.1",
-		},
-	}, 1)
+	cfg := testIPFIXConfig(addr.IP.String(), addr.Port)
+	cfg.Bind = config.IPFIXBindConfig{Host: "127.0.0.1"}
+	exp, err := NewIPFIX(cfg, 1)
 	if err != nil {
 		t.Fatalf("NewIPFIX: %v", err)
 	}
@@ -525,10 +560,7 @@ func TestIPFIXTemplateSuppressedWithinRefreshWindow(t *testing.T) {
 	addr := conn.LocalAddr().(*net.UDPAddr)
 
 	now := time.Unix(1_700_000_000, 0).UTC()
-	exp, err := NewIPFIX(config.IPFIXConfig{
-		Host: addr.IP.String(),
-		Port: addr.Port,
-	}, 1)
+	exp, err := NewIPFIX(testIPFIXConfig(addr.IP.String(), addr.Port), 1)
 	if err != nil {
 		t.Fatalf("NewIPFIX: %v", err)
 	}
@@ -578,10 +610,7 @@ func TestIPFIXTemplateResendAfterRefreshTimeout(t *testing.T) {
 	addr := conn.LocalAddr().(*net.UDPAddr)
 
 	now := time.Unix(1_700_000_000, 0).UTC()
-	exp, err := NewIPFIX(config.IPFIXConfig{
-		Host: addr.IP.String(),
-		Port: addr.Port,
-	}, 1)
+	exp, err := NewIPFIX(testIPFIXConfig(addr.IP.String(), addr.Port), 1)
 	if err != nil {
 		t.Fatalf("NewIPFIX: %v", err)
 	}
