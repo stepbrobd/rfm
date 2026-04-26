@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os/signal"
 	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
@@ -73,11 +74,18 @@ func runAgent(cmd *cobra.Command, args []string) error {
 	}
 	defer p.Close()
 
+	var failures []string
 	for _, iface := range ifaces {
 		if err := p.Attach(iface.Index); err != nil {
-			return fmt.Errorf("attach %s: %w", iface.Name, err)
+			log.Error("attach failed", "interface", iface.Name, "err", err)
+			failures = append(failures, fmt.Sprintf("%s: %v", iface.Name, err))
+			continue
 		}
 		log.Info("attached", "interface", iface.Name)
+	}
+	log.Info("attach summary", "successful", len(ifaces)-len(failures), "total", len(ifaces))
+	if len(failures) > 0 {
+		return fmt.Errorf("attach failed for %d/%d interfaces: %s", len(failures), len(ifaces), strings.Join(failures, "; "))
 	}
 
 	rd, err := collector.NewReader(p.FlowEvents(), p.FlowDrops())
