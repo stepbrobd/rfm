@@ -53,6 +53,12 @@ in
                       default = 262144;
                       description = "Ring buffer size in bytes.";
                     };
+
+                    wakeup_batch = std.mkOption {
+                      type = std.types.ints.positive;
+                      default = 64;
+                      description = "Send a ring buffer wakeup every N submitted flow events.";
+                    };
                   };
                 };
               };

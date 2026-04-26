@@ -30,6 +30,7 @@ type AgentConfig struct {
 type BPFConfig struct {
 	SampleRate  uint32 `toml:"sample_rate"`
 	RingBufSize int    `toml:"ring_buf_size"`
+	WakeupBatch uint32 `toml:"wakeup_batch"`
 }
 
 // CollectorConfig controls flow collection and eviction
@@ -189,6 +190,7 @@ func Load(path string) (*Config, error) {
 	raw := rawConfig{}
 	raw.Agent.BPF.SampleRate = 100
 	raw.Agent.BPF.RingBufSize = 262144
+	raw.Agent.BPF.WakeupBatch = 64
 	raw.Agent.Collector.MaxFlows = 65536
 	raw.Agent.Collector.EvictionTimeout = "30s"
 	raw.Agent.IPFIX.TemplateRefresh = "60s"
@@ -310,6 +312,9 @@ func validate(cfg *Config) error {
 	}
 	if a.BPF.RingBufSize&(a.BPF.RingBufSize-1) != 0 {
 		return fmt.Errorf("agent.bpf.ring_buf_size must be a power of two, got %d", a.BPF.RingBufSize)
+	}
+	if a.BPF.WakeupBatch == 0 {
+		return fmt.Errorf("agent.bpf.wakeup_batch must be > 0")
 	}
 	if a.Collector.MaxFlows < 0 {
 		return fmt.Errorf("agent.collector.max_flows must be >= 0")

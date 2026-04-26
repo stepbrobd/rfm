@@ -82,6 +82,7 @@ interfaces = ["eth0", "tailscale0"]
 [agent.bpf]
 sample_rate = 100
 ring_buf_size = 262144
+wakeup_batch = 64
 
 [agent.collector]
 max_flows = 65536
@@ -127,6 +128,12 @@ reduce ring buffer throughput at the cost of flow granularity.
 Must be greater than 0 and a power of two. Invalid values are rejected at config
 load time. Larger buffers reduce the chance of dropped events under burst
 traffic.
+
+`wakeup_batch` (uint32, default 64): The BPF program flags ring buffer submits
+with `BPF_RB_NO_WAKEUP` and forces a wakeup once every N submits. Lower values
+reduce flow event delivery latency at the cost of more userspace wakeups; higher
+values amortize wakeups but make Run loop iterations slower to react. Must be
+greater than 0.
 
 ### `agent.collector`
 

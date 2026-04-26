@@ -104,6 +104,9 @@ interfaces = ["eth0"]
 	if cfg.Agent.BPF.RingBufSize != 262144 {
 		t.Fatalf("ring_buf_size = %d, want 262144", cfg.Agent.BPF.RingBufSize)
 	}
+	if cfg.Agent.BPF.WakeupBatch != 64 {
+		t.Fatalf("wakeup_batch default = %d, want 64", cfg.Agent.BPF.WakeupBatch)
+	}
 	if cfg.Agent.Collector.MaxFlows != 65536 {
 		t.Fatalf("max_flows = %d, want 65536", cfg.Agent.Collector.MaxFlows)
 	}
@@ -277,6 +280,36 @@ sample_rate = 0
 	_, err := Load(path)
 	if err == nil {
 		t.Fatal("expected error for sample_rate=0")
+	}
+}
+
+func TestLoadWakeupBatch(t *testing.T) {
+	path := writeTOML(t, `
+[agent]
+interfaces = ["eth0"]
+
+[agent.bpf]
+wakeup_batch = 256
+`)
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.Agent.BPF.WakeupBatch != 256 {
+		t.Fatalf("wakeup_batch = %d, want 256", cfg.Agent.BPF.WakeupBatch)
+	}
+}
+
+func TestLoadZeroWakeupBatch(t *testing.T) {
+	path := writeTOML(t, `
+[agent]
+interfaces = ["eth0"]
+
+[agent.bpf]
+wakeup_batch = 0
+`)
+	if _, err := Load(path); err == nil {
+		t.Fatal("expected error for wakeup_batch = 0")
 	}
 }
 

@@ -41,8 +41,9 @@ func Load(cfg Config) (*Probe, error) {
 	// write config into BPF map at load time
 	cfgKey := uint32(0)
 	cfgVal := rfmRfmConfig{
-		SampleRate: cfg.SampleRate,
-		Flags:      cfg.Flags,
+		SampleRate:  cfg.SampleRate,
+		Flags:       cfg.Flags,
+		WakeupBatch: cfg.WakeupBatch,
 	}
 	if err := objs.RfmConfig.Update(cfgKey, cfgVal, ebpf.UpdateAny); err != nil {
 		objs.Close()

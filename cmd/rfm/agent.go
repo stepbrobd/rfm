@@ -57,6 +57,7 @@ func runAgent(cmd *cobra.Command, args []string) error {
 	p, err := probe.Load(probe.Config{
 		SampleRate:     cfg.Agent.BPF.SampleRate,
 		RingBufSize:    cfg.Agent.BPF.RingBufSize,
+		WakeupBatch:    cfg.Agent.BPF.WakeupBatch,
 		IfaceStatsSize: ifaceStatsSize,
 	})
 	if err != nil {

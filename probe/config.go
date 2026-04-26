@@ -6,6 +6,7 @@ package probe
 type Config struct {
 	SampleRate     uint32
 	Flags          uint32
+	WakeupBatch    uint32
 	RingBufSize    int
 	IfaceStatsSize int
 }

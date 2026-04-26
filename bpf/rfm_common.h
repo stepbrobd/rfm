@@ -10,6 +10,7 @@
 struct rfm_config {
 	__u32 sample_rate;
 	__u32 flags;
+	__u32 wakeup_batch;
 };
 
 struct rfm_iface_key {
@@ -35,6 +36,7 @@ struct rfm_flow_event {
 	__u32 len;
 };
 
+// RFM_WAKEUP_BATCH is the load-time fallback when rfm_config.wakeup_batch is 0
 #define RFM_WAKEUP_BATCH 64
 
 #endif

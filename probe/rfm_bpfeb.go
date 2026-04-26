@@ -14,9 +14,10 @@ import (
 )
 
 type rfmRfmConfig struct {
-	_          structs.HostLayout
-	SampleRate uint32
-	Flags      uint32
+	_           structs.HostLayout
+	SampleRate  uint32
+	Flags       uint32
+	WakeupBatch uint32
 }
 
 type rfmRfmIfaceKey struct {

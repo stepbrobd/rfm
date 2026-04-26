@@ -191,11 +191,15 @@ static __always_inline int rfm_tc(struct __sk_buff *skb, __u8 dir)
 
 	__builtin_memcpy(ring_ev, &ev, sizeof(ev));
 
-	// batch wakeups: only wake epoll every RFM_WAKEUP_BATCH events
+	// batch wakeups: only wake epoll every cfg->wakeup_batch events
+	// fall back to RFM_WAKEUP_BATCH when the config value is unset
+	__u32 batch = cfg->wakeup_batch;
+	if (batch == 0)
+		batch = RFM_WAKEUP_BATCH;
 	__u64 flags = BPF_RB_NO_WAKEUP;
 	__u32 cnt_key = 0;
 	__u64 *cnt = bpf_map_lookup_elem(&rfm_submit_count, &cnt_key);
-	if (cnt && (++(*cnt) % RFM_WAKEUP_BATCH == 0))
+	if (cnt && (++(*cnt) % batch == 0))
 		flags = BPF_RB_FORCE_WAKEUP;
 	bpf_ringbuf_submit(ring_ev, flags);
 
