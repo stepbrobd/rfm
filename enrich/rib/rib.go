@@ -18,6 +18,13 @@ import (
 	"ysun.co/rfm/config"
 )
 
+const (
+	// bmpScannerInitialBuf is the starting buffer size for the BMP message scanner
+	bmpScannerInitialBuf = 64 * 1024
+	// bmpScannerMaxBuf caps BMP message size, very big and prob not necessary (just in case)
+	bmpScannerMaxBuf = 1 << 20
+)
+
 // LargeCommunity is a decoded RFC 8092 large community
 type LargeCommunity struct {
 	GlobalAdmin uint32
@@ -238,7 +245,7 @@ func (s *Server) handleConn(conn net.Conn) {
 
 	scanner := bufio.NewScanner(conn)
 	scanner.Split(bmp.SplitBMP)
-	scanner.Buffer(make([]byte, 64*1024), 1<<20)
+	scanner.Buffer(make([]byte, bmpScannerInitialBuf), bmpScannerMaxBuf)
 
 	var messages int
 	var changes int
