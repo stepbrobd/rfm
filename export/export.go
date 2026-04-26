@@ -92,7 +92,7 @@ var (
 )
 
 // MetricsCollector implements prometheus.Collector, reading BPF iface
-// stats and the collector's flow table at scrape time.
+// stats and the collector's flow table at scrape time
 type MetricsCollector struct {
 	source        IfaceStatsSource
 	col           *collector.Collector
@@ -102,7 +102,8 @@ type MetricsCollector struct {
 	resolveIfname func(uint32) string
 }
 
-// New creates a MetricsCollector. Both source and c may be nil.
+// New creates a MetricsCollector
+// both source and c may be nil
 func New(source IfaceStatsSource, c *collector.Collector) *MetricsCollector {
 	return &MetricsCollector{
 		source:        source,
@@ -112,14 +113,14 @@ func New(source IfaceStatsSource, c *collector.Collector) *MetricsCollector {
 	}
 }
 
-// Describe sends all metric descriptors to ch.
+// Describe sends all metric descriptors to ch
 func (mc *MetricsCollector) Describe(ch chan<- *prometheus.Desc) {
 	for _, d := range allDescs {
 		ch <- d
 	}
 }
 
-// Collect sends all current metric values to ch.
+// Collect sends all current metric values to ch
 func (mc *MetricsCollector) Collect(ch chan<- prometheus.Metric) {
 	mc.collectIfaceStats(ch)
 	mc.collectFlows(ch)
@@ -169,9 +170,9 @@ func (mc *MetricsCollector) collectIfaceStats(ch chan<- prometheus.Metric) {
 	}
 }
 
-// flowRollupKey is the label tuple used to aggregate flows for Prometheus.
-// Multiple flows with different ports but the same enrichment labels
-// are summed into one series.
+// flowRollupKey is the label tuple used to aggregate flows for Prometheus
+// multiple flows with different ports but the same enrichment labels
+// are summed into one series
 type flowRollupKey struct {
 	ifname  string
 	dir     string
@@ -281,7 +282,7 @@ func (mc *MetricsCollector) ifname(ifindex uint32) string {
 }
 
 // ifnameFromIndex resolves an interface index to a name, falling back
-// to the string representation of the index.
+// to the string representation of the index
 func ifnameFromIndex(ifindex uint32) string {
 	iface, err := net.InterfaceByIndex(int(ifindex))
 	if err != nil {
@@ -290,8 +291,8 @@ func ifnameFromIndex(ifindex uint32) string {
 	return iface.Name
 }
 
-// familyString maps BPF iface stats proto (IP version) to a label.
-// BPF stores 4 for IPv4, 6 for IPv6 — not L4 protocol numbers.
+// familyString maps BPF iface stats proto (IP version) to a label
+// BPF stores 4 for IPv4 and 6 for IPv6, not L4 protocol numbers
 func familyString(proto uint8) string {
 	switch proto {
 	case 4:
@@ -303,7 +304,7 @@ func familyString(proto uint8) string {
 	}
 }
 
-// dirString returns the human-readable direction label.
+// dirString returns the human-readable direction label
 func dirString(dir uint8) string {
 	if dir == 0 {
 		return "ingress"
@@ -311,7 +312,7 @@ func dirString(dir uint8) string {
 	return "egress"
 }
 
-// formatASN formats an ASN as a string, returning empty string for zero.
+// formatASN formats an ASN as a string, returning empty string for zero
 func formatASN(asn uint32) string {
 	if asn == 0 {
 		return ""

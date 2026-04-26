@@ -74,7 +74,7 @@ func (m *exportMockReader) Close() error { return nil }
 
 // --- test helpers ---
 
-// collectAll calls Collect and returns a map of metric name -> summed value.
+// collectAll calls Collect and returns a map of metric name -> summed value
 func collectAll(t *testing.T, mc *MetricsCollector) map[string]float64 {
 	t.Helper()
 	metrics := collectMetrics(t, mc)
@@ -97,7 +97,7 @@ func collectAll(t *testing.T, mc *MetricsCollector) map[string]float64 {
 	return result
 }
 
-// collectMetrics calls Collect and returns all emitted metrics.
+// collectMetrics calls Collect and returns all emitted metrics
 func collectMetrics(t *testing.T, mc *MetricsCollector) []prometheus.Metric {
 	t.Helper()
 	ch := make(chan prometheus.Metric, 100)
@@ -126,7 +126,7 @@ func extractName(desc *prometheus.Desc) string {
 	return before
 }
 
-// assertCounter checks that the named metric has the expected value.
+// assertCounter checks that the named metric has the expected value
 func assertCounter(t *testing.T, vals map[string]float64, name string, want float64) {
 	t.Helper()
 	got, ok := vals[name]
@@ -139,7 +139,7 @@ func assertCounter(t *testing.T, vals map[string]float64, name string, want floa
 	}
 }
 
-// assertGauge checks that the named metric has the expected value.
+// assertGauge checks that the named metric has the expected value
 func assertGauge(t *testing.T, vals map[string]float64, name string, want float64) {
 	t.Helper()
 	got, ok := vals[name]
@@ -152,7 +152,7 @@ func assertGauge(t *testing.T, vals map[string]float64, name string, want float6
 	}
 }
 
-// metricLabels returns the label name->value map for a metric.
+// metricLabels returns the label name->value map for a metric
 func metricLabels(t *testing.T, m prometheus.Metric) map[string]string {
 	t.Helper()
 	d := new(dto.Metric)
@@ -166,7 +166,7 @@ func metricLabels(t *testing.T, m prometheus.Metric) map[string]string {
 	return labels
 }
 
-// metricValue returns the numeric value of a metric (counter or gauge).
+// metricValue returns the numeric value of a metric (counter or gauge)
 func metricValue(t *testing.T, m prometheus.Metric) float64 {
 	t.Helper()
 	d := new(dto.Metric)
@@ -335,7 +335,7 @@ func TestCollectFlowsNoEnricher(t *testing.T) {
 	assertGauge(t, vals, "rfm_flow_sampled_bytes", 200)
 	assertGauge(t, vals, "rfm_flow_sampled_packets", 1)
 
-	// Check labels - enrichment should be empty strings
+	// check labels, enrichment should be empty strings
 	metrics := collectMetrics(t, mc)
 	for _, m := range metrics {
 		name := extractName(m.Desc())
@@ -436,9 +436,9 @@ func TestCollectFlowsScalesBySampleRate(t *testing.T) {
 
 func TestCollectNilSources(t *testing.T) {
 	mc := New(nil, nil)
-	// Must not panic
+	// must not panic
 	vals := collectAll(t, mc)
-	// Should have no iface or flow metrics, but also no panic
+	// should have no iface or flow metrics, but also no panic
 	_ = vals
 }
 

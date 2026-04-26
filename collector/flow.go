@@ -5,9 +5,9 @@ import (
 	"time"
 )
 
-// Enricher provides optional metadata for flow addresses.
-// Implementations include MMDB (GeoIP) and BMP/RIB lookups.
-// nil Enricher means zero-value labels.
+// Enricher provides optional metadata for flow addresses
+// implementations include MMDB (GeoIP) and BMP/RIB lookups
+// a nil Enricher means zero-value labels
 type Enricher interface {
 	Enrich(src, dst netip.Addr) (srcLabels, dstLabels Labels)
 }

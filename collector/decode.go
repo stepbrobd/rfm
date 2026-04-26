@@ -1,7 +1,6 @@
 package collector
 
 import (
-	"bytes"
 	"encoding/binary"
 	"fmt"
 	"net/netip"
@@ -30,7 +29,7 @@ func DecodeFlowEvent(raw []byte) (FlowEvent, error) {
 	}
 
 	var wire wireFlowEvent
-	if err := binary.Read(bytes.NewReader(raw), binary.NativeEndian, &wire); err != nil {
+	if _, err := binary.Decode(raw, binary.NativeEndian, &wire); err != nil {
 		return FlowEvent{}, fmt.Errorf("decode flow event: %w", err)
 	}
 

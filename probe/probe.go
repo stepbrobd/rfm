@@ -61,10 +61,6 @@ func (p *Probe) Close() error {
 	return errors.Join(errs...)
 }
 
-func (p *Probe) Config() *ebpf.Map {
-	return p.objs.RfmConfig
-}
-
 func (p *Probe) SampleRate() (uint32, error) {
 	key := uint32(0)
 	var cfg rfmRfmConfig

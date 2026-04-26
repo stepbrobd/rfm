@@ -1,7 +1,7 @@
 package export
 
 // IfaceStatsEntry is a single entry from the BPF iface stats map,
-// already summed across CPUs.
+// already summed across CPUs
 type IfaceStatsEntry struct {
 	Ifindex uint32
 	Dir     uint8
@@ -10,13 +10,13 @@ type IfaceStatsEntry struct {
 	Bytes   uint64
 }
 
-// IfaceStatsSource provides aggregated per-interface statistics.
-// The probe implements this on Linux; tests use a mock.
+// IfaceStatsSource provides aggregated per-interface statistics
+// the probe implements this on Linux, tests use a mock
 type IfaceStatsSource interface {
 	IfaceStats() ([]IfaceStatsEntry, error)
 }
 
-// SampleRateSource provides the current packet sample rate used by the probe.
+// SampleRateSource provides the current packet sample rate used by the probe
 type SampleRateSource interface {
 	SampleRate() (uint32, error)
 }

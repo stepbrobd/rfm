@@ -11,8 +11,8 @@ import (
 	"ysun.co/rfm/config"
 )
 
-// Open opens the configured MMDB databases.
-// When no MMDB database is configured, it returns nil, nil, nil.
+// Open opens the configured MMDB databases
+// when no MMDB database is configured, it returns nil, nil, nil
 func Open(cfg config.MMDBConfig) (collector.Enricher, io.Closer, error) {
 	if cfg.ASNDB == "" && cfg.CityDB == "" {
 		return nil, nil, nil
@@ -47,7 +47,7 @@ func Open(cfg config.MMDBConfig) (collector.Enricher, io.Closer, error) {
 	return m, m, nil
 }
 
-// Enricher reads optional ASN and city data from MMDB files.
+// Enricher reads optional ASN and city data from MMDB files
 type Enricher struct {
 	asn  *maxminddb.Reader
 	city *maxminddb.Reader
@@ -82,7 +82,7 @@ func (m *Enricher) lookup(addr netip.Addr) collector.Labels {
 func (m *Enricher) Close() error {
 	var first error
 	if m.asn != nil {
-		if err := m.asn.Close(); err != nil && first == nil {
+		if err := m.asn.Close(); err != nil {
 			first = err
 		}
 	}

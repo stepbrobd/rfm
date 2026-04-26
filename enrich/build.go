@@ -9,8 +9,8 @@ import (
 	"ysun.co/rfm/enrich/rib"
 )
 
-// Build constructs the configured enrichment backends.
-// When no backend is configured, it returns nil, nil, nil.
+// Build constructs the configured enrichment backends
+// when no backend is configured, it returns nil, nil, nil
 func Build(cfg config.EnrichConfig) (collector.Enricher, io.Closer, error) {
 	var enrichers []collector.Enricher
 	var closers []io.Closer

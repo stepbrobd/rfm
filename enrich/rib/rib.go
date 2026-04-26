@@ -316,9 +316,6 @@ func (s *Server) trackConn(conn net.Conn) bool {
 		_ = conn.Close()
 		return false
 	}
-	if s.conns == nil {
-		s.conns = make(map[net.Conn]struct{})
-	}
 	s.conns[conn] = struct{}{}
 	return true
 }
@@ -327,9 +324,6 @@ func (s *Server) untrackConn(conn net.Conn) {
 	s.connsMu.Lock()
 	defer s.connsMu.Unlock()
 
-	if s.conns == nil {
-		return
-	}
 	delete(s.conns, conn)
 }
 

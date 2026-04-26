@@ -116,7 +116,7 @@ func TestIPFIXExportsEvictedFlowsOverUDP(t *testing.T) {
 			if templateID != tc.templateID {
 				t.Fatalf("template id = %d, want %d", templateID, tc.templateID)
 			}
-			assertTemplateFields(t, fields, ipfixFieldNames(tc.templateID == 257))
+			assertTemplateFields(t, fields, templateFieldNames(tc.templateID == 257))
 
 			record := parseDataRecord(t, msg.Sets[1], fields)
 			assertIPFIXDataIP(t, record, tc.srcFieldName, tc.srcIP)
@@ -419,10 +419,17 @@ func parseDataRecord(t *testing.T, set decodedIPFIXSet, fields []decodedTemplate
 	return record
 }
 
+func templateFieldNames(isIPv6 bool) []string {
+	if isIPv6 {
+		return ipfixFieldNames(ipfixIPv6Fields, ipfixCommonFields)
+	}
+	return ipfixFieldNames(ipfixIPv4Fields, ipfixCommonFields)
+}
+
 func templateFieldName(t *testing.T, id uint16) string {
 	t.Helper()
 
-	for _, name := range append(ipfixFieldNames(false), ipfixFieldNames(true)...) {
+	for _, name := range append(templateFieldNames(false), templateFieldNames(true)...) {
 		ie, err := registry.GetInfoElement(name, registry.IANAEnterpriseID)
 		if err != nil {
 			t.Fatalf("GetInfoElement(%q): %v", name, err)

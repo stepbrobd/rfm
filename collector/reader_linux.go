@@ -15,7 +15,7 @@ type ringReader struct {
 	drops *ebpf.Map
 }
 
-// NewReader wraps a ring buffer map and a per-CPU drop counter map.
+// NewReader wraps a ring buffer map and a per-CPU drop counter map
 func NewReader(events, drops *ebpf.Map) (Reader, error) {
 	rd, err := ringbuf.NewReader(events)
 	if err != nil {

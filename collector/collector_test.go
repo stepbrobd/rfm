@@ -266,7 +266,7 @@ func TestRunDroppedEventsUnderLoad(t *testing.T) {
 		DstAddr: netip.MustParseAddr("::ffff:10.0.0.2"),
 		Len:     100,
 	}
-	// reader never hits deadline — events flow continuously
+	// reader never hits deadline, events flow continuously
 	mr := &sustainedReader{event: encodeWireEvent(ev), drops: 99}
 
 	// short timeout so the eviction ticker fires fast

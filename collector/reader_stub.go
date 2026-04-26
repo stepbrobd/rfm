@@ -10,7 +10,7 @@ import (
 
 var errUnsupported = errors.New("collector reader is only supported on linux")
 
-// NewReader is not supported on non-Linux platforms.
+// NewReader is not supported on non-Linux platforms
 func NewReader(events, drops *ebpf.Map) (Reader, error) {
 	return nil, errUnsupported
 }

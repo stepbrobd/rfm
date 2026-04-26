@@ -119,8 +119,8 @@ func IPv4WithOptions(proto uint8, src, dst net.IP, options, payload []byte) []by
 	return hdr
 }
 
-// IPv4Fragment builds a minimal IPv4 fragment header.
-// offsetBytes must be a multiple of 8.
+// IPv4Fragment builds a minimal IPv4 fragment header
+// offsetBytes must be a multiple of 8
 func IPv4Fragment(proto uint8, src, dst net.IP, id uint16, offsetBytes uint16, more bool, payload []byte) []byte {
 	if offsetBytes%8 != 0 {
 		panic("offsetBytes must be a multiple of 8")
@@ -194,7 +194,7 @@ func EthIPv4UDP(srcIP, dstIP net.IP, srcPort, dstPort uint16) []byte {
 	)
 }
 
-// EthIPv4UDPFragment builds an eth+ipv4 fragment frame for UDP traffic.
+// EthIPv4UDPFragment builds an eth+ipv4 fragment frame for UDP traffic
 func EthIPv4UDPFragment(srcIP, dstIP net.IP, id uint16, offsetBytes uint16, more bool, payload []byte) []byte {
 	ip := IPv4Fragment(17, srcIP, dstIP, id, offsetBytes, more, payload)
 	return Eth(

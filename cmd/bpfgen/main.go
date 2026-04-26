@@ -5,7 +5,7 @@
 // use --compdb to generate a compile_commands.json for clangd
 // this works even on non-linux where the actual build is skipped
 //
-// e.g.
+// example
 // //go:generate go tool bpfgen --ident foo --output-dir testdata --pkg-config libbpf --compdb compile_commands.json source.bpf.c
 
 package main

@@ -54,8 +54,8 @@ func TestDecodeFlowEventShort(t *testing.T) {
 	}
 }
 
-// encodeWireEvent encodes a FlowEvent into wire format for testing.
-// Used by Run tests in collector_test.go.
+// encodeWireEvent encodes a FlowEvent into wire format for testing
+// used by Run tests in collector_test.go
 func encodeWireEvent(ev FlowEvent) []byte {
 	wire := wireFlowEvent{
 		Tstamp:  ev.Tstamp,

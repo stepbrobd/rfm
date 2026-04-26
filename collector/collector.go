@@ -204,14 +204,17 @@ func (c *Collector) exportFlows(exp FlowExporter, flows []ExportedFlow) {
 			if failed == 1 {
 				log.Error("export flow", "err", err)
 			}
-			c.mu.Lock()
-			c.ipfixErrs++
-			c.mu.Unlock()
 		}
+	}
+	if failed == 0 {
+		return
 	}
 	if failed > 1 {
 		log.Error("export flow batch", "failed", failed, "total", len(flows))
 	}
+	c.mu.Lock()
+	c.ipfixErrs += uint64(failed)
+	c.mu.Unlock()
 }
 
 func (c *Collector) pollDrops(rd Reader) {

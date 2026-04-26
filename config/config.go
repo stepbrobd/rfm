@@ -11,12 +11,12 @@ import (
 	"github.com/BurntSushi/toml"
 )
 
-// Config is the top-level configuration.
+// Config is the top-level configuration
 type Config struct {
 	Agent AgentConfig `toml:"agent"`
 }
 
-// AgentConfig holds all agent-level settings.
+// AgentConfig holds all agent-level settings
 type AgentConfig struct {
 	Interfaces []string         `toml:"interfaces"`
 	BPF        BPFConfig        `toml:"bpf"`
@@ -26,37 +26,37 @@ type AgentConfig struct {
 	Enrich     EnrichConfig     `toml:"enrich"`
 }
 
-// BPFConfig controls the eBPF probe.
+// BPFConfig controls the eBPF probe
 type BPFConfig struct {
 	SampleRate  uint32 `toml:"sample_rate"`
 	RingBufSize int    `toml:"ring_buf_size"`
 }
 
-// CollectorConfig controls flow collection and eviction.
+// CollectorConfig controls flow collection and eviction
 type CollectorConfig struct {
 	MaxFlows        int           `toml:"-"`
 	EvictionTimeout time.Duration `toml:"-"`
 }
 
-// IPFIXConfig controls export to a single IPFIX collector.
+// IPFIXConfig controls export to a single IPFIX collector
 type IPFIXConfig struct {
 	Host string          `toml:"host"`
 	Port int             `toml:"port"`
 	Bind IPFIXBindConfig `toml:"bind"`
 }
 
-// IPFIXBindConfig controls the local UDP bind used by the IPFIX exporter.
+// IPFIXBindConfig controls the local UDP bind used by the IPFIX exporter
 type IPFIXBindConfig struct {
 	Host string `toml:"host"`
 	Port int    `toml:"port"`
 }
 
-// Enabled reports whether IPFIX export should be configured.
+// Enabled reports whether IPFIX export should be configured
 func (c IPFIXConfig) Enabled() bool {
 	return c.Host != "" || c.Port != 0
 }
 
-// WithDefaults fills in collector defaults when IPFIX export is enabled.
+// WithDefaults fills in collector defaults when IPFIX export is enabled
 func (c IPFIXConfig) WithDefaults() IPFIXConfig {
 	if !c.Enabled() {
 		return c
@@ -70,7 +70,7 @@ func (c IPFIXConfig) WithDefaults() IPFIXConfig {
 	return c
 }
 
-// Addr formats the collector address.
+// Addr formats the collector address
 func (c IPFIXConfig) Addr() string {
 	c = c.WithDefaults()
 	if !c.Enabled() {
@@ -79,12 +79,12 @@ func (c IPFIXConfig) Addr() string {
 	return net.JoinHostPort(c.Host, strconv.Itoa(c.Port))
 }
 
-// Enabled reports whether a local source bind should be configured.
+// Enabled reports whether a local source bind should be configured
 func (c IPFIXBindConfig) Enabled() bool {
 	return c.Host != "" || c.Port != 0
 }
 
-// Addr formats the local bind address.
+// Addr formats the local bind address
 func (c IPFIXBindConfig) Addr() string {
 	if !c.Enabled() {
 		return ""
@@ -92,36 +92,36 @@ func (c IPFIXBindConfig) Addr() string {
 	return net.JoinHostPort(c.Host, strconv.Itoa(c.Port))
 }
 
-// PrometheusConfig controls the Prometheus metrics endpoint.
+// PrometheusConfig controls the Prometheus metrics endpoint
 type PrometheusConfig struct {
 	Host string `toml:"host"`
 	Port int    `toml:"port"`
 }
 
-// EnrichConfig controls optional flow enrichment backends.
+// EnrichConfig controls optional flow enrichment backends
 type EnrichConfig struct {
 	MMDB MMDBConfig `toml:"mmdb"`
 	RIB  RIBConfig  `toml:"rib"`
 }
 
-// MMDBConfig controls MaxMind/DB-IP database lookups.
+// MMDBConfig controls MaxMind/DB-IP database lookups
 type MMDBConfig struct {
 	ASNDB  string `toml:"asn_db"`
 	CityDB string `toml:"city_db"`
 }
 
-// BMPConfig controls the live BMP listener for the RIB backend.
+// BMPConfig controls the live BMP listener for the RIB backend
 type BMPConfig struct {
 	Host string `toml:"host"`
 	Port int    `toml:"port"`
 }
 
-// Enabled reports whether the BMP listener should be configured.
+// Enabled reports whether the BMP listener should be configured
 func (c BMPConfig) Enabled() bool {
 	return c.Host != "" || c.Port != 0
 }
 
-// WithDefaults fills in BMP defaults when the backend is enabled.
+// WithDefaults fills in BMP defaults when the backend is enabled
 func (c BMPConfig) WithDefaults() BMPConfig {
 	if !c.Enabled() {
 		return c
@@ -135,7 +135,7 @@ func (c BMPConfig) WithDefaults() BMPConfig {
 	return c
 }
 
-// Addr formats the listener address.
+// Addr formats the listener address
 func (c BMPConfig) Addr() string {
 	c = c.WithDefaults()
 	if !c.Enabled() {
@@ -144,18 +144,18 @@ func (c BMPConfig) Addr() string {
 	return net.JoinHostPort(c.Host, strconv.Itoa(c.Port))
 }
 
-// RIBConfig controls the live RIB/BMP backend.
+// RIBConfig controls the live RIB/BMP backend
 type RIBConfig struct {
 	BMP BMPConfig `toml:"bmp"`
 }
 
-// rawCollectorConfig mirrors CollectorConfig with string-typed fields for TOML decoding.
+// rawCollectorConfig mirrors CollectorConfig with string-typed fields for TOML decoding
 type rawCollectorConfig struct {
 	MaxFlows        int    `toml:"max_flows"`
 	EvictionTimeout string `toml:"eviction_timeout"`
 }
 
-// rawConfig is the wire format for TOML decoding, before duration parsing.
+// rawConfig is the wire format for TOML decoding, before duration parsing
 type rawConfig struct {
 	Agent struct {
 		Interfaces []string           `toml:"interfaces"`
@@ -167,20 +167,19 @@ type rawConfig struct {
 	} `toml:"agent"`
 }
 
-// Load reads a TOML config file, applies defaults, parses durations, and validates.
+// Load reads a TOML config file, applies defaults, parses durations, and validates
 func Load(path string) (*Config, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("reading config: %w", err)
 	}
 
-	// Start with defaults.
+	// start with defaults
 	raw := rawConfig{}
 	raw.Agent.BPF.SampleRate = 100
 	raw.Agent.BPF.RingBufSize = 262144
 	raw.Agent.Collector.MaxFlows = 65536
 	raw.Agent.Collector.EvictionTimeout = "30s"
-	raw.Agent.IPFIX = IPFIXConfig{}
 	raw.Agent.Prometheus.Host = "::1"
 	raw.Agent.Prometheus.Port = 9669
 
@@ -192,7 +191,7 @@ func Load(path string) (*Config, error) {
 		return nil, fmt.Errorf("unknown config key: %s", undecoded[0])
 	}
 
-	// Parse eviction timeout.
+	// parse eviction timeout
 	evictionTimeout, err := time.ParseDuration(raw.Agent.Collector.EvictionTimeout)
 	if err != nil {
 		return nil, fmt.Errorf("parsing eviction_timeout %q: %w", raw.Agent.Collector.EvictionTimeout, err)
@@ -222,9 +221,9 @@ func Load(path string) (*Config, error) {
 	return cfg, nil
 }
 
-// ResolveInterfaces converts interface names to indices.
-// ["*"] expands to all non-loopback interfaces.
-// "*" cannot be mixed with named interfaces.
+// ResolveInterfaces converts interface names to indices
+// ["*"] expands to all non-loopback interfaces
+// "*" cannot be mixed with named interfaces
 func ResolveInterfaces(names []string) ([]int, error) {
 	if len(names) == 1 && names[0] == "*" {
 		return resolveWildcard()

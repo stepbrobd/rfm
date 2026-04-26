@@ -60,6 +60,14 @@ type IPFIXExporter struct {
 	ipv6TemplateSentAt     time.Time
 	templateRefreshTimeout time.Duration
 	nowFunc                func() time.Time
+	ipv4Fields             ipfixFields
+	ipv6Fields             ipfixFields
+}
+
+// ipfixFields caches the field name and registry InfoElement for one template
+type ipfixFields struct {
+	names    []string
+	elements []*entities.InfoElement
 }
 
 // NewIPFIX creates an IPFIX exporter for a single configured collector
@@ -75,9 +83,13 @@ func NewIPFIX(cfg config.IPFIXConfig, sampleRate uint32) (*IPFIXExporter, error)
 
 	loadIPFIXRegistry.Do(registry.LoadRegistry)
 
-	// verify the registry loaded correctly before continuing
-	if _, err := registry.GetInfoElement("protocolIdentifier", registry.IANAEnterpriseID); err != nil {
-		return nil, fmt.Errorf("ipfix registry failed to load: %w", err)
+	ipv4Fields, err := newIPFIXFields(ipfixIPv4Fields, ipfixCommonFields)
+	if err != nil {
+		return nil, err
+	}
+	ipv6Fields, err := newIPFIXFields(ipfixIPv6Fields, ipfixCommonFields)
+	if err != nil {
+		return nil, err
 	}
 
 	remote, err := net.ResolveUDPAddr("udp", cfg.Addr())
@@ -126,22 +138,38 @@ func NewIPFIX(cfg config.IPFIXConfig, sampleRate uint32) (*IPFIXExporter, error)
 		ipv6TemplateID:         257,
 		templateRefreshTimeout: time.Duration(entities.TemplateRefreshTimeOut) * time.Second,
 		nowFunc:                time.Now,
+		ipv4Fields:             ipv4Fields,
+		ipv6Fields:             ipv6Fields,
 	}, nil
+}
+
+func newIPFIXFields(family, common []string) (ipfixFields, error) {
+	names := ipfixFieldNames(family, common)
+	elements := make([]*entities.InfoElement, len(names))
+	for i, name := range names {
+		ie, err := registry.GetInfoElement(name, registry.IANAEnterpriseID)
+		if err != nil {
+			return ipfixFields{}, fmt.Errorf("ipfix info element %q: %w", name, err)
+		}
+		elements[i] = ie
+	}
+	return ipfixFields{names: names, elements: elements}, nil
+}
+
+func ipfixFieldNames(family, common []string) []string {
+	names := make([]string, 0, len(family)+len(common))
+	names = append(names, family...)
+	names = append(names, common...)
+	return names
 }
 
 // Close closes the connection to the collector
 func (e *IPFIXExporter) Close() error {
-	if e == nil || e.conn == nil {
-		return nil
-	}
 	return e.conn.Close()
 }
 
 // ExportFlow sends a completed flow as an IPFIX data record
 func (e *IPFIXExporter) ExportFlow(flow collector.ExportedFlow) error {
-	if e == nil || e.conn == nil {
-		return fmt.Errorf("ipfix exporter is not initialized")
-	}
 	if e.isOwnExportFlow(flow) {
 		return nil
 	}
@@ -160,12 +188,7 @@ func (e *IPFIXExporter) ExportFlow(flow collector.ExportedFlow) error {
 		return err
 	}
 
-	elements, err := e.dataElements(flow, isIPv6)
-	if err != nil {
-		return err
-	}
-
-	set, err := entities.MakeDataSet(templateID, elements)
+	set, err := entities.MakeDataSet(templateID, e.dataElements(flow, isIPv6))
 	if err != nil {
 		return err
 	}
@@ -190,15 +213,18 @@ func (e *IPFIXExporter) templateSetIfNeededLocked(isIPv6 bool, now time.Time) (u
 		return templateID, nil, nil
 	}
 
-	elements, err := templateInfoElements(isIPv6)
-	if err != nil {
-		return 0, nil, err
-	}
-	set, err := entities.MakeTemplateSet(templateID, elements)
+	set, err := entities.MakeTemplateSet(templateID, e.fields(isIPv6).elements)
 	if err != nil {
 		return 0, nil, err
 	}
 	return templateID, set, nil
+}
+
+func (e *IPFIXExporter) fields(isIPv6 bool) ipfixFields {
+	if isIPv6 {
+		return e.ipv6Fields
+	}
+	return e.ipv4Fields
 }
 
 func (e *IPFIXExporter) markTemplateSentLocked(isIPv6 bool, now time.Time) {
@@ -257,8 +283,8 @@ func (e *IPFIXExporter) sendSetsLocked(now time.Time, sets ...entities.Set) erro
 	return nil
 }
 
-func (e *IPFIXExporter) dataElements(flow collector.ExportedFlow, isIPv6 bool) ([]entities.InfoElementWithValue, error) {
-	fields := ipfixFieldNames(isIPv6)
+func (e *IPFIXExporter) dataElements(flow collector.ExportedFlow, isIPv6 bool) []entities.InfoElementWithValue {
+	f := e.fields(isIPv6)
 
 	srcAddr := flow.Key.SrcAddr.Unmap()
 	dstAddr := flow.Key.DstAddr.Unmap()
@@ -271,12 +297,9 @@ func (e *IPFIXExporter) dataElements(flow collector.ExportedFlow, isIPv6 bool) (
 		egressIf = flow.Key.Ifindex
 	}
 
-	elements := make([]entities.InfoElementWithValue, 0, len(fields))
-	for _, name := range fields {
-		ie, err := registry.GetInfoElement(name, registry.IANAEnterpriseID)
-		if err != nil {
-			return nil, err
-		}
+	elements := make([]entities.InfoElementWithValue, 0, len(f.names))
+	for i, name := range f.names {
+		ie := f.elements[i]
 		switch name {
 		case "sourceIPv4Address", "sourceIPv6Address":
 			elements = append(elements, entities.NewIPAddressInfoElement(ie, net.IP(srcAddr.AsSlice())))
@@ -308,31 +331,7 @@ func (e *IPFIXExporter) dataElements(flow collector.ExportedFlow, isIPv6 bool) (
 			elements = append(elements, entities.NewFloat64InfoElement(ie, e.samplingProb))
 		}
 	}
-	return elements, nil
-}
-
-func templateInfoElements(isIPv6 bool) ([]*entities.InfoElement, error) {
-	fields := ipfixFieldNames(isIPv6)
-	elements := make([]*entities.InfoElement, 0, len(fields))
-	for _, name := range fields {
-		ie, err := registry.GetInfoElement(name, registry.IANAEnterpriseID)
-		if err != nil {
-			return nil, err
-		}
-		elements = append(elements, ie)
-	}
-	return elements, nil
-}
-
-func ipfixFieldNames(isIPv6 bool) []string {
-	fields := make([]string, 0, len(ipfixCommonFields)+len(ipfixIPv4Fields))
-	if isIPv6 {
-		fields = append(fields, ipfixIPv6Fields...)
-	} else {
-		fields = append(fields, ipfixIPv4Fields...)
-	}
-	fields = append(fields, ipfixCommonFields...)
-	return fields
+	return elements
 }
 
 func flowIsIPv6(flow collector.ExportedFlow) (bool, error) {

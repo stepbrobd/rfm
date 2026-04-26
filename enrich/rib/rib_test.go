@@ -249,6 +249,7 @@ func TestServerCloseReturnsWithIdleConnection(t *testing.T) {
 		listener: ln,
 		table:    NewTable(),
 		done:     make(chan struct{}),
+		conns:    make(map[net.Conn]struct{}),
 	}
 	s.wg.Add(1)
 	go s.accept()

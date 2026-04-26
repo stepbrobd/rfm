@@ -310,7 +310,7 @@ func TestFlowEventIPv6TCP(t *testing.T) {
 func TestFlowEventIPv4Options(t *testing.T) {
 	testutil.RequireRoot(t)
 
-	// 4 NOP options → IHL=6 (24-byte header)
+	// 4 NOP options give IHL=6 with a 24-byte header
 	options := []byte{0x01, 0x01, 0x01, 0x01}
 	pkt := testutil.EthIPv4TCPWithOptions(
 		net.IPv4(10, 0, 0, 1),

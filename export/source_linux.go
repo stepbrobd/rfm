@@ -9,7 +9,7 @@ import (
 	"ysun.co/rfm/probe"
 )
 
-// ifaceKey mirrors the BPF rfm_iface_key struct for decoding map entries.
+// ifaceKey mirrors the BPF rfm_iface_key struct for decoding map entries
 type ifaceKey struct {
 	_       structs.HostLayout
 	Ifindex uint32
@@ -18,7 +18,7 @@ type ifaceKey struct {
 	Pad     uint16
 }
 
-// ifaceValue mirrors the BPF rfm_iface_value struct for decoding map entries.
+// ifaceValue mirrors the BPF rfm_iface_value struct for decoding map entries
 type ifaceValue struct {
 	_       structs.HostLayout
 	Packets uint64
@@ -26,12 +26,12 @@ type ifaceValue struct {
 }
 
 // ProbeSource adapts a *probe.Probe to the IfaceStatsSource interface
-// by iterating the BPF per-CPU hash map.
+// by iterating the BPF per-CPU hash map
 type ProbeSource struct {
 	Probe *probe.Probe
 }
 
-// IfaceStats reads the BPF iface stats map, summing per-CPU values.
+// IfaceStats reads the BPF iface stats map, summing per-CPU values
 func (s *ProbeSource) IfaceStats() ([]IfaceStatsEntry, error) {
 	m := s.Probe.IfaceStats()
 	if m == nil {
@@ -62,7 +62,7 @@ func (s *ProbeSource) IfaceStats() ([]IfaceStatsEntry, error) {
 	return entries, nil
 }
 
-// SampleRate reads the current sample rate from the probe config map.
+// SampleRate reads the current sample rate from the probe config map
 func (s *ProbeSource) SampleRate() (uint32, error) {
 	if s.Probe == nil {
 		return 1, nil

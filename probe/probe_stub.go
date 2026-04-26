@@ -20,10 +20,6 @@ func (p *Probe) Close() error {
 	return nil
 }
 
-func (p *Probe) Config() *ebpf.Map {
-	return nil
-}
-
 func (p *Probe) SampleRate() (uint32, error) {
 	return 0, errUnsupported
 }
