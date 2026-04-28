@@ -8,7 +8,7 @@ Prometheus and IPFIX.
 
 Requirements:
 
-- Linux 6.12 or newer (TCX, `bpf_ktime_get_boot_ns`)
+- Linux 5.8 or newer (per [bpfvet](https://github.com/boratanrikulu/bpfvet))
 - Go 1.25+
 - Root or `CAP_BPF` + `CAP_NET_ADMIN`
 
@@ -409,7 +409,7 @@ buffer size, and flow table limits, all of which are tunable.
 ### Container and Kubernetes use
 
 rfm can run inside Docker containers or Kubernetes pods with `CAP_BPF` +
-`CAP_NET_ADMIN` (or privileged mode). The host kernel must be Linux 6.12+.
+`CAP_NET_ADMIN` (or privileged mode). The host kernel must be Linux 5.8+.
 
 Most flow receivers (Akvorado, goflow2, nfdump, ElastiFlow) cannot do
 per-container flow monitoring. They are passive UDP listeners that depend on
