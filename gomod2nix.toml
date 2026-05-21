@@ -54,8 +54,8 @@ schema = 3
     hash = 'sha256-GO3az7WiGcwU0OvmocwdfR5ohGRL8NbjscIaMyhAdxE='
 
   [mod.'github.com/gaissmai/bart']
-    version = 'v0.27.1'
-    hash = 'sha256-RXL8H62eykU5vnzTs41FvjY3QdSo2CfWBAh02k32++0='
+    version = 'v0.28.0'
+    hash = 'sha256-FvFdafTENaUmNBc0Kp5yroHVGN+Y+2UFOE7dGSzjIcc='
 
   [mod.'github.com/go-logfmt/logfmt']
     version = 'v0.6.1'
@@ -86,8 +86,8 @@ schema = 3
     hash = 'sha256-79URDDFenmGc9JZu+5AXHToMrtTREHb3BC84b/gym9Q='
 
   [mod.'github.com/oschwald/maxminddb-golang/v2']
-    version = 'v2.2.0'
-    hash = 'sha256-eTCSaBFP/jieE0ntP0A8dkNoOwqLZCHTNwmadWeRs/c='
+    version = 'v2.3.0'
+    hash = 'sha256-NLhd5eR+b5EjItpj8DMA+DK9kDJguws2F+MyGppQl+s='
 
   [mod.'github.com/osrg/gobgp/v3']
     version = 'v3.37.0'

@@ -10,8 +10,8 @@ require (
 	github.com/BurntSushi/toml v1.6.0
 	github.com/charmbracelet/log v1.0.0
 	github.com/cilium/ebpf v0.21.0
-	github.com/gaissmai/bart v0.27.1
-	github.com/oschwald/maxminddb-golang/v2 v2.2.0
+	github.com/gaissmai/bart v0.28.0
+	github.com/oschwald/maxminddb-golang/v2 v2.3.0
 	github.com/osrg/gobgp/v3 v3.37.0
 	github.com/prometheus/client_golang v1.23.2
 	github.com/prometheus/client_model v0.6.2
