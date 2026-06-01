@@ -1,5 +1,10 @@
 # RFM
 
+Binary Cache:
+
+- Cache: <https://cache.ysun.co>
+- Key: `cache.ysun.co-1:WxPYwT5g3kt9XhUhHPpNLZKI9HIOsVVAuqSHpok8Qt4=`
+
 RFM (Router Flow Monitor) is an eBPF-based network flow analysis agent for Linux
 routers. It attaches TC programs to network interfaces, collects per-flow
 traffic statistics with configurable sampling, optionally enriches flows from a

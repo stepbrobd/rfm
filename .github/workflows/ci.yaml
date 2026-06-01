@@ -1,0 +1,16 @@
+name: CI
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  checks: write
+  id-token: write
+
+jobs:
+  Atelier:
+    uses: stepbrobd/atelier/.github/workflows/discover.yaml@master
+    secrets: inherit
