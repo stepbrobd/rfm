@@ -458,6 +458,16 @@ focus on performance, reliability, and geographic reach. Their platform enables
 rapid deployment across diverse regions, making it well suited for
 network-intensive and distributed systems workloads.
 
+## Upstream contribution
+
+- BIRD Report 1:
+  <https://trubka.network.cz/pipermail/bird-users/2026-June/018783.html> Fix:
+  <https://github.com/CZ-NIC/bird/commit/e038bf69ec11c46a76634918129bb05583730506>
+
+- BIRD Report 2:
+  <https://trubka.network.cz/pipermail/bird-users/2026-June/018784.html> Fix:
+  <https://github.com/CZ-NIC/bird/commit/371531d20e251d16916450338dc034fb2b1a7240>
+
 ## License
 
 Everything under `bpf/` is GPLv2 to satisfy kernel BPF requirements. Everything
