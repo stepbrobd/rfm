@@ -8,7 +8,9 @@
   gomod2nix,
   llvmPackages,
   nixfmt-tree,
+  ruff,
   taplo,
+  ty,
 }:
 
 writeShellScriptBin "formatter" ''
@@ -27,6 +29,9 @@ writeShellScriptBin "formatter" ''
   ${lib.getExe deno} fmt readme.md grafana/dashboard.json
   ${lib.getExe nixfmt-tree} .
   ${lib.getExe taplo} format **/*.toml
+
+  ${lib.getExe ruff} check --fix --unsafe-fixes --preview .
+  ${lib.getExe ty} check --fix --error all .
 
   ${lib.getExe go} fix ./...
   ${lib.getExe go} fmt ./...
