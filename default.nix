@@ -2,6 +2,7 @@
   lib,
   buildGoApplication,
   installShellFiles,
+  versionCheckHook,
 }:
 
 buildGoApplication (
@@ -37,6 +38,8 @@ buildGoApplication (
     subPackages = [ "cmd/rfm" ];
 
     ldflags = [
+      "-s"
+      "-w"
       "-X"
       "main.version=${finalAttrs.version}"
     ];
@@ -48,5 +51,9 @@ buildGoApplication (
         installShellCompletion --cmd ${finalAttrs.pname} --''${shell} <("$out/bin/${finalAttrs.pname}" completion "$shell")
       done
     '';
+
+    doInstallCheck = true;
+    nativeInstallCheckInputs = [ versionCheckHook ];
+    versionCheckProgramArg = "version";
   })
 )
