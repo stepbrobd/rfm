@@ -18,9 +18,9 @@ func TestDetect(t *testing.T) {
 		want    config
 		wantErr bool
 	}{
-		{"amd64", config{"x86", "x86"}, false},
-		{"x86_64", config{"x86", "x86"}, false},
-		{"386", config{"x86", "x86"}, false},
+		{"amd64", config{"x86", "x86_64"}, false},
+		{"x86_64", config{"x86", "x86_64"}, false},
+		{"386", config{"x86", "x86_64"}, false},
 		{"arm", config{"arm", "arm"}, false},
 		{"arm64", config{"arm64", "aarch64"}, false},
 		{"aarch64", config{"arm64", "aarch64"}, false},
@@ -55,11 +55,11 @@ func TestCFlags(t *testing.T) {
 		{
 			name:   "basic",
 			source: "testdata/without.bpf.c",
-			cfg:    config{"x86", "x86"},
+			cfg:    config{"x86", "x86_64"},
 			want: []string{
 				"-O2", "-g", "-Wall", "-Wno-missing-declarations",
 				"-Itestdata/include",
-				"-Itestdata/include/vmlinux/x86",
+				"-Itestdata/include/vmlinux/x86_64",
 				"-D__TARGET_ARCH_x86",
 			},
 		},

@@ -120,7 +120,7 @@ func run(_ *cobra.Command, args []string) error {
 func detect(arch string) (config, error) {
 	switch arch {
 	case "386", "i386", "x86", "x86_64", "amd64":
-		return config{"x86", "x86"}, nil
+		return config{"x86", "x86_64"}, nil
 	case "arm":
 		return config{"arm", "arm"}, nil
 	case "arm64", "aarch64":
