@@ -1,0 +1,44 @@
+From 5f729f40e74bfa72ea03338d75983beeea50c313 Mon Sep 17 00:00:00 2001
+From: Yifei Sun <yifei.sun@inria.fr>
+Date: Thu, 11 Jun 2026 16:58:15 +0200
+Subject: [PATCH] BGP: Fix bucket assert when encoding BMP route monitoring
+ messages
+
+bgp_create_update_bmp() encodes routes for BMP using a temporary bucket
+allocated on stack. Such buckets are not allocated from the bucket slab
+and have no ID assigned, so the assert at the beginning of
+bgp_delete_from_bucket() fails as soon as the NLRI encoder pops the
+prefix, aborting the daemon on the first route monitoring message that
+carries a real prefix.
+
+On BIRD 3.3.1:
+
+> Assertion 'b->my_id' failed at proto/bgp/attrs.c:2020
+
+Temporary BMP buckets always hold exactly one prefix and take the
+single-prefix path, which does not use the bucket ID at all, so allow
+them through the assert.
+
+Introduced in 9fa3e89476ed53b6a9d41931a8cdf9a8c675be27
+
+"BGP: Compacting export prefix buckets"
+---
+ proto/bgp/attrs.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/proto/bgp/attrs.c b/proto/bgp/attrs.c
+index d92ce92f7..242a57227 100644
+--- a/proto/bgp/attrs.c
++++ b/proto/bgp/attrs.c
+@@ -2017,7 +2017,7 @@ bgp_add_to_bucket(struct bgp_ptx_private *c, struct bgp_bucket *b, struct bgp_pr
+ static struct bgp_prefix *
+ bgp_delete_from_bucket(struct bgp_ptx_private *c, struct bgp_bucket *b, u32 id)
+ {
+-  ASSERT_DIE(b->my_id);
++  ASSERT_DIE(b->my_id || b->bmp);
+   u32 row_num = BUCKET_PREFIX_ROW(id);
+   u32 pos = BUCKET_PREFIX_POS(id);
+   ASSERT_DIE(b->last_pref_id);
+-- 
+2.54.0
+

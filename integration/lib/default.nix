@@ -98,6 +98,14 @@ in
   # shared python helpers prepended to test scripts
   helpers = std.readFile ./helpers.py;
 
+  # https://github.com/stepbrobd/rfm/actions/runs/27352866052/job/80819677363#step:5:5108
+  # https://github.com/stepbrobd/rfm/actions/runs/27347885470/job/80814124422#step:5:4534
+  overlay = _: prev: {
+    bird3 = prev.bird3.overrideAttrs (prev: {
+      patches = (prev.patches or [ ]) ++ [ ./bmp.patch ];
+    });
+  };
+
   # each machine have different config to cover more code paths
   machine1 =
     { pkgs, ... }:
