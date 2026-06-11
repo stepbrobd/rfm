@@ -2,6 +2,9 @@ substituters = ["https://cache.ysun.co"]
 
 systems = ["x86_64-linux", "aarch64-linux"]
 
-include = ["formatter.*", "devShells.*.*", "packages.*.*", "checks.*.*"]
+include = ["checks.*.*", "devShells.*.*", "formatter.*", "packages.*.*"]
 
-exclude = ["legacyPackages.*.*"]
+exclude = [
+  "legacyPackages.*.*",     # unused
+  "checks.aarch64-linux.*", # runner does not have kvm
+]
