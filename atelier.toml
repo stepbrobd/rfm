@@ -1,2 +1,7 @@
-systems = ["x86_64-linux", "aarch64-linux"]
 substituters = ["https://cache.ysun.co"]
+
+systems = ["x86_64-linux", "aarch64-linux"]
+
+include = ["formatter.*", "devShells.*.*", "packages.*.*", "checks.*.*"]
+
+exclude = ["legacyPackages.*.*"]
