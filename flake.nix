@@ -27,9 +27,22 @@
               overlays = [ inputs.gomod2nix.overlays.default ];
             };
 
-            checks.default = lift pkgs.testers.runNixOSTest ./test.nix;
+            checks =
+              lib.genAttrs'
+                (lib.filter (lib.hasSuffix ".nix") (
+                  lib.map (f: ./integration/${f}) (lib.attrNames (lib.readDir ./integration))
+                ))
+                (
+                  path:
+                  lib.nameValuePair (lib.removeSuffix ".nix" (lib.baseNameOf path)) (
+                    lift pkgs.testers.runNixOSTest path
+                  )
+                );
+
             devShells.default = pkgs.callPackage ./shell.nix { };
+
             formatter = pkgs.callPackage ./formatter.nix { };
+
             packages.default = pkgs.callPackage ./default.nix { };
           };
       }
