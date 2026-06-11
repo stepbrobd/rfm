@@ -11,7 +11,7 @@ let
 in
 {
   options.services.rfm = {
-    enable = std.mkEnableOption "rfm";
+    enable = std.mkEnableOption "RFM (Router Flow Monitor)";
 
     package = std.mkPackageOption inputs.self.packages.${pkgs.stdenv.hostPlatform.system} "default" { };
 
@@ -235,7 +235,7 @@ in
       };
 
       default = { };
-      description = "Settings for rfm, serialized to TOML.";
+      description = "Settings for RFM, serialized to TOML.";
     };
   };
 
@@ -243,7 +243,7 @@ in
     environment.systemPackages = [ cfg.package ];
 
     systemd.services.rfm = {
-      description = "rfm network flow monitor";
+      description = "Router Flow Monitor agent";
       after = [ "network.target" ];
       wantedBy = [ "multi-user.target" ];
       serviceConfig = {
