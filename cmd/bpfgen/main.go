@@ -43,7 +43,7 @@ var (
 )
 
 var cmd = &cobra.Command{
-	Use:           "bpfgen [flags] <source>",
+	Use:           "bpfgen <source>",
 	Short:         "Generate Go bindings from BPF C source",
 	Args:          cobra.ExactArgs(1),
 	RunE:          run,
@@ -52,11 +52,12 @@ var cmd = &cobra.Command{
 }
 
 func init() {
-	cmd.Flags().StringVar(&ident, "ident", "", "stem for generated Go types and files")
-	cmd.Flags().StringVarP(&outdir, "output-dir", "o", ".", "directory for generated files")
-	cmd.Flags().StringVar(&pkg, "package", os.Getenv("GOPACKAGE"), "the Go package for generated files")
+	cmd.Flags().StringVar(&ident, "ident", "", "Stem for generated Go types and files")
+	cmd.Flags().StringVarP(&outdir, "output-dir", "o", ".", "Directory for generated files")
+	cmd.Flags().StringVar(&pkg, "package", os.Getenv("GOPACKAGE"), "Go package for generated files")
 	cmd.Flags().StringSliceVar(&libs, "pkg-config", nil, "pkg-config libraries for include flags")
-	cmd.Flags().StringVar(&compdb, "compdb", "", "path to compile_commands.json to update")
+	cmd.Flags().StringVar(&compdb, "compdb", "", "Path to compile_commands.json to update")
+	cmd.Flags().BoolP("help", "h", false, "Print help and exit")
 	cmd.MarkFlagRequired("ident")
 }
 
