@@ -25,7 +25,7 @@ import (
 
 var agentCmd = &cobra.Command{
 	Use:   "agent",
-	Short: "start the rfm agent daemon",
+	Short: "Start the RFM agent daemon",
 	RunE:  runAgent,
 }
 
