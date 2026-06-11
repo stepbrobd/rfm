@@ -49,7 +49,7 @@
     );
 
   inputs.nixpkgs.url = "github:nixos/nixpkgs/nixos-unstable";
-  inputs.systems.url = "github:nix-systems/default";
+  inputs.systems.url = "github:nix-systems/triplet";
   inputs.parts.url = "github:hercules-ci/flake-parts";
   inputs.parts.inputs.nixpkgs-lib.follows = "nixpkgs";
   inputs.utils.url = "github:numtide/flake-utils";
