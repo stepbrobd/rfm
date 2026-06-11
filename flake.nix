@@ -48,13 +48,20 @@
       }
     );
 
-  inputs.nixpkgs.url = "github:nixos/nixpkgs/nixos-unstable";
-  inputs.systems.url = "github:nix-systems/triplet";
-  inputs.parts.url = "github:hercules-ci/flake-parts";
-  inputs.parts.inputs.nixpkgs-lib.follows = "nixpkgs";
-  inputs.utils.url = "github:numtide/flake-utils";
-  inputs.utils.inputs.systems.follows = "systems";
-  inputs.gomod2nix.url = "github:nix-community/gomod2nix";
-  inputs.gomod2nix.inputs.nixpkgs.follows = "nixpkgs";
-  inputs.gomod2nix.inputs.flake-utils.follows = "utils";
+  inputs = {
+    nixpkgs.url = "github:nixos/nixpkgs/nixos-unstable";
+    systems.url = "github:nix-systems/triplet";
+    parts.url = "github:hercules-ci/flake-parts";
+    parts.inputs.nixpkgs-lib.follows = "nixpkgs";
+    utils.url = "github:numtide/flake-utils";
+    utils.inputs.systems.follows = "systems";
+    gomod2nix.url = "github:nix-community/gomod2nix";
+    gomod2nix.inputs.nixpkgs.follows = "nixpkgs";
+    gomod2nix.inputs.flake-utils.follows = "utils";
+  };
+
+  nixConfig = {
+    extra-substituters = [ "https://cache.ysun.co" ];
+    extra-trusted-public-keys = [ "cache.ysun.co-1:WxPYwT5g3kt9XhUhHPpNLZKI9HIOsVVAuqSHpok8Qt4=" ];
+  };
 }
