@@ -15,7 +15,7 @@ Requirements:
 
 - Linux 6.6 or newer (TCX requirement)
 - Go 1.25+
-- Root or `CAP_BPF` + `CAP_NET_ADMIN`
+- Root or `CAP_BPF` + `CAP_NET_ADMIN` + `CAP_PERFMON`
 
 Current scope:
 
@@ -400,7 +400,8 @@ buffer size, and flow table limits, all of which are tunable.
 ### Container and Kubernetes use
 
 RFM can run inside Docker containers or Kubernetes pods with `CAP_BPF` +
-`CAP_NET_ADMIN` (or privileged mode). The host kernel must be Linux 6.6+.
+`CAP_NET_ADMIN` + `CAP_PERFMON` (or privileged mode). The host kernel must be
+Linux 6.6+.
 
 Most flow receivers (Akvorado, goflow2, nfdump, ElastiFlow) cannot do
 per-container flow monitoring. eBPF tools that can monitor per-container traffic
