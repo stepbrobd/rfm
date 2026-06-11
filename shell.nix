@@ -11,6 +11,7 @@
   libbpf,
   llvmPackages,
   pkg-config,
+  python3,
   stdenv,
 }:
 
@@ -26,6 +27,7 @@ mkShell {
     llvmPackages.clang-unwrapped
     llvmPackages.libllvm
     pkg-config
+    python3
   ]
   ++ lib.optionals stdenv.isLinux [
     bpftools
