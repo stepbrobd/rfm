@@ -13,27 +13,27 @@ Prometheus and IPFIX.
 
 Requirements:
 
-- Linux 5.8 or newer (per [bpfvet](https://github.com/boratanrikulu/bpfvet))
+- Linux 6.6 or newer (TCX requirement)
 - Go 1.25+
 - Root or `CAP_BPF` + `CAP_NET_ADMIN`
 
 Current scope:
 
-- Attaches TC programs for bidirectional flow observation
-- Parses ipv4 and ipv6 traffic on plain ethernet, VLAN, and QinQ links
-- Keeps BPF behavior fully map-driven and stateless
+- Attaches TC programs for bidirectional flow observation (BPF behavior is
+  config map driven and stateless)
+- Parses IPv4 and IPv6 traffic on ethernet, VLAN, and QinQ links
 - Optionally enriches flows in userspace with BMP/RIB data, MMDB data, or both
 - Exports Prometheus metrics
 - Optionally exports completed flows to one UDP IPFIX collector
-- Ships a typed NixOS module and VM coverage
+- NixOS module and VM test
 
 Planned:
 
-- Unix socket control plane
-- XDP firewall fast-path features
+- Unix socket control plane?
+- XDP firewall fast path features?
 
-rfm runs as a single daemon (`rfm agent`) that loads eBPF programs, collects
-flow events in userspace, and serves Prometheus metrics over HTTP.
+RFM daemon (`rfm agent`) loads eBPF programs, collects flow events in userspace,
+and serves Prometheus metrics over HTTP.
 
 ```
 +------------------------------------+
@@ -42,14 +42,14 @@ flow events in userspace, and serves Prometheus metrics over HTTP.
 |               +---> ring buffer -----> userspace collector
 |  TC egress  --+                    |
 |                                    |
-|  per-CPU iface stats map ------------> Prometheus /metrics
+|  per CPU iface stats map ------------> Prometheus /metrics
 +------------------------------------+
 ```
 
-BPF programs are attached via TCX as link-based attachments. BPF behavior is
-map-driven: sampling rates and feature flags live in a shared `rfm_config` map
-rather than compiled-in constants. The config map is writable at runtime, though
-the current agent writes it during startup.
+BPF programs are loaded via TCX as link-based attachments. Programs are state
+machine and reacts to the config map and reacts to the config map (e.g. sampling
+rates and feature flags live in a shared `rfm_config` map rather than compiled
+time constants).
 
 ### Data path
 
@@ -60,13 +60,14 @@ the current agent writes it during startup.
    `src_port=0` and `dst_port=0` because later fragments do not carry the
    transport header.
 2. The userspace collector reads events from the ring buffer, converts
-   `CLOCK_BOOTTIME` timestamps to wall clock time, and aggregates flows into an
+   `CLOCK_BOOTTIME` timestamps to wall clock, and aggregates flows into an
    in-memory table keyed by
    `(ifindex, direction, protocol,
    src/dst address, src/dst port)`.
-3. Flows are evicted after a configurable idle timeout. When the flow table is
-   full, the flow with the oldest last-seen timestamp is forcibly evicted.
-4. At scrape time, the Prometheus exporter reads the BPF interface counters map
+3. Flows are evicted after a configurable idle timeout. Under high load, when
+   the flow table is full, the flow with the oldest last-seen timestamp is
+   forcibly evicted.
+4. At scrape time, Prometheus exporter reads the BPF interface counters map
    directly and iterates the flow table, rolling up flows by interface,
    direction, protocol, and enrichment labels (ASN, city) before emitting
    metrics. With no enrichment configured, those labels stay empty and the agent
@@ -77,8 +78,8 @@ the current agent writes it during startup.
 
 ## Configuration
 
-rfm reads a TOML config file (default `/etc/rfm/rfm.toml`). Unknown keys are
-rejected at load time to catch typos. Example:
+RFM reads a TOML config file (default `/etc/rfm/rfm.toml`). Unknown keys are
+rejected at load time. Example:
 
 ```toml
 [agent]
@@ -119,9 +120,9 @@ port = 11019
 ### `agent`
 
 `interfaces` (required, list of strings): Network interfaces to attach BPF
-programs to. Each entry is a Go regular expression matched against system
-interface names with implicit full-string anchoring. Use `[".*"]` for every
-interface, `["ranet.*"]` for the ranet prefix, or list exact names like
+programs to. Each entry is a Go regex matched against system interface names
+with implicit full-string anchoring. Use `[".*"]` for every interface,
+`["ranet.*"]` for the ranet prefix, or list exact names like
 `["eth0", "wlan0"]`.
 
 Patterns may overlap. For example `["eth0", "eth.*"]` matches `eth0` once even
@@ -145,9 +146,9 @@ traffic.
 
 `wakeup_batch` (uint32, default 64): The BPF program flags ring buffer submits
 with `BPF_RB_NO_WAKEUP` and forces a wakeup once every N submits. Lower values
-reduce flow event delivery latency at the cost of more userspace wakeups; higher
-values amortize wakeups but make Run loop iterations slower to react. Must be
-greater than 0.
+reduce flow event delivery latency at the cost of more userspace wakeups. Higher
+values amortize wakeups but make iterations longer (slower to react to events).
+Must be greater than 0.
 
 `iface_stats_size` (int, default 0): Override the BPF iface stats hash map
 capacity. `0` means auto-compute as `max(len(interfaces) * 8, 64)`. Set
@@ -186,7 +187,7 @@ default of 60s lets a collector that loses or restarts during a packet recover
 within one refresh window.
 
 `observation_domain_id` (uint32, default 1): IPFIX observation domain id placed
-in exported message headers. Must be > 0. Set distinct values when multiple rfm
+in exported message headers. Must be > 0. Set distinct values when multiple RFM
 agents export to one collector and downstream needs to demultiplex by source.
 
 ### `agent.prometheus`
@@ -265,8 +266,8 @@ Screenshot from
 
 ![IPFIX](grafana/ipfix.jpg)
 
-It is intentionally a starting point, not a finished observability product. The
-current dashboard covers the basic operational views:
+The provided dashboard example is intentionally a starting point, not a finished
+observability product. The current dashboard covers the basic operational views:
 
 - aggregate ingress and egress traffic
 - per-interface traffic breakdown
@@ -281,21 +282,11 @@ be derived from RFM data in Grafana.
 
 ## CLI
 
-The current CLI surface is intentionally small:
+The CLI includes:
 
 - `rfm agent`
 
 Control plane subcommands, runtime status, and RIB inspection are planned.
-
-## IPFIX export
-
-IPFIX export is optional and uses one UDP collector configured by
-`agent.ipfix.host` and `agent.ipfix.port`.
-
-The exporter uses `vmware/go-ipfix` for standards-compliant message encoding and
-owns the UDP socket itself. That lets RFM exclude only its own export traffic
-from recursive re-export while still observing unrelated traffic sent to the
-same collector address and port.
 
 ## NixOS module
 
@@ -307,6 +298,7 @@ Example:
 {
   services.rfm = {
     enable = true;
+
     settings.agent = {
       interfaces = [ "eth0" "tailscale0" ];
       bpf.sample_rate = 50;
@@ -322,11 +314,11 @@ Example:
 }
 ```
 
-The module generates a TOML config file and runs rfm as a systemd service with
-automatic restart on failure. `agent.ipfix.*` and `agent.enrich.*` are available
-through typed module options.
+The module generates a TOML config file and runs RFM as a systemd service with
+automatic restart on failure. All supported knobs are available through (typed)
+module options.
 
-## Scope and non-goals
+## Scope
 
 RFM is a lightweight flow telemetry agent, not a full traffic analysis platform.
 A few deliberate choices follow from that:
@@ -338,44 +330,42 @@ type/code. Adding these fields would widen the per-event wire struct, increase
 ring buffer pressure, and expand the IPFIX template surface for information that
 most lightweight deployments never query. Operators who need TCP flag analysis,
 QoS-aware accounting, or deep header inspection should consider ntopng or pmacct
-instead.
+(or other solutions) instead.
 
-Prometheus flow gauges are intentionally rolled up by enrichment labels
+Prometheus flow gauges only includes (intentionally) enrichment labels
 (interface, direction, protocol, ASN, city). Source and destination ports are
 not included as Prometheus labels. With `max_flows` defaulting to 65536 and
 ephemeral source ports ranging from 32768 to 60999, adding port labels would
 create maybe 10k+ unique time series per scrape interval, most of which are seen
 once and never again. This kind of high cardinality churn is expensive for
 Prometheus to ingest and store. Port level flow records are available through
-the IPFIX push path, where a downstream collector (goflow2 or similar, or flow
+IPFIX push path, where a downstream collector (goflow2 or similar, or flow
 collector platforms with IPFIX support like Cloudflare Magic Network Monitoring)
 is better suited to handle them.
 
-## Comparison with other tools
+## Comparison
 
 The tools below all receive NetFlow/sFlow/IPFIX from routers, and some can also
-capture packets directly (ntopng via libpcap/PF_RING, pmacct via pmacctd,
-FastNetMon via AF_PACKET, nfdump via nfpcapd). rfm takes a different approach:
-it captures packets directly in the kernel via eBPF TC programs. No flow export
-configuration on the device, no separate collector, no message queue.
+capture packets directly (e.g. ntopng via libpcap/PF_RING, pmacct via pmacctd,
+FastNetMon via AF_PACKET, nfdump via nfpcapd, etc.). RFM takes a different
+approach, it captures packets directly in the kernel via eBPF TC programs.
 
 | Tool                                                       | Type                       | Infrastructure                | BGP/BMP                       | License              |
 | ---------------------------------------------------------- | -------------------------- | ----------------------------- | ----------------------------- | -------------------- |
-| rfm                                                        | eBPF agent (single binary) | Prometheus                    | BMP (inline)                  | AGPLv3               |
+| RFM                                                        | eBPF agent (single binary) | Prometheus                    | BMP (inline)                  | AGPLv3               |
 | [Akvorado](https://github.com/akvorado/akvorado)           | Flow receiver              | Kafka + ClickHouse + Redis    | BMP; SNMP/gNMI for interfaces | AGPLv3               |
+| [ElastiFlow](https://www.elastiflow.com)                   | Flow receiver              | ES, OpenSearch, Splunk, Kafka | GeoIP only                    | Proprietary          |
+| [FastNetMon](https://github.com/pavel-odintsov/fastnetmon) | DDoS detection             | Prom, Kafka, ClickHouse       | BGP (output only)             | GPL-2.0 / commercial |
 | [goflow2](https://github.com/netsampler/goflow2)           | Flow receiver              | Kafka or file                 | GeoIP only                    | BSD-3                |
+| [kTranslate](https://github.com/kentik/ktranslate)         | Flow receiver              | 14+ output sinks              | GeoIP only                    | Apache-2.0           |
+| [nfdump](https://github.com/phaag/nfdump)                  | Flow receiver + CLI        | Flat files                    | GeoIP only                    | BSD                  |
 | [ntopng](https://github.com/ntop/ntopng)                   | Packet capture + DPI       | Redis + optional DB           | None                          | GPLv3 / commercial   |
 | [pmacct](https://github.com/pmacct/pmacct)                 | Multi-daemon suite         | Kafka, PG, MySQL              | BGP + BMP + RPKI              | GPLv2+               |
-| [kTranslate](https://github.com/kentik/ktranslate)         | Flow receiver              | 14+ output sinks              | GeoIP only                    | Apache-2.0           |
-| [FastNetMon](https://github.com/pavel-odintsov/fastnetmon) | DDoS detection             | Prom, Kafka, ClickHouse       | BGP (output only)             | GPL-2.0 / commercial |
-| [nfdump](https://github.com/phaag/nfdump)                  | Flow receiver + CLI        | Flat files                    | GeoIP only                    | BSD                  |
-| [ElastiFlow](https://www.elastiflow.com)                   | Flow receiver              | ES, OpenSearch, Splunk, Kafka | GeoIP only                    | Proprietary          |
 
-### Footprint and simplicity
-
-rfm is a single binary with a single TOML config file. There are no external
-dependencies at runtime: no database, no message queue, no Redis, no web server
-beyond the built-in Prometheus endpoint. Typical RSS is around 10 MB.
+The main goal of RFM is to be a extremely lightweight and easily configurable
+flow analytics tool. There are no external dependencies at runtime (unlike other
+solutions, it does not require a separate database, message queue, Redis, web
+server beyond the built-in Prometheus endpoint). Typical RSS is around 10 MB.
 
 Most alternatives require significant supporting infrastructure:
 
@@ -391,39 +381,34 @@ Even the lighter tools in the comparison (goflow2, nfdump, kTranslate) are flow
 receivers that need routers to be configured for NetFlow/sFlow export and
 typically feed into a downstream pipeline for storage and visualization.
 
-rfm replaces that entire chain with a single process: capture, aggregation,
-enrichment, and Prometheus export all happen in one binary, configured by one
-file.
-
 ### Performance
 
-rfm's eBPF TC programs run in the kernel with zero-copy delivery to userspace
+RFM's eBPF TC programs run in the kernel with zero-copy delivery to userspace
 via a ring buffer. Packet sampling (configurable 1-in-N) reduces ring buffer
 throughput. Interface counters are updated on every packet regardless of
-sampling, with no userspace involvement. The Prometheus exporter reads the BPF
+sampling with no userspace involvement. The Prometheus exporter reads the BPF
 map directly at scrape time.
 
-Compared to libpcap-based tools (ntopng, pmacctd), eBPF TC avoids the overhead
-of copying every packet to userspace. rfm only copies sampled flow metadata (56
-bytes per event), not full packet contents. Compared to flow receivers
-(Akvorado, goflow2), rfm eliminates the intermediate UDP export step entirely.
+Compared to libpcap based tools (ntopng, pmacctd), eBPF TC avoids the overhead
+of copying every packet to userspace. RFM only copies sampled flow metadata not
+the full packet contents. Compared to flow receivers (Akvorado, goflow2), RFM
+eliminates the intermediate UDP export step entirely.
 
 Performance under sustained high packet rates depends on the sample rate, ring
 buffer size, and flow table limits, all of which are tunable.
 
 ### Container and Kubernetes use
 
-rfm can run inside Docker containers or Kubernetes pods with `CAP_BPF` +
-`CAP_NET_ADMIN` (or privileged mode). The host kernel must be Linux 5.8+.
+RFM can run inside Docker containers or Kubernetes pods with `CAP_BPF` +
+`CAP_NET_ADMIN` (or privileged mode). The host kernel must be Linux 6.6+.
 
 Most flow receivers (Akvorado, goflow2, nfdump, ElastiFlow) cannot do
-per-container flow monitoring. They are passive UDP listeners that depend on
-external flow export from routers. The eBPF tools that can monitor per-container
-traffic are either tied to a specific CNI (Cilium Hubble requires Cilium, Calico
-flow logs require Calico) or target broader Kubernetes observability (Microsoft
-Retina is CNI-agnostic but is a larger platform).
+per-container flow monitoring. eBPF tools that can monitor per-container traffic
+are either tied to a specific CNI (Cilium Hubble requires Cilium, Calico flow
+logs require Calico) or target broader Kubernetes observability (Microsoft
+Retina is CNI agnostic but is a larger platform).
 
-rfm is CNI-agnostic and does not require any particular network plugin. It
+RFM is CNI agnostic and does not require any particular network plugin. It
 attaches TC programs to whatever interfaces are available in its network
 namespace. This makes it usable as:
 
@@ -432,19 +417,8 @@ namespace. This makes it usable as:
 - a **sidecar** inside a pod, monitoring that pod's network interfaces directly
 
 The DaemonSet pattern is standard for eBPF-based monitoring (used by Hubble,
-Retina, and Calico), but rfm's small footprint also makes the sidecar model
+Retina, and Calico), but RFM's small footprint also makes the sidecar model
 practical where per-pod isolation is needed.
-
-### When to use something else
-
-- **Deep packet inspection** (TCP flags, application protocol detection, payload
-  analysis): ntopng
-- **Collecting flows from hardware routers** that already export
-  NetFlow/sFlow/IPFIX: Akvorado, goflow2, or nfdump
-- **Historical flow storage and forensic queries**: nfdump or Akvorado with
-  ClickHouse
-- **DDoS detection and automated BGP blackhole mitigation**: FastNetMon
-- **Turnkey web dashboard** without Grafana: ntopng or Akvorado
 
 ## Sponsorship disclaimer
 
@@ -470,5 +444,5 @@ network-intensive and distributed systems workloads.
 
 ## License
 
-Everything under `bpf/` is GPLv2 to satisfy kernel BPF requirements. Everything
-else is AGPLv3.
+Source files under `bpf/` are licensed under GPLv2 to satisfy kernel BPF
+requirements. Everything else is AGPLv3.
