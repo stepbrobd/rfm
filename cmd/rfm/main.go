@@ -11,12 +11,12 @@ var cfgFile string
 
 var root = &cobra.Command{
 	Use:   "rfm",
-	Short: "router flow monitor",
+	Short: "Router Flow Monitor",
 }
 
 func init() {
 	root.PersistentFlags().StringVarP(&cfgFile, "config", "c",
-		"/etc/rfm/rfm.toml", "config file path")
+		"/etc/rfm/rfm.toml", "RFM configuration file path")
 }
 
 func main() {
