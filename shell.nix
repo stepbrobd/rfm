@@ -3,6 +3,7 @@
   mkShell,
   bear,
   bpftools,
+  deno,
   go,
   go-tools,
   gomod2nix,
@@ -16,6 +17,7 @@
 mkShell {
   packages = [
     bear
+    deno
     go
     go-tools
     gomod2nix
