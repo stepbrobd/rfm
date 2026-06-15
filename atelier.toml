@@ -1,5 +1,7 @@
 substituters = ["https://cache.ysun.co"]
-trusted-public-keys = ["cache.ysun.co-1:WxPYwT5g3kt9XhUhHPpNLZKI9HIOsVVAuqSHpok8Qt4="]
+trusted-public-keys = [
+  "cache.ysun.co-1:WxPYwT5g3kt9XhUhHPpNLZKI9HIOsVVAuqSHpok8Qt4=",
+]
 
 systems = ["x86_64-linux", "aarch64-linux"]
 
