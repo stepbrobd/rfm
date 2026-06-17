@@ -23,7 +23,6 @@
           {
             _module.args.pkgs = import inputs.nixpkgs {
               inherit system;
-              config.allowDeprecatedx86_64Darwin = true;
               overlays = [ inputs.gomod2nix.overlays.default ];
             };
 
@@ -44,6 +43,16 @@
             formatter = pkgs.callPackage ./formatter.nix { };
 
             packages.default = pkgs.callPackage ./default.nix { };
+
+            packages.bench =
+              (lib.nixosSystem {
+                inherit system;
+                specialArgs = { inherit inputs; };
+                modules = [
+                  ./bench
+                  inputs.g5k.nixosModules.g5k-image-systemd
+                ];
+              }).config.system.build.g5k-image;
           };
       }
     );
@@ -58,6 +67,9 @@
     gomod2nix.url = "github:nix-community/gomod2nix";
     gomod2nix.inputs.nixpkgs.follows = "nixpkgs";
     gomod2nix.inputs.flake-utils.follows = "utils";
+    g5k.url = "github:oar-team/nixos-g5k-image";
+    g5k.inputs.nixpkgs.follows = "nixpkgs";
+    g5k.inputs.kapack.follows = "";
   };
 
   nixConfig = {
