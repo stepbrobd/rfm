@@ -62,6 +62,10 @@
     ];
 
     systemPackages = with pkgs; [
+      bashInteractive
+      nushell
+      zsh
+
       # rfm
       inputs.self.packages.${pkgs.stdenv.hostPlatform.system}.default
 
@@ -75,7 +79,13 @@
       xdp-tools
 
       alacritty.terminfo
+      ethtool
+      goflow2
+      iperf3
       jq
+      nfdump
+      python3
+      tcpreplay
     ];
   };
 
