@@ -8,6 +8,7 @@
   gomod2nix,
   llvmPackages,
   nixfmt-tree,
+  nufmt,
   ruff,
   taplo,
   ty,
@@ -28,6 +29,7 @@ writeShellScriptBin "formatter" ''
 
   ${lib.getExe deno} fmt **/*.md **/*.json
   ${lib.getExe nixfmt-tree} .
+  ${lib.getExe nufmt} **/*.nu
   ${lib.getExe taplo} format **/*.toml
 
   ${lib.getExe ruff} check --fix --unsafe-fixes --preview .

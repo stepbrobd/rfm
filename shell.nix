@@ -10,6 +10,8 @@
   gopls,
   libbpf,
   llvmPackages,
+  nufmt,
+  nushell,
   pkg-config,
   python3,
   stdenv,
@@ -26,6 +28,8 @@ mkShell {
     llvmPackages.clang-tools
     llvmPackages.clang-unwrapped
     llvmPackages.libllvm
+    nufmt
+    nushell
     pkg-config
     python3
   ]
