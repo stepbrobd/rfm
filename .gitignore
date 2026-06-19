@@ -43,6 +43,7 @@
 .tmp_versions/
 Mkfile.old
 Module.symvers
+__pycache__/
 compile_commands.json
 coverage.*
 dkms.conf
