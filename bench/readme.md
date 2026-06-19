@@ -87,3 +87,55 @@ print tables (except for `accuracy.nu` also writes a CSV for `analyze.py`).
 - Per-flow relative error follows sqrt(N/P)
   (<https://dl.acm.org/doi/10.1145/637201.637225>)
 - Flow coverage should drop as P / N go below 1
+
+## On 2 or more nodes with KaVLAN
+
+The veth bench cannot exercise the real NIC driver path (hardware IRQ, NAPI,
+RSS). For that use two nodes with their data NIC in an isolated KaVLAN, so the
+traffic neither touches nor is disturbed by the production network.
+
+Reserve two nodes (or more) in the same cluster with routed VLAN and deploy:
+
+```sh
+# say we are on grenoble
+oarsub -t deploy \
+  -l "{type='kavlan'}/vlan=1+{cluster='dahu'}/host=2,walltime=6:0:0" \
+  ~/kavlan-deploy.sh
+```
+
+`~/kavlan-deploy.sh`:
+
+```sh
+#!/usr/bin/env bash
+VLAN=$(kavlan -V -j "$OAR_JOB_ID")
+kavlan -e -i "$VLAN" -j "$OAR_JOB_ID"
+kadeploy3 -a ~/g5k-image/nixos-x86_64-linux.yaml -f "$OAR_NODE_FILE" --vlan "$VLAN"
+sleep 21000
+```
+
+Use a routed `kavlan` (not `kavlan-local`) because dahu only have a single
+usable NIC, unrouted vlan would leave the nodes unreachable. After deploy the
+nodes get isolated IPs and answer at `<node>-kavlan-<vlanid>` (e.g.
+`dahu-7-kavlan-4.grenoble.g5k`).
+
+Copy `workload/` to both nodes. Start the generator first (its flood must be
+flowing before the device under test measures), then run the DUT sweeps. The DUT
+NIC MAC is the generator's `--dstmac`.
+
+```sh
+# generator node: sustained flood, many flows for RSS spread (detached)
+nu workload/gen.nu --dst <dut-ip> --dstmac <dut-mac> --threads 1 --count 1200000000
+
+# DUT: overhead vs sample rate on the real NIC (descending, N=1 last)
+nu workload/realnic.nu --ns "1024 100 10 1" --secs 15
+
+# DUT: hardware RSS multi-queue sweep (resets the NIC via ethtool -L, detached)
+nu workload/rss.nu --queues "1 2 4 8 16 32 64" --ns "100 1"
+
+# DUT: head-to-head vs libpcap baselines (system-wide busy cores per agent)
+# need softflowd and pmacct
+nu workload/headtohead.nu --n 100
+```
+
+Run the DUT scripts detached (a line-rate flood stalls the management SSH on the
+single NIC). Read results from `/tmp/{realnic,rss}.json`.
