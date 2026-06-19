@@ -1,9 +1,6 @@
-# RFM Single Node Microbenchmark
+# RFM Benchmark
 
-Datapath overhead and sampling accuracy related statistics are collected on one
-node on G5K. We use kernel pktgen on a veth pair and RFM monitors the peer.
-"Ground truth" numbers will be from pktgen's exact send counts and RFM's per-CPU
-interface counters.
+See NixOS modules (used to generate G5K image) and scripts under this directory.
 
 ## Kadeploy
 
@@ -46,7 +43,14 @@ Kadeploy (for x86_64-linux jobs):
 kadeploy3 -a ~/g5k-image/nixos-x86_64-linux.yaml # -M
 ```
 
-## Setup
+## Single node microbenchmark
+
+Datapath overhead and sampling accuracy related statistics are collected on one
+node on G5K. We use kernel pktgen on a veth pair and RFM monitors the peer.
+"Ground truth" numbers will be from pktgen's exact send counts and RFM's per-CPU
+interface counters.
+
+### Setup
 
 Deploy G5K Kadeploy image, copy this directory to the node and run as root:
 
@@ -54,7 +58,7 @@ Deploy G5K Kadeploy image, copy this directory to the node and run as root:
 scp -r bench/workload root@<node>:/root/
 ```
 
-## Run
+### Run
 
 ```sh
 # overhead vs sample rate
@@ -76,7 +80,7 @@ nu workload/scale.nu --cores "1 2 4 8 16 32" --n 100
 Each script takes `--flags` (run with `--help` to list them). Also, scripts will
 print tables (except for `accuracy.nu` also writes a CSV for `analyze.py`).
 
-## Expected results
+### Expected results
 
 - Interface counters are exact (100%) at every sample rate
 - Sampled flow estimates track 1/N
