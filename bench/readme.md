@@ -68,7 +68,9 @@ python3 workload/analyze.py --csv /tmp/rfm-accuracy-N100-M10000.csv --rate 100 -
 nu workload/tune.nu
 
 # multi core scaling
-nu workload/scale.nu --cores "1 2 4 8 16" --n 100
+# note: one pinned pktgen thread per core and keep cores <= half the node's hw thread
+# so the generator does not starve rx-softirq and collector
+nu workload/scale.nu --cores "1 2 4 8 16 32" --n 100
 ```
 
 Each script takes `--flags` (run with `--help` to list them). Also, scripts will
