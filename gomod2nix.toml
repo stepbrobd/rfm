@@ -102,8 +102,8 @@ schema = 3
     hash = 'sha256-q6Fh6v8iNJN9ypD47LjWmx66YITa3FyRjZMRsuRTFeQ='
 
   [mod.'github.com/prometheus/common']
-    version = 'v0.68.1'
-    hash = 'sha256-1AtxAdjW8OoHxkHeCTNrC1ECK08OVcivVLb8ds8hfOk='
+    version = 'v0.69.0'
+    hash = 'sha256-rqui1G7KMtVtGXDFY7XpWD9tA721UtoPC+/JLh8axrA='
 
   [mod.'github.com/prometheus/procfs']
     version = 'v0.20.1'
@@ -130,8 +130,8 @@ schema = 3
     hash = 'sha256-wYDmrmqdv9R8dAL5nuWJ+1Nh7fWWxdpd03UkLOtyJrk='
 
   [mod.'github.com/vmware/go-ipfix']
-    version = 'v0.16.0'
-    hash = 'sha256-T3DMyRzv+OyOcQo+DggsZjkJgvlAtYfD/iOEevjtrkA='
+    version = 'v0.17.0'
+    hash = 'sha256-FuuOzKkUzdvtwGuYbmGUpSDIYZK6gYQsodJneJV6cnI='
 
   [mod.'github.com/xo/terminfo']
     version = 'v0.0.0-20220910002029-abceb7e1c41e'
@@ -146,5 +146,5 @@ schema = 3
     hash = 'sha256-NzRXMSEk6upeudJvUEPVnw6clJ3d8UdC/vdfANWAc8g='
 
   [mod.'google.golang.org/protobuf']
-    version = 'v1.36.11'
-    hash = 'sha256-7W+6jntfI/awWL3JP6yQedxqP5S9o3XvPgJ2XxxsIeE='
+    version = 'v1.36.12-0.20260120151049-f2248ac996af'
+    hash = 'sha256-G6dblBo/FH3sIvIrHuco6fpaRIWBdV2xtorLFU49r5I='
