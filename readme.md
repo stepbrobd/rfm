@@ -13,7 +13,7 @@ Prometheus and IPFIX.
 
 Requirements:
 
-- Linux 6.6 or newer (TCX requirement)
+- Linux 6.12 or newer ([integration tested](integration/versions.nix))
 - Go 1.25+
 - Root or `CAP_BPF` + `CAP_NET_ADMIN` + `CAP_PERFMON`
 
@@ -401,7 +401,7 @@ buffer size, and flow table limits, all of which are tunable.
 
 RFM can run inside Docker containers or Kubernetes pods with `CAP_BPF` +
 `CAP_NET_ADMIN` + `CAP_PERFMON` (or privileged mode). The host kernel must be
-Linux 6.6+.
+Linux 6.12+.
 
 Most flow receivers (Akvorado, goflow2, nfdump, ElastiFlow) cannot do
 per-container flow monitoring. eBPF tools that can monitor per-container traffic
