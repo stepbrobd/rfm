@@ -84,7 +84,9 @@
       iperf3
       jq
       nfdump
+      pmacct
       python3
+      softflowd
       tcpreplay
     ];
   };
