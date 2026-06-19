@@ -5,6 +5,47 @@ node on G5K. We use kernel pktgen on a veth pair and RFM monitors the peer.
 "Ground truth" numbers will be from pktgen's exact send counts and RFM's per-CPU
 interface counters.
 
+## Kadeploy
+
+Before running the actual benchmark, Kadeploy image (should already be cached)
+is required.
+
+Go onto G5K frontend and reserve an interactive job, and install Nix on the
+compute node.
+
+Clone the repo:
+
+```sh
+git clone https://github.com/stepbrobd/rfm
+```
+
+Build the benchmark image:
+
+```sh
+nix run nixpkgs#nix-output-monitor -- build .#bench --no-link --json > result.json
+```
+
+Copy the closure to the shared NFS between compute node and frontend:
+
+```sh
+cp -rL $(jq -r '.[0].outputs.out' result.json) ~/g5k-image
+chmod +rw ~/g5k-image
+rm result.json
+```
+
+Exit out of the current compute node and back to frontend. Then reserve however
+many nodes needed for benchmark:
+
+```sh
+oarsub -I -t deploy # -l nodes=2,walltime=2
+```
+
+Kadeploy (for x86_64-linux jobs):
+
+```sh
+kadeploy3 -a ~/g5k-image/nixos-x86_64-linux.yaml # -M
+```
+
 ## Setup
 
 Deploy G5K Kadeploy image, copy this directory to the node and run as root:
