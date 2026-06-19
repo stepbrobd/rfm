@@ -75,7 +75,15 @@ export def metrics [] { ^curl -s http://127.0.0.1:9669/metrics }
 
 # sum the values of every metric line whose name starts with the prefix
 export def metric-sum [m: string, prefix: string] {
-    $m | lines | where {|l| $l | str starts-with $prefix} | each {|l| $l | split row ' ' | last | into float} | math sum
+    let xs = (
+        $m
+        | lines
+        | where {|l| $l | str starts-with $prefix}
+        | each {|l| $l | split row ' ' | last | into float}
+    )
+    if ($xs | is-empty) { 0.0 } else {
+        $xs | math sum
+    }
 }
 
 export def metric-val [m: string, prefix: string] {
