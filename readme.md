@@ -436,12 +436,17 @@ network-intensive and distributed systems workloads.
 ## Upstream contribution
 
 - BIRD Report 1:
-  <https://trubka.network.cz/pipermail/bird-users/2026-June/018783.html> Fix:
+  <https://trubka.network.cz/archives/list/bird-users@network.cz/message/5BLB2ISGTARLUWDT3O42K6PV5HOMHSTU/>
+  Fix:
   <https://github.com/CZ-NIC/bird/commit/e038bf69ec11c46a76634918129bb05583730506>
 
 - BIRD Report 2:
-  <https://trubka.network.cz/pipermail/bird-users/2026-June/018784.html> Fix:
+  <https://trubka.network.cz/archives/list/bird-users@network.cz/message/6QMZAPPD6VDNJSRAS2MHHVT6E5V6IKHB/>
+  Fix:
   <https://github.com/CZ-NIC/bird/commit/371531d20e251d16916450338dc034fb2b1a7240>
+
+- BIRD Report 3:
+  <https://trubka.network.cz/archives/list/bird-users@network.cz/message/XN43FORRZGU2RL3TASCE6NDKWPTZTSAC/>
 
 ## License
 
