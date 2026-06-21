@@ -44,6 +44,8 @@
 
             packages.default = pkgs.callPackage ./default.nix { };
 
+            packages.hsflowd = pkgs.callPackage ./bench/hsflowd.nix { };
+            packages.netobserv = pkgs.callPackage ./bench/netobserv.nix { };
             packages.bench =
               (lib.nixosSystem {
                 inherit system;
