@@ -88,6 +88,9 @@
       python3
       softflowd
       tcpreplay
+
+      (callPackage ./hsflowd.nix { }) # in kernel sampling (EPCAP/TCX + PSAMPLE)
+      (callPackage ./netobserv.nix { }) # in kernel per CPU hash aggregation
     ];
   };
 
