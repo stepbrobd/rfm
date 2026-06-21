@@ -1,0 +1,26 @@
+Per-packet eBPF datapath cost (kernel.bpf_stats_enabled=1), real i40e NIC,
+offered ~2.1 Mpps of 64B over 1000 flows, sample rate N=100. Produced by
+bench/workload/progcost.nu. run_cnt/run_time_ns summed over the agent's
+sched_cls (TC/TCX) programs over a 6 s window; rx_pkts from the NIC counter.
+
+  agent      progs  runs_per_rx  avg_ns_in_prog   head-to-head sys_cores
+  -----      -----  -----------  --------------   ----------------------
+  none         -        -             -           6.01 (NIC RX softirq only)
+  rfm          2      1.00          118           6.61  (+0.60, 0 ring drops)
+  hsflowd      2      1.00           98          21.17  (+15.2, epcap/TCX)
+  netobserv  >=2      1.00           74          23.05  (+17.0, Sampling:100)
+  softflowd    -        -             -          21.67  (+15.7, libpcap)
+  pmacctd      -        -             -          27.88  (+21.9, libpcap)
+
+Interpretation (the load-bearing fact for the paper): every agent's TC/TCX
+program executes on every packet (runs_per_rx = 1.00) -- sampling does NOT skip
+packets at the datapath. netobserv ran with Sampling:100 confirmed
+(TCAttachMode:tcx, CacheMaxFlows:5000), yet its program still runs per packet
+because its per-CPU hash AGGREGATES every packet and sampling only thins the
+EXPORT. rfm's program also runs per packet (its eBPF is in fact the most
+expensive per run, 118 ns, because it updates the always-on exact per-CPU
+counters), but it holds NO per-flow kernel state and gates the sample FIRST: 99%
+of packets stop after the counter bump and never reach userspace, so the total
+system cost is +0.60 cores vs +15..+22 for the agents that keep per-flow state
+(netobserv) or copy every packet to userspace (libpcap). The cost gap is about
+where flow state lives, not about whether the datapath touches every packet.

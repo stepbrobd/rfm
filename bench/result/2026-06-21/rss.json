@@ -1,0 +1,128 @@
+[
+  {
+    "N": 100,
+    "queues set": 1,
+    "queues hit": 1,
+    "rx pps": 814719,
+    "ring drops": 0,
+    "kern cores": 0.048,
+    "user cores": 0.053
+  },
+  {
+    "N": 100,
+    "queues set": 2,
+    "queues hit": 2,
+    "rx pps": 1557893,
+    "ring drops": 0,
+    "kern cores": 0.096,
+    "user cores": 0.076
+  },
+  {
+    "N": 100,
+    "queues set": 4,
+    "queues hit": 4,
+    "rx pps": 2160872,
+    "ring drops": 0,
+    "kern cores": 0.14,
+    "user cores": 0.095
+  },
+  {
+    "N": 100,
+    "queues set": 8,
+    "queues hit": 8,
+    "rx pps": 2172890,
+    "ring drops": 0,
+    "kern cores": 0.15,
+    "user cores": 0.1
+  },
+  {
+    "N": 100,
+    "queues set": 16,
+    "queues hit": 16,
+    "rx pps": 2184710,
+    "ring drops": 0,
+    "kern cores": 0.196,
+    "user cores": 0.095
+  },
+  {
+    "N": 100,
+    "queues set": 32,
+    "queues hit": 32,
+    "rx pps": 2184721,
+    "ring drops": 0,
+    "kern cores": 0.251,
+    "user cores": 0.095
+  },
+  {
+    "N": 100,
+    "queues set": 64,
+    "queues hit": 64,
+    "rx pps": 2187458,
+    "ring drops": 0,
+    "kern cores": 0.262,
+    "user cores": 0.098
+  },
+  {
+    "N": 1,
+    "queues set": 1,
+    "queues hit": 1,
+    "rx pps": 713012,
+    "ring drops": 21381,
+    "kern cores": 0.15,
+    "user cores": 0.857
+  },
+  {
+    "N": 1,
+    "queues set": 2,
+    "queues hit": 2,
+    "rx pps": 1184081,
+    "ring drops": 2513641,
+    "kern cores": 0.539,
+    "user cores": 1.1
+  },
+  {
+    "N": 1,
+    "queues set": 4,
+    "queues hit": 4,
+    "rx pps": 2150736,
+    "ring drops": 17852282,
+    "kern cores": 0.934,
+    "user cores": 1.096
+  },
+  {
+    "N": 1,
+    "queues set": 8,
+    "queues hit": 8,
+    "rx pps": 2190850,
+    "ring drops": 20806793,
+    "kern cores": 0.879,
+    "user cores": 1.071
+  },
+  {
+    "N": 1,
+    "queues set": 16,
+    "queues hit": 16,
+    "rx pps": 2187305,
+    "ring drops": 24634088,
+    "kern cores": 1.336,
+    "user cores": 1.043
+  },
+  {
+    "N": 1,
+    "queues set": 32,
+    "queues hit": 32,
+    "rx pps": 2194093,
+    "ring drops": 21147191,
+    "kern cores": 1.908,
+    "user cores": 1.074
+  },
+  {
+    "N": 1,
+    "queues set": 64,
+    "queues hit": 64,
+    "rx pps": 2188217,
+    "ring drops": 21323549,
+    "kern cores": 2.305,
+    "user cores": 1.074
+  }
+]
