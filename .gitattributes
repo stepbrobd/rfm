@@ -62,4 +62,5 @@
 *.tgz binary
 *.zip binary
 
+bench/result/** linguist-generated
 bpf/include/vmlinux/**/vmlinux*.h linguist-generated
