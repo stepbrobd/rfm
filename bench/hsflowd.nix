@@ -53,6 +53,10 @@ stdenv.mkDerivation (finalAttrs: {
       --replace-fail '-I/usr/include/bpf' '-I${lib.getDev libbpf}/include' \
       --replace-fail 'mod_epcap.o: mod_epcap.c $(HEADERS)' \
         'mod_epcap.o: mod_epcap.c sample.skel.h $(HEADERS)'
+
+    substituteInPlace src/json/Makefile \
+      --replace-fail '$(UTILS_SHARED_VERSION): $(UTILS_OBJ)' \
+        '$(UTILS_SHARED_VERSION): $(UTILS_OBJ) $(CJSON_OBJ)'
   '';
 
   installFlags = [
