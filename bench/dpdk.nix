@@ -1,7 +1,17 @@
-{ pkgs, ... }:
+{ lib, pkgs, ... }:
 
 {
   boot.kernelModules = [ "vfio-pci" ];
+
+  nixpkgs.overlays = [
+    (
+      _: prev:
+      # dpdk have intel-ipsec-mb (x86 only) in buildInputs unconditionally
+      lib.optionalAttrs (!prev.stdenv.hostPlatform.isx86_64) {
+        dpdk = prev.dpdk.override { intel-ipsec-mb = null; };
+      }
+    )
+  ];
 
   boot.kernelParams = [
     # iommu for vfio-pci binding
