@@ -7,6 +7,7 @@
     (
       _: prev:
       # dpdk have intel-ipsec-mb (x86 only) in buildInputs unconditionally
+      # drop after https://github.com/nixos/nixpkgs/pull/534604
       lib.optionalAttrs (!prev.stdenv.hostPlatform.isx86_64) {
         dpdk = prev.dpdk.override { intel-ipsec-mb = null; };
       }
