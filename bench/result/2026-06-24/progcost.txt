@@ -1,0 +1,33 @@
+Per-packet eBPF datapath cost (kernel.bpf_stats_enabled=1), real mlx5 ConnectX-4 Lx
+25GbE NIC at DPDK line rate (~14.4 Mpps of 64B, dpdk-testpmd txonly-multi-flow), sample
+rate N=100. Produced by bench/workload/progcost.nu. run_cnt/run_time_ns summed over each
+agent's sched_cls (TC/TCX) programs over a 6 s window; rx_pkts from the NIC counter.
+
+  agent      progs  runs_per_rx  avg_ns_in_prog
+  -----      -----  -----------  --------------
+  rfm          2      1.00          105
+  hsflowd      2      1.00           91
+  netobserv    6      1.00           65
+
+Every in-kernel agent's TC/TCX program runs on every packet (runs_per_rx = 1.00) even at
+25G line rate. Sampling does not skip packets at the datapath. rfm's low total system
+cost comes from gating the sample first and holding no per-flow kernel state, not from
+running its program less often (its per-run cost is in fact the highest of the three,
+105 ns, because it updates the always-on exact per-CPU counters).
+
+See headtohead.json for the matched 1-in-100 system-wide busy-core comparison. That
+comparison was measured at a MODERATE offered load (~2.2 Mpps, kernel pktgen), not at
+line rate: at ~14.4 Mpps the NIC RX softirq baseline alone is about 34.6 of 36 cores and
+saturates the receive path, leaving no headroom to separate the agents. At ~2.2 Mpps:
+
+  none 9.74 | rfm +0.97 (0 ring drops) | netobserv +0.75 | hsflowd +0.84
+  | softflowd +13.8 | pmacctd +11.0   (softflowd/pmacctd are libpcap)
+
+The three in-kernel eBPF agents cluster around +0.8 cores; the libpcap tools are 11 to
+18x heavier. The dominant cost factor is the kernel-to-userspace boundary (copy every
+packet vs sample in kernel), not whether the agent keeps per-flow state: netobserv keeps
+a per-CPU flow hash yet stays in the cheap class. NOTE: the 2026-06-21 head-to-head
+over-stated netobserv (+17.0) and hsflowd (+15.2) because the libpcap agents measured
+just before them were killed with SIGINT and did not always exit, so orphan libpcap
+captures inflated the later measurements. This run force-kills each agent before the
+next.

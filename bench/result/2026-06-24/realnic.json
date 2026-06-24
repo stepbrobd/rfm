@@ -1,0 +1,29 @@
+[
+  {
+    "N": 1024,
+    "rx pps": 14440047,
+    "ring drops": 0,
+    "ns/pkt": 102.3,
+    "kern cores": 1.479,
+    "user cores": 0.041,
+    "cores/Mpps": 0.105
+  },
+  {
+    "N": 100,
+    "rx pps": 14374947,
+    "ring drops": 30059,
+    "ns/pkt": 106.4,
+    "kern cores": 1.53,
+    "user cores": 0.313,
+    "cores/Mpps": 0.128
+  },
+  {
+    "N": 10,
+    "rx pps": 14301106,
+    "ring drops": 19238253,
+    "ns/pkt": 123.0,
+    "kern cores": 1.759,
+    "user cores": 0.309,
+    "cores/Mpps": 0.145
+  }
+]

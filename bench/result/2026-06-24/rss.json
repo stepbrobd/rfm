@@ -1,0 +1,56 @@
+[
+  {
+    "N": 100,
+    "queues set": 1,
+    "queues hit": 1,
+    "rx pps": 1150261,
+    "ring drops": 0,
+    "kern cores": 0.047,
+    "user cores": 0.054
+  },
+  {
+    "N": 100,
+    "queues set": 2,
+    "queues hit": 2,
+    "rx pps": 2182777,
+    "ring drops": 0,
+    "kern cores": 0.093,
+    "user cores": 0.087
+  },
+  {
+    "N": 100,
+    "queues set": 4,
+    "queues hit": 4,
+    "rx pps": 4230378,
+    "ring drops": 0,
+    "kern cores": 0.185,
+    "user cores": 0.152
+  },
+  {
+    "N": 100,
+    "queues set": 8,
+    "queues hit": 8,
+    "rx pps": 7297907,
+    "ring drops": 0,
+    "kern cores": 0.375,
+    "user cores": 0.243
+  },
+  {
+    "N": 100,
+    "queues set": 16,
+    "queues hit": 16,
+    "rx pps": 12657634,
+    "ring drops": 0,
+    "kern cores": 0.736,
+    "user cores": 0.29
+  },
+  {
+    "N": 100,
+    "queues set": 32,
+    "queues hit": 32,
+    "rx pps": 14317699,
+    "ring drops": 0,
+    "kern cores": 1.393,
+    "user cores": 0.32
+  }
+]
