@@ -30,15 +30,12 @@ port=9669
     let r = (rfm-start $toml)
     sleep ($warmup * 1sec)
     let st0 = (ingress-stat)
-    let m0 = (metrics)
-    let rx0 = (metric-sum $m0 "rfm_interface_rx_packets_total")
     let c0 = (proc-cpu $r.pid)
     let t0 = (date now)
     sleep ($secs * 1sec)
     let t1 = (date now)
     let st1 = (ingress-stat)
     let m1 = (metrics)
-    let rx1 = (metric-sum $m1 "rfm_interface_rx_packets_total")
     let c1 = (proc-cpu $r.pid)
     let dur = (($t1 - $t0) / 1sec)
     rfm-stop $r.jid
@@ -48,15 +45,17 @@ port=9669
     let rc1 = $st1.run_cnt? | default 0 | into int
     let rc0 = $st0.run_cnt? | default 0 | into int
     let rc = $rc1 - $rc0
-    let drx = $rx1 - $rx0 | into int
     let dc = ($c1 - $c0)
-    let pps = if $dur > 0 { ($drx / $dur | math round) } else { 0 }
+    # rx rate from the TC program run_cnt (exact packets rfm processed, via
+    # bpftool) -- avoids scraping rfm's HTTP endpoint, which is unreachable under
+    # full line-rate saturation
+    let pps = if $dur > 0 { ($rc / $dur | math round) } else { 0 }
     let kcores = if $dur > 0 { $rt / 1000000000 / $dur | math round --precision 3 } else { 0 }
     let ucores = if $dur > 0 { $dc / $clk / $dur | math round --precision 3 } else { 0 }
     {
       "N": $n
       "rx pps": $pps
-      "ring drops": (metric-val $m1 "rfm_collector_dropped_events_total" | into int)
+      "ring drops": (if ($m1 | is-empty) { -1 } else { metric-val $m1 "rfm_collector_dropped_events_total" | into int })
       "ns/pkt": (if $rc > 0 { ($rt / $rc | math round --precision 1) } else { 0 })
       "kern cores": $kcores
       "user cores": $ucores

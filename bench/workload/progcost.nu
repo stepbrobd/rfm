@@ -115,7 +115,7 @@ port=9669
     ^bash -c $"nohup hsflowd -d -f /tmp/progcost-hsf.conf -l ($hsf_mod) >/tmp/progcost-hsf.log 2>&1 &"
     sleep ($warmup * 1sec)
     let hsfc = (prog-cost $iface $secs)
-    ^pkill -INT -x hsflowd | complete | ignore
+    ^pkill -KILL -x hsflowd | complete | ignore
     sleep 2sec
 
     # netobserv (Sampling=N, direct-flp, no collector). Comm is too long for
@@ -134,7 +134,7 @@ exec netobserv-ebpf-agent
     sleep ($warmup * 1sec)
     let netc = (prog-cost $iface $secs)
     let npid = open /tmp/progcost-neto.pid | str trim | into int
-    ^kill -INT $npid | complete | ignore
+    ^kill -KILL $npid | complete | ignore
     sleep 2sec
 
     bpf-stats false

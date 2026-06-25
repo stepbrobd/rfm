@@ -14,6 +14,12 @@
 # export). pmacct/softflowd come from nixpkgs; netobserv/hsflowd are not in
 # nixpkgs and ship in the bench image (bench/{netobserv,hsflowd}.nix), already on
 # PATH on the deployed node. Run detached; logs land in /tmp/{sfd,pmd,neto,hsf}.log.
+#
+# Output is namespaced per sample rate (/tmp/headtohead-N<n>.json) so a sweep
+# over N=1/10/100/1000 (one invocation per N, generator left running) does not
+# clobber. Agents are force-killed (SIGKILL) between measurements: softflowd and
+# pmacctd (libpcap) do not reliably exit on SIGINT, and an orphan capture keeps
+# copying every packet and inflates whichever agent is measured next.
 
 const LIB = path self | path dirname | path join "lib.nu"
 use $LIB *
@@ -87,6 +93,32 @@ def measure-pid [pid: int, secs: int] {
     {sys_cores: $bcores, proc_cores: $pcores}
 }
 
+# kill every agent so a measurement starts from an agent-free state
+def kill-all-agents [] {
+    ^pkill -KILL -x softflowd | complete | ignore
+    ^pkill -KILL -x pmacctd | complete | ignore
+    ^pkill -KILL -x hsflowd | complete | ignore
+    ^pkill -KILL -f netobserv-ebpf-agent | complete | ignore
+    ^pkill -KILL -f "rfm agent" | complete | ignore
+    null
+}
+
+# total kernel memory (sum of bytes_memlock over all bpf maps) right now. Each
+# agent's map memory is this minus the no-agent baseline -- rfm holds only fixed
+# per-CPU counters + a constant ring buffer (no per-flow state), netobserv holds
+# a per-CPU flow hash, hsflowd a small sampler, and the libpcap tools none.
+def map-mem [] {
+    let xs = (
+        ^bpftool map show -j
+        | from json
+        | get bytes_memlock?
+        | compact
+    )
+    if ($xs | is-empty) { 0 } else {
+        $xs | math sum
+    }
+}
+
 def main [
   --iface: string = "ens3f0np0"
   --secs: int = 15
@@ -100,6 +132,15 @@ nfprobe_version: 10
 sampling_rate: ($n)
 ' | save --force /tmp/pmacctd.conf
     bpf-stats true
+
+    # defensive cleanup: kill stray agents (e.g. from a previous N in a sweep) so
+    # the baseline and each measurement start agent-free
+    kill-all-agents
+    sleep 2sec
+
+    # kernel bpf-map memory with no agent attached; subtracted from each agent's
+    # reading to isolate the agent's own maps (libpcap tools create none -> ~0)
+    let base_mem = (map-mem)
 
     # baseline: no agent (NIC RX softirq cost at the offered load)
     let base = (measure "no-such-process-xyzzy" $secs)
@@ -116,6 +157,7 @@ port=9669
     let r = (rfm-start $toml)
     sleep 3sec
     let rfmm = (measure "rfm" $secs)
+    let rfm_mem = ((map-mem) - $base_mem)
     let drops = metric-val (metrics) "rfm_collector_dropped_events_total" | into int
     rfm-stop $r.jid
 
@@ -124,7 +166,8 @@ port=9669
     ^bash -c $"nohup softflowd -i ($iface) -n 127.0.0.1:9995 -v 10 -s ($n) -d >/tmp/sfd.log 2>&1 &"
     sleep 3sec
     let sfdm = (measure "softflowd" $secs)
-    ^pkill -INT -x softflowd | complete | ignore
+    let sfd_mem = ((map-mem) - $base_mem)
+    ^pkill -KILL -x softflowd | complete | ignore
     sleep 2sec
 
     # pmacctd (libpcap), matched 1-in-N sampling, foreground
@@ -132,7 +175,8 @@ port=9669
     ^bash -c "nohup pmacctd -f /tmp/pmacctd.conf >/tmp/pmd.log 2>&1 &"
     sleep 4sec
     let pmdm = (measure "pmacctd" $secs)
-    ^pkill -INT -x pmacctd | complete | ignore
+    let pmd_mem = ((map-mem) - $base_mem)
+    ^pkill -KILL -x pmacctd | complete | ignore
     sleep 2sec
 
     # netobserv-ebpf-agent (eBPF, in-kernel per-CPU HASH aggregation): the
@@ -154,7 +198,8 @@ exec netobserv-ebpf-agent
     sleep 4sec
     let neto_pid = open /tmp/neto.pid | str trim | into int
     let netom = (measure-pid $neto_pid $secs)
-    ^kill -INT $neto_pid | complete | ignore
+    let neto_mem = ((map-mem) - $base_mem)
+    ^kill -KILL $neto_pid | complete | ignore
     sleep 2sec
 
     # hsflowd EPCAP (eBPF/TCX, in-kernel 1-in-N sampling, no per-flow kernel
@@ -178,7 +223,8 @@ exec netobserv-ebpf-agent
     ^bash -c $"nohup hsflowd -d -f /tmp/hsflowd.conf -l ($hsf_mod) > /tmp/hsf.log 2>&1 &"
     sleep 4sec
     let hsfm = (measure "hsflowd" $secs)
-    ^pkill -INT -x hsflowd | complete | ignore
+    let hsf_mem = ((map-mem) - $base_mem)
+    ^pkill -KILL -x hsflowd | complete | ignore
     sleep 2sec
 
     bpf-stats false
@@ -187,39 +233,45 @@ exec netobserv-ebpf-agent
             agent: "none (baseline)"
             sys_cores: $base.sys_cores
             proc_cores: 0.0
+            map_mem_kb: 0
             note: "NIC RX softirq only"
         }
         {
             agent: $"rfm N=($n)"
             sys_cores: $rfmm.sys_cores
             proc_cores: $rfmm.proc_cores
+            map_mem_kb: ($rfm_mem / 1024 | math round)
             note: $"in-kernel sample; ring drops ($drops)"
         }
         {
             agent: $"softflowd s=($n)"
             sys_cores: $sfdm.sys_cores
             proc_cores: $sfdm.proc_cores
+            map_mem_kb: ($sfd_mem / 1024 | math round)
             note: "libpcap; see /tmp/sfd.log"
         }
         {
             agent: $"pmacctd s=($n)"
             sys_cores: $pmdm.sys_cores
             proc_cores: $pmdm.proc_cores
+            map_mem_kb: ($pmd_mem / 1024 | math round)
             note: "libpcap; see /tmp/pmd.log"
         }
         {
             agent: $"netobserv N=($n)"
             sys_cores: $netom.sys_cores
             proc_cores: $netom.proc_cores
+            map_mem_kb: ($neto_mem / 1024 | math round)
             note: "eBPF in-kernel hash; direct-flp"
         }
         {
             agent: $"hsflowd epcap s=($n)"
             sys_cores: $hsfm.sys_cores
             proc_cores: $hsfm.proc_cores
+            map_mem_kb: ($hsf_mem / 1024 | math round)
             note: "eBPF/TCX in-kernel sample; sFlow"
         }
     ]
-    $rows | to json | save --force /tmp/headtohead.json
+    $rows | to json | save --force $"/tmp/headtohead-N($n).json"
     $rows
 }

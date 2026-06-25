@@ -50,7 +50,9 @@ export def bpf-stats [on: bool] {
 export def rfm-start [toml: string] {
     $toml | save --raw --force /tmp/rfm.toml
     let jid = job spawn {|| ^($env.RFM) agent -c /tmp/rfm.toml out+err> /tmp/rfm.log }
-    sleep 2sec
+    # wait for the prometheus endpoint to answer (up to ~20s) so metric scrapes
+    # under a heavy flood do not race the agent's HTTP server coming up
+    ^bash -c 'for i in $(seq 1 40); do curl -s --max-time 1 http://127.0.0.1:9669/metrics >/dev/null 2>&1 && exit 0; sleep 0.5; done; exit 0' | complete | ignore
     {
         jid: $jid
         pid: (
@@ -71,7 +73,9 @@ export def rfm-stop [jid: int] {
     null
 }
 
-export def metrics [] { ^curl -s http://127.0.0.1:9669/metrics }
+export def metrics [] {
+    ^curl -s --max-time 2 http://127.0.0.1:9669/metrics | complete | get stdout
+}
 
 # sum the values of every metric line whose name starts with the prefix
 export def metric-sum [m: string, prefix: string] {
