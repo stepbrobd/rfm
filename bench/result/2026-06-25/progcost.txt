@@ -1,0 +1,46 @@
+Per-packet eBPF datapath cost (kernel.bpf_stats_enabled=1), real mlx5 ConnectX-4 Lx
+25GbE NIC at DPDK line rate (~15-16 Mpps of 64B, dpdk-testpmd txonly-multi-flow),
+sample rate N=100. Produced by bench/workload/progcost.nu. run_cnt/run_time_ns summed
+over each agent's sched_cls (TC/TCX) programs over a 6 s window; rx_pkts from the NIC.
+
+  agent      progs  runs_per_rx  avg_ns_in_prog
+  -----      -----  -----------  --------------
+  rfm          2      1.00*         106
+  hsflowd      2      1.00           94
+  netobserv    6/8    1.00           67
+
+  * rfm read runs_per_rx 0.62 at 16 Mpps: at extreme load some packets are dropped
+    before the TC ingress hook, so the program runs on fewer packets than the NIC
+    rx counter. The per-run cost (106 ns) is the comparable figure and matches the
+    2026-06-24 line-rate run (105 ns).
+
+Every in-kernel agent's TC/TCX program runs on essentially every received packet.
+Sampling does not skip the datapath program. rfm's program is the most expensive of
+the three per run (106 ns) because it also updates the always-on EXACT per-CPU
+counters; netobserv (67 ns) is cheapest in-program because it does a per-flow hash
+update and defers everything else. rfm's low TOTAL system cost comes from gating the
+sample first and holding no per-flow kernel state, not from running its program less.
+
+This is the per-packet view that complements two other comparisons:
+
+1. System-wide busy cores at a matched 1-in-100 rate, moderate ~2.08 Mpps load
+   (headtohead-N100.json), over a 3.23-core agent-free baseline:
+     rfm +0.20 | netobserv +0.17 | hsflowd +0.15 | softflowd +4.74 | pmacctd +3.20
+   The three in-kernel eBPF agents cluster near +0.15-0.20 cores; the libpcap
+   exporters are 16-24x heavier because they copy every packet to userspace and
+   sample after. NOTE: the head-to-head was measured at ~2.08 Mpps, not line rate:
+   at ~16 Mpps the NIC RX softirq alone saturates the receive path (node loadavg
+   ~39) and leaves no headroom to separate the agents.
+
+2. Kernel memory and per-flow state (headtohead-N*.json map_mem_kb, kmem-F*.json).
+   rfm holds NO per-flow kernel table: a constant 314 KB (256K sampled-event
+   ringbuf + 44 KB exact per-CPU counters) at any flow cardinality. netobserv holds
+   a per-CPU/aggregated flow hash that grows with active flows and CAPS at 5000
+   entries: at 20000-50000 concurrent flows it tracks only 5000 (10-25% coverage)
+   and costs ~2.2 MB of kernel memory. hsflowd, like rfm, holds no flow table
+   (91 KB). The libpcap tools keep their flow tables in userspace (~0 kernel BPF).
+
+   The design story: rfm trades a little userspace CPU (its sampled-event consumer)
+   for exact volume counters and zero per-flow kernel state, so it has no kernel
+   cardinality cap; netobserv's lower in-program cost comes with a fixed 5000-flow
+   kernel hash that silently drops flows past capacity.

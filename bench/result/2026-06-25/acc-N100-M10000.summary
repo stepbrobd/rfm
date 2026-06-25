@@ -1,0 +1,4 @@
++ python3 analyze.py --csv /tmp/acc-N100-M10000.csv --rate 100 --flows 1000
+N=100 M=10000 seen=959/1000 coverage=0.959
+rel_err mean=0.0797 p50=0.0700 p95=0.2000 max=0.3000
+duffield_bound sqrt(N/M)=0.1000

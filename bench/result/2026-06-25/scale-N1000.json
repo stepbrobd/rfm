@@ -1,0 +1,68 @@
+[
+  {
+    "cores": 1,
+    "agg sent": 2000000,
+    "rx (exact)": 2000005,
+    "exact %": 1e+2,
+    "sampled": 1955,
+    "ring drops": 0,
+    "kernel cores": 0.024,
+    "rfm cores": 0.006,
+    "agg pps": 1371486
+  },
+  {
+    "cores": 2,
+    "agg sent": 4000000,
+    "rx (exact)": 4000012,
+    "exact %": 1e+2,
+    "sampled": 3917,
+    "ring drops": 0,
+    "kernel cores": 0.046,
+    "rfm cores": 0.008,
+    "agg pps": 2646123
+  },
+  {
+    "cores": 4,
+    "agg sent": 8000000,
+    "rx (exact)": 8000021,
+    "exact %": 1e+2,
+    "sampled": 7937,
+    "ring drops": 0,
+    "kernel cores": 0.099,
+    "rfm cores": 0.011,
+    "agg pps": 5044156
+  },
+  {
+    "cores": 8,
+    "agg sent": 16000000,
+    "rx (exact)": 16000045,
+    "exact %": 1e+2,
+    "sampled": 15824,
+    "ring drops": 0,
+    "kernel cores": 0.212,
+    "rfm cores": 0.018,
+    "agg pps": 8925480
+  },
+  {
+    "cores": 16,
+    "agg sent": 32000000,
+    "rx (exact)": 32000086,
+    "exact %": 1e+2,
+    "sampled": 32324,
+    "ring drops": 0,
+    "kernel cores": 0.437,
+    "rfm cores": 0.024,
+    "agg pps": 15776631
+  },
+  {
+    "cores": 32,
+    "agg sent": 64000000,
+    "rx (exact)": 64000150,
+    "exact %": 1e+2,
+    "sampled": 63836,
+    "ring drops": 0,
+    "kernel cores": 1.115,
+    "rfm cores": 0.032,
+    "agg pps": 17815312
+  }
+]

@@ -1,0 +1,32 @@
+[
+  {
+    "agent": "rfm",
+    "map_mem_kb": 314,
+    "flow_tables": []
+  },
+  {
+    "agent": "netobserv",
+    "map_mem_kb": 2234,
+    "flow_tables": [
+      {
+        "name": "quic_flows",
+        "type": "percpu_hash",
+        "max_entries": 65536,
+        "memlock_kb": 1026,
+        "entries": 0
+      },
+      {
+        "name": "aggregated_flow",
+        "type": "hash",
+        "max_entries": 5000,
+        "memlock_kb": 1106,
+        "entries": 4999
+      }
+    ]
+  },
+  {
+    "agent": "hsflowd",
+    "map_mem_kb": 91,
+    "flow_tables": []
+  }
+]
