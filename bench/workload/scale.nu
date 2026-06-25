@@ -81,6 +81,7 @@ port=9669
   })
     bpf-stats false
     0..63 | each {|i| ^ip link del $"g($i)" | complete | ignore }
-    $rows | to json | save --force /tmp/scale.json
+    # per-N output so the N=1/10/100 sweeps for fig:overhead(b,c) do not clobber
+    $rows | to json | save --force $"/tmp/scale-N($n).json"
     $rows
 }

@@ -6,7 +6,7 @@ const LIB = path self | path dirname | path join "lib.nu"
 use $LIB *
 
 def main [
-  --rates: string = "1 10 100 1024"  # sample rates to sweep
+  --rates: string = "1 10 100 1000"  # sample rates to sweep (base-10)
   --count: int = 5000000             # packets per run
   --size: int = 60                   # packet size
 ] {

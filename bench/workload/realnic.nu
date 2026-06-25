@@ -3,14 +3,15 @@
 # DUT-side real-NIC overhead sweep over sample_rate, under a sustained external
 # flood (start gen.nu on the peer FIRST). Reports the exact counter rate, ring
 # drops, real-NIC kernel ns/pkt, kernel + userspace cores, and cores-per-Mpps
-# per N. Default 64 RX queues. Run detached; reads /tmp/realnic.json after.
+# per N. N=1 is excluded at line rate (a single userspace consumer cannot drain
+# ~14.4M events/s). Run detached; reads /tmp/realnic.json after.
 
 const LIB = path self | path dirname | path join "lib.nu"
 use $LIB *
 
 def main [
   --iface: string = "ens3f0np0"
-  --ns: string = "1 10 100 1024"  # sample rates to sweep
+  --ns: string = "10 100 1000"  # sample rates to sweep (base-10; N=1 excluded at line rate)
   --secs: int = 15                # measurement window per N
   --warmup: int = 3               # settle time after rfm attach
 ] {
