@@ -1,0 +1,74 @@
+[
+  {
+    "ring_buf_size": 262144,
+    "wakeup_batch": 64,
+    "ring drops": 123017,
+    "sampled": 4876994,
+    "kernel ns/pkt": 176.7,
+    "rfm cores": 0.667,
+    "gen pps": 1088305
+  },
+  {
+    "ring_buf_size": 1048576,
+    "wakeup_batch": 64,
+    "ring drops": 0,
+    "sampled": 5000002,
+    "kernel ns/pkt": 183.4,
+    "rfm cores": 0.672,
+    "gen pps": 1090015
+  },
+  {
+    "ring_buf_size": 4194304,
+    "wakeup_batch": 64,
+    "ring drops": 0,
+    "sampled": 5000000,
+    "kernel ns/pkt": 180.5,
+    "rfm cores": 0.673,
+    "gen pps": 1087882
+  },
+  {
+    "ring_buf_size": 16777216,
+    "wakeup_batch": 64,
+    "ring drops": 0,
+    "sampled": 5000001,
+    "kernel ns/pkt": 181.7,
+    "rfm cores": 0.677,
+    "gen pps": 1083223
+  },
+  {
+    "ring_buf_size": 262144,
+    "wakeup_batch": 16,
+    "ring drops": 123171,
+    "sampled": 4876829,
+    "kernel ns/pkt": 211.0,
+    "rfm cores": 0.656,
+    "gen pps": 1052395
+  },
+  {
+    "ring_buf_size": 262144,
+    "wakeup_batch": 64,
+    "ring drops": 92723,
+    "sampled": 4907277,
+    "kernel ns/pkt": 178.1,
+    "rfm cores": 0.676,
+    "gen pps": 1076621
+  },
+  {
+    "ring_buf_size": 262144,
+    "wakeup_batch": 256,
+    "ring drops": 131254,
+    "sampled": 4868746,
+    "kernel ns/pkt": 168.8,
+    "rfm cores": 0.671,
+    "gen pps": 1104461
+  },
+  {
+    "ring_buf_size": 262144,
+    "wakeup_batch": 1024,
+    "ring drops": 155551,
+    "sampled": 4844450,
+    "kernel ns/pkt": 165.3,
+    "rfm cores": 0.665,
+    "gen pps": 1113164
+  }
+]

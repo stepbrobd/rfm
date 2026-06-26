@@ -1,0 +1,44 @@
+[
+  {
+    "agent": "none (baseline)",
+    "sys_cores": 3.239,
+    "proc_cores": 0.0,
+    "map_mem_kb": 0,
+    "note": "NIC RX softirq only"
+  },
+  {
+    "agent": "rfm N=10",
+    "sys_cores": 3.655,
+    "proc_cores": 0.276,
+    "map_mem_kb": 314,
+    "note": "in-kernel sample; ring drops 0"
+  },
+  {
+    "agent": "softflowd s=10",
+    "sys_cores": 7.741,
+    "proc_cores": 0.16,
+    "map_mem_kb": 0,
+    "note": "libpcap; see /tmp/sfd.log"
+  },
+  {
+    "agent": "pmacctd s=10",
+    "sys_cores": 6.251,
+    "proc_cores": 0.828,
+    "map_mem_kb": 0,
+    "note": "libpcap; see /tmp/pmd.log"
+  },
+  {
+    "agent": "netobserv N=10",
+    "sys_cores": 3.394,
+    "proc_cores": 0.006,
+    "map_mem_kb": 1453,
+    "note": "eBPF in-kernel hash; direct-flp"
+  },
+  {
+    "agent": "hsflowd epcap s=10",
+    "sys_cores": 3.366,
+    "proc_cores": 0.001,
+    "map_mem_kb": 91,
+    "note": "eBPF/TCX in-kernel sample; sFlow"
+  }
+]

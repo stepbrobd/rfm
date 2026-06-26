@@ -1,0 +1,3 @@
+N=100 M=10000 seen=999/1000 coverage=0.999
+rel_err mean=0.0818 p50=0.0700 p95=0.2000 max=0.3700
+duffield_bound sqrt(N/M)=0.1000

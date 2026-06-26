@@ -1,0 +1,46 @@
+[
+  {
+    "sample rate": 1,
+    "sent": 5000000,
+    "rx (exact)": 5000006,
+    "exact %": 1e+2,
+    "sampled": 4889298,
+    "ring drops": 110714,
+    "kernel ns/pkt": 175.9,
+    "rfm cores": 0.688,
+    "gen pps": 1090475
+  },
+  {
+    "sample rate": 10,
+    "sent": 5000000,
+    "rx (exact)": 5000001,
+    "exact %": 1e+2,
+    "sampled": 499637,
+    "ring drops": 0,
+    "kernel ns/pkt": 51.2,
+    "rfm cores": 0.077,
+    "gen pps": 1303164
+  },
+  {
+    "sample rate": 100,
+    "sent": 5000000,
+    "rx (exact)": 5000000,
+    "exact %": 1e+2,
+    "sampled": 50003,
+    "ring drops": 0,
+    "kernel ns/pkt": 42.9,
+    "rfm cores": 0.04,
+    "gen pps": 1337192
+  },
+  {
+    "sample rate": 1000,
+    "sent": 5000000,
+    "rx (exact)": 5000001,
+    "exact %": 1e+2,
+    "sampled": 5021,
+    "ring drops": 0,
+    "kernel ns/pkt": 41.7,
+    "rfm cores": 0.008,
+    "gen pps": 1364497
+  }
+]

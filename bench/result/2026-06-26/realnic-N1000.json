@@ -1,0 +1,11 @@
+[
+  {
+    "N": 1000,
+    "rx pps": 14426174,
+    "ring drops": 0,
+    "ns/pkt": 94.1,
+    "kern cores": 1.357,
+    "user cores": 0.04,
+    "cores/Mpps": 0.097
+  }
+]
