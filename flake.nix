@@ -69,7 +69,7 @@
     gomod2nix.url = "github:nix-community/gomod2nix";
     gomod2nix.inputs.nixpkgs.follows = "nixpkgs";
     gomod2nix.inputs.flake-utils.follows = "utils";
-    g5k.url = "github:stepbrobd/nixos-g5k-image/systemd";
+    g5k.url = "github:oar-team/nixos-g5k-image";
     g5k.inputs.nixpkgs.follows = "nixpkgs";
     g5k.inputs.kapack.follows = "";
   };

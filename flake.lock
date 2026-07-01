@@ -8,16 +8,15 @@
         ]
       },
       "locked": {
-        "lastModified": 1782293818,
+        "lastModified": 1782915509,
         "narHash": "sha256-PgJK989pgQxxVYlsFoYfE7zlfgOclQLvAoYo/6fWdnU=",
-        "owner": "stepbrobd",
+        "owner": "oar-team",
         "repo": "nixos-g5k-image",
-        "rev": "776e96e4e7b4d1211b5960c874d27901a24dbad4",
+        "rev": "40432ca2798695cd38415783df627d5605ca646b",
         "type": "github"
       },
       "original": {
-        "owner": "stepbrobd",
-        "ref": "systemd",
+        "owner": "oar-team",
         "repo": "nixos-g5k-image",
         "type": "github"
       }
