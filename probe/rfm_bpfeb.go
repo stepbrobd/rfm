@@ -34,6 +34,19 @@ type rfmRfmIfaceValue struct {
 	Bytes   uint64
 }
 
+// Names of all BPF objects in the ELF.
+//
+// Used for safe lookups in a Collection or CollectionSpec.
+const (
+	rfmMapRfmConfig      = "rfm_config"
+	rfmMapRfmFlowDrops   = "rfm_flow_drops"
+	rfmMapRfmFlowEvents  = "rfm_flow_events"
+	rfmMapRfmIfaceStats  = "rfm_iface_stats"
+	rfmMapRfmSubmitCount = "rfm_submit_count"
+	rfmProgRfmTcEgress   = "rfm_tc_egress"
+	rfmProgRfmTcIngress  = "rfm_tc_ingress"
+)
+
 // loadRfm returns the embedded CollectionSpec for rfm.
 func loadRfm() (*ebpf.CollectionSpec, error) {
 	reader := bytes.NewReader(_RfmBytes)
@@ -54,7 +67,7 @@ func loadRfm() (*ebpf.CollectionSpec, error) {
 //	*rfmMaps
 //
 // See ebpf.CollectionSpec.LoadAndAssign documentation for details.
-func loadRfmObjects(obj interface{}, opts *ebpf.CollectionOptions) error {
+func loadRfmObjects(obj any, opts *ebpf.CollectionOptions) error {
 	spec, err := loadRfm()
 	if err != nil {
 		return err
