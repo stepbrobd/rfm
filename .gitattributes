@@ -2,6 +2,7 @@
 
 *.patch -text
 
+# *.csv text eol=lf
 # .gitattributes export-ignore
 # .gitignore export-ignore
 # .gitkeep export-ignore
@@ -29,7 +30,6 @@
 *.adoc text
 *.bib text diff=bibtex
 *.bibtex text diff=bibtex
-*.csv text eol=crlf
 *.doc diff=astextplain
 *.docx diff=astextplain
 *.dot diff=astextplain
