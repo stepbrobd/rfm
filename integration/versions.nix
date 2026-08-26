@@ -6,8 +6,8 @@ let
   kernels = [
     "linuxPackages_6_12"
     "linuxPackages_6_18"
-    "linuxPackages_7_0"
     "linuxPackages_7_1"
+    "linuxPackages_7_2"
   ];
 
   # "linuxPackages_7_0" -> "k70"
