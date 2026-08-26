@@ -33,7 +33,7 @@ mkShell {
     pkg-config
     python3
   ]
-  ++ lib.optionals stdenv.isLinux [
+  ++ lib.optionals stdenv.hostPlatform.isLinux [
     bpftools
     libbpf
   ];
