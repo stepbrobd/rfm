@@ -1,6 +1,9 @@
 name: Merge
 
 on:
+  workflow_run: # zizmor: ignore[dangerous-triggers]
+    workflows: [CI]
+    types: [completed]
   schedule:
     - cron: "0 6 * * 6"
   workflow_dispatch:
@@ -11,6 +14,7 @@ permissions:
 
 jobs:
   Merge:
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.event == 'pull_request'
     runs-on: ubuntu-latest
     steps:
       - name: Merge
