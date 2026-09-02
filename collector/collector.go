@@ -230,6 +230,8 @@ func (c *Collector) pollDrops(rd Reader) {
 
 // Run reads events from rd, decodes them, and records them until ctx is done
 // It also runs a background goroutine for eviction and drop counter polling
+// the drop counter is polled from that goroutine only, once per tick, so the
+// read loop never spends a map lookup on an idle deadline
 func (c *Collector) Run(ctx context.Context, rd Reader) error {
 	if c.timeout <= 0 {
 		return fmt.Errorf("eviction timeout must be positive, got %v", c.timeout)
@@ -264,7 +266,6 @@ func (c *Collector) Run(ctx context.Context, rd Reader) error {
 		raw, err := rd.ReadRawEvent()
 		if err != nil {
 			if errors.Is(err, os.ErrDeadlineExceeded) {
-				c.pollDrops(rd)
 				continue
 			}
 			c.ringBufErrs.Add(1)

@@ -570,7 +570,8 @@ func TestCollectErrorsTotal(t *testing.T) {
 func TestCollectErrorsSubsystemLabels(t *testing.T) {
 	// exercise both subsystem labels via a collector that has
 	// accumulated ring_buffer and bpf_map errors through Run
-	c := collector.New(30*time.Second, nil, 0)
+	// the drop counter is polled by the eviction ticker, so keep it short
+	c := collector.New(200*time.Millisecond, nil, 0)
 
 	mr := &exportMockReader{
 		events:  [][]byte{{0xde, 0xad}}, // garbage -> decode error -> ring_buffer

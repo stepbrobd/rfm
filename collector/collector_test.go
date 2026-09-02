@@ -256,7 +256,8 @@ func TestRun(t *testing.T) {
 func TestRunDroppedEvents(t *testing.T) {
 	mr := &mockReader{drops: 42}
 
-	c := New(30*time.Second, nil, 0)
+	// drops are polled by the eviction ticker, so keep its period short
+	c := New(200*time.Millisecond, nil, 0)
 	ctx, cancel := context.WithCancel(context.Background())
 
 	errCh := make(chan error, 1)
