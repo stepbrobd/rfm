@@ -683,3 +683,38 @@ func TestExportErrorIncrementsStats(t *testing.T) {
 		t.Fatalf("ipfix errors = %d, want 1", s.IPFIXErrors)
 	}
 }
+
+func TestEvictOrderFollowsLastSeen(t *testing.T) {
+	c := New(10*time.Second, nil, 0)
+	t0 := time.Now()
+
+	mk := func(port uint16) FlowEvent {
+		return FlowEvent{
+			Proto: 6, SrcPort: port, DstPort: 80,
+			SrcAddr: netip.MustParseAddr("::ffff:10.0.0.1"),
+			DstAddr: netip.MustParseAddr("::ffff:10.0.0.2"),
+			Len:     100,
+		}
+	}
+
+	// three flows, then the first one sees traffic again and becomes the
+	// freshest, the eviction sweep must take the second and third only
+	c.Record(mk(1), t0)
+	c.Record(mk(2), t0.Add(time.Second))
+	c.Record(mk(3), t0.Add(2*time.Second))
+	c.Record(mk(1), t0.Add(3*time.Second))
+
+	exp := &mockFlowExporter{}
+	c.SetFlowExporter(exp)
+	c.Evict(t0.Add(12*time.Second + 500*time.Millisecond))
+
+	if got := len(exp.flows); got != 2 {
+		t.Fatalf("exported flows = %d, want 2", got)
+	}
+	if exp.flows[0].Key.SrcPort != 2 || exp.flows[1].Key.SrcPort != 3 {
+		t.Fatalf("eviction order = [%d %d], want [2 3]", exp.flows[0].Key.SrcPort, exp.flows[1].Key.SrcPort)
+	}
+	if _, ok := c.Flows()[mk(1).Key()]; !ok {
+		t.Fatal("refreshed flow was evicted")
+	}
+}

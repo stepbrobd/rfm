@@ -1,7 +1,7 @@
 package collector
 
 import (
-	"container/heap"
+	"container/list"
 	"context"
 	"errors"
 	"fmt"
@@ -15,9 +15,15 @@ import (
 
 // Collector aggregates flow events into an in-memory flow table
 type Collector struct {
-	mu       sync.RWMutex
-	flows    map[FlowKey]*flowState
-	eviction flowHeap
+	mu    sync.RWMutex
+	flows map[FlowKey]*flowState
+	// lru orders flows by last seen time with the oldest at the front
+	// a flow moves to the back on every packet, so idle eviction and forced
+	// eviction both pop the front in constant time
+	// events from different cpus can arrive slightly out of order, which
+	// makes the order approximate by a few microseconds, an expired flow can
+	// then survive one extra sweep behind a fresher one
+	lru      *list.List
 	timeout  time.Duration
 	enricher Enricher
 	exporter FlowExporter
@@ -34,14 +40,13 @@ type Collector struct {
 // enricher may be nil
 // maxFlows <= 0 means unlimited
 func New(timeout time.Duration, enricher Enricher, maxFlows int) *Collector {
-	c := &Collector{
+	return &Collector{
 		flows:    make(map[FlowKey]*flowState),
+		lru:      list.New(),
 		timeout:  timeout,
 		enricher: enricher,
 		maxFlows: maxFlows,
 	}
-	heap.Init(&c.eviction)
-	return c
 }
 
 // Enricher returns the enricher passed to New
@@ -81,8 +86,8 @@ func (c *Collector) Record(ev FlowEvent, now time.Time) {
 				LastSeen:  now,
 			},
 		}
+		state.elem = c.lru.PushBack(state)
 		c.flows[key] = state
-		heap.Push(&c.eviction, state)
 		exp = c.exporter
 		c.mu.Unlock()
 		c.exportFlows(exp, expired)
@@ -92,7 +97,7 @@ func (c *Collector) Record(ev FlowEvent, now time.Time) {
 	state.entry.Packets += ev.Packets()
 	state.entry.Bytes += uint64(ev.Len)
 	state.entry.LastSeen = now
-	heap.Fix(&c.eviction, state.index)
+	c.lru.MoveToBack(state.elem)
 	exp = c.exporter
 	c.mu.Unlock()
 	c.exportFlows(exp, expired)
@@ -101,13 +106,13 @@ func (c *Collector) Record(ev FlowEvent, now time.Time) {
 // evictOldestLocked removes the flow with the oldest LastSeen
 // it must be called with mu held
 func (c *Collector) evictOldestLocked(reason uint8) (ExportedFlow, bool) {
-	oldest := c.eviction.peek()
-	if oldest == nil {
+	front := c.lru.Front()
+	if front == nil {
 		return ExportedFlow{}, false
 	}
+	oldest := c.lru.Remove(front).(*flowState)
 
 	delete(c.flows, oldest.key)
-	heap.Pop(&c.eviction)
 	c.forced.Add(1)
 	return ExportedFlow{
 		Key:       oldest.key,
@@ -125,16 +130,16 @@ func (c *Collector) Evict(now time.Time) {
 	c.mu.Lock()
 
 	for {
-		oldest := c.eviction.peek()
-		if oldest == nil || !oldest.entry.LastSeen.Before(cutoff) {
+		front := c.lru.Front()
+		if front == nil || !front.Value.(*flowState).entry.LastSeen.Before(cutoff) {
 			exp = c.exporter
 			c.mu.Unlock()
 			c.exportFlows(exp, expired)
 			return
 		}
+		oldest := c.lru.Remove(front).(*flowState)
 
 		delete(c.flows, oldest.key)
-		heap.Pop(&c.eviction)
 		expired = append(expired, ExportedFlow{
 			Key:       oldest.key,
 			Entry:     oldest.entry,
@@ -188,8 +193,7 @@ func (c *Collector) Flush(reason uint8) {
 		}
 	}
 	c.flows = make(map[FlowKey]*flowState)
-	c.eviction = nil
-	heap.Init(&c.eviction)
+	c.lru.Init()
 	exp = c.exporter
 	c.mu.Unlock()
 
