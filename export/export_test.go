@@ -318,11 +318,15 @@ func TestCollectCachesIfnames(t *testing.T) {
 		return fmt.Sprintf("if-%d", ifindex)
 	}
 
+	// one resolve per scrape however many series mention the interface,
+	// a second scrape resolves again so a renamed interface shows up
 	collectMetrics(t, mc)
-	collectMetrics(t, mc)
-
 	if got := calls[7]; got != 1 {
 		t.Fatalf("ifname resolver calls for ifindex 7 = %d, want 1", got)
+	}
+	collectMetrics(t, mc)
+	if got := calls[7]; got != 2 {
+		t.Fatalf("ifname resolver calls after two scrapes = %d, want 2", got)
 	}
 }
 

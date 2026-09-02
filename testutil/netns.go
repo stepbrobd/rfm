@@ -27,6 +27,7 @@ const (
 type NS struct {
 	veth *netlink.Veth
 	Link netlink.Link
+	ns   netns.NsHandle
 }
 
 func NewNS(t *testing.T) *NS {
@@ -85,7 +86,14 @@ func NewNS(t *testing.T) *NS {
 	return &NS{
 		veth: veth,
 		Link: link,
+		ns:   ns,
 	}
+}
+
+// Handle returns the namespace so another goroutine can enter it with
+// runtime.LockOSThread and netns.Set
+func (n *NS) Handle() netns.NsHandle {
+	return n.ns
 }
 
 func (n *NS) Ifindex() int {

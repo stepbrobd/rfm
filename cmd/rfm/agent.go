@@ -90,6 +90,11 @@ func runAgent(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("attach failed for %d/%d interfaces: %s", len(failures), len(ifaces), strings.Join(failures, "; "))
 	}
 
+	matcher, err := config.InterfaceMatcher(cfg.Agent.Interfaces)
+	if err != nil {
+		return err
+	}
+
 	rd, err := collector.NewReader(p.FlowEvents(), p.FlowDrops())
 	if err != nil {
 		return fmt.Errorf("open reader: %w", err)
@@ -157,6 +162,20 @@ func runAgent(cmd *cobra.Command, args []string) error {
 		if err := srv.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			log.Error("http server died, shutting down", "err", err)
 			cancel()
+		}
+	}()
+
+	// follow interfaces that appear or vanish while the agent runs
+	go func() {
+		err := p.Watch(ctx, matcher, func(ev probe.LinkEvent) {
+			if ev.Attached {
+				log.Info("attached", "interface", ev.Name)
+			} else {
+				log.Info("detached", "interface", ev.Name)
+			}
+		})
+		if err != nil && ctx.Err() == nil {
+			log.Error("interface watch stopped", "err", err)
 		}
 	}()
 

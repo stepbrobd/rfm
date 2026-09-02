@@ -156,6 +156,12 @@ func (p *Probe) Attached() []int {
 // recreated interface starts from zero under its new index
 // detaching an interface that is not attached is not an error
 func (p *Probe) Detach(ifindex int) error {
+	_, err := p.detach(ifindex)
+	return err
+}
+
+// detach is Detach reporting whether the interface was attached
+func (p *Probe) detach(ifindex int) (bool, error) {
 	p.mu.Lock()
 	l, ok := p.links[ifindex]
 	if ok {
@@ -163,14 +169,14 @@ func (p *Probe) Detach(ifindex int) error {
 	}
 	p.mu.Unlock()
 	if !ok {
-		return nil
+		return false, nil
 	}
 
 	err := errors.Join(l.ingress.Close(), l.egress.Close())
 	if cerr := p.clearIfaceStats(ifindex); cerr != nil {
 		err = errors.Join(err, cerr)
 	}
-	return err
+	return true, err
 }
 
 // clearIfaceStats deletes every counter entry of ifindex
@@ -242,11 +248,17 @@ func (p *Probe) FlowDrops() *ebpf.Map {
 // about to leave after other programs had their say, which is what the NIC
 // counters measure as well
 func (p *Probe) Attach(ifindex int) error {
+	_, err := p.attach(ifindex)
+	return err
+}
+
+// attach is Attach reporting whether the interface was newly attached
+func (p *Probe) attach(ifindex int) (bool, error) {
 	p.mu.Lock()
 	_, attached := p.links[ifindex]
 	p.mu.Unlock()
 	if attached {
-		return nil
+		return false, nil
 	}
 
 	ing, err := link.AttachTCX(link.TCXOptions{
@@ -256,7 +268,7 @@ func (p *Probe) Attach(ifindex int) error {
 		Anchor:    link.Head(),
 	})
 	if err != nil {
-		return fmt.Errorf("attach ingress on %d: %w", ifindex, err)
+		return false, fmt.Errorf("attach ingress on %d: %w", ifindex, err)
 	}
 
 	egr, err := link.AttachTCX(link.TCXOptions{
@@ -267,11 +279,11 @@ func (p *Probe) Attach(ifindex int) error {
 	})
 	if err != nil {
 		ing.Close()
-		return fmt.Errorf("attach egress on %d: %w", ifindex, err)
+		return false, fmt.Errorf("attach egress on %d: %w", ifindex, err)
 	}
 
 	p.mu.Lock()
 	p.links[ifindex] = ifaceLinks{ingress: ing, egress: egr}
 	p.mu.Unlock()
-	return nil
+	return true, nil
 }

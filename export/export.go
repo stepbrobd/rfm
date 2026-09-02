@@ -205,6 +205,13 @@ func (mc *MetricsCollector) Describe(ch chan<- *prometheus.Desc) {
 
 // Collect sends all current metric values to ch
 func (mc *MetricsCollector) Collect(ch chan<- prometheus.Metric) {
+	// interfaces come and go and an index can be reused under another
+	// name, so names are resolved once per scrape rather than cached for
+	// the life of the process
+	mc.mu.Lock()
+	clear(mc.ifnames)
+	mc.mu.Unlock()
+
 	mc.collectIfaceStats(ch)
 	mc.collectFlows(ch)
 	mc.collectRollups(ch)

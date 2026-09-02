@@ -4,11 +4,14 @@ package probe
 
 import (
 	"bytes"
+	"context"
 	"encoding/binary"
 	"errors"
 	"fmt"
 	"net"
 	"os"
+	"runtime"
+	"strings"
 	"structs"
 	"syscall"
 	"testing"
@@ -18,6 +21,8 @@ import (
 	"github.com/cilium/ebpf/asm"
 	"github.com/cilium/ebpf/link"
 	"github.com/cilium/ebpf/ringbuf"
+	"github.com/vishvananda/netlink"
+	"github.com/vishvananda/netns"
 	"ysun.co/rfm/testutil"
 )
 
@@ -835,5 +840,102 @@ func TestPinnedCountersSurviveReload(t *testing.T) {
 	defer p3.Close()
 	if got := p3.IfaceStats().MaxEntries(); got != 128 {
 		t.Fatalf("max entries = %d, want 128", got)
+	}
+}
+
+func TestWatchFollowsInterfaces(t *testing.T) {
+	testutil.RequireRoot(t)
+
+	ns := testutil.NewNS(t)
+
+	p, err := Load(Config{})
+	if err != nil {
+		skipIfUnsupported(t, err)
+		t.Fatal(err)
+	}
+	defer p.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	events := make(chan LinkEvent, 16)
+	watchErr := make(chan error, 1)
+	// the watcher needs a thread inside the test namespace of its own,
+	// the test goroutine keeps the one NewNS locked
+	go func() {
+		runtime.LockOSThread()
+		defer runtime.UnlockOSThread()
+		if err := netns.Set(ns.Handle()); err != nil {
+			watchErr <- err
+			return
+		}
+		watchErr <- p.Watch(ctx, func(name string) bool { return strings.HasPrefix(name, "rfmw") }, func(ev LinkEvent) {
+			events <- ev
+		})
+	}()
+
+	next := func() LinkEvent {
+		select {
+		case ev := <-events:
+			return ev
+		case err := <-watchErr:
+			t.Fatalf("watch stopped: %v", err)
+		case <-time.After(3 * time.Second):
+			t.Fatal("timed out waiting for a link event")
+		}
+		return LinkEvent{}
+	}
+
+	// give the subscription a moment to be in place before the first link
+	time.Sleep(50 * time.Millisecond)
+
+	veth := &netlink.Veth{LinkAttrs: netlink.LinkAttrs{Name: "rfmw0"}, PeerName: "rfmw1"}
+	if err := netlink.LinkAdd(veth); err != nil {
+		t.Fatal(err)
+	}
+
+	attached := map[string]bool{}
+	for range 2 {
+		ev := next()
+		if !ev.Attached {
+			t.Fatalf("unexpected detach event %+v", ev)
+		}
+		attached[ev.Name] = true
+	}
+	if !attached["rfmw0"] || !attached["rfmw1"] {
+		t.Fatalf("attached = %v, want rfmw0 and rfmw1", attached)
+	}
+	if got := len(p.Attached()); got != 2 {
+		t.Fatalf("attached count = %d, want 2", got)
+	}
+
+	// an interface outside the pattern is ignored
+	other := &netlink.Veth{LinkAttrs: netlink.LinkAttrs{Name: "other0"}, PeerName: "other1"}
+	if err := netlink.LinkAdd(other); err != nil {
+		t.Fatal(err)
+	}
+	defer netlink.LinkDel(other)
+
+	if err := netlink.LinkDel(veth); err != nil {
+		t.Fatal(err)
+	}
+	detached := map[string]bool{}
+	for range 2 {
+		ev := next()
+		if ev.Attached {
+			t.Fatalf("unexpected attach event %+v", ev)
+		}
+		detached[ev.Name] = true
+	}
+	if !detached["rfmw0"] || !detached["rfmw1"] {
+		t.Fatalf("detached = %v, want rfmw0 and rfmw1", detached)
+	}
+	if got := len(p.Attached()); got != 0 {
+		t.Fatalf("attached count after delete = %d, want 0", got)
+	}
+
+	cancel()
+	if err := <-watchErr; !errors.Is(err, context.Canceled) {
+		t.Fatalf("watch returned %v, want context.Canceled", err)
 	}
 }

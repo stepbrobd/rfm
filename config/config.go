@@ -346,6 +346,22 @@ func ResolveInterfaces(patterns []string) ([]Interface, error) {
 	return matches, nil
 }
 
+// InterfaceMatcher compiles patterns into a predicate over interface names
+func InterfaceMatcher(patterns []string) (func(string) bool, error) {
+	compiled, err := compileInterfacePatterns(patterns)
+	if err != nil {
+		return nil, err
+	}
+	return func(name string) bool {
+		for _, re := range compiled {
+			if re.MatchString(name) {
+				return true
+			}
+		}
+		return false
+	}, nil
+}
+
 func compileInterfacePatterns(patterns []string) ([]*regexp.Regexp, error) {
 	out := make([]*regexp.Regexp, len(patterns))
 	for i, p := range patterns {
