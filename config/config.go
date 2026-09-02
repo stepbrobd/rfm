@@ -63,7 +63,9 @@ type IPFIXConfig struct {
 	Bind                IPFIXBindConfig
 	TemplateRefresh     time.Duration
 	ObservationDomainID uint32
-	// QueueSize bounds the records waiting for the sender goroutine
+	// QueueSize bounds the records waiting for the sender goroutine, an
+	// eviction sweep can hand the exporter every flow in the table at once,
+	// so the default is max_flows or DefaultIPFIXQueueSize, whichever is larger
 	QueueSize int
 	// FlushInterval is how long the sender gathers records before a message
 	// goes out when fewer than a full message are waiting
@@ -243,7 +245,6 @@ func Load(path string) (*Config, error) {
 	raw.Agent.Collector.ActiveTimeout = "60s"
 	raw.Agent.IPFIX.TemplateRefresh = "60s"
 	raw.Agent.IPFIX.ObservationDomainID = 1
-	raw.Agent.IPFIX.QueueSize = DefaultIPFIXQueueSize
 	raw.Agent.IPFIX.FlushInterval = "1s"
 	raw.Agent.IPFIX.MaxMessageSize = DefaultIPFIXMaxMessageSize
 	raw.Agent.Prometheus.Host = "::1"
@@ -279,13 +280,17 @@ func Load(path string) (*Config, error) {
 	}
 
 	raw.Agent.Enrich.RIB.BMP = raw.Agent.Enrich.RIB.BMP.WithDefaults()
+	queueSize := raw.Agent.IPFIX.QueueSize
+	if queueSize == 0 {
+		queueSize = max(DefaultIPFIXQueueSize, raw.Agent.Collector.MaxFlows)
+	}
 	ipfixCfg := IPFIXConfig{
 		Host:                raw.Agent.IPFIX.Host,
 		Port:                raw.Agent.IPFIX.Port,
 		Bind:                raw.Agent.IPFIX.Bind,
 		TemplateRefresh:     templateRefresh,
 		ObservationDomainID: raw.Agent.IPFIX.ObservationDomainID,
-		QueueSize:           raw.Agent.IPFIX.QueueSize,
+		QueueSize:           queueSize,
 		FlushInterval:       flushInterval,
 		MaxMessageSize:      raw.Agent.IPFIX.MaxMessageSize,
 	}.WithDefaults()

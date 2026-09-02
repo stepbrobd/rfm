@@ -706,14 +706,36 @@ host = "127.0.0.1"
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.Agent.IPFIX.QueueSize != DefaultIPFIXQueueSize {
-		t.Fatalf("queue_size = %d, want %d", cfg.Agent.IPFIX.QueueSize, DefaultIPFIXQueueSize)
+	// the default queue holds a full table sweep
+	if cfg.Agent.IPFIX.QueueSize != 65536 {
+		t.Fatalf("queue_size = %d, want max_flows 65536", cfg.Agent.IPFIX.QueueSize)
 	}
 	if cfg.Agent.IPFIX.FlushInterval != DefaultIPFIXFlushInterval {
 		t.Fatalf("flush_interval = %v, want %v", cfg.Agent.IPFIX.FlushInterval, DefaultIPFIXFlushInterval)
 	}
 	if cfg.Agent.IPFIX.MaxMessageSize != DefaultIPFIXMaxMessageSize {
 		t.Fatalf("max_message_size = %d, want %d", cfg.Agent.IPFIX.MaxMessageSize, DefaultIPFIXMaxMessageSize)
+	}
+}
+
+func TestLoadIPFIXQueueFloor(t *testing.T) {
+	path := writeTOML(t, `
+[agent]
+interfaces = ["eth0"]
+
+[agent.collector]
+max_flows = 100
+
+[agent.ipfix]
+host = "127.0.0.1"
+`)
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Agent.IPFIX.QueueSize != DefaultIPFIXQueueSize {
+		t.Fatalf("queue_size = %d, want the floor %d", cfg.Agent.IPFIX.QueueSize, DefaultIPFIXQueueSize)
 	}
 }
 

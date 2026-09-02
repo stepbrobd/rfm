@@ -242,9 +242,10 @@ within one refresh window.
 in exported message headers. Must be > 0. Set distinct values when multiple RFM
 agents export to one collector and downstream needs to demultiplex by source.
 
-`queue_size` (int, default 4096): Records that may wait for the sender
-goroutine. A full queue drops the newest record and counts it, so a slow socket
-never stalls flow collection.
+`queue_size` (int, default 0): Records that may wait for the sender goroutine.
+`0` means `max_flows` or 4096, whichever is larger, so one eviction sweep of a
+full table always fits. A full queue drops the newest record and counts it, so a
+slow socket never stalls flow collection.
 
 `flush_interval` (string, default "1s"): How long the sender gathers records
 before a partial message goes out. Minimum 10ms.
