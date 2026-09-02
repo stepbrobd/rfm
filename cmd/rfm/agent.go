@@ -146,7 +146,7 @@ func runAgent(cmd *cobra.Command, args []string) error {
 
 	runErr := c.Run(ctx, rd)
 	if ipfixExp != nil {
-		c.Flush(collector.FlowEndReasonEndOfFlow)
+		c.Flush(collector.FlowEndReasonForcedEnd)
 		if err := ipfixExp.Close(); err != nil {
 			log.Error("close ipfix exporter", "err", err)
 		}

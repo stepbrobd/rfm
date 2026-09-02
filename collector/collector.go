@@ -68,7 +68,7 @@ func (c *Collector) Record(ev FlowEvent, now time.Time) {
 	state, ok := c.flows[key]
 	if !ok {
 		if c.maxFlows > 0 && len(c.flows) >= c.maxFlows {
-			if ended, ok := c.evictOldestLocked(FlowEndReasonEndOfFlow); ok {
+			if ended, ok := c.evictOldestLocked(FlowEndReasonLackOfResources); ok {
 				expired = append(expired, ended)
 			}
 		}

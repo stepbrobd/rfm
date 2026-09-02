@@ -628,8 +628,8 @@ func TestRecordForcedEvictionExportsOldestFlow(t *testing.T) {
 	if exp.flows[0].Key != ev1.Key() {
 		t.Fatalf("exported key = %+v, want %+v", exp.flows[0].Key, ev1.Key())
 	}
-	if exp.flows[0].EndReason != FlowEndReasonEndOfFlow {
-		t.Fatalf("end reason = %d, want %d", exp.flows[0].EndReason, FlowEndReasonEndOfFlow)
+	if exp.flows[0].EndReason != FlowEndReasonLackOfResources {
+		t.Fatalf("end reason = %d, want %d", exp.flows[0].EndReason, FlowEndReasonLackOfResources)
 	}
 	if _, ok := c.Flows()[ev2.Key()]; !ok {
 		t.Fatal("new flow missing after forced eviction")
@@ -650,13 +650,13 @@ func TestFlushExportsRemainingFlows(t *testing.T) {
 	}
 
 	c.Record(ev, t0)
-	c.Flush(FlowEndReasonEndOfFlow)
+	c.Flush(FlowEndReasonForcedEnd)
 
 	if got := len(exp.flows); got != 1 {
 		t.Fatalf("exported flows = %d, want 1", got)
 	}
-	if exp.flows[0].EndReason != FlowEndReasonEndOfFlow {
-		t.Fatalf("end reason = %d, want %d", exp.flows[0].EndReason, FlowEndReasonEndOfFlow)
+	if exp.flows[0].EndReason != FlowEndReasonForcedEnd {
+		t.Fatalf("end reason = %d, want %d", exp.flows[0].EndReason, FlowEndReasonForcedEnd)
 	}
 	if len(c.Flows()) != 0 {
 		t.Fatalf("flow count after flush = %d, want 0", len(c.Flows()))
