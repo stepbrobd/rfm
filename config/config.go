@@ -37,6 +37,9 @@ type BPFConfig struct {
 	AdaptiveSampling bool `toml:"adaptive_sampling"`
 	// MaxSampleRate caps the adaptive sample rate
 	MaxSampleRate uint32 `toml:"max_sample_rate"`
+	// PinPath is a bpffs directory that keeps the interface counters across
+	// restarts, empty keeps them private to the process
+	PinPath string `toml:"pin_path"`
 }
 
 // CollectorConfig controls flow collection and eviction

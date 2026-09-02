@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"os"
 	"structs"
 	"syscall"
 	"testing"
@@ -720,5 +721,119 @@ func TestSetSampleRate(t *testing.T) {
 
 	if err := p.SetSampleRate(0); err == nil {
 		t.Fatal("sample rate 0 must be rejected")
+	}
+}
+
+func TestDetachDropsCounters(t *testing.T) {
+	testutil.RequireRoot(t)
+
+	ns := testutil.NewNS(t)
+
+	p, err := Load(Config{})
+	if err != nil {
+		skipIfUnsupported(t, err)
+		t.Fatal(err)
+	}
+	defer p.Close()
+
+	if err := p.Attach(ns.Ifindex()); err != nil {
+		skipIfUnsupported(t, err)
+		t.Fatal(err)
+	}
+	// attaching twice is a no-op
+	if err := p.Attach(ns.Ifindex()); err != nil {
+		t.Fatal(err)
+	}
+	if got := p.Attached(); len(got) != 1 || got[0] != ns.Ifindex() {
+		t.Fatalf("attached = %v, want [%d]", got, ns.Ifindex())
+	}
+
+	ns.SendRaw(t, testutil.EthIPv4TCP(net.IPv4(10, 0, 0, 1), net.IPv4(10, 0, 0, 2), 1, 80))
+	key := rfmRfmIfaceKey{Ifindex: uint32(ns.Ifindex()), Dir: 0, Proto: 4}
+	testutil.Eventually(t, time.Second, 10*time.Millisecond, func() error {
+		if packets, _ := ifaceStats(t, p, key); packets == 0 {
+			return fmt.Errorf("expected packets > 0")
+		}
+		return nil
+	})
+
+	if err := p.Detach(ns.Ifindex()); err != nil {
+		t.Fatal(err)
+	}
+	if got := p.Attached(); len(got) != 0 {
+		t.Fatalf("attached after detach = %v, want none", got)
+	}
+	if packets, _ := ifaceStats(t, p, key); packets != 0 {
+		t.Fatalf("counters survived detach: %d packets", packets)
+	}
+
+	// no program left on the interface, traffic is not counted any more
+	ns.SendRaw(t, testutil.EthIPv4TCP(net.IPv4(10, 0, 0, 1), net.IPv4(10, 0, 0, 2), 2, 80))
+	time.Sleep(50 * time.Millisecond)
+	if packets, _ := ifaceStats(t, p, key); packets != 0 {
+		t.Fatalf("detached interface still counted: %d packets", packets)
+	}
+
+	// detaching again is a no-op
+	if err := p.Detach(ns.Ifindex()); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestPinnedCountersSurviveReload(t *testing.T) {
+	testutil.RequireRoot(t)
+
+	if _, err := os.Stat("/sys/fs/bpf"); err != nil {
+		t.Skipf("bpffs not mounted: %v", err)
+	}
+	dir := fmt.Sprintf("/sys/fs/bpf/rfm-test-%d", os.Getpid())
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+
+	ns := testutil.NewNS(t)
+
+	p, err := Load(Config{PinPath: dir})
+	if err != nil {
+		skipIfUnsupported(t, err)
+		t.Fatal(err)
+	}
+	if err := p.Attach(ns.Ifindex()); err != nil {
+		skipIfUnsupported(t, err)
+		p.Close()
+		t.Fatal(err)
+	}
+
+	ns.SendRaw(t, testutil.EthIPv4TCP(net.IPv4(10, 0, 0, 1), net.IPv4(10, 0, 0, 2), 3, 80))
+	key := rfmRfmIfaceKey{Ifindex: uint32(ns.Ifindex()), Dir: 0, Proto: 4}
+	testutil.Eventually(t, time.Second, 10*time.Millisecond, func() error {
+		if packets, _ := ifaceStats(t, p, key); packets == 0 {
+			return fmt.Errorf("expected packets > 0")
+		}
+		return nil
+	})
+	before, _ := ifaceStats(t, p, key)
+	if err := p.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	// a second load under the same pin path picks the counters up
+	p2, err := Load(Config{PinPath: dir})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer p2.Close()
+	after, _ := ifaceStats(t, p2, key)
+	if after != before {
+		t.Fatalf("packets after reload = %d, want %d from the pinned map", after, before)
+	}
+
+	// a different map shape replaces the stale pin instead of failing
+	p2.Close()
+	p3, err := Load(Config{PinPath: dir, IfaceStatsSize: 128})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer p3.Close()
+	if got := p3.IfaceStats().MaxEntries(); got != 128 {
+		t.Fatalf("max entries = %d, want 128", got)
 	}
 }

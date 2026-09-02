@@ -395,6 +395,24 @@ max_sample_rate = 640
 	}
 }
 
+func TestLoadPinPath(t *testing.T) {
+	path := writeTOML(t, `
+[agent]
+interfaces = ["eth0"]
+
+[agent.bpf]
+pin_path = "/sys/fs/bpf/rfm"
+`)
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Agent.BPF.PinPath != "/sys/fs/bpf/rfm" {
+		t.Fatalf("pin_path = %q, want /sys/fs/bpf/rfm", cfg.Agent.BPF.PinPath)
+	}
+}
+
 func TestLoadAdaptiveSamplingDefaults(t *testing.T) {
 	path := writeTOML(t, `
 [agent]

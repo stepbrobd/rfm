@@ -5,14 +5,26 @@ package probe
 import (
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
+	"sync"
 
+	"github.com/charmbracelet/log"
 	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/link"
 )
 
+// ifaceLinks are the two tcx links of one attached interface
+type ifaceLinks struct {
+	ingress link.Link
+	egress  link.Link
+}
+
 type Probe struct {
-	objs  *rfmObjects
-	links []link.Link
+	objs *rfmObjects
+
+	mu    sync.Mutex
+	links map[int]ifaceLinks
 }
 
 func Load(cfg Config) (*Probe, error) {
@@ -33,9 +45,35 @@ func Load(cfg Config) (*Probe, error) {
 		}
 	}
 
+	// a pinned counter map from a previous run is reused when its shape
+	// still matches, so a restart or upgrade keeps the counters monotonic
+	var opts ebpf.CollectionOptions
+	var pinned *ebpf.Map
+	if cfg.PinPath != "" {
+		pinned, err = loadPinnedIfaceStats(cfg.PinPath, spec.Maps["rfm_iface_stats"])
+		if err != nil {
+			return nil, err
+		}
+		if pinned != nil {
+			opts.MapReplacements = map[string]*ebpf.Map{"rfm_iface_stats": pinned}
+		}
+	}
+
 	var objs rfmObjects
-	if err := spec.LoadAndAssign(&objs, nil); err != nil {
+	if err := spec.LoadAndAssign(&objs, &opts); err != nil {
+		if pinned != nil {
+			pinned.Close()
+		}
 		return nil, fmt.Errorf("load BPF: %w", err)
+	}
+	if pinned != nil {
+		// the collection holds its own handle now
+		pinned.Close()
+	} else if cfg.PinPath != "" {
+		if err := objs.RfmIfaceStats.Pin(pinPathFor(cfg.PinPath)); err != nil {
+			objs.Close()
+			return nil, fmt.Errorf("pin iface stats: %w", err)
+		}
 	}
 
 	// write config into BPF map at load time
@@ -50,16 +88,111 @@ func Load(cfg Config) (*Probe, error) {
 		return nil, fmt.Errorf("write config: %w", err)
 	}
 
-	return &Probe{objs: &objs}, nil
+	return &Probe{objs: &objs, links: make(map[int]ifaceLinks)}, nil
 }
 
+func pinPathFor(dir string) string {
+	return filepath.Join(dir, "rfm_iface_stats")
+}
+
+// loadPinnedIfaceStats returns the pinned counter map under dir when one
+// exists and matches spec, a stale pin with another shape is removed
+// it returns nil, nil when there is nothing to reuse
+func loadPinnedIfaceStats(dir string, spec *ebpf.MapSpec) (*ebpf.Map, error) {
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return nil, fmt.Errorf("create pin directory %q: %w", dir, err)
+	}
+
+	path := pinPathFor(dir)
+	m, err := ebpf.LoadPinnedMap(path, nil)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("load pinned iface stats %q: %w", path, err)
+	}
+
+	if m.Type() != spec.Type || m.KeySize() != spec.KeySize || m.ValueSize() != spec.ValueSize ||
+		m.MaxEntries() != spec.MaxEntries {
+		log.Warn("pinned iface stats do not match the configured map, starting fresh", "path", path)
+		err := m.Unpin()
+		m.Close()
+		if err != nil {
+			return nil, fmt.Errorf("unpin stale iface stats %q: %w", path, err)
+		}
+		return nil, nil
+	}
+	return m, nil
+}
+
+// Close detaches every interface and releases the programs and maps
+// a pinned counter map stays in bpffs for the next run
 func (p *Probe) Close() error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
 	var errs []error
-	for _, l := range p.links {
-		errs = append(errs, l.Close())
+	for ifindex, l := range p.links {
+		errs = append(errs, l.ingress.Close(), l.egress.Close())
+		delete(p.links, ifindex)
 	}
 	errs = append(errs, p.objs.Close())
 	return errors.Join(errs...)
+}
+
+// Attached lists the interfaces the programs are attached to
+func (p *Probe) Attached() []int {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	out := make([]int, 0, len(p.links))
+	for ifindex := range p.links {
+		out = append(out, ifindex)
+	}
+	return out
+}
+
+// Detach removes the programs from ifindex and drops its counters, so a
+// recreated interface starts from zero under its new index
+// detaching an interface that is not attached is not an error
+func (p *Probe) Detach(ifindex int) error {
+	p.mu.Lock()
+	l, ok := p.links[ifindex]
+	if ok {
+		delete(p.links, ifindex)
+	}
+	p.mu.Unlock()
+	if !ok {
+		return nil
+	}
+
+	err := errors.Join(l.ingress.Close(), l.egress.Close())
+	if cerr := p.clearIfaceStats(ifindex); cerr != nil {
+		err = errors.Join(err, cerr)
+	}
+	return err
+}
+
+// clearIfaceStats deletes every counter entry of ifindex
+func (p *Probe) clearIfaceStats(ifindex int) error {
+	var key rfmRfmIfaceKey
+	var vals []rfmRfmIfaceValue
+	var keys []rfmRfmIfaceKey
+	iter := p.objs.RfmIfaceStats.Iterate()
+	for iter.Next(&key, &vals) {
+		if key.Ifindex == uint32(ifindex) {
+			keys = append(keys, key)
+		}
+	}
+	if err := iter.Err(); err != nil {
+		return fmt.Errorf("iterate iface stats: %w", err)
+	}
+	for _, k := range keys {
+		if err := p.objs.RfmIfaceStats.Delete(k); err != nil && !errors.Is(err, ebpf.ErrKeyNotExist) {
+			return fmt.Errorf("delete iface stats %d: %w", ifindex, err)
+		}
+	}
+	return nil
 }
 
 func (p *Probe) SampleRate() (uint32, error) {
@@ -109,6 +242,13 @@ func (p *Probe) FlowDrops() *ebpf.Map {
 // about to leave after other programs had their say, which is what the NIC
 // counters measure as well
 func (p *Probe) Attach(ifindex int) error {
+	p.mu.Lock()
+	_, attached := p.links[ifindex]
+	p.mu.Unlock()
+	if attached {
+		return nil
+	}
+
 	ing, err := link.AttachTCX(link.TCXOptions{
 		Interface: ifindex,
 		Program:   p.objs.RfmTcIngress,
@@ -130,6 +270,8 @@ func (p *Probe) Attach(ifindex int) error {
 		return fmt.Errorf("attach egress on %d: %w", ifindex, err)
 	}
 
-	p.links = append(p.links, ing, egr)
+	p.mu.Lock()
+	p.links[ifindex] = ifaceLinks{ingress: ing, egress: egr}
+	p.mu.Unlock()
 	return nil
 }

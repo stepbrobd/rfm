@@ -9,4 +9,7 @@ type Config struct {
 	WakeupBatch    uint32
 	RingBufSize    int
 	IfaceStatsSize int
+	// PinPath is a bpffs directory where the interface counters are pinned
+	// so they survive a restart, empty keeps them private to the process
+	PinPath string
 }

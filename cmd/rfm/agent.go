@@ -69,6 +69,7 @@ func runAgent(cmd *cobra.Command, args []string) error {
 		RingBufSize:    cfg.Agent.BPF.RingBufSize,
 		WakeupBatch:    cfg.Agent.BPF.WakeupBatch,
 		IfaceStatsSize: ifaceStatsSize,
+		PinPath:        cfg.Agent.BPF.PinPath,
 	})
 	if err != nil {
 		return fmt.Errorf("load probe: %w", err)

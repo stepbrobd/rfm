@@ -82,6 +82,12 @@ in
                       default = 1000;
                       description = "Upper bound for the adaptive sample rate.";
                     };
+
+                    pin_path = std.mkOption {
+                      type = std.types.str;
+                      default = "/sys/fs/bpf/rfm";
+                      description = "bpffs directory that keeps the interface counters across restarts, empty keeps them private to the process.";
+                    };
                   };
                 };
               };
