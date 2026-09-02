@@ -306,9 +306,11 @@ a restart. `rfm reload mmdb` forces the check.
 
 The RIB keeps every route per BMP peer, serves the best one per prefix (post
 policy over pre policy, then the lowest peer address), withdraws a peer's routes
-on Peer Down, and withdraws everything a session announced when that session
-ends. A route whose AS path ends in an AS_SET has no single origin and reports
-ASN 0.
+on Peer Down, and replaces them when a new session announces the peer again with
+Peer Up, since the speaker dumps the peer's table right after. Routes survive
+the end of a session, so a speaker restart keeps enrichment in place until the
+next dump. A route whose AS path ends in an AS_SET has no single origin and
+reports ASN 0.
 
 ## Prometheus metrics
 

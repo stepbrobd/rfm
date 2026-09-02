@@ -334,9 +334,10 @@ func (s *Server) accept() {
 }
 
 // handleConn reads one BMP session
-// routes are valid only while the session that carried them is up, so a
-// peer down message withdraws that peer and the end of the session
-// withdraws every peer it announced
+// a peer down message withdraws that peer, and a peer up message withdraws
+// what an earlier session announced for the peer, because the speaker dumps
+// the peer's table again right after it, routes survive the end of a session
+// so a speaker restart leaves enrichment in place until the next dump
 func (s *Server) handleConn(conn net.Conn) {
 	log.Info("bmp session opened", "remote", conn.RemoteAddr())
 
@@ -350,11 +351,6 @@ func (s *Server) handleConn(conn net.Conn) {
 	var appliedLogged bool
 	seenTypes := make(map[uint8]struct{})
 	peers := make(map[Peer]struct{})
-	defer func() {
-		for peer := range peers {
-			s.table.RemovePeer(peer)
-		}
-	}()
 
 	for scanner.Scan() {
 		messages++
@@ -376,17 +372,16 @@ func (s *Server) handleConn(conn net.Conn) {
 		}
 
 		switch msg.Header.Type {
+		case bmp.BMP_MSG_PEER_UP_NOTIFICATION:
+			peer := peerFromHeader(msg.PeerHeader)
+			s.table.RemovePeer(peer)
+			log.Info("bmp peer up", "remote", conn.RemoteAddr(), "peer", peer.Address)
+			continue
 		case bmp.BMP_MSG_PEER_DOWN_NOTIFICATION:
 			peer := peerFromHeader(msg.PeerHeader)
 			s.table.RemovePeer(peer)
 			delete(peers, peer)
 			log.Info("bmp peer down", "remote", conn.RemoteAddr(), "peer", peer.Address)
-			continue
-		case bmp.BMP_MSG_TERMINATION:
-			for peer := range peers {
-				s.table.RemovePeer(peer)
-				delete(peers, peer)
-			}
 			continue
 		case bmp.BMP_MSG_ROUTE_MONITORING:
 			log.Debug(

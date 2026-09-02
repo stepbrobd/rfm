@@ -245,14 +245,82 @@ func TestHandleConnAppliesBMPRouteMonitoring(t *testing.T) {
 		time.Sleep(5 * time.Millisecond)
 	}
 
-	// the end of the session withdraws everything it announced
+	// the end of the session keeps the routes, the next session replaces
+	// them peer by peer as it announces them again
 	if err := clientConn.Close(); err != nil {
 		t.Fatalf("Close: %v", err)
 	}
 	<-done
 
-	if _, ok := s.Lookup(netip.MustParseAddr("198.51.100.7")); ok {
-		t.Fatal("route survived the end of its BMP session")
+	if _, ok := s.Lookup(netip.MustParseAddr("198.51.100.7")); !ok {
+		t.Fatal("route did not survive the end of its BMP session")
+	}
+}
+
+func TestHandleConnPeerUpReplacesPeer(t *testing.T) {
+	serverConn, clientConn := net.Pipe()
+	defer clientConn.Close()
+
+	s := &Server{
+		table: NewTable(),
+	}
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		s.handleConn(serverConn)
+	}()
+
+	if _, err := clientConn.Write(mustBMPWire(t, "198.51.100.0/24", 65003)); err != nil {
+		t.Fatalf("Write: %v", err)
+	}
+	waitForRoute(t, s, "198.51.100.7", true)
+
+	// a peer up for the same peer means a fresh dump follows, so what the
+	// earlier session announced for it goes away
+	peer := bmp.NewBMPPeerHeader(
+		bmp.BMP_PEER_TYPE_LOCAL_RIB,
+		bmp.BMP_PEER_FLAG_POST_POLICY,
+		0,
+		"192.0.2.2",
+		65003,
+		"192.0.2.2",
+		0,
+	)
+	open := bgp.NewBGPOpenMessage(65003, 90, "192.0.2.2", nil)
+	up, err := bmp.NewBMPPeerUpNotification(*peer, "192.0.2.1", 179, 40000, open, open).Serialize()
+	if err != nil {
+		t.Fatalf("Serialize: %v", err)
+	}
+	if _, err := clientConn.Write(up); err != nil {
+		t.Fatalf("Write: %v", err)
+	}
+	waitForRoute(t, s, "198.51.100.7", false)
+
+	// the dump after the peer up lands again
+	if _, err := clientConn.Write(mustBMPWire(t, "203.0.113.0/24", 65003)); err != nil {
+		t.Fatalf("Write: %v", err)
+	}
+	waitForRoute(t, s, "203.0.113.7", true)
+
+	_ = clientConn.Close()
+	<-done
+}
+
+// waitForRoute polls the server until addr is present or absent
+func waitForRoute(t *testing.T, s *Server, addr string, present bool) {
+	t.Helper()
+
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		_, ok := s.Lookup(netip.MustParseAddr(addr))
+		if ok == present {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("route %s present=%v, want present=%v", addr, ok, present)
+		}
+		time.Sleep(5 * time.Millisecond)
 	}
 }
 
