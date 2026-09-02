@@ -71,6 +71,25 @@ func (p *Probe) SampleRate() (uint32, error) {
 	return cfg.SampleRate, nil
 }
 
+// SetSampleRate changes the 1-in-N sampling of the running programs
+// the config map is read per packet, so the change applies at once without
+// detaching or reloading anything
+func (p *Probe) SetSampleRate(n uint32) error {
+	if n == 0 {
+		return fmt.Errorf("sample rate must be > 0")
+	}
+	key := uint32(0)
+	var cfg rfmRfmConfig
+	if err := p.objs.RfmConfig.Lookup(key, &cfg); err != nil {
+		return fmt.Errorf("read config: %w", err)
+	}
+	cfg.SampleRate = n
+	if err := p.objs.RfmConfig.Update(key, cfg, ebpf.UpdateAny); err != nil {
+		return fmt.Errorf("write config: %w", err)
+	}
+	return nil
+}
+
 func (p *Probe) IfaceStats() *ebpf.Map {
 	return p.objs.RfmIfaceStats
 }

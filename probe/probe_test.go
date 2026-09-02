@@ -687,3 +687,38 @@ func TestAttachOrder(t *testing.T) {
 		t.Fatalf("egress order = %v, want [other %d, rfm %d]", got, otherID, egressID)
 	}
 }
+
+func TestSetSampleRate(t *testing.T) {
+	testutil.RequireRoot(t)
+
+	p, err := Load(Config{SampleRate: 100, WakeupBatch: 64})
+	if err != nil {
+		skipIfUnsupported(t, err)
+		t.Fatal(err)
+	}
+	defer p.Close()
+
+	if err := p.SetSampleRate(7); err != nil {
+		t.Fatal(err)
+	}
+	rate, err := p.SampleRate()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rate != 7 {
+		t.Fatalf("sample rate = %d, want 7", rate)
+	}
+
+	// the other config fields survive the update
+	var cfg rfmRfmConfig
+	if err := p.objs.RfmConfig.Lookup(uint32(0), &cfg); err != nil {
+		t.Fatal(err)
+	}
+	if cfg.WakeupBatch != 64 {
+		t.Fatalf("wakeup batch = %d after the update, want 64", cfg.WakeupBatch)
+	}
+
+	if err := p.SetSampleRate(0); err == nil {
+		t.Fatal("sample rate 0 must be rejected")
+	}
+}
