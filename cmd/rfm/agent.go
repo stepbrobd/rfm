@@ -102,6 +102,9 @@ func runAgent(cmd *cobra.Command, args []string) error {
 	)
 	c.SetActiveTimeout(cfg.Agent.Collector.ActiveTimeout)
 	c.SetSampleRate(cfg.Agent.BPF.SampleRate, 0)
+	if cfg.Agent.BPF.AdaptiveSampling {
+		c.SetRateController(cfg.Agent.BPF.SampleRate, cfg.Agent.BPF.MaxSampleRate, p.SetSampleRate)
+	}
 
 	var ipfixExp *export.IPFIXExporter
 	if cfg.Agent.IPFIX.Enabled() {

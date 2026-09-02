@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/netip"
 	"os"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -972,4 +973,42 @@ func TestExportedRecordCarriesEstimateDelta(t *testing.T) {
 	if got := rec.SamplingProbability(); got != 0.01 {
 		t.Fatalf("sampling probability = %v, want 0.01", got)
 	}
+}
+
+func TestAdaptiveSamplingAppliesRateOnDrops(t *testing.T) {
+	ev := FlowEvent{
+		Ifindex: 1, Proto: 6, SrcPort: 1000, DstPort: 80,
+		SrcAddr: netip.MustParseAddr("::ffff:10.0.0.1"),
+		DstAddr: netip.MustParseAddr("::ffff:10.0.0.2"),
+		Len:     100,
+	}
+	mr := &sustainedReader{event: encodeWireEvent(ev), drops: 5}
+
+	c := New(100*time.Millisecond, nil, 0)
+	c.SetSampleRate(10, 0)
+	var applied atomic.Uint32
+	c.SetRateController(10, 40, func(n uint32) error {
+		applied.Store(n)
+		return nil
+	})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	errCh := make(chan error, 1)
+	go func() { errCh <- c.Run(ctx, mr) }()
+
+	// the first tick sees 5 drops and doubles the rate, later ticks see no
+	// new drops and leave it alone until the quiet streak relaxes it
+	deadline := time.Now().Add(2 * time.Second)
+	for applied.Load() != 20 {
+		if time.Now().After(deadline) {
+			t.Fatalf("applied rate = %d, want 20", applied.Load())
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	if got := c.SampleRate(); got != 20 {
+		t.Fatalf("collector rate = %d, want 20", got)
+	}
+
+	cancel()
+	<-errCh
 }

@@ -372,6 +372,61 @@ ring_buf_size = 12345
 	}
 }
 
+func TestLoadAdaptiveSampling(t *testing.T) {
+	path := writeTOML(t, `
+[agent]
+interfaces = ["eth0"]
+
+[agent.bpf]
+sample_rate = 10
+adaptive_sampling = true
+max_sample_rate = 640
+`)
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !cfg.Agent.BPF.AdaptiveSampling {
+		t.Fatal("adaptive_sampling = false, want true")
+	}
+	if cfg.Agent.BPF.MaxSampleRate != 640 {
+		t.Fatalf("max_sample_rate = %d, want 640", cfg.Agent.BPF.MaxSampleRate)
+	}
+}
+
+func TestLoadAdaptiveSamplingDefaults(t *testing.T) {
+	path := writeTOML(t, `
+[agent]
+interfaces = ["eth0"]
+`)
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Agent.BPF.AdaptiveSampling {
+		t.Fatal("adaptive_sampling = true, want false by default")
+	}
+	if cfg.Agent.BPF.MaxSampleRate != 1000 {
+		t.Fatalf("max_sample_rate = %d, want 1000", cfg.Agent.BPF.MaxSampleRate)
+	}
+}
+
+func TestLoadMaxSampleRateBelowSampleRate(t *testing.T) {
+	path := writeTOML(t, `
+[agent]
+interfaces = ["eth0"]
+
+[agent.bpf]
+sample_rate = 2000
+`)
+
+	if _, err := Load(path); err == nil {
+		t.Fatal("expected error for max_sample_rate below sample_rate")
+	}
+}
+
 func TestLoadRingBufSizeMustBePageMultiple(t *testing.T) {
 	// a power of two below the page size passes the power of two check but
 	// the kernel would still refuse it

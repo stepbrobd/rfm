@@ -9,3 +9,5 @@ func eventTime(FlowEvent) time.Time {
 }
 
 func refreshBootOffset() {}
+
+func bootNow() uint64 { return 0 }

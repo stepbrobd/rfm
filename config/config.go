@@ -32,6 +32,11 @@ type BPFConfig struct {
 	RingBufSize    int    `toml:"ring_buf_size"`
 	WakeupBatch    uint32 `toml:"wakeup_batch"`
 	IfaceStatsSize int    `toml:"iface_stats_size"`
+	// AdaptiveSampling lets the collector raise the sample rate while the
+	// ring buffer drops events and lower it back once the drops stop
+	AdaptiveSampling bool `toml:"adaptive_sampling"`
+	// MaxSampleRate caps the adaptive sample rate
+	MaxSampleRate uint32 `toml:"max_sample_rate"`
 }
 
 // CollectorConfig controls flow collection and eviction
@@ -221,6 +226,7 @@ func Load(path string) (*Config, error) {
 	raw.Agent.BPF.SampleRate = 100
 	raw.Agent.BPF.RingBufSize = 262144
 	raw.Agent.BPF.WakeupBatch = 64
+	raw.Agent.BPF.MaxSampleRate = 1000
 	raw.Agent.Collector.MaxFlows = 65536
 	raw.Agent.Collector.EvictionTimeout = "30s"
 	raw.Agent.Collector.ActiveTimeout = "60s"
@@ -376,6 +382,9 @@ func validate(cfg *Config) error {
 	}
 	if a.BPF.IfaceStatsSize < 0 {
 		return fmt.Errorf("agent.bpf.iface_stats_size must be >= 0, got %d", a.BPF.IfaceStatsSize)
+	}
+	if a.BPF.MaxSampleRate < a.BPF.SampleRate {
+		return fmt.Errorf("agent.bpf.max_sample_rate must be >= sample_rate, got %d < %d", a.BPF.MaxSampleRate, a.BPF.SampleRate)
 	}
 	if a.Collector.MaxFlows < 0 {
 		return fmt.Errorf("agent.collector.max_flows must be >= 0")

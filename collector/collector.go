@@ -37,6 +37,12 @@ type Collector struct {
 	// rate changed at runtime
 	rates []rateChange
 
+	// controller adapts the rate to ring drops when set, apply writes the
+	// new rate into the probe
+	controller *rateController
+	applyRate  func(uint32) error
+	lastDrops  uint64
+
 	dropped     atomic.Uint64
 	forced      atomic.Uint64
 	ringBufErrs atomic.Uint64
@@ -88,6 +94,40 @@ func (c *Collector) SetSampleRate(rate uint32, since uint64) {
 	if len(c.rates) > rateHistory {
 		c.rates = c.rates[len(c.rates)-rateHistory:]
 	}
+}
+
+// SetRateController enables adaptive sampling between base and maxRate
+// apply installs a new rate in the probe, the collector records the change
+// for scaling once apply succeeded
+// it must be called before Run
+func (c *Collector) SetRateController(base, maxRate uint32, apply func(uint32) error) {
+	c.mu.Lock()
+	c.controller = newRateController(base, maxRate)
+	c.applyRate = apply
+	c.mu.Unlock()
+}
+
+// adapt feeds the drop counter to the controller once per tick
+func (c *Collector) adapt(drops uint64) {
+	c.mu.Lock()
+	ctl, apply := c.controller, c.applyRate
+	delta := drops - c.lastDrops
+	c.lastDrops = drops
+	c.mu.Unlock()
+	if ctl == nil {
+		return
+	}
+
+	rate, changed := ctl.step(delta)
+	if !changed {
+		return
+	}
+	if err := apply(rate); err != nil {
+		log.Error("apply sample rate", "rate", rate, "err", err)
+		return
+	}
+	c.SetSampleRate(rate, bootNow())
+	log.Info("sample rate adapted", "rate", rate, "drops", delta)
 }
 
 // SampleRate returns the rate in force now
@@ -345,6 +385,7 @@ func (c *Collector) pollDrops(rd Reader) {
 		return
 	}
 	c.dropped.Store(dropped)
+	c.adapt(dropped)
 }
 
 // readBatch caps how many ring buffer records are recorded per lock acquisition

@@ -28,6 +28,15 @@ func refreshBootOffset() {
 	bootOffsetNanos.Store(time.Now().UnixNano() - bootNs)
 }
 
+// bootNow returns CLOCK_BOOTTIME in nanoseconds, 0 when the clock fails
+func bootNow() uint64 {
+	var ts unix.Timespec
+	if err := unix.ClockGettime(unix.CLOCK_BOOTTIME, &ts); err != nil {
+		return 0
+	}
+	return uint64(ts.Sec)*uint64(time.Second) + uint64(ts.Nsec)
+}
+
 // bootTimeToWall converts a CLOCK_BOOTTIME nanosecond timestamp to wall time
 // it falls back to time.Now() when the cached offset is unavailable
 func bootTimeToWall(bootNs uint64) time.Time {

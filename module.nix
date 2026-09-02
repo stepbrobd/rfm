@@ -70,6 +70,18 @@ in
                       default = 0;
                       description = "Override the BPF iface stats map capacity, 0 means auto-compute from interface count.";
                     };
+
+                    adaptive_sampling = std.mkOption {
+                      type = std.types.bool;
+                      default = false;
+                      description = "Raise the sample rate while the ring buffer drops events and relax it afterwards.";
+                    };
+
+                    max_sample_rate = std.mkOption {
+                      type = std.types.ints.positive;
+                      default = 1000;
+                      description = "Upper bound for the adaptive sample rate.";
+                    };
                   };
                 };
               };
