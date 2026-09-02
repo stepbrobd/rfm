@@ -2,6 +2,7 @@ package export
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/netip"
 	"os"
@@ -739,8 +740,9 @@ func TestCollectIPFIXStats(t *testing.T) {
 		"rfm_ipfix_dropped_records_total{reason=encode}":      0,
 		"rfm_ipfix_send_errors_total{errno=EPERM}":            5,
 		"rfm_ipfix_send_errors_total{errno=ECONNREFUSED}":     1,
-		// queue refusals, unsent, dial and send errors all count as ipfix errors
-		"rfm_errors_total{subsystem=ipfix}": 14,
+		// queue refusals, unsent and send errors count once each, a failed
+		// dial loses no record by itself
+		"rfm_errors_total{subsystem=ipfix}": 13,
 	}
 	for name, val := range want {
 		if got[name] != val {
@@ -804,3 +806,35 @@ func TestCollectRollupCountersSurviveEviction(t *testing.T) {
 		t.Fatal("idle rollup still exported after the retention window")
 	}
 }
+
+func TestCollectIPFIXErrorsCountLossOnce(t *testing.T) {
+	// the collector refuses a record when the queue is full and the exporter
+	// counts the same drop, the subsystem counter must show it once
+	exp := &recordingExporter{err: errors.New("ipfix queue full")}
+	c := collector.New(30*time.Second, nil, 0)
+	c.SetFlowExporter(exp)
+	t0 := time.Now()
+	c.Record(collector.FlowEvent{
+		Proto: 6, SrcPort: 1, DstPort: 80,
+		SrcAddr: netip.MustParseAddr("10.0.0.1"),
+		DstAddr: netip.MustParseAddr("10.0.0.2"),
+		Len:     100,
+	}, t0)
+	c.Evict(t0.Add(time.Minute))
+	if c.Stats().IPFIXErrors != 1 {
+		t.Fatalf("collector ipfix errors = %d, want 1", c.Stats().IPFIXErrors)
+	}
+
+	mc := New(nil, c)
+	mc.SetIPFIX(func() IPFIXStats { return IPFIXStats{QueueDropped: 1, SendErrors: map[string]uint64{}} })
+	vals := collectAll(t, mc)
+	if got := vals["rfm_errors_total"]; got != 1 {
+		t.Fatalf("rfm_errors_total summed over subsystems = %v, want 1 (one lost record)", got)
+	}
+}
+
+type recordingExporter struct {
+	err error
+}
+
+func (r *recordingExporter) ExportFlow(collector.ExportedFlow) error { return r.err }

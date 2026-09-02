@@ -224,12 +224,14 @@ func (mc *MetricsCollector) Collect(ch chan<- prometheus.Metric) {
 	ipfix := mc.ipfix
 	mc.mu.Unlock()
 
-	// the ipfix subsystem error counter sums the collector's queue refusals
-	// with every loss the exporter itself counted
+	// the ipfix subsystem error counter is every loss the exporter counted,
+	// the collector's own tally of refused records repeats the exporter's
+	// queue drops and only stands in when no exporter stats are wired
 	var ipfixErrs uint64
-	if ipfix != nil {
+	haveIPFIX := ipfix != nil
+	if haveIPFIX {
 		s := ipfix()
-		ipfixErrs += s.Failures()
+		ipfixErrs = s.Failures()
 		var connected float64
 		if s.Connected {
 			connected = 1
@@ -255,7 +257,10 @@ func (mc *MetricsCollector) Collect(ch chan<- prometheus.Metric) {
 		ch <- prometheus.MustNewConstMetric(descForcedEvictions, prometheus.CounterValue, float64(stats.ForcedEvictions))
 		bpfErrs += stats.BPFMapErrors
 		ch <- prometheus.MustNewConstMetric(descErrorsTotal, prometheus.CounterValue, float64(stats.RingBufErrors), "ring_buffer")
-		ch <- prometheus.MustNewConstMetric(descErrorsTotal, prometheus.CounterValue, float64(stats.IPFIXErrors+ipfixErrs), "ipfix")
+		if !haveIPFIX {
+			ipfixErrs = stats.IPFIXErrors
+		}
+		ch <- prometheus.MustNewConstMetric(descErrorsTotal, prometheus.CounterValue, float64(ipfixErrs), "ipfix")
 	}
 	ch <- prometheus.MustNewConstMetric(descErrorsTotal, prometheus.CounterValue, float64(bpfErrs), "bpf_map")
 }

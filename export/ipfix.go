@@ -87,8 +87,10 @@ type IPFIXStats struct {
 }
 
 // Failures sums every way a record can be lost
+// a failed dial loses nothing by itself, the records it strands are counted
+// as unsent
 func (s IPFIXStats) Failures() uint64 {
-	n := s.QueueDropped + s.Unsent + s.EncodeErrors + s.DialErrors
+	n := s.QueueDropped + s.Unsent + s.EncodeErrors
 	for _, v := range s.SendErrors {
 		n += v
 	}
