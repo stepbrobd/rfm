@@ -21,8 +21,19 @@ in
     machine2.succeed("iperf3 -s -D -p 5201")
     time.sleep(1)
 
+    before = iface_counters(machine2, "eth1")
     machine1.succeed("iperf3 -c 192.168.1.2 -p 5201 -t 2 -P 1")
     time.sleep(2)
+
+    # gro merges the received tcp segments into large skbs before the tc
+    # hook runs, the exact counters must still report wire packets and wire
+    # bytes, which is what the nic statistics count
+    after = iface_counters(machine2, "eth1")
+    rfm_pkts, rfm_bytes, nic_pkts, nic_bytes = (a - b for a, b in zip(after, before))
+    print(f"rx over iperf3: rfm {rfm_pkts} pkts {rfm_bytes} bytes, nic {nic_pkts} pkts {nic_bytes} bytes")
+    assert nic_pkts > 100, f"iperf3 produced too few packets: {nic_pkts}"
+    assert abs(rfm_pkts - nic_pkts) <= 4, f"rx packets: rfm {rfm_pkts} vs nic {nic_pkts}"
+    assert abs(rfm_bytes - nic_bytes) <= 4 * 1514, f"rx bytes: rfm {rfm_bytes} vs nic {nic_bytes}"
 
     metrics1 = machine1.succeed("curl -sf http://localhost:9669/metrics")
     require_positive(metrics1, "rfm_interface_tx_bytes_total", ifname="eth1", family="ipv4")

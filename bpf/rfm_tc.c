@@ -14,6 +14,9 @@
 #define ETH_P_8021Q 0x8100
 #define ETH_P_8021AD 0x88A8
 
+#define IPPROTO_TCP 6
+#define IPPROTO_UDP 17
+
 struct rfm_vlan_hdr {
 	__u16 tci;
 	__u16 encap_proto;
@@ -51,6 +54,46 @@ struct {
 	__type(key, __u32);
 	__type(value, __u64);
 } rfm_submit_count SEC(".maps");
+
+// rfm_hdr_len returns the L2 + L3 + L4 header size of the frame, the same
+// quantity qdisc_pkt_len_init() uses to reconstruct the on-wire length of a
+// GSO skb, and 0 when the headers cannot be parsed
+// l2_len covers ethernet plus any VLAN tags, l3 points at the IP header
+static __always_inline __u32 rfm_hdr_len(void *l3, void *end, __u16 eth_proto,
+					 __u32 l2_len)
+{
+	__u32 l3_len;
+	__u8 proto;
+
+	if (eth_proto == ETH_P_IP) {
+		struct iphdr *ip = l3;
+		if ((void *)(ip + 1) > end)
+			return 0;
+		if (ip->ihl < 5)
+			return 0;
+		l3_len = (__u32)ip->ihl << 2;
+		proto = ip->protocol;
+	} else {
+		struct ipv6hdr *ip6 = l3;
+		if ((void *)(ip6 + 1) > end)
+			return 0;
+		l3_len = sizeof(*ip6);
+		proto = ip6->nexthdr;
+	}
+
+	void *l4 = l3 + l3_len;
+	if (proto == IPPROTO_TCP) {
+		struct tcphdr *tcp = l4;
+		if ((void *)(tcp + 1) > end)
+			return 0;
+		return l2_len + l3_len + ((__u32)tcp->doff << 2);
+	}
+	if (proto == IPPROTO_UDP)
+		return l2_len + l3_len + sizeof(struct udphdr);
+
+	// the kernel adds no transport header for other GSO types either
+	return l2_len + l3_len;
+}
 
 static __always_inline int rfm_tc(struct __sk_buff *skb, __u8 dir)
 {
@@ -91,6 +134,31 @@ static __always_inline int rfm_tc(struct __sk_buff *skb, __u8 dir)
 		break;
 	}
 
+	// GRO (ingress) and GSO (egress) hand the tc hook one skb that stands
+	// for several wire packets, so account for the segments it carries and
+	// for the headers the merge removed, this keeps the counters equal to
+	// what the NIC saw on the wire instead of what the stack saw as skbs
+	__u32 len = skb->len;
+	__u32 segs = 1;
+	if (skb->gso_size && iface_proto) {
+		__u32 hdr_len =
+			rfm_hdr_len(l3, end, eth_proto, (__u32)(l3 - data));
+		segs = skb->gso_segs;
+		// drivers that pass gso frames up unverified leave gso_segs 0
+		// (SKB_GSO_DODGY), derive it from the payload like the kernel
+		if (segs == 0 && hdr_len && len > hdr_len)
+			segs = (len - hdr_len + skb->gso_size - 1) /
+			       skb->gso_size;
+		if (segs == 0)
+			segs = 1;
+		if (dir == RFM_DIR_EGRESS)
+			// qdisc_pkt_len_init() already added the header bytes
+			// of every extra segment before the egress hook ran
+			len = skb->wire_len;
+		else
+			len += (segs - 1) * hdr_len;
+	}
+
 	// iface stats are always updated, not gated by sampling
 	struct rfm_iface_key ikey = {
 		.ifindex = skb->ifindex,
@@ -101,11 +169,10 @@ static __always_inline int rfm_tc(struct __sk_buff *skb, __u8 dir)
 	struct rfm_iface_value *val =
 		bpf_map_lookup_elem(&rfm_iface_stats, &ikey);
 	if (val) {
-		val->packets++;
-		val->bytes += skb->len;
+		val->packets += segs;
+		val->bytes += len;
 	} else {
-		struct rfm_iface_value init = { .packets = 1,
-						.bytes = skb->len };
+		struct rfm_iface_value init = { .packets = segs, .bytes = len };
 		bpf_map_update_elem(&rfm_iface_stats, &ikey, &init, BPF_ANY);
 	}
 
@@ -126,7 +193,8 @@ static __always_inline int rfm_tc(struct __sk_buff *skb, __u8 dir)
 		.tstamp = bpf_ktime_get_boot_ns(),
 		.ifindex = skb->ifindex,
 		.dir = dir,
-		.len = skb->len,
+		.segs = segs > 0xffff ? 0xffff : segs,
+		.len = len,
 	};
 
 	void *l4 = NULL;
@@ -171,7 +239,7 @@ static __always_inline int rfm_tc(struct __sk_buff *skb, __u8 dir)
 	}
 
 	// extract ports for TCP and UDP
-	if (l4 && (ev.proto == 6 || ev.proto == 17)) {
+	if (l4 && (ev.proto == IPPROTO_TCP || ev.proto == IPPROTO_UDP)) {
 		if (l4 + 4 > end)
 			return TC_ACT_OK;
 		ev.src_port = bpf_ntohs(*(__u16 *)l4);

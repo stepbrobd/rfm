@@ -32,6 +32,26 @@ def require_positive(metrics: str, name: str, **labels: str) -> list[float]:
   assert any(val > 0 for val in vals), f"{name} {labels} has no positive samples: {vals}"
   return vals
 
+def iface_counters(machine, ifname: str) -> tuple[int, int, int, int]:
+  """rfm and kernel rx counters of ifname read back to back.
+
+  Returns (rfm packets, rfm bytes, kernel packets, kernel bytes) so a test can
+  compare deltas of the exact per-CPU counters against the NIC statistics.
+  """
+  out = machine.succeed(
+    "curl -sf http://localhost:9669/metrics; echo ---; "
+    f"cat /sys/class/net/{ifname}/statistics/rx_packets "
+    f"/sys/class/net/{ifname}/statistics/rx_bytes"
+  )
+  metrics, kernel = out.split("---\n")
+  rx_packets, rx_bytes = (int(x) for x in kernel.split())
+  return (
+    int(sum(metric_values(metrics, "rfm_interface_rx_packets_total", ifname=ifname))),
+    int(sum(metric_values(metrics, "rfm_interface_rx_bytes_total", ifname=ifname))),
+    rx_packets,
+    rx_bytes,
+  )
+
 def wait_for_positive_metric(machine, name: str, timeout_s: float = 10, **labels: str) -> list[float]:
   deadline = time.time() + timeout_s
   last_metrics = ""

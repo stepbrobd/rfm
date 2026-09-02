@@ -15,7 +15,7 @@ type wireFlowEvent struct {
 	Ifindex uint32
 	Dir     uint8
 	Proto   uint8
-	Pad     uint16
+	Segs    uint16
 	SrcAddr [16]uint8
 	DstAddr [16]uint8
 	SrcPort uint16
@@ -42,6 +42,7 @@ func DecodeFlowEvent(raw []byte) (FlowEvent, error) {
 		DstAddr: netip.AddrFrom16(wire.DstAddr),
 		SrcPort: wire.SrcPort,
 		DstPort: wire.DstPort,
+		Segs:    wire.Segs,
 		Len:     wire.Len,
 	}, nil
 }

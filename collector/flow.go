@@ -18,7 +18,10 @@ type Labels struct {
 	City string
 }
 
-// FlowEvent represents a single packet observation from the BPF program
+// FlowEvent represents a single sampled skb observation from the BPF program
+// one skb can stand for several wire packets after GRO or before GSO, so Segs
+// carries the wire packet count and Len the wire byte count of the whole skb
+// a Segs of 0 comes from a probe without segment accounting and means 1
 type FlowEvent struct {
 	Tstamp  uint64 // CLOCK_BOOTTIME nanoseconds
 	Ifindex uint32
@@ -28,7 +31,16 @@ type FlowEvent struct {
 	DstAddr netip.Addr
 	SrcPort uint16
 	DstPort uint16
+	Segs    uint16
 	Len     uint32
+}
+
+// Packets returns the number of wire packets the event stands for
+func (e FlowEvent) Packets() uint64 {
+	if e.Segs == 0 {
+		return 1
+	}
+	return uint64(e.Segs)
 }
 
 // Key returns the flow key for this event, suitable as a map key

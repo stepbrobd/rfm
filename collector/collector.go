@@ -76,7 +76,7 @@ func (c *Collector) Record(ev FlowEvent, now time.Time) {
 			key: key,
 			entry: FlowEntry{
 				FirstSeen: now,
-				Packets:   1,
+				Packets:   ev.Packets(),
 				Bytes:     uint64(ev.Len),
 				LastSeen:  now,
 			},
@@ -89,7 +89,7 @@ func (c *Collector) Record(ev FlowEvent, now time.Time) {
 		return
 	}
 
-	state.entry.Packets++
+	state.entry.Packets += ev.Packets()
 	state.entry.Bytes += uint64(ev.Len)
 	state.entry.LastSeen = now
 	heap.Fix(&c.eviction, state.index)

@@ -23,12 +23,15 @@ struct rfm_iface_value {
 	__u64 packets, bytes;
 };
 
+// len is the on-wire byte count and segs the on-wire packet count of the
+// sampled skb, GRO on ingress and GSO on egress coalesce several wire packets
+// into one skb, so both are reconstructed from gso_segs and the header size
 struct rfm_flow_event {
 	__u64 tstamp;
 	__u32 ifindex;
 	__u8 dir;
 	__u8 proto;
-	__u16 _pad;
+	__u16 segs;
 	__u8 src_addr[16];
 	__u8 dst_addr[16];
 	__u16 src_port;

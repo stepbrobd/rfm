@@ -17,6 +17,7 @@ func TestDecodeFlowEvent(t *testing.T) {
 		DstAddr: netip.MustParseAddr("::ffff:10.0.0.2"),
 		SrcPort: 12345,
 		DstPort: 80,
+		Segs:    3,
 		Len:     1500,
 	}
 
@@ -29,6 +30,7 @@ func TestDecodeFlowEvent(t *testing.T) {
 		DstAddr: want.DstAddr.As16(),
 		SrcPort: want.SrcPort,
 		DstPort: want.DstPort,
+		Segs:    want.Segs,
 		Len:     want.Len,
 	}
 
@@ -66,6 +68,7 @@ func encodeWireEvent(ev FlowEvent) []byte {
 		DstAddr: ev.DstAddr.As16(),
 		SrcPort: ev.SrcPort,
 		DstPort: ev.DstPort,
+		Segs:    ev.Segs,
 		Len:     ev.Len,
 	}
 	var buf bytes.Buffer

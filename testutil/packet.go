@@ -170,6 +170,19 @@ func EthIPv4TCP(srcIP, dstIP net.IP, srcPort, dstPort uint16) []byte {
 	)
 }
 
+// EthIPv4TCPPayload builds an eth+ipv4+tcp frame carrying payload bytes
+// the frame may exceed the link MTU, which is what a GSO skb looks like
+func EthIPv4TCPPayload(srcIP, dstIP net.IP, srcPort, dstPort uint16, payload []byte) []byte {
+	tcp := append(TCP(srcPort, dstPort), payload...)
+	ip := IPv4(6, srcIP, dstIP, tcp)
+	return Eth(
+		defaultDstMAC(),
+		defaultSrcMAC(),
+		EthPIPv4,
+		ip,
+	)
+}
+
 // EthVLANIPv4TCP builds an 802.1Q tagged eth+ipv4+tcp frame
 func EthVLANIPv4TCP(srcIP, dstIP net.IP, srcPort, dstPort uint16, tci uint16) []byte {
 	tcp := TCP(srcPort, dstPort)

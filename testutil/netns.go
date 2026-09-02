@@ -3,12 +3,24 @@
 package testutil
 
 import (
+	"encoding/binary"
 	"runtime"
 	"syscall"
 	"testing"
 
 	"github.com/vishvananda/netlink"
 	"github.com/vishvananda/netns"
+	"golang.org/x/sys/unix"
+)
+
+// virtio_net_hdr values understood by AF_PACKET sockets with PACKET_VNET_HDR
+const (
+	virtioNetHdrLen        = 10
+	virtioNetHdrNeedsCsum  = 1
+	virtioNetHdrGSOTCPv4   = 1
+	tcpChecksumOffset      = 16
+	packetVNetHdrSockopt   = unix.PACKET_VNET_HDR
+	packetVNetHdrSockLevel = unix.SOL_PACKET
 )
 
 // NS is an isolated network namespace with a veth pair
@@ -109,6 +121,54 @@ func (n *NS) SendRaw(t *testing.T, pkt []byte) {
 	if err := syscall.Sendto(fd, pkt, 0, addr); err != nil {
 		SkipIfUnprivileged(t, err)
 		t.Fatal(err)
+	}
+}
+
+// SendGSO hands the kernel one TCPv4 GSO skb built from pkt, an ethernet
+// frame whose TCP payload is longer than gsoSize, the same way a virtio or
+// tap driver delivers a large frame, so the tc hooks see an skb that stands
+// for several wire packets
+// the skb leaves through the named interface, use the peer name to have it
+// arrive on the monitored end as ingress
+// hdrLen is the ethernet + ip + tcp header size of pkt
+func (n *NS) SendGSO(t *testing.T, ifname string, pkt []byte, hdrLen, gsoSize uint16) {
+	t.Helper()
+
+	dev, err := netlink.LinkByName(ifname)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	fd, err := syscall.Socket(
+		syscall.AF_PACKET, syscall.SOCK_RAW,
+		int(htons(syscall.ETH_P_ALL)))
+	if err != nil {
+		SkipIfUnprivileged(t, err)
+		t.Fatal(err)
+	}
+	defer syscall.Close(fd)
+
+	if err := syscall.SetsockoptInt(fd, packetVNetHdrSockLevel, packetVNetHdrSockopt, 1); err != nil {
+		t.Fatalf("PACKET_VNET_HDR: %v", err)
+	}
+
+	// struct virtio_net_hdr, little endian on AF_PACKET
+	// the checksum fields locate the tcp checksum so the kernel accepts
+	// the frame as a partial checksum gso skb
+	hdr := make([]byte, virtioNetHdrLen)
+	hdr[0] = virtioNetHdrNeedsCsum
+	hdr[1] = virtioNetHdrGSOTCPv4
+	binary.LittleEndian.PutUint16(hdr[2:4], hdrLen)
+	binary.LittleEndian.PutUint16(hdr[4:6], gsoSize)
+	binary.LittleEndian.PutUint16(hdr[6:8], hdrLen-TCPHdrLen)
+	binary.LittleEndian.PutUint16(hdr[8:10], tcpChecksumOffset)
+
+	addr := &syscall.SockaddrLinklayer{
+		Ifindex: dev.Attrs().Index,
+	}
+	if err := syscall.Sendto(fd, append(hdr, pkt...), 0, addr); err != nil {
+		SkipIfUnprivileged(t, err)
+		t.Fatalf("send gso frame: %v", err)
 	}
 }
 

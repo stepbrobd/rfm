@@ -41,6 +41,37 @@ func TestRecord(t *testing.T) {
 	}
 }
 
+func TestRecordCountsSegments(t *testing.T) {
+	c := New(30*time.Second, nil, 0)
+	now := time.Now()
+
+	// a GRO or GSO skb carries several wire packets in one event
+	ev := FlowEvent{
+		Proto: 6, SrcPort: 1000, DstPort: 80,
+		SrcAddr: netip.MustParseAddr("::ffff:10.0.0.1"),
+		DstAddr: netip.MustParseAddr("::ffff:10.0.0.2"),
+		Segs:    5,
+		Len:     5270,
+	}
+	c.Record(ev, now)
+
+	// an event from a probe without segment accounting still counts as one
+	ev.Segs = 0
+	ev.Len = 100
+	c.Record(ev, now)
+
+	entry, ok := c.Flows()[ev.Key()]
+	if !ok {
+		t.Fatal("flow not found")
+	}
+	if entry.Packets != 6 {
+		t.Errorf("packets=%d want 6", entry.Packets)
+	}
+	if entry.Bytes != 5370 {
+		t.Errorf("bytes=%d want 5370", entry.Bytes)
+	}
+}
+
 func TestRecordDistinctFlows(t *testing.T) {
 	c := New(30*time.Second, nil, 0)
 	now := time.Now()
