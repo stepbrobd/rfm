@@ -129,7 +129,9 @@ func runAgent(cmd *cobra.Command, args []string) error {
 
 	mux := http.NewServeMux()
 	mux.Handle("/metrics", promhttp.HandlerFor(reg, promhttp.HandlerOpts{}))
-	srv := &http.Server{Addr: addr, Handler: mux}
+	// bound header reads so an idle client cannot hold a connection open
+	// forever when the endpoint is exposed beyond loopback
+	srv := &http.Server{Addr: addr, Handler: mux, ReadHeaderTimeout: 10 * time.Second}
 
 	// start listener and fail immediately if bind fails
 	ln, err := net.Listen("tcp", addr)
