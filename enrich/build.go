@@ -9,68 +9,61 @@ import (
 	"ysun.co/rfm/enrich/rib"
 )
 
-// Build constructs the configured enrichment backends
-// when no backend is configured, it returns nil, nil, nil
-func Build(cfg config.EnrichConfig) (collector.Enricher, io.Closer, error) {
-	var enrichers []collector.Enricher
-	var closers []io.Closer
+// Backends holds the configured enrichment backends
+// Enricher is what the collector uses, RIB and MMDB stay reachable for the
+// control plane, either may be nil
+type Backends struct {
+	Enricher collector.Enricher
+	RIB      *rib.Server
+	MMDB     *mmdb.Enricher
+	closers  []io.Closer
+}
 
-	add := func(enricher collector.Enricher, closer io.Closer) {
-		if enricher != nil {
-			enrichers = append(enrichers, enricher)
-		}
-		if closer != nil {
-			closers = append(closers, closer)
-		}
-	}
+// Build constructs the configured enrichment backends
+// when no backend is configured, it returns nil, nil
+func Build(cfg config.EnrichConfig) (*Backends, error) {
+	b := &Backends{}
+	var enrichers []collector.Enricher
 
 	r, rCloser, err := rib.Listen(cfg.RIB)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
-	add(r, rCloser)
+	if r != nil {
+		b.RIB = r.(*rib.Server)
+		enrichers = append(enrichers, r)
+		b.closers = append(b.closers, rCloser)
+	}
 
 	mm, mmCloser, err := mmdb.Open(cfg.MMDB)
 	if err != nil {
-		closeAll(closers)
-		return nil, nil, err
+		_ = b.Close()
+		return nil, err
 	}
-	add(mm, mmCloser)
-
-	if len(enrichers) == 0 {
-		return nil, nil, nil
+	if mm != nil {
+		b.MMDB = mm.(*mmdb.Enricher)
+		enrichers = append(enrichers, mm)
+		b.closers = append(b.closers, mmCloser)
 	}
 
-	var closer io.Closer
-	switch len(closers) {
+	switch len(enrichers) {
 	case 0:
+		return nil, nil
 	case 1:
-		closer = closers[0]
+		b.Enricher = enrichers[0]
 	default:
-		closer = multiCloser(closers)
+		b.Enricher = composite{enrichers: enrichers}
 	}
-
-	if len(enrichers) == 1 {
-		return enrichers[0], closer, nil
-	}
-
-	return composite{enrichers: enrichers}, closer, nil
+	return b, nil
 }
 
-type multiCloser []io.Closer
-
-func (m multiCloser) Close() error {
+// Close closes every backend and returns the first error
+func (b *Backends) Close() error {
 	var first error
-	for _, closer := range m {
+	for _, closer := range b.closers {
 		if err := closer.Close(); err != nil && first == nil {
 			first = err
 		}
 	}
 	return first
-}
-
-func closeAll(closers []io.Closer) {
-	for _, closer := range closers {
-		_ = closer.Close()
-	}
 }

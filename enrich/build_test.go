@@ -7,35 +7,44 @@ import (
 )
 
 func TestBuildNilWhenUnset(t *testing.T) {
-	enricher, closer, err := Build(config.EnrichConfig{})
+	backends, err := Build(config.EnrichConfig{})
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
-	if enricher != nil {
-		t.Fatal("expected nil enricher")
-	}
-	if closer != nil {
-		t.Fatal("expected nil closer")
+	if backends != nil {
+		t.Fatal("expected nil backends")
 	}
 }
 
 func TestBuildNilWhenMMDBEmpty(t *testing.T) {
-	enricher, closer, err := Build(config.EnrichConfig{
+	backends, err := Build(config.EnrichConfig{
 		MMDB: config.MMDBConfig{},
 	})
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
-	if enricher != nil {
-		t.Fatal("expected nil enricher")
+	if backends != nil {
+		t.Fatal("expected nil backends")
 	}
-	if closer != nil {
-		t.Fatal("expected nil closer")
+}
+
+func TestBuildRIBExposesServer(t *testing.T) {
+	backends, err := Build(config.EnrichConfig{
+		RIB: config.RIBConfig{
+			BMP: config.BMPConfig{Host: "127.0.0.1", Port: 0},
+		},
+	})
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	defer backends.Close()
+	if backends.RIB == nil || backends.Enricher == nil || backends.MMDB != nil {
+		t.Fatalf("backends = %+v, want a rib server and enricher only", backends)
 	}
 }
 
 func TestBuildMMDBBadPath(t *testing.T) {
-	_, _, err := Build(config.EnrichConfig{
+	_, err := Build(config.EnrichConfig{
 		MMDB: config.MMDBConfig{
 			ASNDB: "/does/not/exist.mmdb",
 		},
@@ -46,7 +55,7 @@ func TestBuildMMDBBadPath(t *testing.T) {
 }
 
 func TestBuildRIBBadListen(t *testing.T) {
-	_, _, err := Build(config.EnrichConfig{
+	_, err := Build(config.EnrichConfig{
 		RIB: config.RIBConfig{
 			BMP: config.BMPConfig{
 				Host: "bad",
