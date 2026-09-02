@@ -320,6 +320,10 @@ func validate(cfg *Config) error {
 	if a.BPF.RingBufSize&(a.BPF.RingBufSize-1) != 0 {
 		return fmt.Errorf("agent.bpf.ring_buf_size must be a power of two, got %d", a.BPF.RingBufSize)
 	}
+	// the kernel rejects ring buffers that are not a whole number of pages
+	if page := os.Getpagesize(); a.BPF.RingBufSize%page != 0 {
+		return fmt.Errorf("agent.bpf.ring_buf_size must be a multiple of the page size %d, got %d", page, a.BPF.RingBufSize)
+	}
 	if a.BPF.WakeupBatch == 0 {
 		return fmt.Errorf("agent.bpf.wakeup_batch must be > 0")
 	}

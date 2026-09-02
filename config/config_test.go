@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -368,6 +369,27 @@ ring_buf_size = 12345
 	_, err := Load(path)
 	if err == nil {
 		t.Fatal("expected error for non-power-of-two ring_buf_size")
+	}
+}
+
+func TestLoadRingBufSizeMustBePageMultiple(t *testing.T) {
+	// a power of two below the page size passes the power of two check but
+	// the kernel would still refuse it
+	size := os.Getpagesize() / 2
+	path := writeTOML(t, `
+[agent]
+interfaces = ["eth0"]
+
+[agent.bpf]
+ring_buf_size = `+strconv.Itoa(size)+`
+`)
+
+	_, err := Load(path)
+	if err == nil {
+		t.Fatal("expected error for ring_buf_size below the page size")
+	}
+	if !strings.Contains(err.Error(), "page size") {
+		t.Fatalf("error = %v, want mention of the page size", err)
 	}
 }
 
