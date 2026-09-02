@@ -89,6 +89,9 @@ func TestIPFIXExportsToGoFlow2(t *testing.T) {
 	if err := exp.ExportFlow(flow); err != nil {
 		t.Fatalf("ExportFlow: %v", err)
 	}
+	if err := exp.Flush(); err != nil {
+		t.Fatalf("Flush: %v", err)
+	}
 
 	var records []map[string]any
 	waitErr := waitForGoFlow2Output(outPath, 5*time.Second, &records)

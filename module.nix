@@ -151,6 +151,24 @@ in
                       default = 1;
                       description = "IPFIX observation domain id used in exported messages.";
                     };
+
+                    queue_size = std.mkOption {
+                      type = std.types.ints.positive;
+                      default = 4096;
+                      description = "Records that may wait for the IPFIX sender before new ones are dropped.";
+                    };
+
+                    flush_interval = std.mkOption {
+                      type = std.types.str;
+                      default = "1s";
+                      description = "How long the IPFIX sender gathers records before sending a partial message (Go duration).";
+                    };
+
+                    max_message_size = std.mkOption {
+                      type = std.types.ints.between 128 65535;
+                      default = 1200;
+                      description = "Largest IPFIX message in bytes, keep it under the path MTU.";
+                    };
                   };
                 };
               };

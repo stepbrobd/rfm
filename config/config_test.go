@@ -587,6 +587,78 @@ interfaces = ["eth0"]
 	}
 }
 
+func TestLoadIPFIXQueueDefaults(t *testing.T) {
+	path := writeTOML(t, `
+[agent]
+interfaces = ["eth0"]
+
+[agent.ipfix]
+host = "127.0.0.1"
+`)
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Agent.IPFIX.QueueSize != DefaultIPFIXQueueSize {
+		t.Fatalf("queue_size = %d, want %d", cfg.Agent.IPFIX.QueueSize, DefaultIPFIXQueueSize)
+	}
+	if cfg.Agent.IPFIX.FlushInterval != DefaultIPFIXFlushInterval {
+		t.Fatalf("flush_interval = %v, want %v", cfg.Agent.IPFIX.FlushInterval, DefaultIPFIXFlushInterval)
+	}
+	if cfg.Agent.IPFIX.MaxMessageSize != DefaultIPFIXMaxMessageSize {
+		t.Fatalf("max_message_size = %d, want %d", cfg.Agent.IPFIX.MaxMessageSize, DefaultIPFIXMaxMessageSize)
+	}
+}
+
+func TestLoadIPFIXQueueSettings(t *testing.T) {
+	path := writeTOML(t, `
+[agent]
+interfaces = ["eth0"]
+
+[agent.ipfix]
+host = "127.0.0.1"
+queue_size = 16
+flush_interval = "250ms"
+max_message_size = 512
+`)
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Agent.IPFIX.QueueSize != 16 {
+		t.Fatalf("queue_size = %d, want 16", cfg.Agent.IPFIX.QueueSize)
+	}
+	if cfg.Agent.IPFIX.FlushInterval != 250*time.Millisecond {
+		t.Fatalf("flush_interval = %v, want 250ms", cfg.Agent.IPFIX.FlushInterval)
+	}
+	if cfg.Agent.IPFIX.MaxMessageSize != 512 {
+		t.Fatalf("max_message_size = %d, want 512", cfg.Agent.IPFIX.MaxMessageSize)
+	}
+}
+
+func TestLoadBadIPFIXQueueSettings(t *testing.T) {
+	for _, body := range []string{
+		"queue_size = -1",
+		`flush_interval = "1ms"`,
+		"max_message_size = 64",
+		"max_message_size = 70000",
+	} {
+		path := writeTOML(t, `
+[agent]
+interfaces = ["eth0"]
+
+[agent.ipfix]
+host = "127.0.0.1"
+`+body+`
+`)
+		if _, err := Load(path); err == nil {
+			t.Fatalf("expected error for %s", body)
+		}
+	}
+}
+
 func TestLoadBadIPFIXTemplateRefresh(t *testing.T) {
 	path := writeTOML(t, `
 [agent]

@@ -48,7 +48,22 @@ type IPFIXConfig struct {
 	Bind                IPFIXBindConfig
 	TemplateRefresh     time.Duration
 	ObservationDomainID uint32
+	// QueueSize bounds the records waiting for the sender goroutine
+	QueueSize int
+	// FlushInterval is how long the sender gathers records before a message
+	// goes out when fewer than a full message are waiting
+	FlushInterval time.Duration
+	// MaxMessageSize caps one IPFIX message in bytes, kept under the path
+	// mtu so a message never fragments
+	MaxMessageSize int
 }
+
+// default exporter sizing
+const (
+	DefaultIPFIXQueueSize      = 4096
+	DefaultIPFIXFlushInterval  = time.Second
+	DefaultIPFIXMaxMessageSize = 1200
+)
 
 // IPFIXBindConfig controls the local UDP bind used by the IPFIX exporter
 type IPFIXBindConfig struct {
@@ -71,6 +86,15 @@ func (c IPFIXConfig) WithDefaults() IPFIXConfig {
 	}
 	if c.Port == 0 {
 		c.Port = 4739
+	}
+	if c.QueueSize == 0 {
+		c.QueueSize = DefaultIPFIXQueueSize
+	}
+	if c.FlushInterval == 0 {
+		c.FlushInterval = DefaultIPFIXFlushInterval
+	}
+	if c.MaxMessageSize == 0 {
+		c.MaxMessageSize = DefaultIPFIXMaxMessageSize
 	}
 	return c
 }
@@ -168,6 +192,9 @@ type rawIPFIXConfig struct {
 	Bind                IPFIXBindConfig `toml:"bind"`
 	TemplateRefresh     string          `toml:"template_refresh"`
 	ObservationDomainID uint32          `toml:"observation_domain_id"`
+	QueueSize           int             `toml:"queue_size"`
+	FlushInterval       string          `toml:"flush_interval"`
+	MaxMessageSize      int             `toml:"max_message_size"`
 }
 
 // rawConfig is the wire format for TOML decoding, before duration parsing
@@ -199,6 +226,9 @@ func Load(path string) (*Config, error) {
 	raw.Agent.Collector.ActiveTimeout = "60s"
 	raw.Agent.IPFIX.TemplateRefresh = "60s"
 	raw.Agent.IPFIX.ObservationDomainID = 1
+	raw.Agent.IPFIX.QueueSize = DefaultIPFIXQueueSize
+	raw.Agent.IPFIX.FlushInterval = "1s"
+	raw.Agent.IPFIX.MaxMessageSize = DefaultIPFIXMaxMessageSize
 	raw.Agent.Prometheus.Host = "::1"
 	raw.Agent.Prometheus.Port = 9669
 
@@ -226,6 +256,11 @@ func Load(path string) (*Config, error) {
 		return nil, fmt.Errorf("parsing ipfix.template_refresh %q: %w", raw.Agent.IPFIX.TemplateRefresh, err)
 	}
 
+	flushInterval, err := time.ParseDuration(raw.Agent.IPFIX.FlushInterval)
+	if err != nil {
+		return nil, fmt.Errorf("parsing ipfix.flush_interval %q: %w", raw.Agent.IPFIX.FlushInterval, err)
+	}
+
 	raw.Agent.Enrich.RIB.BMP = raw.Agent.Enrich.RIB.BMP.WithDefaults()
 	ipfixCfg := IPFIXConfig{
 		Host:                raw.Agent.IPFIX.Host,
@@ -233,6 +268,9 @@ func Load(path string) (*Config, error) {
 		Bind:                raw.Agent.IPFIX.Bind,
 		TemplateRefresh:     templateRefresh,
 		ObservationDomainID: raw.Agent.IPFIX.ObservationDomainID,
+		QueueSize:           raw.Agent.IPFIX.QueueSize,
+		FlushInterval:       flushInterval,
+		MaxMessageSize:      raw.Agent.IPFIX.MaxMessageSize,
 	}.WithDefaults()
 
 	cfg := &Config{
@@ -362,6 +400,15 @@ func validate(cfg *Config) error {
 	}
 	if a.IPFIX.ObservationDomainID == 0 {
 		return fmt.Errorf("agent.ipfix.observation_domain_id must be > 0")
+	}
+	if a.IPFIX.QueueSize < 1 {
+		return fmt.Errorf("agent.ipfix.queue_size must be >= 1, got %d", a.IPFIX.QueueSize)
+	}
+	if a.IPFIX.FlushInterval < 10*time.Millisecond {
+		return fmt.Errorf("agent.ipfix.flush_interval must be >= 10ms, got %v", a.IPFIX.FlushInterval)
+	}
+	if a.IPFIX.MaxMessageSize < 128 || a.IPFIX.MaxMessageSize > 65535 {
+		return fmt.Errorf("agent.ipfix.max_message_size must be between 128 and 65535, got %d", a.IPFIX.MaxMessageSize)
 	}
 	if a.Prometheus.Port < 1 || a.Prometheus.Port > 65535 {
 		return fmt.Errorf("agent.prometheus.port must be between 1 and 65535, got %d", a.Prometheus.Port)
