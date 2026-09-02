@@ -32,40 +32,62 @@ type LargeCommunity struct {
 	LocalData2  uint32
 }
 
+// Peer identifies one view of the routing table as seen over BMP
+// a speaker sends one view per monitored peer and, when configured, one
+// each for pre and post policy, routes are kept per view so a withdraw from
+// one peer never removes what another peer still announces
+type Peer struct {
+	Address       netip.Addr
+	Distinguisher uint64
+	PostPolicy    bool
+}
+
 // Route is the internal route view exposed by the RIB backend
 type Route struct {
-	Prefix           netip.Prefix
-	OriginASN        uint32
-	ASPath           []uint32
-	Communities      []uint32
-	LargeCommunities []LargeCommunity
-	PeerASN          uint32
-	PeerAddress      netip.Addr
-	PostPolicy       bool
+	Prefix    netip.Prefix
+	OriginASN uint32
+	// OriginASSet marks a path whose last segment is an AS_SET, the origin
+	// is then ambiguous and OriginASN is 0
+	OriginASSet       bool
+	ASPath            []uint32
+	Communities       []uint32
+	LargeCommunities  []LargeCommunity
+	PeerASN           uint32
+	PeerAddress       netip.Addr
+	PeerDistinguisher uint64
+	PostPolicy        bool
+}
+
+// Peer returns the view this route belongs to
+func (r Route) Peer() Peer {
+	return Peer{Address: r.PeerAddress, Distinguisher: r.PeerDistinguisher, PostPolicy: r.PostPolicy}
 }
 
 type routeValue struct {
-	Prefix    netip.Prefix
-	OriginASN uint32
-	MetaID    uint64
+	Prefix      netip.Prefix
+	OriginASN   uint32
+	OriginASSet bool
+	MetaID      uint64
 }
 
 type routeMeta struct {
-	ASPath           []uint32
-	Communities      []uint32
-	LargeCommunities []LargeCommunity
-	PeerASN          uint32
-	PeerAddress      netip.Addr
-	PostPolicy       bool
+	ASPath            []uint32
+	Communities       []uint32
+	LargeCommunities  []LargeCommunity
+	PeerASN           uint32
+	PeerAddress       netip.Addr
+	PeerDistinguisher uint64
+	PostPolicy        bool
 }
 
 type routeMetaKey struct {
-	ASPath           string
-	Communities      string
-	LargeCommunities string
-	PeerASN          uint32
-	PeerAddress      netip.Addr
-	PostPolicy       bool
+	ASPath            string
+	Communities       string
+	LargeCommunities  string
+	PeerASN           uint32
+	PeerAddress       netip.Addr
+	PeerDistinguisher uint64
+	PostPolicy        bool
 }
 
 type routeMetaState struct {
@@ -75,29 +97,44 @@ type routeMetaState struct {
 }
 
 // Update is a batch of RIB changes
+// Reach routes carry their own peer, Withdraw prefixes are withdrawn from
+// Peer, or from every peer when Peer is the zero value
 type Update struct {
+	Peer     Peer
 	Reach    []Route
 	Withdraw []netip.Prefix
 }
 
+// Summary counts what the table holds
+type Summary struct {
+	PrefixesV4 int
+	PrefixesV6 int
+	Routes     int
+	Peers      int
+}
+
 // Table is a longest-prefix-match routing table
+// the tries hold the best route per prefix, entries hold every route per
+// prefix and peer so the best route can be reselected on a withdraw
 type Table struct {
-	mu       sync.RWMutex
-	v4       bart.Table[routeValue]
-	v6       bart.Table[routeValue]
-	entries  map[netip.Prefix]routeValue
-	metas    map[uint64]*routeMetaState
-	metaKeys map[routeMetaKey]uint64
-	nextMeta uint64
+	mu         sync.RWMutex
+	v4         bart.Table[routeValue]
+	v6         bart.Table[routeValue]
+	entries    map[netip.Prefix]map[Peer]routeValue
+	peerRoutes map[Peer]int
+	metas      map[uint64]*routeMetaState
+	metaKeys   map[routeMetaKey]uint64
+	nextMeta   uint64
 }
 
 // NewTable creates an empty RIB table
 func NewTable() *Table {
 	return &Table{
-		entries:  make(map[netip.Prefix]routeValue),
-		metas:    make(map[uint64]*routeMetaState),
-		metaKeys: make(map[routeMetaKey]uint64),
-		nextMeta: 1,
+		entries:    make(map[netip.Prefix]map[Peer]routeValue),
+		peerRoutes: make(map[Peer]int),
+		metas:      make(map[uint64]*routeMetaState),
+		metaKeys:   make(map[routeMetaKey]uint64),
+		nextMeta:   1,
 	}
 }
 
@@ -107,10 +144,32 @@ func (t *Table) Apply(update Update) {
 	defer t.mu.Unlock()
 
 	for _, prefix := range update.Withdraw {
-		t.deletePrefix(prefix)
+		prefix = prefix.Masked()
+		if update.Peer == (Peer{}) {
+			for peer := range t.entries[prefix] {
+				t.deleteRoute(prefix, peer)
+			}
+			continue
+		}
+		t.deleteRoute(prefix, update.Peer)
 	}
 	for _, route := range update.Reach {
 		t.insertRoute(route)
+	}
+}
+
+// RemovePeer withdraws every route learned from peer
+func (t *Table) RemovePeer(peer Peer) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	if t.peerRoutes[peer] == 0 {
+		return
+	}
+	for prefix, peers := range t.entries {
+		if _, ok := peers[peer]; ok {
+			t.deleteRoute(prefix, peer)
+		}
 	}
 }
 
@@ -144,6 +203,35 @@ func (t *Table) labels(addr netip.Addr) collector.Labels {
 		return collector.Labels{}
 	}
 	return collector.Labels{ASN: value.OriginASN}
+}
+
+// Summary counts the prefixes, routes and peers in the table
+func (t *Table) Summary() Summary {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+
+	var routes int
+	for _, n := range t.peerRoutes {
+		routes += n
+	}
+	return Summary{
+		PrefixesV4: t.v4.Size(),
+		PrefixesV6: t.v6.Size(),
+		Routes:     routes,
+		Peers:      len(t.peerRoutes),
+	}
+}
+
+// Peers lists the views with at least one route
+func (t *Table) Peers() []Peer {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+
+	out := make([]Peer, 0, len(t.peerRoutes))
+	for peer := range t.peerRoutes {
+		out = append(out, peer)
+	}
+	return out
 }
 
 // Server owns a BMP listener and an in-memory RIB
@@ -190,6 +278,11 @@ func (s *Server) Enrich(src, dst netip.Addr) (collector.Labels, collector.Labels
 // Lookup returns the best matching route for addr
 func (s *Server) Lookup(addr netip.Addr) (Route, bool) {
 	return s.table.Lookup(addr)
+}
+
+// Table exposes the RIB for inspection
+func (s *Server) Table() *Table {
+	return s.table
 }
 
 func (s *Server) Close() error {
@@ -240,6 +333,10 @@ func (s *Server) accept() {
 	}
 }
 
+// handleConn reads one BMP session
+// routes are valid only while the session that carried them is up, so a
+// peer down message withdraws that peer and the end of the session
+// withdraws every peer it announced
 func (s *Server) handleConn(conn net.Conn) {
 	log.Info("bmp session opened", "remote", conn.RemoteAddr())
 
@@ -252,6 +349,12 @@ func (s *Server) handleConn(conn net.Conn) {
 	var parseErrLogged bool
 	var appliedLogged bool
 	seenTypes := make(map[uint8]struct{})
+	peers := make(map[Peer]struct{})
+	defer func() {
+		for peer := range peers {
+			s.table.RemovePeer(peer)
+		}
+	}()
 
 	for scanner.Scan() {
 		messages++
@@ -272,7 +375,20 @@ func (s *Server) handleConn(conn net.Conn) {
 			}
 		}
 
-		if msg.Header.Type == bmp.BMP_MSG_ROUTE_MONITORING {
+		switch msg.Header.Type {
+		case bmp.BMP_MSG_PEER_DOWN_NOTIFICATION:
+			peer := peerFromHeader(msg.PeerHeader)
+			s.table.RemovePeer(peer)
+			delete(peers, peer)
+			log.Info("bmp peer down", "remote", conn.RemoteAddr(), "peer", peer.Address)
+			continue
+		case bmp.BMP_MSG_TERMINATION:
+			for peer := range peers {
+				s.table.RemovePeer(peer)
+				delete(peers, peer)
+			}
+			continue
+		case bmp.BMP_MSG_ROUTE_MONITORING:
 			log.Debug(
 				"bmp route monitoring raw",
 				"remote", conn.RemoteAddr(),
@@ -284,6 +400,7 @@ func (s *Server) handleConn(conn net.Conn) {
 		if !ok {
 			continue
 		}
+		peers[update.Peer] = struct{}{}
 
 		if len(update.Reach) > 0 || len(update.Withdraw) > 0 {
 			if !appliedLogged {
@@ -312,7 +429,7 @@ func (s *Server) handleConn(conn net.Conn) {
 		log.Error("read bmp stream", "remote", conn.RemoteAddr(), "err", err)
 	}
 
-	log.Info("bmp session closed", "remote", conn.RemoteAddr(), "messages", messages, "changes", changes)
+	log.Info("bmp session closed", "remote", conn.RemoteAddr(), "messages", messages, "changes", changes, "peers", len(peers))
 }
 
 func (s *Server) trackConn(conn net.Conn) bool {
@@ -343,6 +460,14 @@ func (s *Server) isClosing() bool {
 	}
 }
 
+func peerFromHeader(h bmp.BMPPeerHeader) Peer {
+	peer := Peer{Distinguisher: h.PeerDistinguisher, PostPolicy: h.IsPostPolicy()}
+	if addr, ok := netip.AddrFromSlice(h.PeerAddress); ok {
+		peer.Address = addr.Unmap()
+	}
+	return peer
+}
+
 func updateFromBMP(msg *bmp.BMPMessage) (Update, bool) {
 	if msg.Header.Type != bmp.BMP_MSG_ROUTE_MONITORING {
 		return Update{}, false
@@ -360,7 +485,7 @@ func updateFromBMP(msg *bmp.BMPMessage) (Update, bool) {
 
 	attrs := routeAttrs(updateMsg.PathAttributes)
 
-	var out Update
+	out := Update{Peer: peerFromHeader(msg.PeerHeader)}
 	for _, withdraw := range updateMsg.WithdrawnRoutes {
 		if prefix, ok := prefixFromNLRI(withdraw); ok {
 			out.Withdraw = append(out.Withdraw, prefix)
@@ -461,36 +586,91 @@ func describePrefix(nlri bgp.AddrPrefixInterface) string {
 	return fmt.Sprintf("%s flat=%v", nlri.String(), flat)
 }
 
+// insertRoute stores route under its peer and reselects the best route
+// it must be called with mu held
 func (t *Table) insertRoute(route Route) {
 	route.Prefix = route.Prefix.Masked()
+	peer := route.Peer()
 
-	if current, ok := t.entries[route.Prefix]; ok {
+	peers, ok := t.entries[route.Prefix]
+	if !ok {
+		peers = make(map[Peer]routeValue)
+		t.entries[route.Prefix] = peers
+	}
+	if current, ok := peers[peer]; ok {
 		t.releaseMeta(current.MetaID)
+	} else {
+		t.peerRoutes[peer]++
 	}
 
-	value := routeValue{
-		Prefix:    route.Prefix,
-		OriginASN: route.OriginASN,
-		MetaID:    t.internMeta(route.meta()),
+	peers[peer] = routeValue{
+		Prefix:      route.Prefix,
+		OriginASN:   route.OriginASN,
+		OriginASSet: route.OriginASSet,
+		MetaID:      t.internMeta(route.meta()),
 	}
-	t.entries[route.Prefix] = value
-	insertValue(&t.v4, &t.v6, value)
+	t.reselect(route.Prefix)
 }
 
-func (t *Table) deletePrefix(prefix netip.Prefix) {
-	prefix = prefix.Masked()
-
-	if current, ok := t.entries[prefix]; ok {
-		t.releaseMeta(current.MetaID)
-		delete(t.entries, prefix)
+// deleteRoute drops the route of peer for prefix and reselects the best
+// it must be called with mu held
+func (t *Table) deleteRoute(prefix netip.Prefix, peer Peer) {
+	peers, ok := t.entries[prefix]
+	if !ok {
+		return
 	}
-	deletePrefix(&t.v4, &t.v6, prefix)
+	current, ok := peers[peer]
+	if !ok {
+		return
+	}
+
+	t.releaseMeta(current.MetaID)
+	delete(peers, peer)
+	if t.peerRoutes[peer]--; t.peerRoutes[peer] == 0 {
+		delete(t.peerRoutes, peer)
+	}
+
+	if len(peers) == 0 {
+		delete(t.entries, prefix)
+		deletePrefix(&t.v4, &t.v6, prefix)
+		return
+	}
+	t.reselect(prefix)
+}
+
+// reselect installs the best route for prefix in the trie
+// a post policy view wins over a pre policy one, then the lowest peer
+// address and distinguisher, which keeps the choice stable across updates
+// it must be called with mu held
+func (t *Table) reselect(prefix netip.Prefix) {
+	var best Peer
+	var value routeValue
+	found := false
+	for peer, v := range t.entries[prefix] {
+		if !found || betterPeer(peer, best) {
+			best, value, found = peer, v, true
+		}
+	}
+	if found {
+		insertValue(&t.v4, &t.v6, value)
+	}
+}
+
+func betterPeer(a, b Peer) bool {
+	if a.PostPolicy != b.PostPolicy {
+		return a.PostPolicy
+	}
+	if c := a.Address.Compare(b.Address); c != 0 {
+		return c < 0
+	}
+	return a.Distinguisher < b.Distinguisher
 }
 
 func (t *Table) route(value routeValue) Route {
 	route := Route{
-		Prefix:    value.Prefix,
-		OriginASN: value.OriginASN,
+		Prefix:      value.Prefix,
+		OriginASN:   value.OriginASN,
+		OriginASSet: value.OriginASSet,
 	}
 	if value.MetaID == 0 {
 		return route
@@ -507,6 +687,7 @@ func (t *Table) route(value routeValue) Route {
 	route.LargeCommunities = routeMeta.LargeCommunities
 	route.PeerASN = routeMeta.PeerASN
 	route.PeerAddress = routeMeta.PeerAddress
+	route.PeerDistinguisher = routeMeta.PeerDistinguisher
 	route.PostPolicy = routeMeta.PostPolicy
 	return route
 }
@@ -554,6 +735,7 @@ func (t *Table) releaseMeta(id uint64) {
 
 type attrs struct {
 	originASN        uint32
+	originASSet      bool
 	asPath           []uint32
 	communities      []uint32
 	largeCommunities []LargeCommunity
@@ -566,7 +748,7 @@ func routeAttrs(pathAttrs []bgp.PathAttributeInterface) attrs {
 		switch a := attr.(type) {
 		case *bgp.PathAttributeAsPath:
 			out.asPath = flattenASPath(a.Value)
-			out.originASN = originASN(out.asPath)
+			out.originASN, out.originASSet = originASN(a.Value)
 		case *bgp.PathAttributeCommunities:
 			out.communities = append([]uint32(nil), a.Value...)
 		case *bgp.PathAttributeLargeCommunities:
@@ -586,13 +768,15 @@ func routeAttrs(pathAttrs []bgp.PathAttributeInterface) attrs {
 
 func (a attrs) route(prefix netip.Prefix, peer bmp.BMPPeerHeader) Route {
 	route := Route{
-		Prefix:           prefix,
-		OriginASN:        a.originASN,
-		ASPath:           append([]uint32(nil), a.asPath...),
-		Communities:      append([]uint32(nil), a.communities...),
-		LargeCommunities: append([]LargeCommunity(nil), a.largeCommunities...),
-		PeerASN:          peer.PeerAS,
-		PostPolicy:       peer.IsPostPolicy(),
+		Prefix:            prefix,
+		OriginASN:         a.originASN,
+		OriginASSet:       a.originASSet,
+		ASPath:            append([]uint32(nil), a.asPath...),
+		Communities:       append([]uint32(nil), a.communities...),
+		LargeCommunities:  append([]LargeCommunity(nil), a.largeCommunities...),
+		PeerASN:           peer.PeerAS,
+		PeerDistinguisher: peer.PeerDistinguisher,
+		PostPolicy:        peer.IsPostPolicy(),
 	}
 
 	if addr, ok := netip.AddrFromSlice(peer.PeerAddress); ok {
@@ -604,12 +788,13 @@ func (a attrs) route(prefix netip.Prefix, peer bmp.BMPPeerHeader) Route {
 
 func (r Route) meta() routeMeta {
 	return routeMeta{
-		ASPath:           append([]uint32(nil), r.ASPath...),
-		Communities:      append([]uint32(nil), r.Communities...),
-		LargeCommunities: append([]LargeCommunity(nil), r.LargeCommunities...),
-		PeerASN:          r.PeerASN,
-		PeerAddress:      r.PeerAddress,
-		PostPolicy:       r.PostPolicy,
+		ASPath:            append([]uint32(nil), r.ASPath...),
+		Communities:       append([]uint32(nil), r.Communities...),
+		LargeCommunities:  append([]LargeCommunity(nil), r.LargeCommunities...),
+		PeerASN:           r.PeerASN,
+		PeerAddress:       r.PeerAddress,
+		PeerDistinguisher: r.PeerDistinguisher,
+		PostPolicy:        r.PostPolicy,
 	}
 }
 
@@ -619,6 +804,7 @@ func (m routeMeta) empty() bool {
 		len(m.LargeCommunities) == 0 &&
 		m.PeerASN == 0 &&
 		!m.PeerAddress.IsValid() &&
+		m.PeerDistinguisher == 0 &&
 		!m.PostPolicy
 }
 
@@ -631,12 +817,13 @@ func (m routeMeta) clone() routeMeta {
 
 func (m routeMeta) key() routeMetaKey {
 	return routeMetaKey{
-		ASPath:           encodeUint32s(m.ASPath),
-		Communities:      encodeUint32s(m.Communities),
-		LargeCommunities: encodeLargeCommunities(m.LargeCommunities),
-		PeerASN:          m.PeerASN,
-		PeerAddress:      m.PeerAddress,
-		PostPolicy:       m.PostPolicy,
+		ASPath:            encodeUint32s(m.ASPath),
+		Communities:       encodeUint32s(m.Communities),
+		LargeCommunities:  encodeLargeCommunities(m.LargeCommunities),
+		PeerASN:           m.PeerASN,
+		PeerAddress:       m.PeerAddress,
+		PeerDistinguisher: m.PeerDistinguisher,
+		PostPolicy:        m.PostPolicy,
 	}
 }
 
@@ -649,11 +836,23 @@ func flattenASPath(path []bgp.AsPathParamInterface) []uint32 {
 	return out
 }
 
-func originASN(path []uint32) uint32 {
+// originASN returns the origin of an AS path, the last ASN of the last
+// segment when that segment is a sequence, and 0 with the set flag raised
+// when the path ends in an AS_SET, where the origin is ambiguous
+func originASN(path []bgp.AsPathParamInterface) (uint32, bool) {
 	if len(path) == 0 {
-		return 0
+		return 0, false
 	}
-	return path[len(path)-1]
+	last := path[len(path)-1]
+	switch last.GetType() {
+	case bgp.BGP_ASPATH_ATTR_TYPE_SET, bgp.BGP_ASPATH_ATTR_TYPE_CONFED_SET:
+		return 0, true
+	}
+	asns := last.GetAS()
+	if len(asns) == 0 {
+		return 0, false
+	}
+	return asns[len(asns)-1], false
 }
 
 func prefixFromNLRI(nlri bgp.AddrPrefixInterface) (netip.Prefix, bool) {

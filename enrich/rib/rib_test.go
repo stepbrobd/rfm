@@ -225,18 +225,94 @@ func TestHandleConnAppliesBMPRouteMonitoring(t *testing.T) {
 	if _, err := clientConn.Write(wire); err != nil {
 		t.Fatalf("Write: %v", err)
 	}
+
+	// the route is served while the session is up
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		route, ok := s.Lookup(netip.MustParseAddr("198.51.100.7"))
+		if ok {
+			if route.OriginASN != 65003 {
+				t.Fatalf("OriginASN = %d, want 65003", route.OriginASN)
+			}
+			if route.PeerAddress != netip.MustParseAddr("192.0.2.2") {
+				t.Fatalf("PeerAddress = %s, want 192.0.2.2", route.PeerAddress)
+			}
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("Lookup should find BMP-learned prefix while the session is up")
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+
+	// the end of the session withdraws everything it announced
 	if err := clientConn.Close(); err != nil {
 		t.Fatalf("Close: %v", err)
 	}
 	<-done
 
-	route, ok := s.Lookup(netip.MustParseAddr("198.51.100.7"))
-	if !ok {
-		t.Fatal("Lookup should find BMP-learned prefix")
+	if _, ok := s.Lookup(netip.MustParseAddr("198.51.100.7")); ok {
+		t.Fatal("route survived the end of its BMP session")
 	}
-	if route.OriginASN != 65003 {
-		t.Fatalf("OriginASN = %d, want 65003", route.OriginASN)
+}
+
+func TestHandleConnPeerDownWithdrawsPeer(t *testing.T) {
+	serverConn, clientConn := net.Pipe()
+	defer clientConn.Close()
+
+	s := &Server{
+		table: NewTable(),
 	}
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		s.handleConn(serverConn)
+	}()
+
+	if _, err := clientConn.Write(mustBMPWire(t, "198.51.100.0/24", 65003)); err != nil {
+		t.Fatalf("Write: %v", err)
+	}
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		if _, ok := s.Lookup(netip.MustParseAddr("198.51.100.7")); ok {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("route never arrived")
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+
+	peer := bmp.NewBMPPeerHeader(
+		bmp.BMP_PEER_TYPE_LOCAL_RIB,
+		bmp.BMP_PEER_FLAG_POST_POLICY,
+		0,
+		"192.0.2.2",
+		65003,
+		"192.0.2.2",
+		0,
+	)
+	down, err := bmp.NewBMPPeerDownNotification(*peer, bmp.BMP_PEER_DOWN_REASON_PEER_DE_CONFIGURED, nil, nil).Serialize()
+	if err != nil {
+		t.Fatalf("Serialize: %v", err)
+	}
+	if _, err := clientConn.Write(down); err != nil {
+		t.Fatalf("Write: %v", err)
+	}
+	deadline = time.Now().Add(2 * time.Second)
+	for {
+		if _, ok := s.Lookup(netip.MustParseAddr("198.51.100.7")); !ok {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("route survived the peer down notification")
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+
+	_ = clientConn.Close()
+	<-done
 }
 
 func TestServerCloseReturnsWithIdleConnection(t *testing.T) {
@@ -397,4 +473,126 @@ func prefixAddr(t *testing.T, prefix string) string {
 
 	pfx := netip.MustParsePrefix(prefix)
 	return pfx.Addr().String()
+}
+
+func TestTableKeepsRoutesPerPeer(t *testing.T) {
+	tab := NewTable()
+	pfx := netip.MustParsePrefix("203.0.113.0/24")
+	a := Peer{Address: netip.MustParseAddr("192.0.2.1")}
+	b := Peer{Address: netip.MustParseAddr("192.0.2.2")}
+
+	tab.Apply(Update{Reach: []Route{
+		{Prefix: pfx, OriginASN: 64501, PeerASN: 64501, PeerAddress: a.Address},
+		{Prefix: pfx, OriginASN: 64502, PeerASN: 64502, PeerAddress: b.Address},
+	}})
+
+	if got := tab.Summary(); got.Routes != 2 || got.PrefixesV4 != 1 || got.Peers != 2 {
+		t.Fatalf("summary = %+v, want 2 routes, 1 prefix, 2 peers", got)
+	}
+
+	// the lowest peer address wins while both are pre policy
+	route, ok := tab.Lookup(netip.MustParseAddr("203.0.113.9"))
+	if !ok || route.OriginASN != 64501 {
+		t.Fatalf("best route = %+v, want origin 64501 from the lower peer", route)
+	}
+
+	// a withdraw from one peer leaves the other peer's route in place
+	tab.Apply(Update{Peer: a, Withdraw: []netip.Prefix{pfx}})
+	route, ok = tab.Lookup(netip.MustParseAddr("203.0.113.9"))
+	if !ok || route.OriginASN != 64502 {
+		t.Fatalf("route after withdraw = %+v ok=%v, want origin 64502 from the other peer", route, ok)
+	}
+	if got := tab.Summary(); got.Routes != 1 || got.Peers != 1 {
+		t.Fatalf("summary after withdraw = %+v, want 1 route from 1 peer", got)
+	}
+
+	tab.Apply(Update{Peer: b, Withdraw: []netip.Prefix{pfx}})
+	if _, ok := tab.Lookup(netip.MustParseAddr("203.0.113.9")); ok {
+		t.Fatal("prefix still present after every peer withdrew it")
+	}
+	if got := tab.Summary(); got.Routes != 0 || got.PrefixesV4 != 0 || got.Peers != 0 {
+		t.Fatalf("summary after full withdraw = %+v, want empty", got)
+	}
+}
+
+func TestTablePrefersPostPolicy(t *testing.T) {
+	tab := NewTable()
+	pfx := netip.MustParsePrefix("2001:db8::/32")
+	addr := netip.MustParseAddr("192.0.2.1")
+
+	tab.Apply(Update{Reach: []Route{
+		{Prefix: pfx, OriginASN: 64511, PeerAddress: addr, PostPolicy: false},
+		{Prefix: pfx, OriginASN: 64512, PeerAddress: addr, PostPolicy: true},
+	}})
+
+	route, ok := tab.Lookup(netip.MustParseAddr("2001:db8::1"))
+	if !ok || route.OriginASN != 64512 || !route.PostPolicy {
+		t.Fatalf("best route = %+v, want the post policy view", route)
+	}
+
+	// dropping the post policy view falls back to the pre policy one
+	tab.RemovePeer(Peer{Address: addr, PostPolicy: true})
+	route, ok = tab.Lookup(netip.MustParseAddr("2001:db8::1"))
+	if !ok || route.OriginASN != 64511 {
+		t.Fatalf("route after removing the post policy peer = %+v, want origin 64511", route)
+	}
+}
+
+func TestRemovePeerDropsOnlyThatPeer(t *testing.T) {
+	tab := NewTable()
+	a := Peer{Address: netip.MustParseAddr("192.0.2.1")}
+	b := Peer{Address: netip.MustParseAddr("192.0.2.2")}
+
+	tab.Apply(Update{Reach: []Route{
+		{Prefix: netip.MustParsePrefix("203.0.113.0/24"), OriginASN: 1, PeerAddress: a.Address},
+		{Prefix: netip.MustParsePrefix("198.51.100.0/24"), OriginASN: 2, PeerAddress: a.Address},
+		{Prefix: netip.MustParsePrefix("198.51.100.0/24"), OriginASN: 3, PeerAddress: b.Address},
+	}})
+
+	tab.RemovePeer(a)
+
+	if _, ok := tab.Lookup(netip.MustParseAddr("203.0.113.1")); ok {
+		t.Fatal("prefix announced only by the removed peer is still present")
+	}
+	route, ok := tab.Lookup(netip.MustParseAddr("198.51.100.1"))
+	if !ok || route.OriginASN != 3 {
+		t.Fatalf("route from the remaining peer = %+v ok=%v, want origin 3", route, ok)
+	}
+	if got := tab.Peers(); len(got) != 1 || got[0] != b {
+		t.Fatalf("peers = %v, want only %v", got, b)
+	}
+	if got := len(tab.metas); got != 1 {
+		t.Fatalf("metadata entries = %d, want 1", got)
+	}
+}
+
+func TestOriginFromASSetIsFlagged(t *testing.T) {
+	update := bgp.NewBGPUpdateMessage(
+		nil,
+		[]bgp.PathAttributeInterface{
+			bgp.NewPathAttributeOrigin(0),
+			bgp.NewPathAttributeAsPath([]bgp.AsPathParamInterface{
+				bgp.NewAsPathParam(bgp.BGP_ASPATH_ATTR_TYPE_SEQ, []uint16{65010}),
+				bgp.NewAsPathParam(bgp.BGP_ASPATH_ATTR_TYPE_SET, []uint16{65020, 65030}),
+			}),
+			bgp.NewPathAttributeNextHop("192.0.2.1"),
+		},
+		[]*bgp.IPAddrPrefix{bgp.NewIPAddrPrefix(24, "203.0.113.0")},
+	)
+	peer := bmp.NewBMPPeerHeader(bmp.BMP_PEER_TYPE_LOCAL_RIB, 0, 0, "192.0.2.2", 65010, "192.0.2.2", 0)
+
+	out, ok := updateFromBMP(bmp.NewBMPRouteMonitoring(*peer, update))
+	if !ok || len(out.Reach) != 1 {
+		t.Fatalf("updateFromBMP = %+v ok=%v, want one route", out, ok)
+	}
+	route := out.Reach[0]
+	if route.OriginASN != 0 || !route.OriginASSet {
+		t.Fatalf("route = origin %d set=%v, want an ambiguous AS_SET origin", route.OriginASN, route.OriginASSet)
+	}
+	if got, want := route.ASPath, []uint32{65010, 65020, 65030}; len(got) != len(want) || got[0] != want[0] || got[2] != want[2] {
+		t.Fatalf("ASPath = %v, want %v", got, want)
+	}
+	if out.Peer.Address != netip.MustParseAddr("192.0.2.2") || out.Peer.PostPolicy {
+		t.Fatalf("update peer = %+v, want the pre policy view of 192.0.2.2", out.Peer)
+	}
 }
