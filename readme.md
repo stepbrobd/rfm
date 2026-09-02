@@ -21,15 +21,25 @@ Current scope:
 
 - Attaches TC programs for bidirectional flow observation (BPF behavior is
   config map driven and stateless)
+- Counts wire packets and wire bytes, GRO and GSO super packets are unfolded
+  from `gso_segs` so the counters match the NIC statistics
 - Parses IPv4 and IPv6 traffic on ethernet, VLAN, and QinQ links
-- Optionally enriches flows in userspace with BMP/RIB data, MMDB data, or both
-- Exports Prometheus metrics
-- Optionally exports completed flows to one UDP IPFIX collector
-- NixOS module and VM test
+- Attaches interfaces as they appear and detaches them as they go, keeps the
+  counters across restarts when pinned in bpffs
+- Optionally enriches flows in userspace with BMP/RIB data, MMDB data, or both,
+  the MMDB files are re-opened when an updater replaces them
+- Exports Prometheus metrics, gauges over the live table and monotonic counters
+  per label tuple
+- Optionally exports flows to one UDP IPFIX collector, on eviction and as
+  interval records on an active timeout, from a bounded queue that packs records
+  into sized messages
+- Changes the sample rate at runtime, by hand or adaptively when the ring buffer
+  drops events
+- Unix socket control plane with birdc style subcommands
+- NixOS module and VM tests
 
 Planned:
 
-- Unix socket control plane?
 - XDP firewall fast path features?
 
 RFM daemon (`rfm agent`) loads eBPF programs, collects flow events in userspace,
@@ -55,26 +65,38 @@ time constants).
 
 1. TC programs classify each packet by direction, protocol family, and 5-tuple
    after ethernet, VLAN, and QinQ parsing. Every packet updates per-CPU
-   interface counters. Sampled packets (1-in-N) emit a flow event to a ring
-   buffer. IPv4 non-initial fragments keep the IP protocol but export
-   `src_port=0` and `dst_port=0` because later fragments do not carry the
-   transport header.
-2. The userspace collector reads events from the ring buffer, converts
-   `CLOCK_BOOTTIME` timestamps to wall clock, and aggregates flows into an
-   in-memory table keyed by
+   interface counters. GRO on ingress and GSO on egress hand the hook one skb
+   that stands for several wire packets, so the program adds `gso_segs` packets
+   and the header bytes the merge removed, which keeps the counters equal to the
+   NIC statistics. Sampled packets (1-in-N) emit a flow event to a ring buffer
+   carrying the same wire packet and byte counts. IPv4 non-initial fragments
+   keep the IP protocol but export `src_port=0` and `dst_port=0` because later
+   fragments do not carry the transport header.
+2. The userspace collector reads events from the ring buffer in batches,
+   converts `CLOCK_BOOTTIME` timestamps to wall clock, scales each event by the
+   sample rate that was in force when it was sampled, and aggregates flows into
+   an in-memory table keyed by
    `(ifindex, direction, protocol,
    src/dst address, src/dst port)`.
+   Enrichment labels are resolved once when a flow is created and ride along
+   with it.
 3. Flows are evicted after a configurable idle timeout. Under high load, when
    the flow table is full, the flow with the oldest last-seen timestamp is
-   forcibly evicted.
+   forcibly evicted. A flow that keeps going is exported as an interval record
+   every `active_timeout` while it stays in the table.
 4. At scrape time, Prometheus exporter reads the BPF interface counters map
-   directly and iterates the flow table, rolling up flows by interface,
-   direction, protocol, and enrichment labels (ASN, city) before emitting
-   metrics. With no enrichment configured, those labels stay empty and the agent
-   still runs normally.
-5. When IPFIX is enabled, completed flows are exported on eviction and agent
-   shutdown. The exporter owns its UDP socket and excludes only that exact
-   socket tuple from recursive self-export.
+   directly, iterates the flow table for the gauges, and emits monotonic
+   counters per interface, direction, protocol, and enrichment labels (ASN,
+   city) that never reset when flows are evicted. With no enrichment configured,
+   those labels stay empty and the agent still runs normally.
+5. When IPFIX is enabled, flow records are queued for a sender that packs them
+   into messages no larger than `max_message_size`, refreshes templates, and
+   sends. Every record carries the packets and bytes since the previous record
+   of the same flow. The socket is dialed lazily and re-dialed with backoff, so
+   the agent starts before its bind address exists. The exporter excludes only
+   its own socket tuple from recursive self-export.
+6. When a control socket is configured, `rfm status`, `rfm flows`, `rfm rib`,
+   `rfm set`, `rfm config` and `rfm reload` talk to the running agent.
 
 ## Configuration
 
@@ -89,16 +111,26 @@ interfaces = ["eth0", "tailscale0"]
 sample_rate = 100
 ring_buf_size = 262144
 wakeup_batch = 64
+adaptive_sampling = false
+max_sample_rate = 1000
+pin_path = "/sys/fs/bpf/rfm"
 
 [agent.collector]
 max_flows = 65536
 eviction_timeout = "30s"
+active_timeout = "60s"
 
 [agent.ipfix]
 host = "127.0.0.1"
 port = 4739
 template_refresh = "60s"
 observation_domain_id = 1
+queue_size = 4096
+flush_interval = "1s"
+max_message_size = 1200
+
+[agent.control]
+socket = "/run/rfm/rfm.sock"
 
 [agent.ipfix.bind]
 host = "192.0.2.10"
@@ -140,9 +172,9 @@ events. Must be greater than 0. A value of 1 samples every packet. Higher values
 reduce ring buffer throughput at the cost of flow granularity.
 
 `ring_buf_size` (int, default 262144): Size of the BPF ring buffer in bytes.
-Must be greater than 0 and a power of two. Invalid values are rejected at config
-load time. Larger buffers reduce the chance of dropped events under burst
-traffic.
+Must be greater than 0, a power of two, and a multiple of the page size. Invalid
+values are rejected at config load time. Larger buffers reduce the chance of
+dropped events under burst traffic.
 
 `wakeup_batch` (uint32, default 64): The BPF program flags ring buffer submits
 with `BPF_RB_NO_WAKEUP` and forces a wakeup once every N submits. Lower values
@@ -155,6 +187,20 @@ capacity. `0` means auto-compute as `max(len(interfaces) * 8, 64)`. Set
 explicitly when running on a router with many subinterfaces or known high
 cardinality where the auto-compute is too small.
 
+`adaptive_sampling` (bool, default false): Let the collector raise the sample
+rate while the ring buffer drops events and lower it again after ten quiet
+sweeps. Every event is scaled by the rate that sampled it, and IPFIX records
+carry the effective `samplingProbability`, so estimates stay unbiased. Leave it
+off when the collector applies its own fixed sampling rate.
+
+`max_sample_rate` (uint32, default 1000): Upper bound for the adaptive rate.
+Must be at least `sample_rate`.
+
+`pin_path` (string, default ""): A bpffs directory where the interface counters
+are pinned. A restart or upgrade reuses the pinned map, so the counters stay
+monotonic across it. The NixOS module sets `/sys/fs/bpf/rfm`. Empty keeps the
+map private to the process.
+
 ### `agent.collector`
 
 `max_flows` (int, default 65536): Maximum number of active flows held in memory.
@@ -164,6 +210,12 @@ value of 0 means unlimited.
 `eviction_timeout` (string, default "30s"): How long a flow can be idle before
 eviction. Accepts any Go duration string (e.g. "10s", "1m", "2s"). Minimum value
 is 1s.
+
+`active_timeout` (string, default "60s"): How often a flow that keeps seeing
+traffic is exported over IPFIX as an interval record (flowEndReason 0x02) while
+it stays in the table. Each record carries the packets and bytes since the
+previous record, so a collector sums them. `"0s"` disables it, otherwise the
+minimum is 1s.
 
 ### `agent.ipfix`
 
@@ -190,6 +242,23 @@ within one refresh window.
 in exported message headers. Must be > 0. Set distinct values when multiple RFM
 agents export to one collector and downstream needs to demultiplex by source.
 
+`queue_size` (int, default 4096): Records that may wait for the sender
+goroutine. A full queue drops the newest record and counts it, so a slow socket
+never stalls flow collection.
+
+`flush_interval` (string, default "1s"): How long the sender gathers records
+before a partial message goes out. Minimum 10ms.
+
+`max_message_size` (int, default 1200): Largest IPFIX message in bytes, between
+128 and 65535. Keep it under the path MTU, including any tunnel the exporter
+traffic crosses, so messages never fragment.
+
+The exporter dials the collector lazily and retries with backoff (1s to 30s), so
+the agent starts and keeps counting while the collector or the local bind
+address is unavailable. Send errors are counted by errno in
+`rfm_ipfix_send_errors_total`. A full host conntrack table shows up there as
+`EPERM`, add a `notrack` rule for the exporter tuple when that happens.
+
 ### `agent.prometheus`
 
 `host` (string, default "::1"): Address to bind the Prometheus metrics HTTP
@@ -198,6 +267,13 @@ IPv4 only, "::" for all interfaces, or "0.0.0.0" for all IPv4 interfaces.
 
 `port` (int, default 9669): TCP port for the metrics server. Must be between 1
 and 65535.
+
+### `agent.control`
+
+`socket` (string, default ""): Path of the unix socket the `rfm` command line
+talks to. Empty disables the control plane. The socket is created with mode 0600
+for the agent's user, so run the commands as that user or as root. The NixOS
+module sets `/run/rfm/rfm.sock`.
 
 ### `agent.enrich`
 
@@ -221,7 +297,18 @@ If configured with no BMP peer connected yet, the agent still runs and ASN
 labels stay empty until routes arrive.
 
 When both backends are enabled, ASN lookup uses the RIB first and MMDB as a
-fallback. City lookup comes from MMDB.
+fallback. City lookup comes from MMDB. Labels are resolved once when a flow is
+created.
+
+MMDB files are polled once a minute and re-opened when their size or mtime
+changed, so an updater that replaces the file (geoipupdate) takes effect without
+a restart. `rfm reload mmdb` forces the check.
+
+The RIB keeps every route per BMP peer, serves the best one per prefix (post
+policy over pre policy, then the lowest peer address), withdraws a peer's routes
+on Peer Down, and withdraws everything a session announced when that session
+ends. A route whose AS path ends in an AS_SET has no single origin and reports
+ASN 0.
 
 ## Prometheus metrics
 
@@ -233,16 +320,31 @@ label is `"ipv4"`, `"ipv6"`, or `"other"` for non-IP traffic (e.g. ARP):
 - `rfm_interface_rx_packets_total{ifname, family}`
 - `rfm_interface_tx_packets_total{ifname, family}`
 
-Flow gauges (rolled up by enrichment labels):
+Flow gauges over the live flow table (rolled up by enrichment labels):
 
 - `rfm_flow_bytes{ifname, direction, proto, src_asn, dst_asn, src_city, dst_city}`
 - `rfm_flow_packets{ifname, direction, proto, src_asn, dst_asn, src_city, dst_city}`
 - `rfm_flow_sampled_bytes{ifname, direction, proto, src_asn, dst_asn, src_city, dst_city}`
 - `rfm_flow_sampled_packets{ifname, direction, proto, src_asn, dst_asn, src_city, dst_city}`
 
-`rfm_flow_bytes` and `rfm_flow_packets` are estimated values scaled by
-`agent.bpf.sample_rate`. `rfm_flow_sampled_bytes` and `rfm_flow_sampled_packets`
-are the raw sampled values before scaling.
+Flow counters with the same labels, which never reset when flows are evicted and
+therefore work with `rate()` and `increase()`:
+
+- `rfm_flow_bytes_total`
+- `rfm_flow_packets_total`
+- `rfm_flow_sampled_bytes_total`
+- `rfm_flow_sampled_packets_total`
+
+`rfm_flow_bytes` and `rfm_flow_bytes_total` are estimates, every event scaled by
+the sample rate in force when it was sampled. The `sampled` variants are the raw
+sampled values before scaling. `increase(rfm_flow_bytes_total[1h])` over
+`increase(rfm_interface_rx_bytes_total[1h])` is the sampling error in
+production. A label tuple that saw no traffic for ten eviction timeouts leaves
+the scrape.
+
+Sampling:
+
+- `rfm_bpf_sample_rate`
 
 Collector health:
 
@@ -252,7 +354,21 @@ Collector health:
 - `rfm_errors_total{subsystem}`
 
 `rfm_errors_total{subsystem}` currently uses `bpf_map`, `ring_buffer`, and
-`ipfix`.
+`ipfix`. The `ipfix` value sums queue refusals, unsent records, dial errors and
+send errors.
+
+IPFIX exporter:
+
+- `rfm_ipfix_connected`
+- `rfm_ipfix_dials_total`
+- `rfm_ipfix_dial_errors_total`
+- `rfm_ipfix_messages_total`
+- `rfm_ipfix_records_total`
+- `rfm_ipfix_dropped_records_total{reason}` with `queue_full`, `unconnected`,
+  `encode`
+- `rfm_ipfix_send_errors_total{errno}`
+
+Go process and runtime metrics (`process_*`, `go_*`) are exported too.
 
 ## Visualization
 
@@ -282,11 +398,34 @@ be derived from RFM data in Grafana.
 
 ## CLI
 
-The CLI includes:
+`rfm agent` runs the daemon. The other subcommands talk to a running agent over
+its control socket (`--socket`, default `/run/rfm/rfm.sock`) and print tables,
+or JSON with `--json`:
 
-- `rfm agent`
+- `rfm status`: version, uptime, attached interfaces, sample rate, flow table,
+  IPFIX, MMDB and RIB state
+- `rfm flows top [N] [--by bytes|packets]`: the busiest live flows
+- `rfm flows count`: live flow count
+- `rfm rib lookup <address>`: best route with AS path, communities and peer
+- `rfm rib summary`: prefixes, routes and peers in the RIB
+- `rfm set sample-rate <N>`: sample 1 in N packets from now on, without a
+  restart, estimates stay consistent because every event is scaled by the rate
+  that sampled it
+- `rfm config show`: the configuration file the agent loaded
+- `rfm reload mmdb`: re-open replaced MMDB files now
 
-Control plane subcommands, runtime status, and RIB inspection are planned.
+Example:
+
+```
+$ sudo rfm status
+version     2026.902.0
+uptime      3h12m0s
+interfaces  eth0
+sampling    1 in 10
+flows       612 active of 65536, 0 ring drops, 0 forced evictions
+ipfix       162.159.65.1:2055 connected, 1843 messages, 27510 records, 0 queue drops, 0 unsent
+mmdb        asn 2026-08-29, city 2026-08-29
+```
 
 ## NixOS module
 
@@ -317,6 +456,13 @@ Example:
 The module generates a TOML config file and runs RFM as a systemd service with
 automatic restart on failure. All supported knobs are available through (typed)
 module options.
+
+The service runs as the `rfm` system user with `CAP_BPF`, `CAP_NET_ADMIN` and
+`CAP_PERFMON` as ambient capabilities and a read-only view of the system. The
+module sets the control socket to `/run/rfm/rfm.sock` and pins the interface
+counters under `/sys/fs/bpf/rfm`, which it creates for that user. MMDB files
+must be readable by the `rfm` user, the geoipupdate module's database directory
+is.
 
 ## Scope
 
