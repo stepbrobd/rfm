@@ -212,6 +212,21 @@ in
                 };
               };
 
+              control = std.mkOption {
+                default = { };
+                type = std.types.submodule {
+                  freeformType = toml.type;
+
+                  options = {
+                    socket = std.mkOption {
+                      type = std.types.str;
+                      default = "/run/rfm/rfm.sock";
+                      description = "Unix socket the rfm command line talks to, empty disables it.";
+                    };
+                  };
+                };
+              };
+
               enrich = std.mkOption {
                 default = { };
                 type = std.types.submodule {
@@ -291,6 +306,7 @@ in
       serviceConfig = {
         ExecStart = "${cfg.package}/bin/rfm agent -c ${configFile}";
         Restart = "on-failure";
+        RuntimeDirectory = "rfm";
       };
     };
   };

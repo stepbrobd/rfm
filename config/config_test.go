@@ -395,6 +395,39 @@ max_sample_rate = 640
 	}
 }
 
+func TestLoadControlSocket(t *testing.T) {
+	path := writeTOML(t, `
+[agent]
+interfaces = ["eth0"]
+
+[agent.control]
+socket = "/run/rfm/rfm.sock"
+`)
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Agent.Control.Socket != "/run/rfm/rfm.sock" {
+		t.Fatalf("control.socket = %q, want /run/rfm/rfm.sock", cfg.Agent.Control.Socket)
+	}
+}
+
+func TestLoadControlSocketDefaultsOff(t *testing.T) {
+	path := writeTOML(t, `
+[agent]
+interfaces = ["eth0"]
+`)
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Agent.Control.Socket != "" {
+		t.Fatalf("control.socket = %q, want empty", cfg.Agent.Control.Socket)
+	}
+}
+
 func TestLoadPinPath(t *testing.T) {
 	path := writeTOML(t, `
 [agent]

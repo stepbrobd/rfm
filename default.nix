@@ -21,6 +21,7 @@ buildGoApplication (
           ./cmd
           ./collector
           ./config
+          ./ctl
           ./enrich
           ./export
           ./probe

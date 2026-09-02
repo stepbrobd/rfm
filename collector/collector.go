@@ -138,6 +138,11 @@ func (c *Collector) adapt(drops uint64) {
 	log.Info("sample rate adapted", "rate", rate, "drops", delta)
 }
 
+// SetSampleRateNow records a rate change that applies from now on
+func (c *Collector) SetSampleRateNow(rate uint32) {
+	c.SetSampleRate(rate, bootNow())
+}
+
 // SampleRate returns the rate in force now
 func (c *Collector) SampleRate() uint32 {
 	c.mu.RLock()

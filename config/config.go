@@ -24,6 +24,13 @@ type AgentConfig struct {
 	IPFIX      IPFIXConfig      `toml:"ipfix"`
 	Prometheus PrometheusConfig `toml:"prometheus"`
 	Enrich     EnrichConfig     `toml:"enrich"`
+	Control    ControlConfig    `toml:"control"`
+}
+
+// ControlConfig controls the unix socket the rfm command line talks to
+type ControlConfig struct {
+	// Socket is the path of the control socket, empty disables it
+	Socket string `toml:"socket"`
 }
 
 // BPFConfig controls the eBPF probe
@@ -214,6 +221,7 @@ type rawConfig struct {
 		IPFIX      rawIPFIXConfig     `toml:"ipfix"`
 		Prometheus PrometheusConfig   `toml:"prometheus"`
 		Enrich     EnrichConfig       `toml:"enrich"`
+		Control    ControlConfig      `toml:"control"`
 	} `toml:"agent"`
 }
 
@@ -294,6 +302,7 @@ func Load(path string) (*Config, error) {
 			IPFIX:      ipfixCfg,
 			Prometheus: raw.Agent.Prometheus,
 			Enrich:     raw.Agent.Enrich,
+			Control:    raw.Agent.Control,
 		},
 	}
 

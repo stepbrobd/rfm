@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"os"
 	"os/signal"
 	"strconv"
 	"strings"
@@ -19,6 +20,7 @@ import (
 	"github.com/spf13/cobra"
 	"ysun.co/rfm/collector"
 	"ysun.co/rfm/config"
+	"ysun.co/rfm/ctl"
 	"ysun.co/rfm/enrich"
 	"ysun.co/rfm/export"
 	"ysun.co/rfm/probe"
@@ -35,9 +37,14 @@ func init() {
 }
 
 func runAgent(cmd *cobra.Command, args []string) error {
+	started := time.Now()
 	cfg, err := config.Load(cfgFile)
 	if err != nil {
 		return err
+	}
+	cfgText, err := os.ReadFile(cfgFile)
+	if err != nil {
+		return fmt.Errorf("reading config: %w", err)
 	}
 
 	ifaces, err := config.ResolveInterfaces(cfg.Agent.Interfaces)
@@ -50,12 +57,14 @@ func runAgent(cmd *cobra.Command, args []string) error {
 	}
 	log.Info("interfaces matched", "count", len(ifaces), "names", names)
 
-	enricher, enrichCloser, err := enrich.Build(cfg.Agent.Enrich)
+	backends, err := enrich.Build(cfg.Agent.Enrich)
 	if err != nil {
 		return err
 	}
-	if enrichCloser != nil {
-		defer enrichCloser.Close()
+	var enricher collector.Enricher
+	if backends != nil {
+		defer backends.Close()
+		enricher = backends.Enricher
 	}
 
 	ifaceStatsSize := cfg.Agent.BPF.IfaceStatsSize
@@ -164,6 +173,28 @@ func runAgent(cmd *cobra.Command, args []string) error {
 			cancel()
 		}
 	}()
+
+	if cfg.Agent.Control.Socket != "" {
+		handler := &controlHandler{
+			started:  started,
+			cfg:      cfg,
+			cfgText:  string(cfgText),
+			probe:    p,
+			col:      c,
+			ipfix:    ipfixExp,
+			backends: backends,
+		}
+		ctlSrv, err := ctl.Listen(cfg.Agent.Control.Socket, handler)
+		if err != nil {
+			return err
+		}
+		log.Info("control socket", "path", cfg.Agent.Control.Socket)
+		go func() {
+			if err := ctlSrv.Serve(ctx); err != nil && ctx.Err() == nil {
+				log.Error("control socket stopped", "err", err)
+			}
+		}()
+	}
 
 	// follow interfaces that appear or vanish while the agent runs
 	go func() {

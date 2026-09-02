@@ -41,5 +41,17 @@ in
       require_metric(metrics, "rfm_errors_total", subsystem="bpf_map")
       require_metric(metrics, "rfm_errors_total", subsystem="ipfix")
       require_metric(metrics, "rfm_errors_total", subsystem="ring_buffer")
+
+    # the control socket answers the birdc style commands
+    for m in machines:
+      status = m.succeed("rfm status")
+      assert "interfaces" in status and "eth1" in status, f"unexpected status output: {status}"
+      assert "sampling" in status, f"unexpected status output: {status}"
+      m.succeed("rfm flows count")
+      m.succeed("rfm config show | grep -q interfaces")
+      m.succeed("rfm set sample-rate 7")
+      assert "1 in 7" in m.succeed("rfm status"), "sample rate change not visible in status"
+      m.succeed("rfm status --json | grep -q '\"rate\": 7'")
+      m.succeed("rfm set sample-rate 1")
   '';
 }
