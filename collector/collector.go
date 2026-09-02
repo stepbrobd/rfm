@@ -64,43 +64,58 @@ func (c *Collector) SetFlowExporter(exp FlowExporter) {
 // Record adds a flow event to the table
 // it creates or updates the entry
 func (c *Collector) Record(ev FlowEvent, now time.Time) {
-	key := ev.Key()
+	c.RecordBatch([]FlowEvent{ev}, []time.Time{now})
+}
+
+// RecordBatch records several events under one lock acquisition
+// at[i] is the observation time of evs[i]
+func (c *Collector) RecordBatch(evs []FlowEvent, at []time.Time) {
 	var expired []ExportedFlow
-	var exp FlowExporter
 
 	c.mu.Lock()
+	for i, ev := range evs {
+		if ended, ok := c.recordLocked(ev, at[i]); ok {
+			expired = append(expired, ended)
+		}
+	}
+	exp := c.exporter
+	c.mu.Unlock()
 
-	state, ok := c.flows[key]
-	if !ok {
-		if c.maxFlows > 0 && len(c.flows) >= c.maxFlows {
-			if ended, ok := c.evictOldestLocked(FlowEndReasonLackOfResources); ok {
-				expired = append(expired, ended)
-			}
-		}
-		state = &flowState{
-			key: key,
-			entry: FlowEntry{
-				FirstSeen: now,
-				Packets:   ev.Packets(),
-				Bytes:     uint64(ev.Len),
-				LastSeen:  now,
-			},
-		}
-		state.elem = c.lru.PushBack(state)
-		c.flows[key] = state
-		exp = c.exporter
-		c.mu.Unlock()
-		c.exportFlows(exp, expired)
-		return
+	c.exportFlows(exp, expired)
+}
+
+// recordLocked creates or updates the flow for ev
+// it returns the flow forced out to make room, if any
+// it must be called with mu held
+func (c *Collector) recordLocked(ev FlowEvent, now time.Time) (ExportedFlow, bool) {
+	key := ev.Key()
+
+	if state, ok := c.flows[key]; ok {
+		state.entry.Packets += ev.Packets()
+		state.entry.Bytes += uint64(ev.Len)
+		state.entry.LastSeen = now
+		c.lru.MoveToBack(state.elem)
+		return ExportedFlow{}, false
 	}
 
-	state.entry.Packets += ev.Packets()
-	state.entry.Bytes += uint64(ev.Len)
-	state.entry.LastSeen = now
-	c.lru.MoveToBack(state.elem)
-	exp = c.exporter
-	c.mu.Unlock()
-	c.exportFlows(exp, expired)
+	var ended ExportedFlow
+	var evicted bool
+	if c.maxFlows > 0 && len(c.flows) >= c.maxFlows {
+		ended, evicted = c.evictOldestLocked(FlowEndReasonLackOfResources)
+	}
+
+	state := &flowState{
+		key: key,
+		entry: FlowEntry{
+			FirstSeen: now,
+			Packets:   ev.Packets(),
+			Bytes:     uint64(ev.Len),
+			LastSeen:  now,
+		},
+	}
+	state.elem = c.lru.PushBack(state)
+	c.flows[key] = state
+	return ended, evicted
 }
 
 // evictOldestLocked removes the flow with the oldest LastSeen
@@ -232,10 +247,19 @@ func (c *Collector) pollDrops(rd Reader) {
 	c.dropped.Store(dropped)
 }
 
+// readBatch caps how many ring buffer records are recorded per lock acquisition
+const readBatch = 64
+
+// readDeadline bounds a blocking read so the loop notices a cancelled context
+const readDeadline = 100 * time.Millisecond
+
 // Run reads events from rd, decodes them, and records them until ctx is done
 // It also runs a background goroutine for eviction and drop counter polling
 // the drop counter is polled from that goroutine only, once per tick, so the
 // read loop never spends a map lookup on an idle deadline
+// after a blocking read the loop drains whatever the ring already holds with
+// an expired deadline, so a burst is recorded under one lock instead of one
+// lock per event
 func (c *Collector) Run(ctx context.Context, rd Reader) error {
 	if c.timeout <= 0 {
 		return fmt.Errorf("eviction timeout must be positive, got %v", c.timeout)
@@ -262,11 +286,13 @@ func (c *Collector) Run(ctx context.Context, rd Reader) error {
 		}
 	}()
 
+	events := make([]FlowEvent, 0, readBatch)
+	times := make([]time.Time, 0, readBatch)
 	for {
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
-		rd.SetDeadline(time.Now().Add(100 * time.Millisecond))
+		rd.SetDeadline(time.Now().Add(readDeadline))
 		raw, err := rd.ReadRawEvent()
 		if err != nil {
 			if errors.Is(err, os.ErrDeadlineExceeded) {
@@ -276,13 +302,35 @@ func (c *Collector) Run(ctx context.Context, rd Reader) error {
 			return fmt.Errorf("read event: %w", err)
 		}
 
-		ev, err := DecodeFlowEvent(raw)
-		if err != nil {
-			log.Error("decode flow event", "err", err, "raw_len", len(raw))
-			c.ringBufErrs.Add(1)
-			continue
+		events, times = events[:0], times[:0]
+		events, times = c.appendEvent(events, times, raw)
+
+		// a deadline in the past turns the read into a poll, an empty ring
+		// comes back as a deadline error and a real error surfaces again
+		// on the next blocking read
+		rd.SetDeadline(time.Now())
+		for len(events) < readBatch {
+			raw, err := rd.ReadRawEvent()
+			if err != nil {
+				break
+			}
+			events, times = c.appendEvent(events, times, raw)
 		}
 
-		c.Record(ev, eventTime(ev))
+		if len(events) > 0 {
+			c.RecordBatch(events, times)
+		}
 	}
+}
+
+// appendEvent decodes raw and appends it with its observation time
+// a record that fails to decode is counted and skipped
+func (c *Collector) appendEvent(events []FlowEvent, times []time.Time, raw []byte) ([]FlowEvent, []time.Time) {
+	ev, err := DecodeFlowEvent(raw)
+	if err != nil {
+		log.Error("decode flow event", "err", err, "raw_len", len(raw))
+		c.ringBufErrs.Add(1)
+		return events, times
+	}
+	return append(events, ev), append(times, eventTime(ev))
 }

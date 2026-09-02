@@ -718,3 +718,100 @@ func TestEvictOrderFollowsLastSeen(t *testing.T) {
 		t.Fatal("refreshed flow was evicted")
 	}
 }
+
+func TestRecordBatchCountsEveryEvent(t *testing.T) {
+	c := New(30*time.Second, nil, 0)
+	t0 := time.Now()
+
+	a := FlowEvent{
+		Proto: 6, SrcPort: 1000, DstPort: 80,
+		SrcAddr: netip.MustParseAddr("::ffff:10.0.0.1"),
+		DstAddr: netip.MustParseAddr("::ffff:10.0.0.2"),
+		Len:     100,
+	}
+	b := a
+	b.SrcPort = 2000
+
+	c.RecordBatch(
+		[]FlowEvent{a, b, a},
+		[]time.Time{t0, t0.Add(time.Millisecond), t0.Add(2 * time.Millisecond)},
+	)
+
+	flows := c.Flows()
+	if len(flows) != 2 {
+		t.Fatalf("flow count=%d want 2", len(flows))
+	}
+	if got := flows[a.Key()].Packets; got != 2 {
+		t.Fatalf("packets for a=%d want 2", got)
+	}
+	if got := flows[a.Key()].LastSeen; !got.Equal(t0.Add(2 * time.Millisecond)) {
+		t.Fatalf("last seen for a=%v want t0+2ms", got)
+	}
+	if got := flows[b.Key()].Packets; got != 1 {
+		t.Fatalf("packets for b=%d want 1", got)
+	}
+}
+
+func TestRecordBatchForcedEvictionExports(t *testing.T) {
+	exp := &mockFlowExporter{}
+	c := New(30*time.Second, nil, 1)
+	c.SetFlowExporter(exp)
+	t0 := time.Now()
+
+	a := FlowEvent{
+		Proto: 6, SrcPort: 1000, DstPort: 80,
+		SrcAddr: netip.MustParseAddr("::ffff:10.0.0.1"),
+		DstAddr: netip.MustParseAddr("::ffff:10.0.0.2"),
+		Len:     100,
+	}
+	b := a
+	b.SrcPort = 2000
+
+	// with room for one flow the second event forces the first one out
+	c.RecordBatch([]FlowEvent{a, b}, []time.Time{t0, t0.Add(time.Millisecond)})
+
+	if got := len(exp.flows); got != 1 {
+		t.Fatalf("exported flows = %d, want 1", got)
+	}
+	if exp.flows[0].Key != a.Key() {
+		t.Fatalf("exported key = %+v, want %+v", exp.flows[0].Key, a.Key())
+	}
+	if _, ok := c.Flows()[b.Key()]; !ok {
+		t.Fatal("new flow missing after forced eviction")
+	}
+}
+
+func TestRunRecordsBurstInOneBatch(t *testing.T) {
+	ev := FlowEvent{
+		Ifindex: 1, Proto: 6, SrcPort: 1000, DstPort: 80,
+		SrcAddr: netip.MustParseAddr("::ffff:10.0.0.1"),
+		DstAddr: netip.MustParseAddr("::ffff:10.0.0.2"),
+		Len:     100,
+	}
+	raw := encodeWireEvent(ev)
+	events := make([][]byte, 0, 200)
+	for range 200 {
+		events = append(events, raw)
+	}
+	mr := &mockReader{events: events}
+
+	c := New(30*time.Second, nil, 0)
+	ctx, cancel := context.WithCancel(context.Background())
+
+	errCh := make(chan error, 1)
+	go func() { errCh <- c.Run(ctx, mr) }()
+
+	deadline := time.Now().Add(time.Second)
+	for {
+		if f, ok := c.Flows()[ev.Key()]; ok && f.Packets == 200 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("packets = %d, want 200", c.Flows()[ev.Key()].Packets)
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+
+	cancel()
+	<-errCh
+}
