@@ -906,3 +906,70 @@ func TestEvictSkipsFullyExportedFlow(t *testing.T) {
 		t.Fatalf("exported flows = %d, want 1 (no empty record at flush)", got)
 	}
 }
+
+func TestSampleRateScalesEstimatesAtRecordTime(t *testing.T) {
+	c := New(30*time.Second, nil, 0)
+	c.SetSampleRate(10, 0)
+	now := time.Now()
+
+	ev := FlowEvent{
+		Tstamp: 1_000,
+		Proto:  6, SrcPort: 1000, DstPort: 80,
+		SrcAddr: netip.MustParseAddr("::ffff:10.0.0.1"),
+		DstAddr: netip.MustParseAddr("::ffff:10.0.0.2"),
+		Len:     100,
+	}
+	c.Record(ev, now)
+
+	// the rate doubles from boot time 5000 on, an older event still scales
+	// by 10 and a newer one by 20
+	c.SetSampleRate(20, 5_000)
+	if got := c.SampleRate(); got != 20 {
+		t.Fatalf("current rate = %d, want 20", got)
+	}
+	late := ev
+	late.Tstamp = 6_000
+	c.Record(late, now)
+	early := ev
+	early.Tstamp = 2_000
+	c.Record(early, now)
+
+	entry := c.Flows()[ev.Key()]
+	if entry.Packets != 3 || entry.Bytes != 300 {
+		t.Fatalf("sampled = %d packets %d bytes, want 3 and 300", entry.Packets, entry.Bytes)
+	}
+	if entry.EstPackets != 40 || entry.EstBytes != 4000 {
+		t.Fatalf("estimated = %d packets %d bytes, want 40 and 4000", entry.EstPackets, entry.EstBytes)
+	}
+	if got := entry.SamplingProbability(); got < 0.074 || got > 0.076 {
+		t.Fatalf("sampling probability = %v, want 3/40", got)
+	}
+}
+
+func TestExportedRecordCarriesEstimateDelta(t *testing.T) {
+	exp := &mockFlowExporter{}
+	c := New(30*time.Second, nil, 0)
+	c.SetFlowExporter(exp)
+	c.SetSampleRate(100, 0)
+
+	t0 := time.Now()
+	ev := FlowEvent{
+		Proto: 17, SrcPort: 5000, DstPort: 53,
+		SrcAddr: netip.MustParseAddr("::ffff:10.0.0.1"),
+		DstAddr: netip.MustParseAddr("::ffff:10.0.0.2"),
+		Len:     60,
+	}
+	c.Record(ev, t0)
+	c.Evict(t0.Add(time.Minute))
+
+	if got := len(exp.flows); got != 1 {
+		t.Fatalf("exported flows = %d, want 1", got)
+	}
+	rec := exp.flows[0].Entry
+	if rec.Packets != 1 || rec.EstPackets != 100 || rec.EstBytes != 6000 {
+		t.Fatalf("record = %+v, want 1 sampled packet standing for 100 packets and 6000 bytes", rec)
+	}
+	if got := rec.SamplingProbability(); got != 0.01 {
+		t.Fatalf("sampling probability = %v, want 0.01", got)
+	}
+}

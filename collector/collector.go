@@ -32,6 +32,10 @@ type Collector struct {
 	enricher    Enricher
 	exporter    FlowExporter
 	maxFlows    int
+	// rates lists the sample rates in force over boot time, oldest first,
+	// so an event is scaled by the rate that sampled it even after the
+	// rate changed at runtime
+	rates []rateChange
 
 	dropped     atomic.Uint64
 	forced      atomic.Uint64
@@ -51,7 +55,57 @@ func New(timeout time.Duration, enricher Enricher, maxFlows int) *Collector {
 		timeout:     timeout,
 		enricher:    enricher,
 		maxFlows:    maxFlows,
+		rates:       []rateChange{{rate: 1}},
 	}
+}
+
+// rateChange is one sample rate in force from a boot time onwards
+type rateChange struct {
+	since uint64
+	rate  uint32
+}
+
+// rateHistory bounds how many rate changes are kept, events are consumed
+// within milliseconds so old changes are never consulted again
+const rateHistory = 64
+
+// SetSampleRate records that packets sampled from boot time since on are
+// 1-in-rate samples, since is CLOCK_BOOTTIME nanoseconds and 0 covers
+// everything seen so far
+func (c *Collector) SetSampleRate(rate uint32, since uint64) {
+	if rate == 0 {
+		rate = 1
+	}
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if since == 0 {
+		c.rates = []rateChange{{rate: rate}}
+		return
+	}
+	c.rates = append(c.rates, rateChange{since: since, rate: rate})
+	if len(c.rates) > rateHistory {
+		c.rates = c.rates[len(c.rates)-rateHistory:]
+	}
+}
+
+// SampleRate returns the rate in force now
+func (c *Collector) SampleRate() uint32 {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.rates[len(c.rates)-1].rate
+}
+
+// sampleRateAtLocked returns the rate in force at boot time tstamp
+// it must be called with mu held
+func (c *Collector) sampleRateAtLocked(tstamp uint64) uint32 {
+	for i := len(c.rates) - 1; i > 0; i-- {
+		if c.rates[i].since <= tstamp {
+			return c.rates[i].rate
+		}
+	}
+	return c.rates[0].rate
 }
 
 // SetActiveTimeout makes every sweep export an interval record for flows
@@ -103,10 +157,15 @@ func (c *Collector) RecordBatch(evs []FlowEvent, at []time.Time) {
 // it must be called with mu held
 func (c *Collector) recordLocked(ev FlowEvent, now time.Time) (ExportedFlow, bool) {
 	key := ev.Key()
+	packets := ev.Packets()
+	bytes := uint64(ev.Len)
+	rate := uint64(c.sampleRateAtLocked(ev.Tstamp))
 
 	if state, ok := c.flows[key]; ok {
-		state.entry.Packets += ev.Packets()
-		state.entry.Bytes += uint64(ev.Len)
+		state.entry.Packets += packets
+		state.entry.Bytes += bytes
+		state.entry.EstPackets += packets * rate
+		state.entry.EstBytes += bytes * rate
 		state.entry.LastSeen = now
 		c.lru.MoveToBack(state.elem)
 		return ExportedFlow{}, false
@@ -121,10 +180,12 @@ func (c *Collector) recordLocked(ev FlowEvent, now time.Time) (ExportedFlow, boo
 	state := &flowState{
 		key: key,
 		entry: FlowEntry{
-			FirstSeen: now,
-			Packets:   ev.Packets(),
-			Bytes:     uint64(ev.Len),
-			LastSeen:  now,
+			FirstSeen:  now,
+			Packets:    packets,
+			Bytes:      bytes,
+			EstPackets: packets * rate,
+			EstBytes:   bytes * rate,
+			LastSeen:   now,
 		},
 		intervalStart: now,
 	}

@@ -17,9 +17,8 @@ type flowState struct {
 	active *list.Element
 	// intervalStart is the start of the not yet exported interval
 	intervalStart time.Time
-	// sentPackets and sentBytes were exported by earlier records
-	sentPackets uint64
-	sentBytes   uint64
+	// sent holds the counters already exported by earlier records
+	sent FlowEntry
 }
 
 // record returns the delta record for the unexported interval
@@ -27,10 +26,12 @@ func (s *flowState) record(reason uint8) ExportedFlow {
 	return ExportedFlow{
 		Key: s.key,
 		Entry: FlowEntry{
-			FirstSeen: s.intervalStart,
-			LastSeen:  s.entry.LastSeen,
-			Packets:   s.entry.Packets - s.sentPackets,
-			Bytes:     s.entry.Bytes - s.sentBytes,
+			FirstSeen:  s.intervalStart,
+			LastSeen:   s.entry.LastSeen,
+			Packets:    s.entry.Packets - s.sent.Packets,
+			Bytes:      s.entry.Bytes - s.sent.Bytes,
+			EstPackets: s.entry.EstPackets - s.sent.EstPackets,
+			EstBytes:   s.entry.EstBytes - s.sent.EstBytes,
 		},
 		EndReason: reason,
 	}
@@ -38,12 +39,11 @@ func (s *flowState) record(reason uint8) ExportedFlow {
 
 // pending reports whether the flow saw packets since its last record
 func (s *flowState) pending() bool {
-	return s.entry.Packets != s.sentPackets
+	return s.entry.Packets != s.sent.Packets
 }
 
 // mark records that everything up to now went out in a record
 func (s *flowState) mark(now time.Time) {
-	s.sentPackets = s.entry.Packets
-	s.sentBytes = s.entry.Bytes
+	s.sent = s.entry
 	s.intervalStart = now
 }

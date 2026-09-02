@@ -745,7 +745,14 @@ func (e *IPFIXExporter) dataElements(flow collector.ExportedFlow, isIPv6 bool) [
 		case "flowEndReason":
 			elements = append(elements, entities.NewUnsigned8InfoElement(ie, flow.EndReason))
 		case "samplingProbability":
-			elements = append(elements, entities.NewFloat64InfoElement(ie, e.samplingProb))
+			// records carry the share of wire packets they stand for, which
+			// tracks runtime rate changes, an empty estimate falls back to
+			// the configured rate
+			prob := e.samplingProb
+			if flow.Entry.EstPackets > 0 {
+				prob = flow.Entry.SamplingProbability()
+			}
+			elements = append(elements, entities.NewFloat64InfoElement(ie, prob))
 		}
 	}
 	return elements

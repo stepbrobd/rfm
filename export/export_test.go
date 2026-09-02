@@ -221,6 +221,7 @@ func TestDescribe(t *testing.T) {
 		"rfm_collector_dropped_events_total",
 		"rfm_collector_forced_evictions_total",
 		"rfm_errors_total",
+		"rfm_bpf_sample_rate",
 		"rfm_ipfix_connected",
 		"rfm_ipfix_dials_total",
 		"rfm_ipfix_dial_errors_total",
@@ -421,6 +422,7 @@ func TestCollectFlowsScalesBySampleRate(t *testing.T) {
 	src := &mockIfaceStats{rate: 10}
 
 	c := collector.New(time.Minute, nil, 0)
+	c.SetSampleRate(10, 0)
 	c.Record(collector.FlowEvent{
 		Ifindex: 2,
 		Dir:     0,
@@ -439,6 +441,7 @@ func TestCollectFlowsScalesBySampleRate(t *testing.T) {
 	assertGauge(t, vals, "rfm_flow_sampled_packets", 1)
 	assertGauge(t, vals, "rfm_flow_bytes", 2000)
 	assertGauge(t, vals, "rfm_flow_packets", 10)
+	assertGauge(t, vals, "rfm_bpf_sample_rate", 10)
 }
 
 func TestCollectNilSources(t *testing.T) {

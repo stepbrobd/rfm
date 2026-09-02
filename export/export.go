@@ -33,6 +33,12 @@ var (
 		[]string{"ifname", "family"}, nil,
 	)
 
+	descSampleRate = prometheus.NewDesc(
+		"rfm_bpf_sample_rate",
+		"Packets sampled 1-in-N by the BPF programs right now.",
+		nil, nil,
+	)
+
 	descFlowBytes = prometheus.NewDesc(
 		"rfm_flow_bytes",
 		"Estimated byte count for an active flow, scaled by the packet sample rate.",
@@ -112,6 +118,7 @@ var (
 	)
 
 	allDescs = []*prometheus.Desc{
+		descSampleRate,
 		descIfaceRxBytes,
 		descIfaceTxBytes,
 		descIfaceRxPackets,
@@ -175,6 +182,9 @@ func (mc *MetricsCollector) Describe(ch chan<- *prometheus.Desc) {
 func (mc *MetricsCollector) Collect(ch chan<- prometheus.Metric) {
 	mc.collectIfaceStats(ch)
 	mc.collectFlows(ch)
+	if mc.source != nil {
+		ch <- prometheus.MustNewConstMetric(descSampleRate, prometheus.GaugeValue, float64(mc.sampleRate()))
+	}
 
 	mc.mu.Lock()
 	bpfErrs := mc.bpfMapErr
@@ -261,6 +271,8 @@ type flowRollupKey struct {
 type flowRollupValue struct {
 	sampledBytes   uint64
 	sampledPackets uint64
+	estBytes       uint64
+	estPackets     uint64
 }
 
 func (mc *MetricsCollector) collectFlows(ch chan<- prometheus.Metric) {
@@ -270,7 +282,6 @@ func (mc *MetricsCollector) collectFlows(ch chan<- prometheus.Metric) {
 
 	enricher := mc.col.Enricher()
 	flows := mc.col.Flows()
-	sampleRate := mc.sampleRate()
 
 	// aggregate by exported label tuple to avoid duplicate series
 	rollups := make(map[flowRollupKey]*flowRollupValue)
@@ -297,14 +308,18 @@ func (mc *MetricsCollector) collectFlows(ch chan<- prometheus.Metric) {
 		}
 		rv.sampledBytes += entry.Bytes
 		rv.sampledPackets += entry.Packets
+		rv.estBytes += entry.EstBytes
+		rv.estPackets += entry.EstPackets
 	}
 
+	// the estimates were scaled when each event was recorded, with the
+	// sample rate in force at that moment
 	for rk, rv := range rollups {
 		ch <- prometheus.MustNewConstMetric(descFlowBytes, prometheus.GaugeValue,
-			float64(rv.sampledBytes)*float64(sampleRate),
+			float64(rv.estBytes),
 			rk.ifname, rk.dir, rk.proto, rk.srcASN, rk.dstASN, rk.srcCity, rk.dstCity)
 		ch <- prometheus.MustNewConstMetric(descFlowPackets, prometheus.GaugeValue,
-			float64(rv.sampledPackets)*float64(sampleRate),
+			float64(rv.estPackets),
 			rk.ifname, rk.dir, rk.proto, rk.srcASN, rk.dstASN, rk.srcCity, rk.dstCity)
 		ch <- prometheus.MustNewConstMetric(descFlowSampledBytes, prometheus.GaugeValue,
 			float64(rv.sampledBytes),

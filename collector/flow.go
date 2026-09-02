@@ -68,11 +68,25 @@ type FlowKey struct {
 }
 
 // FlowEntry holds aggregated counters for a single flow
+// Packets and Bytes count what was sampled, EstPackets and EstBytes scale
+// every event by the sample rate in force when it was sampled, so they stay
+// unbiased estimates of the wire totals across runtime rate changes
 type FlowEntry struct {
-	FirstSeen time.Time
-	Packets   uint64
-	Bytes     uint64
-	LastSeen  time.Time
+	FirstSeen  time.Time
+	Packets    uint64
+	Bytes      uint64
+	EstPackets uint64
+	EstBytes   uint64
+	LastSeen   time.Time
+}
+
+// SamplingProbability is the share of wire packets this entry saw, 1 when
+// nothing was sampled
+func (e FlowEntry) SamplingProbability() float64 {
+	if e.EstPackets == 0 {
+		return 1
+	}
+	return float64(e.Packets) / float64(e.EstPackets)
 }
 
 // Stats holds collector-level statistics
