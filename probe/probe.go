@@ -83,11 +83,18 @@ func (p *Probe) FlowDrops() *ebpf.Map {
 	return p.objs.RfmFlowDrops
 }
 
+// Attach installs both programs on ifindex as TCX links
+// the ingress program is anchored at the head of the TCX chain and the egress
+// program at its tail, so the counters see every frame the interface received
+// before another program can drop or redirect it and every frame that is
+// about to leave after other programs had their say, which is what the NIC
+// counters measure as well
 func (p *Probe) Attach(ifindex int) error {
 	ing, err := link.AttachTCX(link.TCXOptions{
 		Interface: ifindex,
 		Program:   p.objs.RfmTcIngress,
 		Attach:    ebpf.AttachTCXIngress,
+		Anchor:    link.Head(),
 	})
 	if err != nil {
 		return fmt.Errorf("attach ingress on %d: %w", ifindex, err)
@@ -97,6 +104,7 @@ func (p *Probe) Attach(ifindex int) error {
 		Interface: ifindex,
 		Program:   p.objs.RfmTcEgress,
 		Attach:    ebpf.AttachTCXEgress,
+		Anchor:    link.Tail(),
 	})
 	if err != nil {
 		ing.Close()

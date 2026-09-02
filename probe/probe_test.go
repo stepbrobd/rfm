@@ -14,6 +14,8 @@ import (
 	"time"
 
 	"github.com/cilium/ebpf"
+	"github.com/cilium/ebpf/asm"
+	"github.com/cilium/ebpf/link"
 	"github.com/cilium/ebpf/ringbuf"
 	"ysun.co/rfm/testutil"
 )
@@ -605,5 +607,83 @@ func TestFlowEventPlainPacketOneSegment(t *testing.T) {
 	}
 	if ev.Len != uint32(len(pkt)) {
 		t.Fatalf("len = %d, want %d", ev.Len, len(pkt))
+	}
+}
+
+func TestAttachOrder(t *testing.T) {
+	testutil.RequireRoot(t)
+
+	ns := testutil.NewNS(t)
+
+	// a foreign tcx program is attached on both hooks before rfm, the
+	// counters must still run first on ingress and last on egress
+	other, err := ebpf.NewProgram(&ebpf.ProgramSpec{
+		Type:         ebpf.SchedCLS,
+		Instructions: asm.Instructions{asm.Mov.Imm(asm.R0, 0), asm.Return()},
+		License:      "MIT",
+	})
+	if err != nil {
+		skipIfUnsupported(t, err)
+		t.Fatal(err)
+	}
+	defer other.Close()
+
+	for _, at := range []ebpf.AttachType{ebpf.AttachTCXIngress, ebpf.AttachTCXEgress} {
+		l, err := link.AttachTCX(link.TCXOptions{
+			Interface: ns.Ifindex(),
+			Program:   other,
+			Attach:    at,
+		})
+		if err != nil {
+			skipIfUnsupported(t, err)
+			t.Fatal(err)
+		}
+		defer l.Close()
+	}
+
+	p, err := Load(Config{})
+	if err != nil {
+		skipIfUnsupported(t, err)
+		t.Fatal(err)
+	}
+	defer p.Close()
+
+	if err := p.Attach(ns.Ifindex()); err != nil {
+		skipIfUnsupported(t, err)
+		t.Fatal(err)
+	}
+
+	progID := func(prog *ebpf.Program) ebpf.ProgramID {
+		info, err := prog.Info()
+		if err != nil {
+			t.Fatal(err)
+		}
+		id, ok := info.ID()
+		if !ok {
+			t.Fatal("program id unavailable")
+		}
+		return id
+	}
+	otherID := progID(other)
+	ingressID := progID(p.objs.RfmTcIngress)
+	egressID := progID(p.objs.RfmTcEgress)
+
+	order := func(at ebpf.AttachType) []ebpf.ProgramID {
+		res, err := link.QueryPrograms(link.QueryOptions{Target: ns.Ifindex(), Attach: at})
+		if err != nil {
+			t.Fatal(err)
+		}
+		ids := make([]ebpf.ProgramID, 0, len(res.Programs))
+		for _, ap := range res.Programs {
+			ids = append(ids, ap.ID)
+		}
+		return ids
+	}
+
+	if got := order(ebpf.AttachTCXIngress); len(got) != 2 || got[0] != ingressID || got[1] != otherID {
+		t.Fatalf("ingress order = %v, want [rfm %d, other %d]", got, ingressID, otherID)
+	}
+	if got := order(ebpf.AttachTCXEgress); len(got) != 2 || got[0] != otherID || got[1] != egressID {
+		t.Fatalf("egress order = %v, want [other %d, rfm %d]", got, otherID, egressID)
 	}
 }
