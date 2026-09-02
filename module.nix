@@ -299,14 +299,69 @@ in
   config = std.mkIf cfg.enable {
     environment.systemPackages = [ cfg.package ];
 
+    # the agent runs as its own user with just the three capabilities the
+    # bpf verifier, tcx attach and map access need, root is not required
+    users.users.rfm = {
+      isSystemUser = true;
+      group = "rfm";
+      description = "Router Flow Monitor agent";
+    };
+    users.groups.rfm = { };
+
     systemd.services.rfm = {
       description = "Router Flow Monitor agent";
       after = [ "network.target" ];
       wantedBy = [ "multi-user.target" ];
       serviceConfig = {
+        # systemd mounts bpffs with mode 0700, which the agent's user cannot
+        # traverse, so the mount root is opened to 0711 (traverse only) and
+        # the pin directory prepared as root before the agent drops to its
+        # own user, pinned objects keep their own 0600 mode
+        ExecStartPre = std.optionals (cfg.settings.agent.bpf.pin_path != "") [
+          "+${pkgs.coreutils}/bin/chmod 0711 ${std.dirOf cfg.settings.agent.bpf.pin_path}"
+          "+${pkgs.coreutils}/bin/install -d -m 0750 -o rfm -g rfm ${cfg.settings.agent.bpf.pin_path}"
+        ];
         ExecStart = "${cfg.package}/bin/rfm agent -c ${configFile}";
         Restart = "on-failure";
+        User = "rfm";
+        Group = "rfm";
         RuntimeDirectory = "rfm";
+        RuntimeDirectoryMode = "0750";
+
+        AmbientCapabilities = [
+          "CAP_BPF"
+          "CAP_NET_ADMIN"
+          "CAP_PERFMON"
+        ];
+        CapabilityBoundingSet = [
+          "CAP_BPF"
+          "CAP_NET_ADMIN"
+          "CAP_PERFMON"
+        ];
+        NoNewPrivileges = true;
+
+        # the tree is read only except the runtime directory, the pin
+        # directory lives under /sys which strict mode leaves writable
+        ProtectSystem = "strict";
+        ProtectHome = true;
+        PrivateTmp = true;
+        ProtectControlGroups = true;
+        ProtectKernelModules = true;
+        ProtectClock = true;
+        ProtectHostname = true;
+        LockPersonality = true;
+        RestrictRealtime = true;
+        RestrictSUIDSGID = true;
+        RestrictNamespaces = true;
+        SystemCallArchitectures = "native";
+        # unix for the control socket, inet for ipfix, bmp and metrics,
+        # netlink for interface discovery
+        RestrictAddressFamilies = [
+          "AF_UNIX"
+          "AF_INET"
+          "AF_INET6"
+          "AF_NETLINK"
+        ];
       };
     };
   };
