@@ -60,6 +60,27 @@ var (
 		[]string{"ifname", "direction", "proto", "src_asn", "dst_asn", "src_city", "dst_city"}, nil,
 	)
 
+	descFlowBytesTotal = prometheus.NewDesc(
+		"rfm_flow_bytes_total",
+		"Estimated bytes recorded per label tuple, scaled by the sample rate in force, never reset by eviction.",
+		[]string{"ifname", "direction", "proto", "src_asn", "dst_asn", "src_city", "dst_city"}, nil,
+	)
+	descFlowPacketsTotal = prometheus.NewDesc(
+		"rfm_flow_packets_total",
+		"Estimated packets recorded per label tuple, scaled by the sample rate in force, never reset by eviction.",
+		[]string{"ifname", "direction", "proto", "src_asn", "dst_asn", "src_city", "dst_city"}, nil,
+	)
+	descFlowSampledBytesTotal = prometheus.NewDesc(
+		"rfm_flow_sampled_bytes_total",
+		"Sampled bytes recorded per label tuple, never reset by eviction.",
+		[]string{"ifname", "direction", "proto", "src_asn", "dst_asn", "src_city", "dst_city"}, nil,
+	)
+	descFlowSampledPacketsTotal = prometheus.NewDesc(
+		"rfm_flow_sampled_packets_total",
+		"Sampled packets recorded per label tuple, never reset by eviction.",
+		[]string{"ifname", "direction", "proto", "src_asn", "dst_asn", "src_city", "dst_city"}, nil,
+	)
+
 	descActiveFlows = prometheus.NewDesc(
 		"rfm_collector_active_flows",
 		"Number of active flows in the collector.",
@@ -127,6 +148,10 @@ var (
 		descFlowPackets,
 		descFlowSampledBytes,
 		descFlowSampledPackets,
+		descFlowBytesTotal,
+		descFlowPacketsTotal,
+		descFlowSampledBytesTotal,
+		descFlowSampledPacketsTotal,
 		descActiveFlows,
 		descDroppedEvents,
 		descForcedEvictions,
@@ -182,6 +207,7 @@ func (mc *MetricsCollector) Describe(ch chan<- *prometheus.Desc) {
 func (mc *MetricsCollector) Collect(ch chan<- prometheus.Metric) {
 	mc.collectIfaceStats(ch)
 	mc.collectFlows(ch)
+	mc.collectRollups(ch)
 	if mc.source != nil {
 		ch <- prometheus.MustNewConstMetric(descSampleRate, prometheus.GaugeValue, float64(mc.sampleRate()))
 	}
@@ -280,26 +306,14 @@ func (mc *MetricsCollector) collectFlows(ch chan<- prometheus.Metric) {
 		return
 	}
 
-	enricher := mc.col.Enricher()
 	flows := mc.col.Flows()
 
-	// aggregate by exported label tuple to avoid duplicate series
+	// aggregate by exported label tuple to avoid duplicate series, the
+	// labels were resolved when each flow was created
 	rollups := make(map[flowRollupKey]*flowRollupValue)
 
 	for key, entry := range flows {
-		rk := flowRollupKey{
-			ifname: mc.ifname(key.Ifindex),
-			dir:    dirString(key.Dir),
-			proto:  strconv.FormatUint(uint64(key.Proto), 10),
-		}
-
-		if enricher != nil {
-			srcLabels, dstLabels := enricher.Enrich(key.SrcAddr, key.DstAddr)
-			rk.srcASN = formatASN(srcLabels.ASN)
-			rk.dstASN = formatASN(dstLabels.ASN)
-			rk.srcCity = srcLabels.City
-			rk.dstCity = dstLabels.City
-		}
+		rk := mc.rollupKey(key.Ifindex, key.Dir, key.Proto, entry.Src, entry.Dst)
 
 		rv, ok := rollups[rk]
 		if !ok {
@@ -326,6 +340,41 @@ func (mc *MetricsCollector) collectFlows(ch chan<- prometheus.Metric) {
 			rk.ifname, rk.dir, rk.proto, rk.srcASN, rk.dstASN, rk.srcCity, rk.dstCity)
 		ch <- prometheus.MustNewConstMetric(descFlowSampledPackets, prometheus.GaugeValue,
 			float64(rv.sampledPackets),
+			rk.ifname, rk.dir, rk.proto, rk.srcASN, rk.dstASN, rk.srcCity, rk.dstCity)
+	}
+}
+
+func (mc *MetricsCollector) rollupKey(ifindex uint32, dir, proto uint8, src, dst collector.Labels) flowRollupKey {
+	return flowRollupKey{
+		ifname:  mc.ifname(ifindex),
+		dir:     dirString(dir),
+		proto:   strconv.FormatUint(uint64(proto), 10),
+		srcASN:  formatASN(src.ASN),
+		dstASN:  formatASN(dst.ASN),
+		srcCity: src.City,
+		dstCity: dst.City,
+	}
+}
+
+// collectRollups emits the monotonic per label counters
+func (mc *MetricsCollector) collectRollups(ch chan<- prometheus.Metric) {
+	if mc.col == nil {
+		return
+	}
+
+	for key, r := range mc.col.Rollups() {
+		rk := mc.rollupKey(key.Ifindex, key.Dir, key.Proto, key.Src, key.Dst)
+		ch <- prometheus.MustNewConstMetric(descFlowBytesTotal, prometheus.CounterValue,
+			float64(r.EstBytes),
+			rk.ifname, rk.dir, rk.proto, rk.srcASN, rk.dstASN, rk.srcCity, rk.dstCity)
+		ch <- prometheus.MustNewConstMetric(descFlowPacketsTotal, prometheus.CounterValue,
+			float64(r.EstPackets),
+			rk.ifname, rk.dir, rk.proto, rk.srcASN, rk.dstASN, rk.srcCity, rk.dstCity)
+		ch <- prometheus.MustNewConstMetric(descFlowSampledBytesTotal, prometheus.CounterValue,
+			float64(r.Bytes),
+			rk.ifname, rk.dir, rk.proto, rk.srcASN, rk.dstASN, rk.srcCity, rk.dstCity)
+		ch <- prometheus.MustNewConstMetric(descFlowSampledPacketsTotal, prometheus.CounterValue,
+			float64(r.Packets),
 			rk.ifname, rk.dir, rk.proto, rk.srcASN, rk.dstASN, rk.srcCity, rk.dstCity)
 	}
 }

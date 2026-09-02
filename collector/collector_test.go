@@ -1012,3 +1012,35 @@ func TestAdaptiveSamplingAppliesRateOnDrops(t *testing.T) {
 	cancel()
 	<-errCh
 }
+
+func TestRollupsAccumulateAcrossFlows(t *testing.T) {
+	c := New(30*time.Second, nil, 0)
+	c.SetSampleRate(4, 0)
+	t0 := time.Now()
+
+	mk := func(port uint16, proto uint8) FlowEvent {
+		return FlowEvent{
+			Ifindex: 3, Dir: 0, Proto: proto, SrcPort: port, DstPort: 80,
+			SrcAddr: netip.MustParseAddr("::ffff:10.0.0.1"),
+			DstAddr: netip.MustParseAddr("::ffff:10.0.0.2"),
+			Len:     50,
+		}
+	}
+	c.Record(mk(1, 6), t0)
+	c.Record(mk(2, 6), t0)
+	c.Record(mk(2, 6), t0)
+	c.Record(mk(3, 17), t0)
+
+	rollups := c.Rollups()
+	if len(rollups) != 2 {
+		t.Fatalf("rollups = %d, want 2 (tcp and udp)", len(rollups))
+	}
+	tcp := rollups[RollupKey{Ifindex: 3, Dir: 0, Proto: 6}]
+	if tcp.Packets != 3 || tcp.Bytes != 150 || tcp.EstPackets != 12 || tcp.EstBytes != 600 {
+		t.Fatalf("tcp rollup = %+v, want 3 packets 150 bytes scaled by 4", tcp)
+	}
+	udp := rollups[RollupKey{Ifindex: 3, Dir: 0, Proto: 17}]
+	if udp.Packets != 1 || udp.EstBytes != 200 {
+		t.Fatalf("udp rollup = %+v, want 1 packet 200 estimated bytes", udp)
+	}
+}

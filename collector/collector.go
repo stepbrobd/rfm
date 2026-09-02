@@ -27,11 +27,14 @@ type Collector struct {
 	// activeQueue orders live flows by the start of their unexported
 	// interval, front first, for the active timeout sweep
 	activeQueue *list.List
-	timeout     time.Duration
-	active      time.Duration
-	enricher    Enricher
-	exporter    FlowExporter
-	maxFlows    int
+	// rollups accumulate per label tuple and outlive the flows behind
+	// them, an idle tuple is dropped after rollupRetention timeouts
+	rollups  map[RollupKey]*RollupCounters
+	timeout  time.Duration
+	active   time.Duration
+	enricher Enricher
+	exporter FlowExporter
+	maxFlows int
 	// rates lists the sample rates in force over boot time, oldest first,
 	// so an event is scaled by the rate that sampled it even after the
 	// rate changed at runtime
@@ -58,12 +61,17 @@ func New(timeout time.Duration, enricher Enricher, maxFlows int) *Collector {
 		flows:       make(map[FlowKey]*flowState),
 		lru:         list.New(),
 		activeQueue: list.New(),
+		rollups:     make(map[RollupKey]*RollupCounters),
 		timeout:     timeout,
 		enricher:    enricher,
 		maxFlows:    maxFlows,
 		rates:       []rateChange{{rate: 1}},
 	}
 }
+
+// rollupRetention is how many eviction timeouts a rollup survives without
+// traffic before its series disappears from the scrape
+const rollupRetention = 10
 
 // rateChange is one sample rate in force from a boot time onwards
 type rateChange struct {
@@ -207,6 +215,7 @@ func (c *Collector) recordLocked(ev FlowEvent, now time.Time) (ExportedFlow, boo
 		state.entry.EstPackets += packets * rate
 		state.entry.EstBytes += bytes * rate
 		state.entry.LastSeen = now
+		state.rollup.add(packets, bytes, rate, now)
 		c.lru.MoveToBack(state.elem)
 		return ExportedFlow{}, false
 	}
@@ -217,6 +226,20 @@ func (c *Collector) recordLocked(ev FlowEvent, now time.Time) (ExportedFlow, boo
 		ended, evicted = c.evictOldestLocked(FlowEndReasonLackOfResources)
 	}
 
+	// enrichment happens once per flow, the labels then ride along with
+	// every event of the flow and with the rollup it lands in
+	var src, dst Labels
+	if c.enricher != nil {
+		src, dst = c.enricher.Enrich(ev.SrcAddr, ev.DstAddr)
+	}
+	rk := RollupKey{Ifindex: ev.Ifindex, Dir: ev.Dir, Proto: ev.Proto, Src: src, Dst: dst}
+	rollup, ok := c.rollups[rk]
+	if !ok {
+		rollup = &RollupCounters{}
+		c.rollups[rk] = rollup
+	}
+	rollup.add(packets, bytes, rate, now)
+
 	state := &flowState{
 		key: key,
 		entry: FlowEntry{
@@ -226,7 +249,10 @@ func (c *Collector) recordLocked(ev FlowEvent, now time.Time) (ExportedFlow, boo
 			EstPackets: packets * rate,
 			EstBytes:   bytes * rate,
 			LastSeen:   now,
+			Src:        src,
+			Dst:        dst,
 		},
+		rollup:        rollup,
 		intervalStart: now,
 	}
 	state.elem = c.lru.PushBack(state)
@@ -280,6 +306,15 @@ func (c *Collector) Evict(now time.Time) {
 		}
 	}
 
+	if len(c.rollups) > 0 {
+		stale := now.Add(-rollupRetention * c.timeout)
+		for rk, rollup := range c.rollups {
+			if rollup.LastSeen.Before(stale) {
+				delete(c.rollups, rk)
+			}
+		}
+	}
+
 	if c.active > 0 {
 		for {
 			front := c.activeQueue.Front()
@@ -312,6 +347,18 @@ func (c *Collector) Flows() map[FlowKey]FlowEntry {
 	snap := make(map[FlowKey]FlowEntry, len(c.flows))
 	for k, state := range c.flows {
 		snap[k] = state.entry
+	}
+	return snap
+}
+
+// Rollups returns a snapshot of the per label counters
+func (c *Collector) Rollups() map[RollupKey]RollupCounters {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	snap := make(map[RollupKey]RollupCounters, len(c.rollups))
+	for k, r := range c.rollups {
+		snap[k] = *r
 	}
 	return snap
 }

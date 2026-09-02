@@ -78,6 +78,32 @@ type FlowEntry struct {
 	EstPackets uint64
 	EstBytes   uint64
 	LastSeen   time.Time
+	// Src and Dst are the enrichment labels resolved when the flow was
+	// created, they stay fixed for the life of the flow
+	Src Labels
+	Dst Labels
+}
+
+// RollupKey is the label tuple the Prometheus flow series are keyed by
+// it carries no ports, so its cardinality is bounded by interfaces, protocols
+// and the enrichment labels seen
+type RollupKey struct {
+	Ifindex uint32
+	Dir     uint8
+	Proto   uint8
+	Src     Labels
+	Dst     Labels
+}
+
+// RollupCounters accumulate every event recorded under one RollupKey
+// unlike FlowEntry they never reset when flows are evicted, so they export
+// as monotonic counters that rate() and increase() can consume
+type RollupCounters struct {
+	Packets    uint64
+	Bytes      uint64
+	EstPackets uint64
+	EstBytes   uint64
+	LastSeen   time.Time
 }
 
 // SamplingProbability is the share of wire packets this entry saw, 1 when

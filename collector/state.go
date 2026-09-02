@@ -9,9 +9,10 @@ import (
 // the interval fields track what was already exported, so every record
 // carries a delta and a flow that exported everything produces no record
 type flowState struct {
-	key   FlowKey
-	entry FlowEntry
-	elem  *list.Element
+	key    FlowKey
+	entry  FlowEntry
+	elem   *list.Element
+	rollup *RollupCounters
 
 	// active is the position in the fifo of pending active timeout exports
 	active *list.Element
@@ -46,4 +47,15 @@ func (s *flowState) pending() bool {
 func (s *flowState) mark(now time.Time) {
 	s.sent = s.entry
 	s.intervalStart = now
+}
+
+// add accounts one event scaled by the rate that sampled it
+func (r *RollupCounters) add(packets, bytes, rate uint64, now time.Time) {
+	r.Packets += packets
+	r.Bytes += bytes
+	r.EstPackets += packets * rate
+	r.EstBytes += bytes * rate
+	if now.After(r.LastSeen) {
+		r.LastSeen = now
+	}
 }

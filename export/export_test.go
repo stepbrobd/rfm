@@ -217,6 +217,10 @@ func TestDescribe(t *testing.T) {
 		"rfm_flow_packets",
 		"rfm_flow_sampled_bytes",
 		"rfm_flow_sampled_packets",
+		"rfm_flow_bytes_total",
+		"rfm_flow_packets_total",
+		"rfm_flow_sampled_bytes_total",
+		"rfm_flow_sampled_packets_total",
 		"rfm_collector_active_flows",
 		"rfm_collector_dropped_events_total",
 		"rfm_collector_forced_evictions_total",
@@ -738,5 +742,61 @@ func TestCollectIPFIXStats(t *testing.T) {
 		if got[name] != val {
 			t.Errorf("%s = %v, want %v", name, got[name], val)
 		}
+	}
+}
+
+func TestCollectRollupCountersSurviveEviction(t *testing.T) {
+	e := &staticEnricher{srcASN: 64500, dstASN: 64501, srcCity: "Oslo", dstCity: "Lima"}
+	c := collector.New(time.Second, e, 0)
+	c.SetSampleRate(10, 0)
+
+	t0 := time.Now()
+	ev := collector.FlowEvent{
+		Ifindex: 2, Dir: 1, Proto: 17,
+		SrcAddr: netip.MustParseAddr("192.168.1.1"),
+		DstAddr: netip.MustParseAddr("192.168.1.2"),
+		SrcPort: 1234, DstPort: 53, Len: 100,
+	}
+	c.Record(ev, t0)
+	other := ev
+	other.SrcPort = 4321
+	c.Record(other, t0)
+
+	// evicting the flows resets the gauges but not the counters
+	c.Evict(t0.Add(5 * time.Second))
+
+	mc := New(nil, c)
+	vals := collectAll(t, mc)
+	if got := vals["rfm_flow_bytes"]; got != 0 {
+		t.Fatalf("rfm_flow_bytes = %v after eviction, want no live flows", got)
+	}
+	if got := vals["rfm_flow_bytes_total"]; got != 2000 {
+		t.Fatalf("rfm_flow_bytes_total = %v, want 2000", got)
+	}
+	if got := vals["rfm_flow_packets_total"]; got != 20 {
+		t.Fatalf("rfm_flow_packets_total = %v, want 20", got)
+	}
+	if got := vals["rfm_flow_sampled_bytes_total"]; got != 200 {
+		t.Fatalf("rfm_flow_sampled_bytes_total = %v, want 200", got)
+	}
+	if got := vals["rfm_flow_sampled_packets_total"]; got != 2 {
+		t.Fatalf("rfm_flow_sampled_packets_total = %v, want 2", got)
+	}
+
+	for _, m := range collectMetrics(t, mc) {
+		if extractName(m.Desc()) != "rfm_flow_bytes_total" {
+			continue
+		}
+		labels := metricLabels(t, m)
+		if labels["src_asn"] != "64500" || labels["dst_city"] != "Lima" || labels["direction"] != "egress" {
+			t.Fatalf("unexpected labels %v", labels)
+		}
+	}
+
+	// a tuple idle for ten timeouts disappears from the scrape
+	c.Evict(t0.Add(11 * time.Second))
+	vals = collectAll(t, mc)
+	if _, ok := vals["rfm_flow_bytes_total"]; ok {
+		t.Fatal("idle rollup still exported after the retention window")
 	}
 }
