@@ -14,6 +14,7 @@ import (
 
 	"github.com/charmbracelet/log"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/collectors"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/spf13/cobra"
 	"ysun.co/rfm/collector"
@@ -118,6 +119,10 @@ func runAgent(cmd *cobra.Command, args []string) error {
 
 	reg := prometheus.NewRegistry()
 	reg.MustRegister(mc)
+	// process and runtime metrics give operators the agent's own footprint
+	// (rss, cpu, goroutines, gc) from the same scrape as the flow data
+	reg.MustRegister(collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}))
+	reg.MustRegister(collectors.NewGoCollector())
 
 	addr := net.JoinHostPort(cfg.Agent.Prometheus.Host,
 		strconv.Itoa(cfg.Agent.Prometheus.Port))
