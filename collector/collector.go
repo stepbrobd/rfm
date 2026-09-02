@@ -23,11 +23,15 @@ type Collector struct {
 	// events from different cpus can arrive slightly out of order, which
 	// makes the order approximate by a few microseconds, an expired flow can
 	// then survive one extra sweep behind a fresher one
-	lru      *list.List
-	timeout  time.Duration
-	enricher Enricher
-	exporter FlowExporter
-	maxFlows int
+	lru *list.List
+	// activeQueue orders live flows by the start of their unexported
+	// interval, front first, for the active timeout sweep
+	activeQueue *list.List
+	timeout     time.Duration
+	active      time.Duration
+	enricher    Enricher
+	exporter    FlowExporter
+	maxFlows    int
 
 	dropped     atomic.Uint64
 	forced      atomic.Uint64
@@ -41,12 +45,22 @@ type Collector struct {
 // maxFlows <= 0 means unlimited
 func New(timeout time.Duration, enricher Enricher, maxFlows int) *Collector {
 	return &Collector{
-		flows:    make(map[FlowKey]*flowState),
-		lru:      list.New(),
-		timeout:  timeout,
-		enricher: enricher,
-		maxFlows: maxFlows,
+		flows:       make(map[FlowKey]*flowState),
+		lru:         list.New(),
+		activeQueue: list.New(),
+		timeout:     timeout,
+		enricher:    enricher,
+		maxFlows:    maxFlows,
 	}
+}
+
+// SetActiveTimeout makes every sweep export an interval record for flows
+// whose unexported interval is at least d old, 0 disables the sweep
+// it must be called before Run
+func (c *Collector) SetActiveTimeout(d time.Duration) {
+	c.mu.Lock()
+	c.active = d
+	c.mu.Unlock()
 }
 
 // Enricher returns the enricher passed to New
@@ -112,10 +126,20 @@ func (c *Collector) recordLocked(ev FlowEvent, now time.Time) (ExportedFlow, boo
 			Bytes:     uint64(ev.Len),
 			LastSeen:  now,
 		},
+		intervalStart: now,
 	}
 	state.elem = c.lru.PushBack(state)
+	state.active = c.activeQueue.PushBack(state)
 	c.flows[key] = state
 	return ended, evicted
+}
+
+// removeLocked drops a flow from the table and both lists
+// it must be called with mu held
+func (c *Collector) removeLocked(state *flowState) {
+	c.lru.Remove(state.elem)
+	c.activeQueue.Remove(state.active)
+	delete(c.flows, state.key)
 }
 
 // evictOldestLocked removes the flow with the oldest LastSeen
@@ -125,42 +149,58 @@ func (c *Collector) evictOldestLocked(reason uint8) (ExportedFlow, bool) {
 	if front == nil {
 		return ExportedFlow{}, false
 	}
-	oldest := c.lru.Remove(front).(*flowState)
-
-	delete(c.flows, oldest.key)
+	oldest := front.Value.(*flowState)
+	c.removeLocked(oldest)
 	c.forced.Add(1)
-	return ExportedFlow{
-		Key:       oldest.key,
-		Entry:     oldest.entry,
-		EndReason: reason,
-	}, true
+	if !oldest.pending() {
+		return ExportedFlow{}, false
+	}
+	return oldest.record(reason), true
 }
 
 // Evict removes flows whose LastSeen is older than the configured timeout
+// and, when an active timeout is set, exports an interval record for every
+// flow whose unexported interval is at least that old
 func (c *Collector) Evict(now time.Time) {
 	cutoff := now.Add(-c.timeout)
 	var expired []ExportedFlow
-	var exp FlowExporter
 
 	c.mu.Lock()
 
 	for {
 		front := c.lru.Front()
 		if front == nil || !front.Value.(*flowState).entry.LastSeen.Before(cutoff) {
-			exp = c.exporter
-			c.mu.Unlock()
-			c.exportFlows(exp, expired)
-			return
+			break
 		}
-		oldest := c.lru.Remove(front).(*flowState)
-
-		delete(c.flows, oldest.key)
-		expired = append(expired, ExportedFlow{
-			Key:       oldest.key,
-			Entry:     oldest.entry,
-			EndReason: FlowEndReasonIdleTimeout,
-		})
+		oldest := front.Value.(*flowState)
+		c.removeLocked(oldest)
+		if oldest.pending() {
+			expired = append(expired, oldest.record(FlowEndReasonIdleTimeout))
+		}
 	}
+
+	if c.active > 0 {
+		for {
+			front := c.activeQueue.Front()
+			if front == nil {
+				break
+			}
+			state := front.Value.(*flowState)
+			if now.Sub(state.intervalStart) < c.active {
+				break
+			}
+			if state.pending() {
+				expired = append(expired, state.record(FlowEndReasonActiveTimeout))
+			}
+			state.mark(now)
+			c.activeQueue.MoveToBack(front)
+		}
+	}
+
+	exp := c.exporter
+	c.mu.Unlock()
+
+	c.exportFlows(exp, expired)
 }
 
 // Flows returns a snapshot of the current flow table
@@ -200,15 +240,14 @@ func (c *Collector) Flush(reason uint8) {
 	if len(c.flows) > 0 {
 		expired = make([]ExportedFlow, 0, len(c.flows))
 		for _, state := range c.flows {
-			expired = append(expired, ExportedFlow{
-				Key:       state.key,
-				Entry:     state.entry,
-				EndReason: reason,
-			})
+			if state.pending() {
+				expired = append(expired, state.record(reason))
+			}
 		}
 	}
 	c.flows = make(map[FlowKey]*flowState)
 	c.lru.Init()
+	c.activeQueue.Init()
 	exp = c.exporter
 	c.mu.Unlock()
 

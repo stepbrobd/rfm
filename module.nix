@@ -91,6 +91,12 @@ in
                       default = "30s";
                       description = "Flow eviction timeout (Go duration).";
                     };
+
+                    active_timeout = std.mkOption {
+                      type = std.types.str;
+                      default = "60s";
+                      description = "Interval after which a live flow is exported as a delta record over IPFIX (Go duration), \"0s\" disables it.";
+                    };
                   };
                 };
               };

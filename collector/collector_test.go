@@ -815,3 +815,94 @@ func TestRunRecordsBurstInOneBatch(t *testing.T) {
 	cancel()
 	<-errCh
 }
+
+func TestActiveTimeoutExportsIntervalRecords(t *testing.T) {
+	exp := &mockFlowExporter{}
+	c := New(30*time.Second, nil, 0)
+	c.SetFlowExporter(exp)
+	c.SetActiveTimeout(10 * time.Second)
+
+	t0 := time.Now()
+	ev := FlowEvent{
+		Proto: 6, SrcPort: 1000, DstPort: 80,
+		SrcAddr: netip.MustParseAddr("::ffff:10.0.0.1"),
+		DstAddr: netip.MustParseAddr("::ffff:10.0.0.2"),
+		Len:     100,
+	}
+	c.Record(ev, t0)
+	c.Record(ev, t0.Add(5*time.Second))
+
+	// too early for the active timeout, nothing goes out
+	c.Evict(t0.Add(9 * time.Second))
+	if got := len(exp.flows); got != 0 {
+		t.Fatalf("exported flows before the active timeout = %d, want 0", got)
+	}
+
+	// the interval record carries everything so far and the flow stays
+	c.Evict(t0.Add(11 * time.Second))
+	if got := len(exp.flows); got != 1 {
+		t.Fatalf("exported flows after the active timeout = %d, want 1", got)
+	}
+	first := exp.flows[0]
+	if first.EndReason != FlowEndReasonActiveTimeout {
+		t.Fatalf("end reason = %d, want %d", first.EndReason, FlowEndReasonActiveTimeout)
+	}
+	if first.Entry.Packets != 2 || first.Entry.Bytes != 200 {
+		t.Fatalf("interval record = %d packets %d bytes, want 2 and 200", first.Entry.Packets, first.Entry.Bytes)
+	}
+	if !first.Entry.FirstSeen.Equal(t0) || !first.Entry.LastSeen.Equal(t0.Add(5*time.Second)) {
+		t.Fatalf("interval = %v..%v, want t0..t0+5s", first.Entry.FirstSeen, first.Entry.LastSeen)
+	}
+	if _, ok := c.Flows()[ev.Key()]; !ok {
+		t.Fatal("flow left the table on an active export")
+	}
+	if got := c.Flows()[ev.Key()].Packets; got != 2 {
+		t.Fatalf("live packets = %d, want the cumulative 2", got)
+	}
+
+	// a quiet flow produces no second interval record
+	c.Evict(t0.Add(22 * time.Second))
+	if got := len(exp.flows); got != 1 {
+		t.Fatalf("exported flows after a quiet interval = %d, want 1", got)
+	}
+
+	// more traffic, then idle eviction exports only the remainder with the
+	// interval starting at the previous sweep
+	c.Record(ev, t0.Add(25*time.Second))
+	c.Evict(t0.Add(60 * time.Second))
+	if got := len(exp.flows); got != 2 {
+		t.Fatalf("exported flows after eviction = %d, want 2", got)
+	}
+	last := exp.flows[1]
+	if last.EndReason != FlowEndReasonIdleTimeout {
+		t.Fatalf("end reason = %d, want %d", last.EndReason, FlowEndReasonIdleTimeout)
+	}
+	if last.Entry.Packets != 1 || last.Entry.Bytes != 100 {
+		t.Fatalf("final record = %d packets %d bytes, want 1 and 100", last.Entry.Packets, last.Entry.Bytes)
+	}
+	if !last.Entry.FirstSeen.Equal(t0.Add(22 * time.Second)) {
+		t.Fatalf("final interval start = %v, want the previous sweep at t0+22s", last.Entry.FirstSeen)
+	}
+}
+
+func TestEvictSkipsFullyExportedFlow(t *testing.T) {
+	exp := &mockFlowExporter{}
+	c := New(30*time.Second, nil, 0)
+	c.SetFlowExporter(exp)
+	c.SetActiveTimeout(10 * time.Second)
+
+	t0 := time.Now()
+	ev := FlowEvent{
+		Proto: 17, SrcPort: 5000, DstPort: 53,
+		SrcAddr: netip.MustParseAddr("::ffff:10.0.0.1"),
+		DstAddr: netip.MustParseAddr("::ffff:10.0.0.2"),
+		Len:     60,
+	}
+	c.Record(ev, t0)
+	c.Evict(t0.Add(11 * time.Second))
+	c.Flush(FlowEndReasonForcedEnd)
+
+	if got := len(exp.flows); got != 1 {
+		t.Fatalf("exported flows = %d, want 1 (no empty record at flush)", got)
+	}
+}

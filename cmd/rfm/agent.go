@@ -100,6 +100,7 @@ func runAgent(cmd *cobra.Command, args []string) error {
 		enricher,
 		cfg.Agent.Collector.MaxFlows,
 	)
+	c.SetActiveTimeout(cfg.Agent.Collector.ActiveTimeout)
 
 	var ipfixExp *export.IPFIXExporter
 	if cfg.Agent.IPFIX.Enabled() {

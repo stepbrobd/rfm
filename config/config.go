@@ -38,6 +38,7 @@ type BPFConfig struct {
 type CollectorConfig struct {
 	MaxFlows        int           `toml:"-"`
 	EvictionTimeout time.Duration `toml:"-"`
+	ActiveTimeout   time.Duration `toml:"-"`
 }
 
 // IPFIXConfig controls export to a single IPFIX collector
@@ -157,6 +158,7 @@ type RIBConfig struct {
 type rawCollectorConfig struct {
 	MaxFlows        int    `toml:"max_flows"`
 	EvictionTimeout string `toml:"eviction_timeout"`
+	ActiveTimeout   string `toml:"active_timeout"`
 }
 
 // rawIPFIXConfig mirrors IPFIXConfig with string-typed fields for TOML decoding
@@ -194,6 +196,7 @@ func Load(path string) (*Config, error) {
 	raw.Agent.BPF.WakeupBatch = 64
 	raw.Agent.Collector.MaxFlows = 65536
 	raw.Agent.Collector.EvictionTimeout = "30s"
+	raw.Agent.Collector.ActiveTimeout = "60s"
 	raw.Agent.IPFIX.TemplateRefresh = "60s"
 	raw.Agent.IPFIX.ObservationDomainID = 1
 	raw.Agent.Prometheus.Host = "::1"
@@ -211,6 +214,11 @@ func Load(path string) (*Config, error) {
 	evictionTimeout, err := time.ParseDuration(raw.Agent.Collector.EvictionTimeout)
 	if err != nil {
 		return nil, fmt.Errorf("parsing eviction_timeout %q: %w", raw.Agent.Collector.EvictionTimeout, err)
+	}
+
+	activeTimeout, err := time.ParseDuration(raw.Agent.Collector.ActiveTimeout)
+	if err != nil {
+		return nil, fmt.Errorf("parsing active_timeout %q: %w", raw.Agent.Collector.ActiveTimeout, err)
 	}
 
 	templateRefresh, err := time.ParseDuration(raw.Agent.IPFIX.TemplateRefresh)
@@ -234,6 +242,7 @@ func Load(path string) (*Config, error) {
 			Collector: CollectorConfig{
 				MaxFlows:        raw.Agent.Collector.MaxFlows,
 				EvictionTimeout: evictionTimeout,
+				ActiveTimeout:   activeTimeout,
 			},
 			IPFIX:      ipfixCfg,
 			Prometheus: raw.Agent.Prometheus,
@@ -335,6 +344,9 @@ func validate(cfg *Config) error {
 	}
 	if a.Collector.EvictionTimeout < time.Second {
 		return fmt.Errorf("agent.collector.eviction_timeout must be >= 1s, got %v", a.Collector.EvictionTimeout)
+	}
+	if a.Collector.ActiveTimeout != 0 && a.Collector.ActiveTimeout < time.Second {
+		return fmt.Errorf("agent.collector.active_timeout must be 0 or >= 1s, got %v", a.Collector.ActiveTimeout)
 	}
 	if a.IPFIX.Enabled() && (a.IPFIX.Port < 1 || a.IPFIX.Port > 65535) {
 		return fmt.Errorf("agent.ipfix.port must be between 1 and 65535, got %d", a.IPFIX.Port)

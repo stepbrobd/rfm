@@ -393,6 +393,71 @@ ring_buf_size = `+strconv.Itoa(size)+`
 	}
 }
 
+func TestLoadActiveTimeout(t *testing.T) {
+	path := writeTOML(t, `
+[agent]
+interfaces = ["eth0"]
+
+[agent.collector]
+active_timeout = "2m"
+`)
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Agent.Collector.ActiveTimeout != 2*time.Minute {
+		t.Fatalf("active_timeout = %v, want 2m", cfg.Agent.Collector.ActiveTimeout)
+	}
+}
+
+func TestLoadActiveTimeoutDefault(t *testing.T) {
+	path := writeTOML(t, `
+[agent]
+interfaces = ["eth0"]
+`)
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Agent.Collector.ActiveTimeout != time.Minute {
+		t.Fatalf("active_timeout = %v, want 1m", cfg.Agent.Collector.ActiveTimeout)
+	}
+}
+
+func TestLoadActiveTimeoutZeroDisables(t *testing.T) {
+	path := writeTOML(t, `
+[agent]
+interfaces = ["eth0"]
+
+[agent.collector]
+active_timeout = "0s"
+`)
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Agent.Collector.ActiveTimeout != 0 {
+		t.Fatalf("active_timeout = %v, want 0", cfg.Agent.Collector.ActiveTimeout)
+	}
+}
+
+func TestLoadSubSecondActiveTimeout(t *testing.T) {
+	path := writeTOML(t, `
+[agent]
+interfaces = ["eth0"]
+
+[agent.collector]
+active_timeout = "500ms"
+`)
+
+	if _, err := Load(path); err == nil {
+		t.Fatal("expected error for sub-second active_timeout")
+	}
+}
+
 func TestLoadBadEvictionTimeout(t *testing.T) {
 	path := writeTOML(t, `
 [agent]
