@@ -190,7 +190,7 @@ func TestMetricsCollectorImplementsInterface(t *testing.T) {
 
 func TestDescribe(t *testing.T) {
 	mc := New(nil, nil)
-	ch := make(chan *prometheus.Desc, 20)
+	ch := make(chan *prometheus.Desc, 32)
 	mc.Describe(ch)
 	close(ch)
 
@@ -199,8 +199,8 @@ func TestDescribe(t *testing.T) {
 		descs = append(descs, d)
 	}
 
-	if got := len(descs); got != 12 {
-		t.Fatalf("got %d descriptors, want 12", got)
+	if got, want := len(descs), len(allDescs); got != want {
+		t.Fatalf("got %d descriptors, want %d", got, want)
 	}
 
 	names := make(map[string]bool)
@@ -221,6 +221,13 @@ func TestDescribe(t *testing.T) {
 		"rfm_collector_dropped_events_total",
 		"rfm_collector_forced_evictions_total",
 		"rfm_errors_total",
+		"rfm_ipfix_connected",
+		"rfm_ipfix_dials_total",
+		"rfm_ipfix_dial_errors_total",
+		"rfm_ipfix_messages_total",
+		"rfm_ipfix_records_total",
+		"rfm_ipfix_dropped_records_total",
+		"rfm_ipfix_send_errors_total",
 	}
 	for _, w := range want {
 		if !names[w] {
@@ -670,5 +677,63 @@ func TestCollectErrorsTotalOnSampleRateLookupError(t *testing.T) {
 	}
 	if !found {
 		t.Error("missing rfm_errors_total{subsystem=\"bpf_map\"}")
+	}
+}
+
+func TestCollectIPFIXStats(t *testing.T) {
+	c := collector.New(30*time.Second, nil, 0)
+	mc := New(nil, c)
+	mc.SetIPFIX(func() IPFIXStats {
+		return IPFIXStats{
+			Connected:    true,
+			Dials:        2,
+			DialErrors:   1,
+			Messages:     10,
+			Records:      200,
+			QueueDropped: 3,
+			Unsent:       4,
+			EncodeErrors: 0,
+			SendErrors:   map[string]uint64{"EPERM": 5, "ECONNREFUSED": 1},
+		}
+	})
+
+	metrics := collectMetrics(t, mc)
+	got := map[string]float64{}
+	for _, m := range metrics {
+		d := new(dto.Metric)
+		if err := m.Write(d); err != nil {
+			t.Fatal(err)
+		}
+		var name strings.Builder
+		name.WriteString(extractName(m.Desc()))
+		for _, l := range d.Label {
+			name.WriteString("{" + l.GetName() + "=" + l.GetValue() + "}")
+		}
+		switch {
+		case d.Counter != nil:
+			got[name.String()] = d.Counter.GetValue()
+		case d.Gauge != nil:
+			got[name.String()] = d.Gauge.GetValue()
+		}
+	}
+
+	want := map[string]float64{
+		"rfm_ipfix_connected":                                 1,
+		"rfm_ipfix_dials_total":                               2,
+		"rfm_ipfix_dial_errors_total":                         1,
+		"rfm_ipfix_messages_total":                            10,
+		"rfm_ipfix_records_total":                             200,
+		"rfm_ipfix_dropped_records_total{reason=queue_full}":  3,
+		"rfm_ipfix_dropped_records_total{reason=unconnected}": 4,
+		"rfm_ipfix_dropped_records_total{reason=encode}":      0,
+		"rfm_ipfix_send_errors_total{errno=EPERM}":            5,
+		"rfm_ipfix_send_errors_total{errno=ECONNREFUSED}":     1,
+		// queue refusals, unsent, dial and send errors all count as ipfix errors
+		"rfm_errors_total{subsystem=ipfix}": 14,
+	}
+	for name, val := range want {
+		if got[name] != val {
+			t.Errorf("%s = %v, want %v", name, got[name], val)
+		}
 	}
 }

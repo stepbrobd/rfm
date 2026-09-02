@@ -75,6 +75,42 @@ var (
 		[]string{"subsystem"}, nil,
 	)
 
+	descIPFIXConnected = prometheus.NewDesc(
+		"rfm_ipfix_connected",
+		"Whether a socket to the IPFIX collector is open.",
+		nil, nil,
+	)
+	descIPFIXDials = prometheus.NewDesc(
+		"rfm_ipfix_dials_total",
+		"Total IPFIX socket setup attempts.",
+		nil, nil,
+	)
+	descIPFIXDialErrors = prometheus.NewDesc(
+		"rfm_ipfix_dial_errors_total",
+		"Total failed IPFIX socket setups.",
+		nil, nil,
+	)
+	descIPFIXMessages = prometheus.NewDesc(
+		"rfm_ipfix_messages_total",
+		"Total IPFIX messages sent.",
+		nil, nil,
+	)
+	descIPFIXRecords = prometheus.NewDesc(
+		"rfm_ipfix_records_total",
+		"Total IPFIX data records sent.",
+		nil, nil,
+	)
+	descIPFIXDropped = prometheus.NewDesc(
+		"rfm_ipfix_dropped_records_total",
+		"Total IPFIX records lost before they were sent, by reason.",
+		[]string{"reason"}, nil,
+	)
+	descIPFIXSendErrors = prometheus.NewDesc(
+		"rfm_ipfix_send_errors_total",
+		"Total failed IPFIX sends by errno.",
+		[]string{"errno"}, nil,
+	)
+
 	allDescs = []*prometheus.Desc{
 		descIfaceRxBytes,
 		descIfaceTxBytes,
@@ -88,6 +124,13 @@ var (
 		descDroppedEvents,
 		descForcedEvictions,
 		descErrorsTotal,
+		descIPFIXConnected,
+		descIPFIXDials,
+		descIPFIXDialErrors,
+		descIPFIXMessages,
+		descIPFIXRecords,
+		descIPFIXDropped,
+		descIPFIXSendErrors,
 	}
 )
 
@@ -96,10 +139,18 @@ var (
 type MetricsCollector struct {
 	source        IfaceStatsSource
 	col           *collector.Collector
+	ipfix         func() IPFIXStats
 	mu            sync.Mutex
 	bpfMapErr     uint64
 	ifnames       map[uint32]string
 	resolveIfname func(uint32) string
+}
+
+// SetIPFIX makes scrapes report the exporter counters behind stats
+func (mc *MetricsCollector) SetIPFIX(stats func() IPFIXStats) {
+	mc.mu.Lock()
+	mc.ipfix = stats
+	mc.mu.Unlock()
 }
 
 // New creates a MetricsCollector
@@ -127,7 +178,31 @@ func (mc *MetricsCollector) Collect(ch chan<- prometheus.Metric) {
 
 	mc.mu.Lock()
 	bpfErrs := mc.bpfMapErr
+	ipfix := mc.ipfix
 	mc.mu.Unlock()
+
+	// the ipfix subsystem error counter sums the collector's queue refusals
+	// with every loss the exporter itself counted
+	var ipfixErrs uint64
+	if ipfix != nil {
+		s := ipfix()
+		ipfixErrs += s.Failures()
+		var connected float64
+		if s.Connected {
+			connected = 1
+		}
+		ch <- prometheus.MustNewConstMetric(descIPFIXConnected, prometheus.GaugeValue, connected)
+		ch <- prometheus.MustNewConstMetric(descIPFIXDials, prometheus.CounterValue, float64(s.Dials))
+		ch <- prometheus.MustNewConstMetric(descIPFIXDialErrors, prometheus.CounterValue, float64(s.DialErrors))
+		ch <- prometheus.MustNewConstMetric(descIPFIXMessages, prometheus.CounterValue, float64(s.Messages))
+		ch <- prometheus.MustNewConstMetric(descIPFIXRecords, prometheus.CounterValue, float64(s.Records))
+		ch <- prometheus.MustNewConstMetric(descIPFIXDropped, prometheus.CounterValue, float64(s.QueueDropped), "queue_full")
+		ch <- prometheus.MustNewConstMetric(descIPFIXDropped, prometheus.CounterValue, float64(s.Unsent), "unconnected")
+		ch <- prometheus.MustNewConstMetric(descIPFIXDropped, prometheus.CounterValue, float64(s.EncodeErrors), "encode")
+		for errno, n := range s.SendErrors {
+			ch <- prometheus.MustNewConstMetric(descIPFIXSendErrors, prometheus.CounterValue, float64(n), errno)
+		}
+	}
 
 	if mc.col != nil {
 		// single Stats() call for a consistent snapshot
@@ -137,7 +212,7 @@ func (mc *MetricsCollector) Collect(ch chan<- prometheus.Metric) {
 		ch <- prometheus.MustNewConstMetric(descForcedEvictions, prometheus.CounterValue, float64(stats.ForcedEvictions))
 		bpfErrs += stats.BPFMapErrors
 		ch <- prometheus.MustNewConstMetric(descErrorsTotal, prometheus.CounterValue, float64(stats.RingBufErrors), "ring_buffer")
-		ch <- prometheus.MustNewConstMetric(descErrorsTotal, prometheus.CounterValue, float64(stats.IPFIXErrors), "ipfix")
+		ch <- prometheus.MustNewConstMetric(descErrorsTotal, prometheus.CounterValue, float64(stats.IPFIXErrors+ipfixErrs), "ipfix")
 	}
 	ch <- prometheus.MustNewConstMetric(descErrorsTotal, prometheus.CounterValue, float64(bpfErrs), "bpf_map")
 }

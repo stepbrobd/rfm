@@ -117,6 +117,9 @@ func runAgent(cmd *cobra.Command, args []string) error {
 	}
 
 	mc := export.New(&export.ProbeSource{Probe: p}, c)
+	if ipfixExp != nil {
+		mc.SetIPFIX(ipfixExp.Stats)
+	}
 
 	reg := prometheus.NewRegistry()
 	reg.MustRegister(mc)
