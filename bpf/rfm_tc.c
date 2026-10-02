@@ -143,8 +143,8 @@ static __always_inline __u32 rfm_l4(struct __sk_buff *skb, void *l3, void *end,
 // rfm_hdr_len returns the L2 + L3 + L4 header size of the frame, the same
 // quantity qdisc_pkt_len_init() uses to reconstruct the on-wire length of a
 // GSO skb, and 0 when the headers cannot be parsed
-// l2_len covers ethernet plus any VLAN tags, l3 points at the IP header, and
-// the L3 size includes the IPv6 extension headers GRO merges behind
+// l2_len covers ethernet plus the VLAN tags in the frame, l3 points at the IP
+// header, and the L3 size includes the IPv6 extension headers GRO merges
 static __always_inline __u32 rfm_hdr_len(struct __sk_buff *skb, void *l3,
 					 void *end, __u16 eth_proto,
 					 __u32 l2_len)
@@ -206,7 +206,8 @@ static __always_inline int rfm_tc(struct __sk_buff *skb, __u8 dir)
 		l3 += sizeof(*vlan);
 	}
 
-	__u32 l2_len = (__u32)(l3 - data);
+	// l3_off counts ethernet and the VLAN tags in the frame
+	__u32 l3_off = (__u32)(l3 - data);
 
 	switch (eth_proto) {
 	case ETH_P_IP:
@@ -224,7 +225,7 @@ static __always_inline int rfm_tc(struct __sk_buff *skb, __u8 dir)
 	__u32 len = skb->len;
 	__u32 segs = 1;
 	if (skb->gso_size && iface_proto) {
-		__u32 hdr_len = rfm_hdr_len(skb, l3, end, eth_proto, l2_len);
+		__u32 hdr_len = rfm_hdr_len(skb, l3, end, eth_proto, l3_off);
 		segs = skb->gso_segs;
 		// drivers that pass gso frames up unverified leave gso_segs 0
 		// (SKB_GSO_DODGY), derive it from the payload like the kernel
@@ -245,8 +246,11 @@ static __always_inline int rfm_tc(struct __sk_buff *skb, __u8 dir)
 	// from before the ingress hook, and a VLAN device hands its frames to
 	// the egress hook of the lower device with the tag in the skb, either
 	// way every wire packet carries the 4 tag bytes outside skb->len
-	if (skb->vlan_present)
+	__u32 l2_len = l3_off;
+	if (skb->vlan_present) {
+		l2_len += sizeof(struct rfm_vlan_hdr);
 		len += segs * sizeof(struct rfm_vlan_hdr);
+	}
 
 	// iface stats are always updated, not gated by sampling
 	struct rfm_iface_key ikey = {
@@ -284,6 +288,7 @@ static __always_inline int rfm_tc(struct __sk_buff *skb, __u8 dir)
 		.dir = dir,
 		.segs = segs > 0xffff ? 0xffff : segs,
 		.len = len,
+		.l2_len = l2_len,
 	};
 
 	if (eth_proto == ETH_P_IP) {
@@ -312,7 +317,7 @@ static __always_inline int rfm_tc(struct __sk_buff *skb, __u8 dir)
 	// extension headers
 	bool later_frag;
 	__u32 l4_off =
-		rfm_l4(skb, l3, end, l2_len, eth_proto, &ev.proto, &later_frag);
+		rfm_l4(skb, l3, end, l3_off, eth_proto, &ev.proto, &later_frag);
 	if (!l4_off)
 		return TCX_NEXT;
 
@@ -321,7 +326,7 @@ static __always_inline int rfm_tc(struct __sk_buff *skb, __u8 dir)
 	if (!later_frag &&
 	    (ev.proto == IPPROTO_TCP || ev.proto == IPPROTO_UDP)) {
 		__be16 ports[2];
-		if (bpf_skb_load_bytes(skb, l2_len + l4_off, ports,
+		if (bpf_skb_load_bytes(skb, l3_off + l4_off, ports,
 				       sizeof(ports)))
 			return TCX_NEXT;
 		ev.src_port = bpf_ntohs(ports[0]);

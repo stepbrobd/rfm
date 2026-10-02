@@ -22,6 +22,8 @@ type Labels struct {
 // one skb can stand for several wire packets after GRO or before GSO, so Segs
 // carries the wire packet count and Len the wire byte count of the whole skb
 // a Segs of 0 comes from a probe without segment accounting and means 1
+// L2Len is the L2 header size of each wire packet, ethernet plus VLAN tags,
+// so Len - Packets() * L2Len is the IP byte count of the skb
 type FlowEvent struct {
 	Tstamp  uint64 // CLOCK_BOOTTIME nanoseconds
 	Ifindex uint32
@@ -33,6 +35,7 @@ type FlowEvent struct {
 	DstPort uint16
 	Segs    uint16
 	Len     uint32
+	L2Len   uint8
 }
 
 // Packets returns the number of wire packets the event stands for

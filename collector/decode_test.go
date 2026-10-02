@@ -19,6 +19,7 @@ func TestDecodeFlowEvent(t *testing.T) {
 		DstPort: 80,
 		Segs:    3,
 		Len:     1500,
+		L2Len:   18,
 	}
 
 	wire := wireFlowEvent{
@@ -32,11 +33,16 @@ func TestDecodeFlowEvent(t *testing.T) {
 		DstPort: want.DstPort,
 		Segs:    want.Segs,
 		Len:     want.Len,
+		L2Len:   want.L2Len,
 	}
 
 	var buf bytes.Buffer
 	if err := binary.Write(&buf, binary.NativeEndian, &wire); err != nil {
 		t.Fatal(err)
+	}
+	// struct rfm_flow_event is padded to a multiple of its 8 byte alignment
+	if buf.Len() != 64 {
+		t.Fatalf("wire event is %d bytes, want the 64 of struct rfm_flow_event", buf.Len())
 	}
 
 	got, err := DecodeFlowEvent(buf.Bytes())
@@ -54,6 +60,11 @@ func TestDecodeFlowEventShort(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for short input")
 	}
+
+	// an event without the L2 length is from another build of the program
+	if _, err := DecodeFlowEvent(make([]byte, 56)); err == nil {
+		t.Fatal("expected error for an event without the l2 length")
+	}
 }
 
 // encodeWireEvent encodes a FlowEvent into wire format for testing
@@ -70,6 +81,7 @@ func encodeWireEvent(ev FlowEvent) []byte {
 		DstPort: ev.DstPort,
 		Segs:    ev.Segs,
 		Len:     ev.Len,
+		L2Len:   ev.L2Len,
 	}
 	var buf bytes.Buffer
 	binary.Write(&buf, binary.NativeEndian, &wire)

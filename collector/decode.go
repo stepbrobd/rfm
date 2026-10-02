@@ -7,8 +7,9 @@ import (
 	"structs"
 )
 
-const wireFlowEventSize = 56
+const wireFlowEventSize = 64
 
+// wireFlowEvent mirrors struct rfm_flow_event in bpf/rfm_common.h
 type wireFlowEvent struct {
 	_       structs.HostLayout
 	Tstamp  uint64
@@ -21,6 +22,8 @@ type wireFlowEvent struct {
 	SrcPort uint16
 	DstPort uint16
 	Len     uint32
+	L2Len   uint8
+	_       [7]uint8
 }
 
 func DecodeFlowEvent(raw []byte) (FlowEvent, error) {
@@ -44,5 +47,6 @@ func DecodeFlowEvent(raw []byte) (FlowEvent, error) {
 		DstPort: wire.DstPort,
 		Segs:    wire.Segs,
 		Len:     wire.Len,
+		L2Len:   wire.L2Len,
 	}, nil
 }

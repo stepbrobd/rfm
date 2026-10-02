@@ -42,6 +42,8 @@ type rfmRfmFlowEvent struct {
 	SrcPort uint16
 	DstPort uint16
 	Len     uint32
+	L2Len   uint8
+	_       [7]uint8
 }
 
 func skipIfUnsupported(t *testing.T, err error) {
@@ -387,6 +389,9 @@ func TestFlowEventIPv4TCP(t *testing.T) {
 	if ev.Len == 0 {
 		t.Fatal("len = 0, want > 0")
 	}
+	if ev.L2Len != testutil.EthHdrLen {
+		t.Fatalf("l2_len = %d, want %d", ev.L2Len, testutil.EthHdrLen)
+	}
 }
 
 func TestFlowEventIPv6TCP(t *testing.T) {
@@ -531,6 +536,13 @@ func TestFlowEventVLANIPv4TCP(t *testing.T) {
 	if ev.DstPort != 8443 {
 		t.Fatalf("dst_port = %d, want 8443", ev.DstPort)
 	}
+	// the tag is held in the skb by the time the ingress hook runs
+	if ev.L2Len != testutil.EthHdrLen+testutil.VLANHdrLen {
+		t.Fatalf("l2_len = %d, want %d", ev.L2Len, testutil.EthHdrLen+testutil.VLANHdrLen)
+	}
+	if ev.Len != uint32(len(pkt)) {
+		t.Fatalf("len = %d, want %d", ev.Len, len(pkt))
+	}
 }
 
 func TestFlowEventQinQIPv6UDP(t *testing.T) {
@@ -552,6 +564,10 @@ func TestFlowEventQinQIPv6UDP(t *testing.T) {
 	}
 	if ev.DstPort != 5353 {
 		t.Fatalf("dst_port = %d, want 5353", ev.DstPort)
+	}
+	// the outer tag is held in the skb and the inner one stays in the frame
+	if ev.L2Len != testutil.EthHdrLen+2*testutil.VLANHdrLen {
+		t.Fatalf("l2_len = %d, want %d", ev.L2Len, testutil.EthHdrLen+2*testutil.VLANHdrLen)
 	}
 }
 
