@@ -1225,6 +1225,81 @@ func TestAdaptiveSamplingAppliesRateOnDrops(t *testing.T) {
 	<-errCh
 }
 
+// rollupCounters returns a snapshot of the per label counters
+func rollupCounters(c *Collector) map[RollupKey]RollupCounters {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	snap := make(map[RollupKey]RollupCounters, len(c.rollups))
+	for k, r := range c.rollups {
+		snap[k] = r.RollupCounters
+	}
+	return snap
+}
+
+func TestRollupsOutliveTheirFlows(t *testing.T) {
+	c := New(30*time.Second, nil, 0)
+	t0 := time.Now()
+	ev := FlowEvent{
+		Ifindex: 3, Proto: 17, SrcPort: 5000, DstPort: 53,
+		SrcAddr: netip.MustParseAddr("::ffff:10.0.0.1"),
+		DstAddr: netip.MustParseAddr("::ffff:10.0.0.2"),
+		Len:     60,
+	}
+	key := RollupKey{Ifindex: 3, Proto: 17}
+	c.Record(ev, t0)
+
+	// the tuple stays in the scrape for RollupRetention eviction timeouts
+	// after its last packet
+	c.Evict(t0.Add(RollupRetention*30*time.Second - time.Second))
+	if len(c.Flows()) != 0 {
+		t.Fatal("idle flow not evicted")
+	}
+	if _, ok := rollupCounters(c)[key]; !ok {
+		t.Fatal("rollup dropped inside the retention")
+	}
+
+	c.Evict(t0.Add(RollupRetention*30*time.Second + time.Second))
+	if _, ok := rollupCounters(c)[key]; ok {
+		t.Fatal("rollup kept past the retention")
+	}
+}
+
+func TestScrapeShowsANewRollupAtZeroFirst(t *testing.T) {
+	c := New(30*time.Second, nil, 0)
+	c.SetSampleRate(10, 0)
+	t0 := time.Now()
+	ev := FlowEvent{
+		Ifindex: 3, Proto: 6, SrcPort: 1000, DstPort: 80,
+		SrcAddr: netip.MustParseAddr("::ffff:10.0.0.1"),
+		DstAddr: netip.MustParseAddr("::ffff:10.0.0.2"),
+		Len:     100,
+	}
+	c.Record(ev, t0)
+
+	scrape := func() RollupSample {
+		t.Helper()
+		samples := c.ScrapeRollups(nil)
+		if len(samples) != 1 {
+			t.Fatalf("samples = %d, want 1", len(samples))
+		}
+		return samples[0]
+	}
+
+	// the first scrape shows the series at zero, so a rate or increase over
+	// the next scrapes counts the packets that created the tuple
+	if s := scrape(); s.Key != (RollupKey{Ifindex: 3, Proto: 6}) || s.Packets != 0 || s.EstPackets != 0 || s.Bytes != 0 || s.EstBytes != 0 {
+		t.Fatalf("first scrape = %+v, want the tuple at zero", s)
+	}
+	if s := scrape(); s.Packets != 1 || s.EstPackets != 10 || s.Bytes != 100 || s.EstBytes != 1000 {
+		t.Fatalf("second scrape = %+v, want the held packet", s)
+	}
+	c.Record(ev, t0)
+	if s := scrape(); s.Packets != 2 || s.EstPackets != 20 {
+		t.Fatalf("third scrape = %+v, want each later packet right away", s)
+	}
+}
+
 func TestRollupsAccumulateAcrossFlows(t *testing.T) {
 	c := New(30*time.Second, nil, 0)
 	c.SetSampleRate(4, 0)
@@ -1243,7 +1318,7 @@ func TestRollupsAccumulateAcrossFlows(t *testing.T) {
 	c.Record(mk(2, 6), t0)
 	c.Record(mk(3, 17), t0)
 
-	rollups := c.Rollups()
+	rollups := rollupCounters(c)
 	if len(rollups) != 2 {
 		t.Fatalf("rollups = %d, want 2 (tcp and udp)", len(rollups))
 	}

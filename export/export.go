@@ -368,13 +368,15 @@ func (mc *MetricsCollector) rollupKey(ifindex uint32, dir, proto uint8, src, dst
 	}
 }
 
-// collectRollups emits the monotonic per label counters
+// collectRollups emits the monotonic per label counters, a new tuple shows
+// up at zero first
 func (mc *MetricsCollector) collectRollups(ch chan<- prometheus.Metric) {
 	if mc.col == nil {
 		return
 	}
 
-	for key, r := range mc.col.Rollups() {
+	for _, r := range mc.col.ScrapeRollups(nil) {
+		key := r.Key
 		rk := mc.rollupKey(key.Ifindex, key.Dir, key.Proto, key.Src, key.Dst)
 		ch <- prometheus.MustNewConstMetric(descFlowBytesTotal, prometheus.CounterValue,
 			float64(r.EstBytes),

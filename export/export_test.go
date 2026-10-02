@@ -768,10 +768,15 @@ func TestCollectRollupCountersSurviveEviction(t *testing.T) {
 	other.SrcPort = 4321
 	c.Record(other, t0)
 
+	// the first scrape shows the new tuple at zero
+	mc := New(nil, c)
+	if got := collectAll(t, mc)["rfm_flow_bytes_total"]; got != 0 {
+		t.Fatalf("rfm_flow_bytes_total on the first scrape = %v, want 0", got)
+	}
+
 	// evicting the flows resets the gauges but not the counters
 	c.Evict(t0.Add(5 * time.Second))
 
-	mc := New(nil, c)
 	vals := collectAll(t, mc)
 	if got := vals["rfm_flow_bytes"]; got != 0 {
 		t.Fatalf("rfm_flow_bytes = %v after eviction, want no live flows", got)
@@ -799,11 +804,44 @@ func TestCollectRollupCountersSurviveEviction(t *testing.T) {
 		}
 	}
 
-	// a tuple idle for ten timeouts disappears from the scrape
-	c.Evict(t0.Add(11 * time.Second))
+	// the counters outlive their flows for the retention, then leave the scrape
+	c.Evict(t0.Add(collector.RollupRetention*time.Second - time.Second))
+	if got := collectAll(t, mc)["rfm_flow_bytes_total"]; got != 2000 {
+		t.Fatalf("rfm_flow_bytes_total inside the retention = %v, want 2000", got)
+	}
+	c.Evict(t0.Add(collector.RollupRetention*time.Second + time.Second))
 	vals = collectAll(t, mc)
 	if _, ok := vals["rfm_flow_bytes_total"]; ok {
 		t.Fatal("idle rollup still exported after the retention window")
+	}
+}
+
+func TestCollectRollupSeriesStartAtZero(t *testing.T) {
+	c := collector.New(time.Minute, nil, 0)
+	c.SetSampleRate(10, 0)
+	ev := collector.FlowEvent{
+		Ifindex: 2, Dir: 1, Proto: 6,
+		SrcAddr: netip.MustParseAddr("192.168.1.1"),
+		DstAddr: netip.MustParseAddr("192.168.1.2"),
+		SrcPort: 1234, DstPort: 443, Len: 100,
+	}
+	c.Record(ev, time.Now())
+
+	// a series whose first sample already holds its first packets loses
+	// them to increase(), which takes the first sample for history
+	mc := New(nil, c)
+	want := []map[string]float64{
+		{"rfm_flow_packets_total": 0, "rfm_flow_bytes_total": 0, "rfm_flow_sampled_packets_total": 0, "rfm_flow_sampled_bytes_total": 0},
+		{"rfm_flow_packets_total": 10, "rfm_flow_bytes_total": 1000, "rfm_flow_sampled_packets_total": 1, "rfm_flow_sampled_bytes_total": 100},
+	}
+	for i, w := range want {
+		vals := collectAll(t, mc)
+		for name, v := range w {
+			got, ok := vals[name]
+			if !ok || got != v {
+				t.Fatalf("scrape %d: %s = %v (present %v), want %v", i+1, name, got, ok, v)
+			}
+		}
 	}
 }
 

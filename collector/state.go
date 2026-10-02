@@ -12,7 +12,7 @@ type flowState struct {
 	key    FlowKey
 	entry  FlowEntry
 	elem   *list.Element
-	rollup *RollupCounters
+	rollup *rollupState
 
 	// active is the position in the fifo of pending active timeout exports
 	active *list.Element
@@ -71,6 +71,13 @@ func (s *flowState) mark(now time.Time) {
 	s.sent = s.entry
 	s.intervalStart = now
 	s.first, s.last = time.Time{}, time.Time{}
+}
+
+// rollupState is one label tuple with the counters a scrape exposes
+type rollupState struct {
+	RollupCounters
+	// exposed is set once a scrape showed the tuple, at zero the first time
+	exposed bool
 }
 
 // add accounts one event scaled by the rate that sampled it

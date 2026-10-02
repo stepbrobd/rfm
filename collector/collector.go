@@ -29,8 +29,8 @@ type Collector struct {
 	// interval, front first, for the active timeout sweep
 	activeQueue *list.List
 	// rollups accumulate per label tuple and outlive the flows behind
-	// them, an idle tuple is dropped after rollupRetention timeouts
-	rollups  map[RollupKey]*RollupCounters
+	// them, an idle tuple is dropped after RollupRetention eviction timeouts
+	rollups  map[RollupKey]*rollupState
 	timeout  time.Duration
 	active   time.Duration
 	enricher Enricher
@@ -62,7 +62,7 @@ func New(timeout time.Duration, enricher Enricher, maxFlows int) *Collector {
 		flows:       make(map[FlowKey]*flowState),
 		lru:         list.New(),
 		activeQueue: list.New(),
-		rollups:     make(map[RollupKey]*RollupCounters),
+		rollups:     make(map[RollupKey]*rollupState),
 		timeout:     timeout,
 		enricher:    enricher,
 		maxFlows:    maxFlows,
@@ -70,9 +70,11 @@ func New(timeout time.Duration, enricher Enricher, maxFlows int) *Collector {
 	}
 }
 
-// rollupRetention is how many eviction timeouts a rollup survives without
+// RollupRetention is how many eviction timeouts a rollup survives without
 // traffic before its series disappears from the scrape
-const rollupRetention = 10
+// a recreated tuple is shown at zero first, so increase() stays exact across
+// the gap, and a longer retention would only add series to every scrape
+const RollupRetention = 10
 
 // rateChange is one sample rate in force from a boot time onwards
 type rateChange struct {
@@ -322,9 +324,9 @@ func (c *Collector) recordLocked(ev FlowEvent, now time.Time, labels map[addrPai
 	}
 
 	rk := RollupKey{Ifindex: ev.Ifindex, Dir: ev.Dir, Proto: ev.Proto, Src: src, Dst: dst}
-	rollup, ok := c.rollups[rk]
-	if !ok {
-		rollup = &RollupCounters{}
+	rollup, found := c.rollups[rk]
+	if !found {
+		rollup = &rollupState{}
 		c.rollups[rk] = rollup
 	}
 	rollup.add(packets, bytes, rate, now)
@@ -399,7 +401,8 @@ func (c *Collector) Evict(now time.Time) {
 	}
 
 	if len(c.rollups) > 0 {
-		stale := now.Add(-rollupRetention * c.timeout)
+
+		stale := now.Add(-RollupRetention * c.timeout)
 		for rk, rollup := range c.rollups {
 			if rollup.LastSeen.Before(stale) {
 				delete(c.rollups, rk)
@@ -443,16 +446,35 @@ func (c *Collector) Flows() map[FlowKey]FlowEntry {
 	return snap
 }
 
-// Rollups returns a snapshot of the per label counters
-func (c *Collector) Rollups() map[RollupKey]RollupCounters {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
+// RollupSample is one rollup tuple as a scrape shows it
+type RollupSample struct {
+	Key        RollupKey
+	Packets    uint64
+	Bytes      uint64
+	EstPackets uint64
+	EstBytes   uint64
+}
 
-	snap := make(map[RollupKey]RollupCounters, len(c.rollups))
+// ScrapeRollups appends the counters of every rollup tuple to buf for a
+// scrape and returns it
+// a tuple no scrape has shown yet is shown at zero and its counts appear from
+// the next scrape on, so every series starts at zero and rate() and
+// increase() count the packets that created it instead of taking its first
+// value for history
+func (c *Collector) ScrapeRollups(buf []RollupSample) []RollupSample {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
 	for k, r := range c.rollups {
-		snap[k] = *r
+		s := RollupSample{Key: k}
+		if r.exposed {
+			s.Packets, s.Bytes = r.Packets, r.Bytes
+			s.EstPackets, s.EstBytes = r.EstPackets, r.EstBytes
+		}
+		r.exposed = true
+		buf = append(buf, s)
 	}
-	return snap
+	return buf
 }
 
 // Stats returns collector-level statistics
