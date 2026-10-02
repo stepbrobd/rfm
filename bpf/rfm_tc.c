@@ -49,6 +49,19 @@ struct {
 	__type(value, __u64);
 } rfm_submit_count SEC(".maps");
 
+// the IPv4 IHL and the TCP data offset are read as nibbles of whole bytes,
+// bpfgen compiles the bpfel and the bpfeb object against one vmlinux.h, and
+// the iphdr and tcphdr bitfields of that header fit only one byte order
+static __always_inline __u32 rfm_ipv4_hdr_len(struct iphdr *ip)
+{
+	return (__u32)(*(__u8 *)ip & 0x0f) << 2;
+}
+
+static __always_inline __u32 rfm_tcp_hdr_len(struct tcphdr *tcp)
+{
+	return (__u32)(((__u8 *)tcp)[12] >> 4) << 2;
+}
+
 // rfm_hdr_len returns the L2 + L3 + L4 header size of the frame, the same
 // quantity qdisc_pkt_len_init() uses to reconstruct the on-wire length of a
 // GSO skb, and 0 when the headers cannot be parsed
@@ -63,9 +76,9 @@ static __always_inline __u32 rfm_hdr_len(void *l3, void *end, __u16 eth_proto,
 		struct iphdr *ip = l3;
 		if ((void *)(ip + 1) > end)
 			return 0;
-		if (ip->ihl < 5)
+		l3_len = rfm_ipv4_hdr_len(ip);
+		if (l3_len < sizeof(*ip))
 			return 0;
-		l3_len = (__u32)ip->ihl << 2;
 		proto = ip->protocol;
 	} else {
 		struct ipv6hdr *ip6 = l3;
@@ -80,7 +93,7 @@ static __always_inline __u32 rfm_hdr_len(void *l3, void *end, __u16 eth_proto,
 		struct tcphdr *tcp = l4;
 		if ((void *)(tcp + 1) > end)
 			return 0;
-		return l2_len + l3_len + ((__u32)tcp->doff << 2);
+		return l2_len + l3_len + rfm_tcp_hdr_len(tcp);
 	}
 	if (proto == IPPROTO_UDP)
 		return l2_len + l3_len + sizeof(struct udphdr);
@@ -214,11 +227,11 @@ static __always_inline int rfm_tc(struct __sk_buff *skb, __u8 dir)
 		__builtin_memcpy(&ev.dst_addr[12], &ip->daddr, 4);
 
 		// use actual IHL to skip IP options
-		__u8 ihl = ip->ihl;
-		if (ihl < 5)
+		__u32 ihl = rfm_ipv4_hdr_len(ip);
+		if (ihl < sizeof(*ip))
 			return TCX_NEXT;
 
-		l4 = (void *)ip + ((__u16)ihl << 2);
+		l4 = (void *)ip + ihl;
 
 		// only the first fragment carries the transport header
 		if ((frag_off & 0x1FFF) != 0)
