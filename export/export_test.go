@@ -727,6 +727,70 @@ func TestCollectErrorsTotalOnSampleRateLookupError(t *testing.T) {
 	}
 }
 
+// refusingIfaceStats is a probe whose interface counter map refused updates
+type refusingIfaceStats struct {
+	mockIfaceStats
+	refused uint64
+	err     error
+}
+
+func (m *refusingIfaceStats) IfaceStatsErrors() (uint64, error) {
+	return m.refused, m.err
+}
+
+// errorsBySubsystem returns the rfm_errors_total values of one scrape
+func errorsBySubsystem(t *testing.T, mc *MetricsCollector) map[string]float64 {
+	t.Helper()
+	got := map[string]float64{}
+	for _, m := range collectMetrics(t, mc) {
+		if extractName(m.Desc()) == "rfm_errors_total" {
+			got[metricLabels(t, m)["subsystem"]] += metricValue(t, m)
+		}
+	}
+	return got
+}
+
+func TestCollectErrorsCountRefusedIfaceStatsUpdates(t *testing.T) {
+	src := &refusingIfaceStats{refused: 7}
+	mc := New(src, nil)
+	if got := errorsBySubsystem(t, mc)["bpf_map"]; got != 7 {
+		t.Fatalf("bpf_map errors = %v, want the 7 refused counter updates", got)
+	}
+
+	// a failed read counts as one more error and the refused updates keep
+	// their last value, so the counter never goes back
+	src.err = errors.New("lookup failed")
+	if got := errorsBySubsystem(t, mc)["bpf_map"]; got != 8 {
+		t.Fatalf("bpf_map errors = %v after a failed read, want 8", got)
+	}
+}
+
+func TestCollectErrorsOfOtherSubsystems(t *testing.T) {
+	mc := New(nil, collector.New(time.Minute, nil, 0))
+	var parse, dropped uint64 = 3, 2
+	mc.AddErrors("bmp", func() uint64 { return parse })
+	mc.AddErrors("netlink", func() uint64 { return dropped })
+	mc.AddErrors("bpf_map", func() uint64 { return 5 })
+
+	got := errorsBySubsystem(t, mc)
+	want := map[string]float64{"bmp": 3, "netlink": 2, "bpf_map": 5, "ring_buffer": 0, "ipfix": 0}
+	if len(got) != len(want) {
+		t.Fatalf("subsystems = %v, want %v", got, want)
+	}
+	for s, v := range want {
+		if got[s] != v {
+			t.Fatalf("%s errors = %v, want %v", s, got[s], v)
+		}
+	}
+
+	// every subsystem is one series, a registry refuses a repeated one
+	reg := prometheus.NewRegistry()
+	reg.MustRegister(mc)
+	if _, err := reg.Gather(); err != nil {
+		t.Fatalf("gather: %v", err)
+	}
+}
+
 func TestCollectIPFIXStats(t *testing.T) {
 	c := collector.New(30*time.Second, nil, 0)
 	mc := New(nil, c)

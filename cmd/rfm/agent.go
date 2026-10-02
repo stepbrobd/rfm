@@ -136,9 +136,22 @@ func runAgent(cmd *cobra.Command, args []string) error {
 		}
 	}
 
+	// the probe source also reports the counter updates the interface stats
+	// map refused, as bpf_map errors
 	mc := export.New(&export.ProbeSource{Probe: p}, c)
 	if ipfixExp != nil {
 		mc.SetIPFIX(ipfixExp.Stats)
+	}
+	mc.AddErrors("netlink", func() uint64 { return p.WatchState().Errors })
+	if backends != nil && backends.RIB != nil {
+		bmp := backends.RIB
+		// a message that does not parse in full, a session or a route the
+		// listener refuses past its bounds and the rib contradicting itself
+		// are bmp errors
+		mc.AddErrors("bmp", func() uint64 {
+			s := bmp.Stats()
+			return s.ParseErrors + s.SessionsRejected + s.RoutesRejected + s.Inconsistencies
+		})
 	}
 
 	reg := prometheus.NewRegistry()

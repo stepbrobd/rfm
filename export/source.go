@@ -20,3 +20,9 @@ type IfaceStatsSource interface {
 type SampleRateSource interface {
 	SampleRate() (uint32, error)
 }
+
+// IfaceStatsErrorSource provides how many counter updates the interface
+// stats map refused, whose traffic went uncounted
+type IfaceStatsErrorSource interface {
+	IfaceStatsErrors() (uint64, error)
+}

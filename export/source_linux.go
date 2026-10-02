@@ -76,3 +76,9 @@ func (s *ProbeSource) SampleRate() (uint32, error) {
 	}
 	return rate, nil
 }
+
+// IfaceStatsErrors reads how many counter updates the interface stats map
+// refused
+func (s *ProbeSource) IfaceStatsErrors() (uint64, error) {
+	return s.Probe.IfaceStatsErrors()
+}

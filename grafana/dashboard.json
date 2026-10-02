@@ -5416,7 +5416,7 @@
     {
       "type": "timeseries",
       "title": "Errors by Subsystem",
-      "description": "Error rate by subsystem (ring_buffer, bpf_map, ipfix).",
+      "description": "Error rate by subsystem of rfm_errors_total, the RFM readme lists what each subsystem counts.",
       "datasource": {
         "type": "datasource",
         "uid": "-- Mixed --"
