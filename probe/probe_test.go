@@ -1303,21 +1303,65 @@ func startWatch(t *testing.T, p *Probe, ns *testutil.NS, prefix string, gate <-c
 		cancel: cancel,
 	}
 	go func() {
+		// the thread goes back to the namespace it came from before it is
+		// unlocked, one that cannot go back stays locked, and the runtime
+		// does not hand a thread locked at goroutine exit to other
+		// goroutines, it ends it or, for the main thread, parks it
 		runtime.LockOSThread()
-		defer runtime.UnlockOSThread()
+		orig, err := netns.Get()
+		if err != nil {
+			w.done <- err
+			return
+		}
+		defer orig.Close()
 		if err := netns.Set(ns.Handle()); err != nil {
 			w.done <- err
 			return
 		}
-		w.done <- p.Watch(ctx, func(name string) bool { return strings.HasPrefix(name, prefix) }, func(ev LinkEvent) {
+		err = p.Watch(ctx, func(name string) bool { return strings.HasPrefix(name, prefix) }, func(ev LinkEvent) {
 			if gate != nil {
 				<-gate
 			}
 			w.events <- ev
 		})
+		if netns.Set(orig) == nil {
+			runtime.UnlockOSThread()
+		}
+		w.done <- err
 	}()
 	t.Cleanup(func() { w.stop() })
 	return w
+}
+
+// threadsIn lists the threads of the process other than the calling one
+// that live in the network namespace ns
+func threadsIn(t *testing.T, ns netns.NsHandle) []int {
+	t.Helper()
+
+	var want unix.Stat_t
+	if err := unix.Fstat(int(ns), &want); err != nil {
+		t.Fatal(err)
+	}
+	tasks, err := os.ReadDir("/proc/self/task")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var tids []int
+	for _, task := range tasks {
+		var tid int
+		if _, err := fmt.Sscan(task.Name(), &tid); err != nil || tid == unix.Gettid() {
+			continue
+		}
+		var st unix.Stat_t
+		// a thread that exited in the meantime has no namespace to compare
+		if err := unix.Stat("/proc/self/task/"+task.Name()+"/ns/net", &st); err != nil {
+			continue
+		}
+		if st.Dev == want.Dev && st.Ino == want.Ino {
+			tids = append(tids, tid)
+		}
+	}
+	return tids
 }
 
 // next waits for the next attach or detach
@@ -1518,6 +1562,15 @@ func TestWatchFollowsInterfaces(t *testing.T) {
 	if err := w.stop(); !errors.Is(err, context.Canceled) {
 		t.Fatalf("watch returned %v, want context.Canceled", err)
 	}
+
+	// the thread of the watcher must not go back to the scheduler while it
+	// still lives in the test namespace, which is about to go away
+	testutil.Eventually(t, time.Second, 10*time.Millisecond, func() error {
+		if tids := threadsIn(t, ns.Handle()); len(tids) > 0 {
+			return fmt.Errorf("threads %v outside the test still live in its namespace", tids)
+		}
+		return nil
+	})
 }
 
 func TestWatchReconcilesExistingLinks(t *testing.T) {
