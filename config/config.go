@@ -327,49 +327,9 @@ func Load(path string) (*Config, error) {
 	return cfg, nil
 }
 
-// Interface is one resolved network interface, ready to attach to
-type Interface struct {
-	Name  string
-	Index int
-}
-
-// ResolveInterfaces matches each pattern against the system interface list
-// patterns are Go regular expressions, anchored full-string
-// for example ".*" matches every interface, "ranet.*" matches the ranet prefix
-// duplicates across patterns are merged, returning each interface once
-func ResolveInterfaces(patterns []string) ([]Interface, error) {
-	compiled, err := compileInterfacePatterns(patterns)
-	if err != nil {
-		return nil, err
-	}
-
-	sysIfaces, err := net.Interfaces()
-	if err != nil {
-		return nil, fmt.Errorf("list interfaces: %w", err)
-	}
-
-	seen := make(map[int]bool, len(sysIfaces))
-	matches := make([]Interface, 0, len(sysIfaces))
-	for _, sys := range sysIfaces {
-		for _, re := range compiled {
-			if re.MatchString(sys.Name) {
-				if !seen[sys.Index] {
-					matches = append(matches, Interface{Name: sys.Name, Index: sys.Index})
-					seen[sys.Index] = true
-				}
-				break
-			}
-		}
-	}
-
-	if len(matches) == 0 {
-		return nil, fmt.Errorf("no interfaces matched patterns %v", patterns)
-	}
-
-	return matches, nil
-}
-
 // InterfaceMatcher compiles patterns into a predicate over interface names
+// patterns are Go regular expressions, anchored full-string, for example
+// ".*" matches every name and "eth.*" every name with the eth prefix
 func InterfaceMatcher(patterns []string) (func(string) bool, error) {
 	compiled, err := compileInterfacePatterns(patterns)
 	if err != nil {

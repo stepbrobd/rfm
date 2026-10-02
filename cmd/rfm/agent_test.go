@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/binary"
 	"errors"
@@ -12,15 +13,20 @@ import (
 	"net/netip"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"structs"
 	"sync"
+	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
 
+	"github.com/charmbracelet/log"
 	"github.com/prometheus/client_golang/prometheus"
 	"ysun.co/rfm/collector"
 	"ysun.co/rfm/config"
+	"ysun.co/rfm/ctl"
 	"ysun.co/rfm/export"
 	"ysun.co/rfm/probe"
 	"ysun.co/rfm/testutil"
@@ -37,16 +43,24 @@ func writeTestConfig(t *testing.T, content string) string {
 }
 
 // fakeProbe stands in for the BPF programs, it keeps the attached
-// interfaces and the sample rate in memory and its reader hands out the
+// interfaces and the sample rate in memory, its watcher attaches the host
+// links that match as if from a link dump, and its reader hands out the
 // events a test sends on events
 type fakeProbe struct {
 	mu       sync.Mutex
 	cfg      probe.Config
 	attached map[int]bool
+	// pending lists the links whose attach failed, state holds the counters
+	// WatchState reports
+	pending  []int
+	state    probe.WatchState
 	rate     uint32
 	watching bool
+	synced   bool
 	closed   bool
 	events   chan []byte
+	// dump, when set, holds the watcher's link dump back until it is closed
+	dump chan struct{}
 }
 
 func newFakeProbe() *fakeProbe {
@@ -67,13 +81,6 @@ func (f *fakeProbe) Close() error {
 	return nil
 }
 
-func (f *fakeProbe) Attach(ifindex int) error {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	f.attached[ifindex] = true
-	return nil
-}
-
 func (f *fakeProbe) Attached() []int {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -82,6 +89,12 @@ func (f *fakeProbe) Attached() []int {
 		out = append(out, ifindex)
 	}
 	return out
+}
+
+func (f *fakeProbe) Pending() []int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return slices.Clone(f.pending)
 }
 
 func (f *fakeProbe) SetSampleRate(n uint32) error {
@@ -100,18 +113,47 @@ func (f *fakeProbe) sampleRate() uint32 {
 func (f *fakeProbe) Watch(ctx context.Context, match func(string) bool, notify func(probe.LinkEvent)) error {
 	f.mu.Lock()
 	f.watching = true
+	dump := f.dump
+	f.mu.Unlock()
+	defer func() {
+		f.mu.Lock()
+		f.watching, f.synced = false, false
+		f.mu.Unlock()
+	}()
+
+	if dump != nil {
+		select {
+		case <-dump:
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
+	links, err := net.Interfaces()
+	if err != nil {
+		return err
+	}
+	for _, l := range links {
+		if !match(l.Name) {
+			continue
+		}
+		f.mu.Lock()
+		f.attached[l.Index] = true
+		f.mu.Unlock()
+		notify(probe.LinkEvent{Name: l.Name, Ifindex: l.Index, Attached: true})
+	}
+	f.mu.Lock()
+	f.synced = true
 	f.mu.Unlock()
 	<-ctx.Done()
-	f.mu.Lock()
-	f.watching = false
-	f.mu.Unlock()
 	return ctx.Err()
 }
 
 func (f *fakeProbe) WatchState() probe.WatchState {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	return probe.WatchState{Running: f.watching, Synced: f.watching}
+	st := f.state
+	st.Running, st.Synced = f.watching, f.synced
+	return st
 }
 
 func (f *fakeProbe) Stats() export.IfaceStatsSource { return fakeStats{f} }
@@ -228,33 +270,55 @@ func noProbe(t *testing.T) agentDeps {
 type agentRun struct {
 	cancel  context.CancelFunc
 	done    chan error
+	addr    chan string
 	metrics string
 }
 
-// startAgent runs the agent on cfgPath until the test stops it, and waits
-// for its metrics listener
+// startAgent runs the agent on cfgPath until the test stops it
 func startAgent(t *testing.T, cfgPath string, deps agentDeps) *agentRun {
 	t.Helper()
 
-	addr := make(chan string, 1)
-	if deps.listen == nil {
-		deps.listen = testListen(addr)
-	}
 	ctx, cancel := context.WithCancel(context.Background())
-	run := &agentRun{cancel: cancel, done: make(chan error, 1)}
+	run := &agentRun{cancel: cancel, done: make(chan error, 1), addr: make(chan string, 1)}
+	if deps.listen == nil {
+		deps.listen = testListen(run.addr)
+	}
 	go func() { run.done <- runAgent(ctx, cfgPath, deps) }()
 	t.Cleanup(func() { run.stop(t) })
+	return run
+}
 
+// metricsURL waits for the metrics listener and returns its url
+func (r *agentRun) metricsURL(t *testing.T) string {
+	t.Helper()
+
+	if r.metrics != "" {
+		return r.metrics
+	}
 	select {
-	case a := <-addr:
-		run.metrics = "http://" + a + "/metrics"
-	case err := <-run.done:
-		run.done <- err
-		t.Fatalf("agent stopped while starting: %v", err)
+	case a := <-r.addr:
+		r.metrics = "http://" + a + "/metrics"
+	case err := <-r.done:
+		r.done <- err
+		t.Fatalf("agent stopped before it served metrics: %v", err)
 	case <-time.After(10 * time.Second):
 		t.Fatal("agent did not open its metrics listener")
 	}
-	return run
+	return r.metrics
+}
+
+// serving reports whether the metrics listener is open
+func (r *agentRun) serving() bool {
+	if r.metrics != "" {
+		return true
+	}
+	select {
+	case a := <-r.addr:
+		r.metrics = "http://" + a + "/metrics"
+		return true
+	default:
+		return false
+	}
 }
 
 // stop cancels the agent and returns what it returned
@@ -302,6 +366,73 @@ func waitCLI(t *testing.T, sock string, args ...string) string {
 	return out
 }
 
+// waitAttached waits until the agent's status lists the named interfaces
+// and returns it
+func waitAttached(t *testing.T, sock string, names ...string) ctl.Status {
+	t.Helper()
+
+	var st ctl.Status
+	testutil.Eventually(t, 5*time.Second, 20*time.Millisecond, func() error {
+		var err error
+		if st, err = (&ctl.Client{Socket: sock}).Status(); err != nil {
+			return err
+		}
+		var got []string
+		for _, iface := range st.Interfaces {
+			got = append(got, iface.Name)
+		}
+		if !slices.Equal(got, names) {
+			return fmt.Errorf("attached %v, want %v", got, names)
+		}
+		return nil
+	})
+	return st
+}
+
+// syncBuffer is a buffer the agent's goroutines write to while the test
+// reads it
+type syncBuffer struct {
+	mu sync.Mutex
+	b  bytes.Buffer
+}
+
+func (s *syncBuffer) Write(p []byte) (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.b.Write(p)
+}
+
+func (s *syncBuffer) String() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.b.String()
+}
+
+// captureLog collects what the agent logs until the test ends
+func captureLog(t *testing.T) *syncBuffer {
+	t.Helper()
+
+	b := &syncBuffer{}
+	prev := log.Default()
+	log.SetDefault(log.New(b))
+	t.Cleanup(func() { log.SetDefault(prev) })
+	return b
+}
+
+// waitLog waits for a log line that holds every one of want
+func waitLog(t *testing.T, logs *syncBuffer, want ...string) {
+	t.Helper()
+
+	testutil.Eventually(t, 5*time.Second, 20*time.Millisecond, func() error {
+		for line := range strings.Lines(logs.String()) {
+			if !slices.ContainsFunc(want, func(w string) bool { return !strings.Contains(line, w) }) {
+				return nil
+			}
+		}
+		return fmt.Errorf("no log line with %q in\n%s", want, logs)
+	})
+}
+
 // mustInterface returns the named host interface
 func mustInterface(t *testing.T, name string) *net.Interface {
 	t.Helper()
@@ -332,6 +463,7 @@ socket = %q
 	run := startAgent(t, cfgPath, agentDeps{loadProbe: f.load})
 
 	// the real control handler answers from the running agent
+	waitAttached(t, sock, lo)
 	status := waitCLI(t, sock, "status")
 	for _, want := range []string{"interfaces  " + lo, "1 in 10", "0 active of 65536"} {
 		if !strings.Contains(status, want) {
@@ -359,7 +491,7 @@ socket = %q
 		t.Fatalf("flows top = %q, want the flow on %s", top, lo)
 	}
 
-	metrics := get(t, run.metrics)
+	metrics := get(t, run.metricsURL(t))
 	for _, want := range []string{
 		fmt.Sprintf(`rfm_interface_rx_packets_total{family="ipv4",ifname=%q} 1`, lo),
 		"rfm_bpf_sample_rate 10",
@@ -416,7 +548,7 @@ socket = %q
 `, lo, pin, sock))
 	}
 	run := startAgent(t, agentConfig(sock, pin), agentDeps{loadProbe: newFakeProbe().load})
-	waitCLI(t, sock, "status")
+	waitAttached(t, sock, lo)
 
 	// an agent on the same socket or the same pin stops before it loads its
 	// programs, it would count the packets of an interface both attach a
@@ -470,10 +602,7 @@ socket = %q
 `, lo, pin, sock))
 
 	run := startAgent(t, cfgPath, agentDeps{loadProbe: loadProbe})
-	status := waitCLI(t, sock, "status")
-	if !strings.Contains(status, "interfaces  "+lo) {
-		t.Fatalf("status output missing %s:\n%s", lo, status)
-	}
+	waitAttached(t, sock, lo)
 	// the lock holds on the bpffs directory of the pin as well
 	second := writeTestConfig(t, fmt.Sprintf(`
 [agent]
@@ -488,7 +617,7 @@ pin_path = %q
 	// the scrapes run over the loopback, a later one counts an earlier one
 	want := fmt.Sprintf(`rfm_interface_rx_packets_total{family="ipv4",ifname=%q}`, lo)
 	testutil.Eventually(t, 5*time.Second, 50*time.Millisecond, func() error {
-		if !strings.Contains(get(t, run.metrics), want) {
+		if !strings.Contains(get(t, run.metricsURL(t)), want) {
 			return fmt.Errorf("metrics missing %s", want)
 		}
 		return nil
@@ -498,17 +627,143 @@ pin_path = %q
 	}
 }
 
-func TestRunAgentBadInterface(t *testing.T) {
-	cfgPath := writeTestConfig(t, `
+func TestRunAgentWaitsForLinksThatMatchNothingYet(t *testing.T) {
+	logs := captureLog(t)
+	sock := filepath.Join(t.TempDir(), "rfm.sock")
+	cfgPath := writeTestConfig(t, fmt.Sprintf(`
 [agent]
-interfaces = ["doesnotexist999"]
-`)
-	err := runAgent(context.Background(), cfgPath, noProbe(t))
-	if err == nil {
-		t.Fatal("should fail on bad interface")
+interfaces = ["doesnotexist999", "ranet*"]
+
+[agent.control]
+socket = %q
+`, sock))
+
+	// links that match can come later, so a start without one runs and
+	// says which patterns match nothing, and that a glob is a regex here
+	run := startAgent(t, cfgPath, agentDeps{loadProbe: newFakeProbe().load})
+	waitLog(t, logs, "WARN", "shell glob", "ranet*")
+	waitLog(t, logs, "WARN", "no interface attached")
+	waitLog(t, logs, "WARN", "matches no link", "doesnotexist999")
+	waitLog(t, logs, "WARN", "matches no link", "ranet*")
+	waitAttached(t, sock)
+	if err := run.stop(t); err != nil {
+		t.Fatalf("agent stopped with %v, want nil", err)
 	}
-	if !strings.Contains(err.Error(), "doesnotexist999") {
-		t.Errorf("error should mention interface name, got: %v", err)
+}
+
+func TestRunAgentAnswersBeforeTheLinkDump(t *testing.T) {
+	logs := captureLog(t)
+	lo := testutil.LoopbackName(t)
+	sock := filepath.Join(t.TempDir(), "rfm.sock")
+	cfgPath := writeTestConfig(t, fmt.Sprintf(`
+[agent]
+interfaces = [%q, "doesnotexist999"]
+
+[agent.control]
+socket = %q
+`, lo, sock))
+
+	// the watcher attaches from its link dump, the control socket answers
+	// while it has not, and the metrics endpoint opens once it has
+	f := newFakeProbe()
+	f.dump = make(chan struct{})
+	run := startAgent(t, cfgPath, agentDeps{loadProbe: f.load})
+	waitAttached(t, sock)
+	if run.serving() {
+		t.Fatal("metrics served before the link dump")
+	}
+
+	close(f.dump)
+	want := fmt.Sprintf(`rfm_interface_rx_packets_total{family="ipv4",ifname=%q} 1`, lo)
+	if metrics := get(t, run.metricsURL(t)); !strings.Contains(metrics, want) {
+		t.Fatalf("first scrape after the link dump misses %q:\n%s", want, metrics)
+	}
+	waitAttached(t, sock, lo)
+	waitLog(t, logs, "INFO", "interfaces attached", lo)
+	waitLog(t, logs, "WARN", "matches no link", "doesnotexist999")
+	if strings.Contains(logs.String(), "no interface attached") || strings.Contains(logs.String(), fmt.Sprintf("pattern=%s\n", lo)) {
+		t.Fatalf("warnings about the attached %s:\n%s", lo, logs)
+	}
+	if err := run.stop(t); err != nil {
+		t.Fatalf("agent stopped with %v, want nil", err)
+	}
+}
+
+func TestRunAgentKeepsMetricsClosedWithoutALinkDump(t *testing.T) {
+	lo := testutil.LoopbackName(t)
+	cfgPath := writeTestConfig(t, fmt.Sprintf(`
+[agent]
+interfaces = [%q]
+`, lo))
+
+	// the clock of the bubble moves on whenever every goroutine in it waits,
+	// so a minute without a link dump passes at once
+	synctest.Test(t, func(t *testing.T) {
+		f := newFakeProbe()
+		f.dump = make(chan struct{})
+		var opened atomic.Bool
+		listen := func(string, string) (net.Listener, error) {
+			opened.Store(true)
+			return nil, errors.New("metrics listener opened")
+		}
+		ctx, cancel := context.WithCancel(context.Background())
+		done := make(chan error, 1)
+		go func() { done <- runAgent(ctx, cfgPath, agentDeps{loadProbe: f.load, listen: listen}) }()
+
+		// a watcher without its first dump keeps the port closed, so a scrape
+		// finds the agent down rather than up without its interfaces
+		time.Sleep(time.Minute)
+		if opened.Load() {
+			t.Fatal("metrics served without a link dump")
+		}
+		cancel()
+		if err := <-done; err != nil {
+			t.Fatalf("agent stopped with %v, want nil", err)
+		}
+	})
+}
+
+func TestRunAgentExportsWatcherErrors(t *testing.T) {
+	lo := testutil.LoopbackName(t)
+	cfgPath := writeTestConfig(t, fmt.Sprintf(`
+[agent]
+interfaces = [%q]
+`, lo))
+
+	// failed tries to attach a matching link are attach errors, failed link
+	// subscriptions are netlink errors like dropped link messages, failed
+	// deletes of the pinned counters of links this run does not attach are
+	// bpf_map errors, and none of them stops the agent
+	f := newFakeProbe()
+	f.state = probe.WatchState{AttachErrors: 1, Resubscribes: 2, Errors: 1, PruneErrors: 4}
+	run := startAgent(t, cfgPath, agentDeps{loadProbe: f.load})
+	metrics := get(t, run.metricsURL(t))
+	for _, want := range []string{
+		`rfm_errors_total{subsystem="attach"} 1`,
+		`rfm_errors_total{subsystem="netlink"} 3`,
+		`rfm_errors_total{subsystem="bpf_map"} 4`,
+	} {
+		if !strings.Contains(metrics, want) {
+			t.Fatalf("metrics missing %q:\n%s", want, metrics)
+		}
+	}
+	if err := run.stop(t); err != nil {
+		t.Fatalf("agent stopped with %v, want nil", err)
+	}
+}
+
+func TestReportInterfacesNamesLinksWhoseAttachFailed(t *testing.T) {
+	logs := captureLog(t)
+	lo := testutil.LoopbackName(t)
+
+	// the watcher retries a link whose attach failed, the link is there and
+	// the report must not call it missing
+	f := newFakeProbe()
+	f.synced, f.pending = true, []int{mustInterface(t, lo).Index}
+	reportInterfaces(context.Background(), f, []string{lo})
+	waitLog(t, logs, "WARN", "attach failed", lo)
+	if strings.Contains(logs.String(), "no interface attached") || strings.Contains(logs.String(), "matches no link") {
+		t.Fatalf("a link whose attach failed reported as missing:\n%s", logs)
 	}
 }
 

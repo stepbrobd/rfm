@@ -8,8 +8,8 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"slices"
 	"strconv"
-	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -46,8 +46,10 @@ func init() {
 // the agent on a fake that needs no privileges
 type agentProbe interface {
 	Close() error
-	Attach(ifindex int) error
 	Attached() []int
+	// Pending lists the matching links whose attach failed, the watcher
+	// tries them again
+	Pending() []int
 	SetSampleRate(n uint32) error
 	Watch(ctx context.Context, match func(string) bool, notify func(probe.LinkEvent)) error
 	WatchState() probe.WatchState
@@ -103,15 +105,15 @@ func runAgent(ctx context.Context, path string, deps agentDeps) error {
 		return fmt.Errorf("reading config: %w", err)
 	}
 
-	ifaces, err := config.ResolveInterfaces(cfg.Agent.Interfaces)
+	// the watcher attaches the interfaces, those up now from its first link
+	// dump and those that come later, so none has to match yet
+	matcher, err := config.InterfaceMatcher(cfg.Agent.Interfaces)
 	if err != nil {
 		return err
 	}
-	names := make([]string, len(ifaces))
-	for i, iface := range ifaces {
-		names[i] = iface.Name
+	for _, pattern := range config.GlobPatterns(cfg.Agent.Interfaces) {
+		log.Warn("interface pattern reads like a shell glob, it is an anchored regular expression", "pattern", pattern)
 	}
-	log.Info("interfaces matched", "count", len(ifaces), "names", names)
 
 	// a second agent with the same pin or the same control socket stops
 	// here, before it loads anything, the pin lock is released last, once
@@ -152,25 +154,6 @@ func runAgent(ctx context.Context, path string, deps agentDeps) error {
 	}
 	defer p.Close()
 
-	var failures []string
-	for _, iface := range ifaces {
-		if err := p.Attach(iface.Index); err != nil {
-			log.Error("attach failed", "interface", iface.Name, "err", err)
-			failures = append(failures, fmt.Sprintf("%s: %v", iface.Name, err))
-			continue
-		}
-		log.Info("attached", "interface", iface.Name)
-	}
-	log.Info("attach summary", "successful", len(ifaces)-len(failures), "total", len(ifaces))
-	if len(failures) > 0 {
-		return fmt.Errorf("attach failed for %d/%d interfaces: %s", len(failures), len(ifaces), strings.Join(failures, "; "))
-	}
-
-	matcher, err := config.InterfaceMatcher(cfg.Agent.Interfaces)
-	if err != nil {
-		return err
-	}
-
 	rd, err := p.Events()
 	if err != nil {
 		return fmt.Errorf("open reader: %w", err)
@@ -207,7 +190,14 @@ func runAgent(ctx context.Context, path string, deps agentDeps) error {
 	if ipfixExp != nil {
 		mc.SetIPFIX(ipfixExp.Stats)
 	}
-	mc.AddErrors("netlink", func() uint64 { return p.WatchState().Errors })
+	// a link subscription that failed is a netlink error like a dropped link
+	// message, every failed try to attach a matching link that is still
+	// there an attach error, and a prune pass that failed to delete the
+	// pinned counters of the links this run neither attaches nor retries a
+	// bpf_map error
+	mc.AddErrors("netlink", func() uint64 { st := p.WatchState(); return st.Errors + st.Resubscribes })
+	mc.AddErrors("attach", func() uint64 { return p.WatchState().AttachErrors })
+	mc.AddErrors("bpf_map", func() uint64 { return p.WatchState().PruneErrors })
 	if backends != nil && backends.RIB != nil {
 		bmp := backends.RIB
 		// a message that does not parse in full, a session or a route the
@@ -231,13 +221,6 @@ func runAgent(ctx context.Context, path string, deps agentDeps) error {
 
 	srv := newMetricsServer(reg, metricsTimeout)
 
-	// start listener and fail immediately if bind fails
-	ln, err := deps.listen("tcp", addr)
-	if err != nil {
-		return fmt.Errorf("listen %s: %w", addr, err)
-	}
-	log.Info("metrics server", "addr", ln.Addr().String())
-
 	handler.probe, handler.col, handler.ipfix, handler.backends = p, c, ipfixExp, backends
 
 	// the goroutines are done before the probe and the reader close
@@ -245,13 +228,6 @@ func runAgent(ctx context.Context, path string, deps agentDeps) error {
 	var wg sync.WaitGroup
 	defer wg.Wait()
 	defer cancel()
-
-	wg.Go(func() {
-		if err := srv.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			log.Error("http server died, shutting down", "err", err)
-			cancel()
-		}
-	})
 
 	if ctlSrv != nil {
 		wg.Go(func() {
@@ -261,7 +237,10 @@ func runAgent(ctx context.Context, path string, deps agentDeps) error {
 		})
 	}
 
-	// follow interfaces that appear or vanish while the agent runs
+	// the watcher attaches the matching interfaces from its link dump and
+	// follows those that appear or vanish while the agent runs, a link it
+	// cannot attach, one without an ethernet header or one already gone, is
+	// a warning
 	wg.Go(func() {
 		err := p.Watch(ctx, matcher, func(ev probe.LinkEvent) {
 			if ev.Attached {
@@ -272,6 +251,30 @@ func runAgent(ctx context.Context, path string, deps agentDeps) error {
 		})
 		if err != nil && ctx.Err() == nil {
 			log.Error("interface watch stopped", "err", err)
+		}
+	})
+	wg.Go(func() { reportInterfaces(ctx, p, cfg.Agent.Interfaces) })
+
+	// the metrics endpoint opens once the first link dump went through, by
+	// then the watcher attached the matching links, or queued a retry for
+	// those it could not attach, and pruned the pinned counters of the
+	// others, a failed prune counts as a bpf_map error and the next dump
+	// tries again, the port stays closed while the watcher retries a dump
+	// that fails, the control socket answers meanwhile
+	if !waitSynced(ctx, p) {
+		return nil
+	}
+
+	// fail immediately if bind fails
+	ln, err := deps.listen("tcp", addr)
+	if err != nil {
+		return fmt.Errorf("listen %s: %w", addr, err)
+	}
+	log.Info("metrics server", "addr", ln.Addr().String())
+	wg.Go(func() {
+		if err := srv.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			log.Error("http server died, shutting down", "err", err)
+			cancel()
 		}
 	})
 
@@ -289,6 +292,67 @@ func runAgent(ctx context.Context, path string, deps agentDeps) error {
 		return nil
 	}
 	return runErr
+}
+
+// syncPoll is how often the agent looks for the watcher's first sync
+const syncPoll = 50 * time.Millisecond
+
+// waitSynced waits until the watcher's first link dump went through and
+// reports whether it did before ctx was done
+func waitSynced(ctx context.Context, p agentProbe) bool {
+	tick := time.NewTicker(syncPoll)
+	defer tick.Stop()
+	for !p.WatchState().Synced {
+		select {
+		case <-ctx.Done():
+			return false
+		case <-tick.C:
+		}
+	}
+	return true
+}
+
+// reportInterfaces waits for the watcher's first link dump, then logs the
+// interfaces it attached, those whose attach failed and every pattern that
+// matches no link, once, the links of such a pattern are attached when they
+// appear and the failed ones once a later try succeeds
+func reportInterfaces(ctx context.Context, p agentProbe, patterns []string) {
+	if !waitSynced(ctx, p) {
+		return
+	}
+
+	links, err := net.Interfaces()
+	if err != nil {
+		log.Error("list interfaces", "err", err)
+		return
+	}
+	names := make([]string, len(links))
+	byIndex := make(ifnames, len(links))
+	for i, l := range links {
+		names[i] = l.Name
+		byIndex[l.Index] = l.Name
+	}
+	var attached, pending []string
+	for _, ifindex := range p.Attached() {
+		attached = append(attached, byIndex.name(ifindex))
+	}
+	for _, ifindex := range p.Pending() {
+		pending = append(pending, byIndex.name(ifindex))
+	}
+	slices.Sort(attached)
+	slices.Sort(pending)
+	switch {
+	case len(attached) > 0:
+		log.Info("interfaces attached", "count", len(attached), "names", attached)
+	case len(pending) == 0:
+		log.Warn("no interface attached yet, matching links are attached when they appear", "patterns", patterns)
+	}
+	if len(pending) > 0 {
+		log.Warn("interface attach failed, retrying", "count", len(pending), "names", pending)
+	}
+	for _, pattern := range config.UnmatchedPatterns(patterns, names) {
+		log.Warn("interface pattern matches no link yet", "pattern", pattern)
+	}
 }
 
 // a scrape gathers and encodes every series, tens of MiB at the fleet's

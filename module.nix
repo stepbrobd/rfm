@@ -35,7 +35,7 @@ in
                   deduplicated by interface index, so `["eth0", "eth.*"]`
                   attaches each interface at most once. Links without an
                   Ethernet header, such as WireGuard, tun or xfrm
-                  interfaces, are not attached.
+                  interfaces, are skipped with a warning.
                 '';
                 example = [
                   "eth0"
@@ -298,9 +298,10 @@ in
       description = "Router Flow Monitor agent";
       after = [ "network.target" ];
       wantedBy = [ "multi-user.target" ];
-      # a start fails while a matched interface, a listen address or an
-      # mmdb file is not there yet, so the unit retries every few seconds
-      # without a start limit instead of giving up within a second
+      # a start fails while a listen address or an mmdb file is not there
+      # yet, so the unit retries every few seconds without a start limit
+      # instead of giving up within a second, a matched interface that is
+      # not there yet is attached once it appears
       startLimitIntervalSec = 0;
       serviceConfig = {
         # systemd mounts bpffs with mode 0700, which the agent's user cannot

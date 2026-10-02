@@ -8,8 +8,6 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	"ysun.co/rfm/testutil"
 )
 
 func writeTOML(t *testing.T, content string) string {
@@ -874,72 +872,29 @@ func TestLoadNonexistentFile(t *testing.T) {
 	}
 }
 
-func TestResolveMatchAll(t *testing.T) {
-	ifaces, err := ResolveInterfaces([]string{".*"})
+func TestInterfaceMatcher(t *testing.T) {
+	match, err := InterfaceMatcher([]string{"lo", "eth[0-9]+", "wg0|wg1"})
 	if err != nil {
-		t.Fatalf("ResolveInterfaces: %v", err)
+		t.Fatalf("InterfaceMatcher: %v", err)
 	}
-	if len(ifaces) == 0 {
-		t.Fatal(".* resolved to zero interfaces")
-	}
-}
-
-func TestResolveExactName(t *testing.T) {
-	loName := testutil.LoopbackName(t)
-
-	ifaces, err := ResolveInterfaces([]string{loName})
-	if err != nil {
-		t.Fatalf("ResolveInterfaces: %v", err)
-	}
-	if len(ifaces) != 1 {
-		t.Fatalf("got %d interfaces, want 1", len(ifaces))
-	}
-	if ifaces[0].Name != loName {
-		t.Fatalf("matched %q, want %q", ifaces[0].Name, loName)
-	}
-}
-
-func TestResolveAnchoredExactNotPrefix(t *testing.T) {
-	loName := testutil.LoopbackName(t)
-
-	// the anchored regex for "lo" must not match "lo0", and vice versa
-	other := loName + "x"
-	ifaces, err := ResolveInterfaces([]string{other})
-	if err == nil && len(ifaces) > 0 {
-		t.Fatalf("anchored pattern %q matched unexpected interfaces: %v", other, ifaces)
-	}
-}
-
-func TestResolveNoMatch(t *testing.T) {
-	_, err := ResolveInterfaces([]string{"doesnotexist999"})
-	if err == nil {
-		t.Fatal("should fail when no interface matches")
-	}
-}
-
-func TestResolveBadRegex(t *testing.T) {
-	_, err := ResolveInterfaces([]string{"["})
-	if err == nil {
-		t.Fatal("should fail on invalid regex")
-	}
-}
-
-func TestResolveDedupAcrossPatterns(t *testing.T) {
-	loName := testutil.LoopbackName(t)
-
-	// the two patterns both match the loopback, but it should appear once
-	ifaces, err := ResolveInterfaces([]string{loName, ".*"})
-	if err != nil {
-		t.Fatalf("ResolveInterfaces: %v", err)
-	}
-	seen := make(map[int]int)
-	for _, iface := range ifaces {
-		seen[iface.Index]++
-	}
-	for idx, count := range seen {
-		if count > 1 {
-			t.Fatalf("interface index %d returned %d times", idx, count)
+	// every pattern, each alternative included, matches a name as a whole
+	for name, want := range map[string]bool{
+		"lo":   true,
+		"lo0":  false,
+		"xlo":  false,
+		"eth0": true,
+		"eth":  false,
+		"wg1":  true,
+		"wg0x": false,
+		"xwg1": false,
+	} {
+		if got := match(name); got != want {
+			t.Errorf("match(%q) = %v, want %v", name, got, want)
 		}
+	}
+
+	if _, err := InterfaceMatcher([]string{"["}); err == nil {
+		t.Fatal("should fail on invalid regex")
 	}
 }
 

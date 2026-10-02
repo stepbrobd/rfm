@@ -30,6 +30,9 @@ type Probe struct {
 	// skipped holds the matching links Watch left alone because of their
 	// link type, so their warning is logged once
 	skipped map[int]bool
+	// pending holds the names of the matching links whose attach failed for
+	// another reason than their removal, Watch tries them again
+	pending map[int]string
 
 	watchState WatchState
 
@@ -103,7 +106,7 @@ func Load(cfg Config) (*Probe, error) {
 		return nil, fmt.Errorf("write config: %w", err)
 	}
 
-	return &Probe{objs: &objs, links: make(map[int]ifaceLinks), skipped: make(map[int]bool)}, nil
+	return &Probe{objs: &objs, links: make(map[int]ifaceLinks), skipped: make(map[int]bool), pending: make(map[int]string)}, nil
 }
 
 func pinPathFor(dir string) string {
@@ -196,16 +199,19 @@ func (p *Probe) clearIfaceStats(ifindex int) error {
 	return p.deleteIfaceStats(func(i uint32) bool { return i == uint32(ifindex) })
 }
 
-// pruneIfaceStats deletes the counter entries of every interface that is not
-// attached
+// pruneIfaceStats deletes the counter entries of every interface that is
+// neither attached nor pending
 func (p *Probe) pruneIfaceStats() error {
 	p.mu.Lock()
-	attached := make(map[uint32]bool, len(p.links))
+	keep := make(map[uint32]bool, len(p.links)+len(p.pending))
 	for ifindex := range p.links {
-		attached[uint32(ifindex)] = true
+		keep[uint32(ifindex)] = true
+	}
+	for ifindex := range p.pending {
+		keep[uint32(ifindex)] = true
 	}
 	p.mu.Unlock()
-	return p.deleteIfaceStats(func(i uint32) bool { return !attached[i] })
+	return p.deleteIfaceStats(func(i uint32) bool { return !keep[i] })
 }
 
 // deleteIfaceStats deletes the counter entries whose ifindex drop accepts
@@ -285,7 +291,8 @@ func (p *Probe) FlowDrops() *ebpf.Map {
 	return p.objs.RfmFlowDrops
 }
 
-// Attach installs both programs on ifindex as TCX links
+// Attach installs both programs on ifindex as TCX links, Watch attaches the
+// matching links itself and only tests call Attach
 // the ingress program is anchored at the head of the TCX chain and the egress
 // program at its tail, so the counters see every frame the interface received
 // before another program can drop or redirect it and every frame that is
@@ -351,6 +358,7 @@ func (p *Probe) attach(ifindex int, name string) (bool, error) {
 
 	p.mu.Lock()
 	p.links[ifindex] = ifaceLinks{name: name, ingress: ing, egress: egr}
+	delete(p.pending, ifindex)
 	p.mu.Unlock()
 	return true, nil
 }

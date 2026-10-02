@@ -32,6 +32,10 @@ type WatchState struct {
 	// Errors counts the link messages the watcher dropped, a dropped
 	// message ends no subscription
 	Errors uint64
+	// AttachErrors counts the failed attaches of matching links, every try
+	// of a link that stays pending counts again, an attach that finds the
+	// link gone does not count
+	AttachErrors uint64
 	// LastError describes the latest failed subscription or dropped message
 	LastError string
 }

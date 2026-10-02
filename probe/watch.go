@@ -7,6 +7,8 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"maps"
+	"slices"
 	"syscall"
 	"time"
 
@@ -23,18 +25,31 @@ const (
 	watchRetryMax = 30 * time.Second
 )
 
+// a pending link is tried again after attachRetryMin, doubled up to
+// attachRetryMax while a try leaves links pending
+const (
+	attachRetryMin = 100 * time.Millisecond
+	attachRetryMax = 30 * time.Second
+)
+
 // Watch attaches the interfaces whose name match accepts and follows link
 // changes until ctx is done
 // every subscription dumps the links on its own socket, so no change between
 // the dump and the next message is lost, and once the dump is through every
 // attached interface that is gone is detached, which catches up with links
 // that came or went before Watch ran or while a subscription was down
-// after the first dump the counters of every interface that is not attached
-// are deleted, a pinned map from an earlier run may hold them, and a link
-// that goes loses its counters whether this run attached it or not
-// a subscription that fails, on ENOBUFS after a burst of link messages for
-// one, is opened again after a pause, a message the watcher cannot use is
-// logged and counted and ends nothing, WatchState reports both
+// a matching link whose attach fails for another reason than its removal
+// stays pending, every dump and every message about it try it again, and so
+// does a timer whose pause doubles while the tries fail
+// after the first dump the counters of every interface that is neither
+// attached nor pending are deleted, a pinned map from an earlier run may hold
+// them, and a link that goes loses its counters whether this run attached it
+// or not
+// a subscription that fails, on ENOBUFS after a burst of link messages or on
+// a link message it cannot decode, is opened again after a pause, a message
+// that is not the kernel's or an error reply outside the dump is logged and
+// counted and ends nothing, WatchState reports both and counts the failed
+// attaches and prunes
 // a link without an ethernet header is skipped with a warning
 // Watch returns the error of the first subscription when that one cannot be
 // opened, and ctx.Err() once ctx is done
@@ -49,7 +64,8 @@ func (p *Probe) Watch(ctx context.Context, match func(name string) bool, notify 
 	defer p.updateWatch(func(st *WatchState) { st.Running, st.Synced = false, false })
 
 	// once the first dump is reconciled every interface of this run is
-	// attached, counters a pinned map kept for any other one are stale
+	// attached or pending, counters a pinned map kept for any other one are
+	// stale
 	pruned := false
 	onSync := func() {
 		if pruned {
@@ -132,8 +148,33 @@ func (p *Probe) watch(ctx context.Context, match func(string) bool, notify func(
 	// it is nil once the dump is through
 	seen := make(map[int]bool)
 	intr := false
+	// the pending links are tried again at next, retry after the try before,
+	// and a receive waits for link messages until then at most
+	retry, next := attachRetryMin, time.Time{}
 	for {
+		var wait time.Duration
+		switch {
+		case len(p.Pending()) == 0:
+			retry, next = attachRetryMin, time.Time{}
+		case next.IsZero():
+			next, wait = time.Now().Add(retry), retry
+		default:
+			if wait = time.Until(next); wait < time.Millisecond {
+				p.attachPending(notify)
+				retry, next = min(2*retry, attachRetryMax), time.Time{}
+				continue
+			}
+		}
+		// a zero timeout lets a receive wait as long as it takes
+		timeout := unix.NsecToTimeval(wait.Nanoseconds())
+		if err := s.SetReceiveTimeout(&timeout); err != nil {
+			return synced, fmt.Errorf("set link update timeout: %w", err)
+		}
 		msgs, from, err := s.Receive()
+		if errors.Is(err, unix.EAGAIN) && ctx.Err() == nil {
+			// the wait for the next try is over
+			continue
+		}
 		if err != nil {
 			return synced, fmt.Errorf("receive link updates: %w", err)
 		}
@@ -239,32 +280,55 @@ func (p *Probe) handleLink(typ uint16, attrs *netlink.LinkAttrs, match func(stri
 			p.skip(attrs.Name, attrs.Index, err)
 			return
 		}
-		attached, err := p.attach(attrs.Index, attrs.Name)
-		if errors.Is(err, unix.ENODEV) {
-			// the link went away before the attach, its delete message
-			// follows
-			log.Warn("attach interface", "interface", attrs.Name, "err", err)
-			return
-		}
-		if err != nil {
-			log.Error("attach interface", "interface", attrs.Name, "err", err)
-			return
-		}
-		if attached {
-			notify(LinkEvent{Name: attrs.Name, Ifindex: attrs.Index, Attached: true})
-		}
+		p.attachLink(attrs.Index, attrs.Name, notify)
 	case unix.RTM_DELLINK:
-		p.unskip(attrs.Index)
 		p.forget(attrs.Index, notify)
 	}
 }
 
+// attachLink attaches a matching link, a link whose attach fails for another
+// reason than its removal stays pending for the next try
+func (p *Probe) attachLink(ifindex int, name string, notify func(LinkEvent)) {
+	attached, err := p.attach(ifindex, name)
+	if errors.Is(err, unix.ENODEV) {
+		// the link went away before the attach, its delete message follows
+		log.Warn("attach interface", "interface", name, "err", err)
+		return
+	}
+	if err != nil {
+		log.Error("attach interface", "interface", name, "err", err)
+		p.mu.Lock()
+		p.pending[ifindex] = name
+		p.watchState.AttachErrors++
+		p.mu.Unlock()
+		return
+	}
+	if attached {
+		notify(LinkEvent{Name: name, Ifindex: ifindex, Attached: true})
+	}
+}
+
+// attachPending tries again to attach every pending link
+func (p *Probe) attachPending(notify func(LinkEvent)) {
+	p.mu.Lock()
+	pending := maps.Clone(p.pending)
+	p.mu.Unlock()
+	for ifindex, name := range pending {
+		p.attachLink(ifindex, name, notify)
+	}
+}
+
 // reconcile detaches every attached interface the dump did not show, and
-// forgets the skipped links that are gone
+// forgets the pending and skipped links that are gone
 func (p *Probe) reconcile(seen map[int]bool, notify func(LinkEvent)) {
 	p.mu.Lock()
 	var gone []int
 	for ifindex := range p.links {
+		if !seen[ifindex] {
+			gone = append(gone, ifindex)
+		}
+	}
+	for ifindex := range p.pending {
 		if !seen[ifindex] {
 			gone = append(gone, ifindex)
 		}
@@ -283,8 +347,13 @@ func (p *Probe) reconcile(seen map[int]bool, notify func(LinkEvent)) {
 
 // forget detaches an interface that is gone and drops its counters, which a
 // pinned map from an earlier run can hold even when this run never attached
-// the interface
+// the interface, and forgets that the link was pending or skipped, its index
+// may come back with another link
 func (p *Probe) forget(ifindex int, notify func(LinkEvent)) {
+	p.mu.Lock()
+	delete(p.pending, ifindex)
+	delete(p.skipped, ifindex)
+	p.mu.Unlock()
 	name, detached, err := p.detach(ifindex)
 	if !detached {
 		err = p.clearIfaceStats(ifindex)
@@ -308,13 +377,6 @@ func (p *Probe) skip(name string, ifindex int, reason error) {
 	}
 }
 
-// unskip forgets a skipped link once it is gone, its index may come back
-func (p *Probe) unskip(ifindex int) {
-	p.mu.Lock()
-	delete(p.skipped, ifindex)
-	p.mu.Unlock()
-}
-
 // watchError counts and logs a link message the watcher dropped
 func (p *Probe) watchError(err error) {
 	log.Warn("link message dropped", "err", err)
@@ -322,6 +384,14 @@ func (p *Probe) watchError(err error) {
 		st.Errors++
 		st.LastError = err.Error()
 	})
+}
+
+// Pending lists the matching links whose attach failed, Watch tries them
+// again until they are attached or gone
+func (p *Probe) Pending() []int {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return slices.Collect(maps.Keys(p.pending))
 }
 
 // WatchState returns what the interface watcher reports about itself

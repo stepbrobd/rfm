@@ -11,6 +11,7 @@ import (
 	"net"
 	"os"
 	"runtime"
+	"slices"
 	"strings"
 	"structs"
 	"syscall"
@@ -1954,5 +1955,133 @@ func TestWatchClearsCountersOfDeletedLinks(t *testing.T) {
 	w.expect(t, true, "rfmw0", "rfmw1")
 	if packets, _ := ifaceStats(t, p, key); packets != 0 {
 		t.Fatalf("counters of a deleted link survived: %d packets", packets)
+	}
+}
+
+// passProgram builds a sched_cls program that hands every packet on, a tcx
+// hook takes every program once
+func passProgram(t *testing.T) *ebpf.Program {
+	t.Helper()
+
+	prog, err := ebpf.NewProgram(&ebpf.ProgramSpec{
+		Type: ebpf.SchedCLS,
+		Instructions: asm.Instructions{
+			asm.Mov.Imm(asm.R0, -1),
+			asm.Return(),
+		},
+		License: "MIT",
+	})
+	if err != nil {
+		skipIfUnsupported(t, err)
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { prog.Close() })
+	return prog
+}
+
+// fillIngress attaches programs to the tcx ingress hook of ifindex until it
+// takes no more and returns their links
+func fillIngress(t *testing.T, ifindex int) []link.Link {
+	t.Helper()
+
+	var links []link.Link
+	for {
+		l, err := link.AttachTCX(link.TCXOptions{
+			Interface: ifindex,
+			Program:   passProgram(t),
+			Attach:    ebpf.AttachTCXIngress,
+		})
+		if errors.Is(err, unix.ERANGE) {
+			return links
+		}
+		if err != nil {
+			skipIfUnsupported(t, err)
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { l.Close() })
+		links = append(links, l)
+	}
+}
+
+func TestWatchRetriesAFailedAttach(t *testing.T) {
+	testutil.RequireRoot(t)
+
+	ns := testutil.NewNS(t)
+
+	p, err := Load(Config{})
+	if err != nil {
+		skipIfUnsupported(t, err)
+		t.Fatal(err)
+	}
+	defer p.Close()
+
+	// full ingress hooks refuse the attach of links that are there, the
+	// counters a pinned map holds for them must outlive the first dump
+	addVeth(t, "rfmw0", "zzp0")
+	gone := addVeth(t, "rfmw1", "zzp1")
+	ifindex, goneIndex := ifindexOf(t, "rfmw0"), ifindexOf(t, "rfmw1")
+	fillers := fillIngress(t, ifindex)
+	fillIngress(t, goneIndex)
+	key := rfmRfmIfaceKey{Ifindex: uint32(ifindex), Dir: 0, Proto: 4}
+	goneKey := rfmRfmIfaceKey{Ifindex: uint32(goneIndex), Dir: 0, Proto: 4}
+	putIfaceStats(t, p, key, 5)
+	putIfaceStats(t, p, goneKey, 5)
+
+	w := startWatch(t, p, ns, "rfmw", nil)
+	testutil.Eventually(t, time.Second, 10*time.Millisecond, func() error {
+		if st := p.WatchState(); !st.Synced || st.AttachErrors < 2 {
+			return fmt.Errorf("watch state = %+v, want both failed attaches counted by the first dump", st)
+		}
+		return nil
+	})
+	if got := p.Pending(); len(got) != 2 || !slices.Contains(got, ifindex) || !slices.Contains(got, goneIndex) {
+		t.Fatalf("pending = %v, want %d and %d", got, ifindex, goneIndex)
+	}
+	for _, k := range []rfmRfmIfaceKey{key, goneKey} {
+		if packets, _ := ifaceStats(t, p, k); packets != 5 {
+			t.Fatalf("counters of ifindex %d waiting for its attach = %d packets, want the 5 pinned", k.Ifindex, packets)
+		}
+	}
+
+	// a pending link that goes is forgotten with its counters
+	if err := netlink.LinkDel(gone); err != nil {
+		t.Fatal(err)
+	}
+	testutil.Eventually(t, time.Second, 10*time.Millisecond, func() error {
+		if got := p.Pending(); len(got) != 1 || got[0] != ifindex {
+			return fmt.Errorf("pending = %v, want [%d]", got, ifindex)
+		}
+		if packets, _ := ifaceStats(t, p, goneKey); packets != 0 {
+			return fmt.Errorf("counters of a deleted pending link = %d packets, want none", packets)
+		}
+		return nil
+	})
+
+	// no message about the link comes, a timer tries it again and counts
+	// every try that fails
+	testutil.Eventually(t, 5*time.Second, 10*time.Millisecond, func() error {
+		if st := p.WatchState(); st.AttachErrors < 3 {
+			return fmt.Errorf("watch state = %+v, want a failed try after the dump", st)
+		}
+		return nil
+	})
+
+	// a later try attaches it once the hook has room, however far the pause
+	// between tries has grown
+	if err := fillers[0].Close(); err != nil {
+		t.Fatal(err)
+	}
+	testutil.Eventually(t, 10*time.Second, 10*time.Millisecond, func() error {
+		if !attachedSet(p)[ifindex] {
+			return fmt.Errorf("rfmw0 not attached")
+		}
+		return nil
+	})
+	w.expect(t, true, "rfmw0")
+	if got := p.Pending(); len(got) != 0 {
+		t.Fatalf("pending after the attach = %v, want none", got)
+	}
+	if packets, _ := ifaceStats(t, p, key); packets < 5 {
+		t.Fatalf("counters after the attach = %d packets, want at least the 5 pinned", packets)
 	}
 }
