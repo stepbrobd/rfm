@@ -5,6 +5,8 @@ import (
 	"net"
 	"os"
 	"regexp"
+	"regexp/syntax"
+	"slices"
 	"strconv"
 	"time"
 
@@ -374,6 +376,42 @@ func InterfaceMatcher(patterns []string) (func(string) bool, error) {
 		}
 		return false
 	}, nil
+}
+
+// GlobPatterns returns the patterns where * or ? repeats a single literal
+// character, which reads as a shell glob, as a regular expression "ranet*"
+// matches rane, ranet and ranettt but not ranet0
+func GlobPatterns(patterns []string) []string {
+	var globs []string
+	for _, p := range patterns {
+		re, err := syntax.Parse(p, syntax.Perl)
+		if err == nil && repeatsLiteral(re) {
+			globs = append(globs, p)
+		}
+	}
+	return globs
+}
+
+func repeatsLiteral(re *syntax.Regexp) bool {
+	if re.Op == syntax.OpStar || re.Op == syntax.OpQuest {
+		if sub := re.Sub[0]; sub.Op == syntax.OpLiteral && len(sub.Rune) == 1 {
+			return true
+		}
+	}
+	return slices.ContainsFunc(re.Sub, repeatsLiteral)
+}
+
+// UnmatchedPatterns returns the patterns that match none of names, a
+// pattern that does not compile matches nothing
+func UnmatchedPatterns(patterns, names []string) []string {
+	var unmatched []string
+	for _, p := range patterns {
+		match, err := InterfaceMatcher([]string{p})
+		if err != nil || !slices.ContainsFunc(names, match) {
+			unmatched = append(unmatched, p)
+		}
+	}
+	return unmatched
 }
 
 func compileInterfacePatterns(patterns []string) ([]*regexp.Regexp, error) {

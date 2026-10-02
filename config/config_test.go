@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -917,6 +918,24 @@ func TestResolveDedupAcrossPatterns(t *testing.T) {
 		if count > 1 {
 			t.Fatalf("interface index %d returned %d times", idx, count)
 		}
+	}
+}
+
+func TestGlobPatterns(t *testing.T) {
+	patterns := []string{"eth0", "ranet*", "ranet.*", `eth\d*`, "eth[0-9]*", "wg?", "br-*", "(eth|ens)[0-9]+", "ra(net)*", "["}
+	want := []string{"ranet*", "wg?", "br-*"}
+	if got := GlobPatterns(patterns); !slices.Equal(got, want) {
+		t.Fatalf("GlobPatterns = %q, want %q", got, want)
+	}
+}
+
+func TestUnmatchedPatterns(t *testing.T) {
+	names := []string{"lo", "eth0", "ranet0a1b2"}
+	// ranet* is the regex rane followed by any number of t
+	patterns := []string{"eth0", "ranet*", "ranet.*", "wg[0-9]+", "["}
+	want := []string{"ranet*", "wg[0-9]+", "["}
+	if got := UnmatchedPatterns(patterns, names); !slices.Equal(got, want) {
+		t.Fatalf("UnmatchedPatterns = %q, want %q", got, want)
 	}
 }
 
