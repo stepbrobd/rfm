@@ -110,15 +110,40 @@ type RollupKey struct {
 	Dst     Labels
 }
 
-// RollupCounters accumulate every event recorded under one RollupKey
-// unlike FlowEntry they never reset when flows are evicted, so they export
-// as monotonic counters that rate() and increase() can consume
-type RollupCounters struct {
+// Counts are sampled packets and wire bytes with their estimates, every event
+// scaled by the sample rate in force when it was sampled
+type Counts struct {
 	Packets    uint64
 	Bytes      uint64
 	EstPackets uint64
 	EstBytes   uint64
-	LastSeen   time.Time
+}
+
+func (c *Counts) add(o Counts) {
+	c.Packets += o.Packets
+	c.Bytes += o.Bytes
+	c.EstPackets += o.EstPackets
+	c.EstBytes += o.EstBytes
+}
+
+func (c *Counts) sub(o Counts) {
+	c.Packets -= o.Packets
+	c.Bytes -= o.Bytes
+	c.EstPackets -= o.EstPackets
+	c.EstBytes -= o.EstBytes
+}
+
+// counts returns the entry's counters without the IP bytes
+func (e FlowEntry) counts() Counts {
+	return Counts{Packets: e.Packets, Bytes: e.Bytes, EstPackets: e.EstPackets, EstBytes: e.EstBytes}
+}
+
+// RollupCounters accumulate every event recorded under one RollupKey
+// unlike FlowEntry they never reset when flows are evicted, so they export
+// as monotonic counters that rate() and increase() can consume
+type RollupCounters struct {
+	Counts
+	LastSeen time.Time
 }
 
 // SamplingProbability is the share of wire packets this entry saw, 1 when

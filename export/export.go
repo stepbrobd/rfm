@@ -173,7 +173,7 @@ var (
 )
 
 // MetricsCollector implements prometheus.Collector, reading BPF iface
-// stats and the collector's flow table at scrape time
+// stats and the collector's label tuples at scrape time
 type MetricsCollector struct {
 	source        IfaceStatsSource
 	col           *collector.Collector
@@ -182,6 +182,13 @@ type MetricsCollector struct {
 	bpfMapErr     uint64
 	ifnames       map[uint32]string
 	resolveIfname func(uint32) string
+
+	// rollupMu serializes the flow series part of overlapping scrapes, it
+	// guards the sample buffer and the label cache
+	rollupMu sync.Mutex
+	samples  []collector.RollupSample
+	labels   map[uint64]*tupleLabels
+	gen      uint64
 }
 
 // SetIPFIX makes scrapes report the exporter counters behind stats
@@ -219,7 +226,6 @@ func (mc *MetricsCollector) Collect(ch chan<- prometheus.Metric) {
 	mc.mu.Unlock()
 
 	mc.collectIfaceStats(ch)
-	mc.collectFlows(ch)
 	mc.collectRollups(ch)
 	if mc.source != nil {
 		ch <- prometheus.MustNewConstMetric(descSampleRate, prometheus.GaugeValue, float64(mc.sampleRate()))
@@ -297,106 +303,6 @@ func (mc *MetricsCollector) collectIfaceStats(ch chan<- prometheus.Metric) {
 			ch <- prometheus.MustNewConstMetric(descIfaceTxBytes, prometheus.CounterValue, float64(e.Bytes), ifname, family)
 			ch <- prometheus.MustNewConstMetric(descIfaceTxPackets, prometheus.CounterValue, float64(e.Packets), ifname, family)
 		}
-	}
-}
-
-// flowRollupKey is the label tuple used to aggregate flows for Prometheus
-// multiple flows with different ports but the same enrichment labels
-// are summed into one series
-type flowRollupKey struct {
-	ifname  string
-	dir     string
-	proto   string
-	srcASN  string
-	dstASN  string
-	srcCity string
-	dstCity string
-}
-
-type flowRollupValue struct {
-	sampledBytes   uint64
-	sampledPackets uint64
-	estBytes       uint64
-	estPackets     uint64
-}
-
-func (mc *MetricsCollector) collectFlows(ch chan<- prometheus.Metric) {
-	if mc.col == nil {
-		return
-	}
-
-	flows := mc.col.Flows()
-
-	// aggregate by exported label tuple to avoid duplicate series, the
-	// labels were resolved when each flow was created
-	rollups := make(map[flowRollupKey]*flowRollupValue)
-
-	for key, entry := range flows {
-		rk := mc.rollupKey(key.Ifindex, key.Dir, key.Proto, entry.Src, entry.Dst)
-
-		rv, ok := rollups[rk]
-		if !ok {
-			rv = &flowRollupValue{}
-			rollups[rk] = rv
-		}
-		rv.sampledBytes += entry.Bytes
-		rv.sampledPackets += entry.Packets
-		rv.estBytes += entry.EstBytes
-		rv.estPackets += entry.EstPackets
-	}
-
-	// the estimates were scaled when each event was recorded, with the
-	// sample rate in force at that moment
-	for rk, rv := range rollups {
-		ch <- prometheus.MustNewConstMetric(descFlowBytes, prometheus.GaugeValue,
-			float64(rv.estBytes),
-			rk.ifname, rk.dir, rk.proto, rk.srcASN, rk.dstASN, rk.srcCity, rk.dstCity)
-		ch <- prometheus.MustNewConstMetric(descFlowPackets, prometheus.GaugeValue,
-			float64(rv.estPackets),
-			rk.ifname, rk.dir, rk.proto, rk.srcASN, rk.dstASN, rk.srcCity, rk.dstCity)
-		ch <- prometheus.MustNewConstMetric(descFlowSampledBytes, prometheus.GaugeValue,
-			float64(rv.sampledBytes),
-			rk.ifname, rk.dir, rk.proto, rk.srcASN, rk.dstASN, rk.srcCity, rk.dstCity)
-		ch <- prometheus.MustNewConstMetric(descFlowSampledPackets, prometheus.GaugeValue,
-			float64(rv.sampledPackets),
-			rk.ifname, rk.dir, rk.proto, rk.srcASN, rk.dstASN, rk.srcCity, rk.dstCity)
-	}
-}
-
-func (mc *MetricsCollector) rollupKey(ifindex uint32, dir, proto uint8, src, dst collector.Labels) flowRollupKey {
-	return flowRollupKey{
-		ifname:  mc.ifname(ifindex),
-		dir:     dirString(dir),
-		proto:   strconv.FormatUint(uint64(proto), 10),
-		srcASN:  formatASN(src.ASN),
-		dstASN:  formatASN(dst.ASN),
-		srcCity: src.City,
-		dstCity: dst.City,
-	}
-}
-
-// collectRollups emits the monotonic per label counters, a new tuple shows
-// up at zero first
-func (mc *MetricsCollector) collectRollups(ch chan<- prometheus.Metric) {
-	if mc.col == nil {
-		return
-	}
-
-	for _, r := range mc.col.ScrapeRollups(nil) {
-		key := r.Key
-		rk := mc.rollupKey(key.Ifindex, key.Dir, key.Proto, key.Src, key.Dst)
-		ch <- prometheus.MustNewConstMetric(descFlowBytesTotal, prometheus.CounterValue,
-			float64(r.EstBytes),
-			rk.ifname, rk.dir, rk.proto, rk.srcASN, rk.dstASN, rk.srcCity, rk.dstCity)
-		ch <- prometheus.MustNewConstMetric(descFlowPacketsTotal, prometheus.CounterValue,
-			float64(r.EstPackets),
-			rk.ifname, rk.dir, rk.proto, rk.srcASN, rk.dstASN, rk.srcCity, rk.dstCity)
-		ch <- prometheus.MustNewConstMetric(descFlowSampledBytesTotal, prometheus.CounterValue,
-			float64(r.Bytes),
-			rk.ifname, rk.dir, rk.proto, rk.srcASN, rk.dstASN, rk.srcCity, rk.dstCity)
-		ch <- prometheus.MustNewConstMetric(descFlowSampledPacketsTotal, prometheus.CounterValue,
-			float64(r.Packets),
-			rk.ifname, rk.dir, rk.proto, rk.srcASN, rk.dstASN, rk.srcCity, rk.dstCity)
 	}
 }
 

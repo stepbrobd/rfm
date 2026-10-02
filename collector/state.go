@@ -77,6 +77,12 @@ func (s *flowState) mark(now time.Time) {
 type rollupState struct {
 	RollupCounters
 	key RollupKey
+	// id tells this life of the tuple apart from any other
+	id uint64
+	// live sums the counts of the live flows under the tuple, kept current
+	// as flows are recorded and removed so a scrape reads the gauges here
+	// instead of walking the flow table
+	live Counts
 	// flows counts the live flows that count under the tuple
 	flows int
 	// idle is the position in the collector's idle list while flows is 0
@@ -88,12 +94,10 @@ type rollupState struct {
 	shown bool
 }
 
-// add accounts one event scaled by the rate that sampled it
-func (r *rollupState) add(packets, bytes, rate uint64, now time.Time) {
-	r.Packets += packets
-	r.Bytes += bytes
-	r.EstPackets += packets * rate
-	r.EstBytes += bytes * rate
+// add accounts the counts of one event of a live flow under the tuple
+func (r *rollupState) add(d Counts, now time.Time) {
+	r.Counts.add(d)
+	r.live.add(d)
 	if now.After(r.LastSeen) {
 		r.LastSeen = now
 	}

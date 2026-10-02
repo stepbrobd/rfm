@@ -36,6 +36,7 @@ type Collector struct {
 	// and protocol with empty labels, which never needs room of its own
 	rollups    map[RollupKey]*rollupState
 	maxRollups int
+	rollupIDs  uint64
 	// idleRollups lists the tuples no live flow counts under, longest idle
 	// at the front, the ones retention or a new tuple may drop
 	idleRollups *list.List
@@ -312,15 +313,16 @@ func (c *Collector) recordLocked(ev FlowEvent, now time.Time, labels map[addrPai
 	bytes := uint64(ev.Len)
 	ipBytes := ev.IPBytes()
 	rate := uint64(c.sampleRateAtLocked(ev.Tstamp))
+	d := Counts{Packets: packets, Bytes: bytes, EstPackets: packets * rate, EstBytes: bytes * rate}
 
 	if state, found := c.flows[key]; found {
-		state.entry.Packets += packets
-		state.entry.Bytes += bytes
+		state.entry.Packets += d.Packets
+		state.entry.Bytes += d.Bytes
 		state.entry.IPBytes += ipBytes
-		state.entry.EstPackets += packets * rate
-		state.entry.EstBytes += bytes * rate
+		state.entry.EstPackets += d.EstPackets
+		state.entry.EstBytes += d.EstBytes
 		state.seen(now)
-		state.rollup.add(packets, bytes, rate, now)
+		state.rollup.add(d, now)
 		c.lru.MoveToBack(state.elem)
 		return ExportedFlow{}, false, true
 	}
@@ -342,17 +344,17 @@ func (c *Collector) recordLocked(ev FlowEvent, now time.Time, labels map[addrPai
 
 	rollup := c.rollupLocked(RollupKey{Ifindex: ev.Ifindex, Dir: ev.Dir, Proto: ev.Proto, Src: src, Dst: dst})
 	c.attachLocked(rollup)
-	rollup.add(packets, bytes, rate, now)
+	rollup.add(d, now)
 
 	state := &flowState{
 		key: key,
 		entry: FlowEntry{
 			FirstSeen:  now,
-			Packets:    packets,
-			Bytes:      bytes,
+			Packets:    d.Packets,
+			Bytes:      d.Bytes,
 			IPBytes:    ipBytes,
-			EstPackets: packets * rate,
-			EstBytes:   bytes * rate,
+			EstPackets: d.EstPackets,
+			EstBytes:   d.EstBytes,
 			LastSeen:   now,
 			Src:        src,
 			Dst:        dst,
@@ -391,7 +393,8 @@ func (c *Collector) rollupLocked(rk RollupKey) *rollupState {
 			}
 		}
 	}
-	r := &rollupState{key: rk}
+	c.rollupIDs++
+	r := &rollupState{key: rk, id: c.rollupIDs}
 	c.rollups[rk] = r
 	return r
 }
@@ -406,10 +409,11 @@ func (c *Collector) attachLocked(r *rollupState) {
 	r.flows++
 }
 
-// detachLocked takes a live flow off r, a tuple without live flows becomes
-// a candidate for retention and for making room
+// detachLocked takes a live flow with entry e off r, a tuple without live
+// flows becomes a candidate for retention and for making room
 // it must be called with mu held
-func (c *Collector) detachLocked(r *rollupState) {
+func (c *Collector) detachLocked(r *rollupState, e FlowEntry) {
+	r.live.sub(e.counts())
 	r.flows--
 	if r.flows == 0 {
 		r.idle = c.idleRollups.PushBack(r)
@@ -430,7 +434,7 @@ func (c *Collector) removeLocked(state *flowState) {
 	c.lru.Remove(state.elem)
 	c.activeQueue.Remove(state.active)
 	delete(c.flows, state.key)
-	c.detachLocked(state.rollup)
+	c.detachLocked(state.rollup, state.entry)
 }
 
 // evictOldestLocked removes the flow with the oldest LastSeen
@@ -520,28 +524,32 @@ func (c *Collector) Flows() map[FlowKey]FlowEntry {
 
 // RollupSample is one rollup tuple as a scrape shows it
 type RollupSample struct {
-	Key        RollupKey
-	Packets    uint64
-	Bytes      uint64
-	EstPackets uint64
-	EstBytes   uint64
+	Key RollupKey
+	// ID tells this life of the tuple apart from any other, a tuple that is
+	// dropped and seen again comes back under a new ID
+	ID uint64
+	// Counts are the monotonic counters of the tuple
+	Counts
+	// Flows is the number of live flows under the tuple, Live sums their
+	// counts, the gauges of a tuple without live flows are not exported
+	Flows int
+	Live  Counts
 }
 
-// ScrapeRollups appends the counters of every rollup tuple to buf for a
-// scrape and returns it
-// a tuple no scrape has shown yet is shown at zero and its counts appear from
-// the next scrape on, so every series starts at zero and rate() and
-// increase() count the packets that created it instead of taking its first
-// value for history
+// ScrapeRollups appends every rollup tuple to buf for a scrape and returns it
+// a tuple no scrape has shown yet is shown with its counters at zero and its
+// counts appear from the next scrape on, so every series starts at zero and
+// rate() and increase() count the packets that created it instead of taking
+// its first value for history
+// the lock is held for the copy only, a scrape never walks the flow table
 func (c *Collector) ScrapeRollups(buf []RollupSample) []RollupSample {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
 	for k, r := range c.rollups {
-		s := RollupSample{Key: k}
+		s := RollupSample{Key: k, ID: r.id, Flows: r.flows, Live: r.live}
 		if r.exposed {
-			s.Packets, s.Bytes = r.Packets, r.Bytes
-			s.EstPackets, s.EstBytes = r.EstPackets, r.EstBytes
+			s.Counts = r.Counts
 			r.shown = true
 		}
 		r.exposed = true
@@ -579,7 +587,7 @@ func (c *Collector) Flush(reason uint8) {
 			if state.pending() {
 				expired = append(expired, state.record(reason))
 			}
-			c.detachLocked(state.rollup)
+			c.detachLocked(state.rollup, state.entry)
 		}
 	}
 	c.flows = make(map[FlowKey]*flowState)
