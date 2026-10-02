@@ -299,6 +299,178 @@ func TestHandleConnAppliesBMPRouteMonitoring(t *testing.T) {
 	}
 }
 
+// fakeClock is a time source a test moves by hand
+type fakeClock struct {
+	mu  sync.Mutex
+	now time.Time
+}
+
+func (c *fakeClock) Now() time.Time {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.now
+}
+
+func (c *fakeClock) advance(d time.Duration) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.now = c.now.Add(d)
+}
+
+func TestStaleViewsAgeOut(t *testing.T) {
+	clock := &fakeClock{now: time.Unix(1_790_000_000, 0)}
+	s := &Server{table: NewTable(), staleGrace: time.Minute, clock: clock.Now}
+	present := func(addr string) bool {
+		_, ok := s.Lookup(netip.MustParseAddr(addr))
+		return ok
+	}
+
+	// the first session announces two peers and ends, as when the speaker
+	// crashes, both pipes stand for the same speaker
+	first, done := startSession(t, s)
+	write(t, first, mustBMPWireFrom(t, "198.51.100.0/24", 65002, "192.0.2.2", bmp.BMP_PEER_FLAG_POST_POLICY))
+	write(t, first, mustBMPWireFrom(t, "203.0.113.0/24", 65003, "192.0.2.3", bmp.BMP_PEER_FLAG_POST_POLICY))
+	waitForSummary(t, s, Summary{PrefixesV4: 2, Routes: 2, Peers: 2})
+	_ = first.Close()
+	<-done
+
+	// while the speaker has no session its routes stay, however long
+	clock.advance(time.Hour)
+	s.purgeStale()
+	if !present("198.51.100.7") || !present("203.0.113.7") {
+		t.Fatal("routes went while their speaker had no session")
+	}
+
+	// the speaker comes back and announces only 192.0.2.2 again
+	second, done := startSession(t, s)
+	write(t, second, mustPeerUpWire(t, "192.0.2.2", 0))
+	write(t, second, mustBMPWireFrom(t, "198.51.100.0/24", 65002, "192.0.2.2", bmp.BMP_PEER_FLAG_POST_POLICY))
+	waitForSummary(t, s, Summary{PrefixesV4: 2, Routes: 2, Peers: 2})
+
+	clock.advance(59 * time.Second)
+	s.purgeStale()
+	if !present("203.0.113.7") {
+		t.Fatal("route of 192.0.2.3 went before the grace period ended")
+	}
+
+	// a grace period later the view the speaker did not announce again goes
+	clock.advance(time.Second)
+	s.purgeStale()
+	if present("203.0.113.7") {
+		t.Fatal("route of 192.0.2.3 outlived the grace period of the later session")
+	}
+	if !present("198.51.100.7") {
+		t.Fatal("route the later session announced again went with the stale view")
+	}
+
+	_ = second.Close()
+	<-done
+}
+
+func TestOnlyViewsTheTableHoldsGoStale(t *testing.T) {
+	clock := &fakeClock{now: time.Unix(1_790_000_000, 0)}
+	s := &Server{table: NewTable(), staleGrace: time.Minute, clock: clock.Now}
+	s.table.maxViews = 2
+	withdraw := func(peer *bmp.BMPPeerHeader, prefix string) []byte {
+		nlri := []*bgp.IPAddrPrefix{bgp.NewIPAddrPrefix(prefixBits(t, prefix), prefixAddr(t, prefix))}
+		return mustRouteMonitoringWire(t, peer, bgp.NewBGPUpdateMessage(nlri, nil, nil))
+	}
+
+	first, done := startSession(t, s)
+	write(t, first, mustBMPWireFrom(t, "198.51.100.0/24", 65002, "192.0.2.2", 0))
+	write(t, first, mustBMPWireFrom(t, "203.0.113.0/24", 65004, "192.0.2.4", 0))
+	// an End-of-RIB marker and a withdraw of a prefix no view holds change
+	// nothing, and the table turns away the routes of views past its limit
+	for i := range 100 {
+		peer := bmp.NewBMPPeerHeader(bmp.BMP_PEER_TYPE_GLOBAL, 0, uint64(i+1), "192.0.2.3", 65003, "192.0.2.3", 0)
+		write(t, first, mustRouteMonitoringWire(t, peer, bgp.NewBGPUpdateMessage(nil, nil, nil)))
+		write(t, first, withdraw(peer, "192.0.2.0/24"))
+		write(t, first, mustBMPWireFrom(t, "192.0.2.0/24", 65005, fmt.Sprintf("10.0.0.%d", i+1), 0))
+	}
+	// and a withdraw that empties a view leaves nothing to age out
+	write(t, first, withdraw(bmp.NewBMPPeerHeader(bmp.BMP_PEER_TYPE_GLOBAL, 0, 0, "192.0.2.4", 65004, "192.0.2.4", 0), "203.0.113.0/24"))
+	_ = first.Close()
+	<-done
+
+	// the ended session leaves only the view the table holds to age out,
+	// and its emptied map of owners goes
+	s.viewsMu.Lock()
+	stale, owners := len(s.stale), s.owners
+	s.viewsMu.Unlock()
+	if stale != 1 || owners != nil {
+		t.Fatalf("stale views = %d and owners = %v, want 1 view and no map", stale, owners)
+	}
+
+	// a later session of the speaker ages it out, and the emptied map of
+	// stale views goes with it
+	second, done := startSession(t, s)
+	write(t, second, mustBMPWireFrom(t, "203.0.113.0/24", 65006, "192.0.2.6", 0))
+	waitForSummary(t, s, Summary{PrefixesV4: 2, Routes: 2, Peers: 2})
+	clock.advance(time.Minute)
+	s.purgeStale()
+	s.viewsMu.Lock()
+	staleViews := s.stale
+	s.viewsMu.Unlock()
+	if got := s.table.Summary(); staleViews != nil || got != (Summary{PrefixesV4: 1, Routes: 1, Peers: 1}) {
+		t.Fatalf("stale views = %v and table = %+v after the grace period, want no map and the route of the later session", staleViews, got)
+	}
+	_ = second.Close()
+	<-done
+}
+
+// mustRouteMonitoringWire serializes a route monitoring message that
+// carries update under the per peer header peer
+func mustRouteMonitoringWire(t *testing.T, peer *bmp.BMPPeerHeader, update *bgp.BGPMessage) []byte {
+	t.Helper()
+
+	wire, err := bmp.NewBMPRouteMonitoring(*peer, update).Serialize()
+	if err != nil {
+		t.Fatalf("Serialize: %v", err)
+	}
+	return wire
+}
+
+func TestStaleViewsOfALateEndedSession(t *testing.T) {
+	clock := &fakeClock{now: time.Unix(1_790_000_000, 0)}
+	s := &Server{table: NewTable(), staleGrace: time.Minute, clock: clock.Now}
+	present := func(addr string) bool {
+		_, ok := s.Lookup(netip.MustParseAddr(addr))
+		return ok
+	}
+
+	old, oldDone := startSession(t, s)
+	write(t, old, mustBMPWireFrom(t, "198.51.100.0/24", 65002, "192.0.2.2", bmp.BMP_PEER_FLAG_POST_POLICY))
+	write(t, old, mustBMPWireFrom(t, "203.0.113.0/24", 65003, "192.0.2.3", bmp.BMP_PEER_FLAG_POST_POLICY))
+	waitForSummary(t, s, Summary{PrefixesV4: 2, Routes: 2, Peers: 2})
+
+	// the speaker restarted and its new session announces 192.0.2.2 again
+	// before the old session is found dead
+	clock.advance(time.Minute)
+	fresh, freshDone := startSession(t, s)
+	write(t, fresh, mustPeerUpWire(t, "192.0.2.2", 0))
+	write(t, fresh, mustBMPWireFrom(t, "198.51.100.0/24", 65002, "192.0.2.2", bmp.BMP_PEER_FLAG_POST_POLICY))
+	waitForSummary(t, s, Summary{PrefixesV4: 2, Routes: 2, Peers: 2})
+	clock.advance(time.Minute)
+	_ = old.Close()
+	<-oldDone
+
+	// the view of 192.0.2.3 went stale only now, it gets a full grace period
+	clock.advance(59 * time.Second)
+	s.purgeStale()
+	if !present("203.0.113.7") {
+		t.Fatal("route of 192.0.2.3 went before the grace period ended")
+	}
+	clock.advance(time.Second)
+	s.purgeStale()
+	if present("203.0.113.7") || !present("198.51.100.7") {
+		t.Fatalf("after the grace period 203.0.113.7 present=%v and 198.51.100.7 present=%v, want false and true",
+			present("203.0.113.7"), present("198.51.100.7"))
+	}
+
+	_ = fresh.Close()
+	<-freshDone
+}
+
 func TestHandleConnPeerUpReplacesPeer(t *testing.T) {
 	serverConn, clientConn := net.Pipe()
 	defer clientConn.Close()

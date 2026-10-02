@@ -44,6 +44,15 @@ const (
 	// of about 1.25M prefixes fit, and maxViews bounds the views
 	maxRoutes = 1 << 23
 	maxViews  = 1024
+	// staleGrace is how long an open session of the same speaker, a later
+	// one or one already open, has to announce a view again before the
+	// routes an ended session left in it go, counted from when the view went
+	// stale or the session opened, whichever is later, over twice the 120 s
+	// ConnectRetryTime RFC 4271 suggests, so a peer that the restarted
+	// speaker connects to again is back in time, and staleSweep is how often
+	// the server looks
+	staleGrace = 5 * time.Minute
+	staleSweep = time.Minute
 )
 
 // LargeCommunity is a decoded RFC 8092 large community
@@ -354,6 +363,14 @@ func (t *Table) Peers() []Peer {
 	return out
 }
 
+// holds reports whether the table holds a route of peer
+func (t *Table) holds(peer Peer) bool {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+
+	return t.views[peer] != nil
+}
+
 // Server owns a BMP listener and an in-memory RIB
 type Server struct {
 	listener net.Listener
@@ -373,6 +390,185 @@ type Server struct {
 	limitLogged      time.Time
 	parseErrors      atomic.Uint64
 	sessionsRejected atomic.Uint64
+
+	// viewsMu guards what ages out the views of ended sessions, and holds
+	// off sessions while a stale view goes so none announces it meanwhile
+	// sessions are the open sessions, owners the open session that last
+	// announced each view, and stale the views whose session ended
+	// owners and stale hold only views the table holds, which keeps them
+	// within maxViews, and are nil while empty, see release
+	viewsMu  sync.Mutex
+	sessions map[*session]struct{}
+	owners   map[Peer]*session
+	stale    map[Peer]staleView
+	// staleGrace overrides the default grace period and clock the time
+	// source, for tests
+	staleGrace time.Duration
+	clock      func() time.Time
+}
+
+// session is one BMP connection, its speaker is the remote address, which
+// a restarted speaker connects from again
+type session struct {
+	speaker netip.Addr
+	opened  time.Time
+}
+
+// staleView is a view whose announcing session ended at since
+type staleView struct {
+	speaker netip.Addr
+	since   time.Time
+}
+
+func (s *Server) now() time.Time {
+	if s.clock != nil {
+		return s.clock()
+	}
+	return time.Now()
+}
+
+func (s *Server) grace() time.Duration {
+	if s.staleGrace > 0 {
+		return s.staleGrace
+	}
+	return staleGrace
+}
+
+// sessionOpened registers a session of the speaker conn connects from
+func (s *Server) sessionOpened(conn net.Conn) *session {
+	sess := &session{opened: s.now()}
+	if addr, ok := conn.RemoteAddr().(*net.TCPAddr); ok {
+		sess.speaker = addr.AddrPort().Addr().Unmap()
+	}
+
+	s.viewsMu.Lock()
+	defer s.viewsMu.Unlock()
+
+	if s.sessions == nil {
+		s.sessions = make(map[*session]struct{})
+	}
+	s.sessions[sess] = struct{}{}
+	return sess
+}
+
+// apply applies update and, while the table holds its view, records that
+// sess announces the view, which makes it current again
+// a view the update emptied or the table turned away has nothing to age
+// out, and an update without routes, such as an End-of-RIB marker, changes
+// nothing, the update runs under viewsMu so purgeStale cannot remove the
+// view between the update and the record
+func (s *Server) apply(sess *session, update Update) {
+	if len(update.Reach) == 0 && len(update.Withdraw) == 0 {
+		return
+	}
+
+	s.viewsMu.Lock()
+	defer s.viewsMu.Unlock()
+
+	s.table.Apply(update)
+	view := update.Peer
+	if s.table.holds(view) {
+		if s.owners == nil {
+			s.owners = make(map[Peer]*session)
+		}
+		s.owners[view] = sess
+	} else {
+		delete(s.owners, view)
+		s.owners = release(s.owners)
+	}
+	delete(s.stale, view)
+	s.stale = release(s.stale)
+}
+
+// release returns nil for an empty map, since a map keeps the room of the
+// most entries it held, and a nil map reads and deletes as an empty one
+func release[V any](m map[Peer]V) map[Peer]V {
+	if len(m) == 0 {
+		return nil
+	}
+	return m
+}
+
+// peerChanged withdraws both views of peer on peer up and peer down, after
+// a peer up the speaker announces them again, so neither ages out
+func (s *Server) peerChanged(peer Peer) {
+	s.viewsMu.Lock()
+	defer s.viewsMu.Unlock()
+
+	s.table.RemovePeerViews(peer)
+	for _, post := range []bool{false, true} {
+		peer.PostPolicy = post
+		delete(s.owners, peer)
+		delete(s.stale, peer)
+	}
+	s.owners, s.stale = release(s.owners), release(s.stale)
+}
+
+// sessionEnded marks the views sess announced last as stale from now
+func (s *Server) sessionEnded(sess *session) {
+	now := s.now()
+
+	s.viewsMu.Lock()
+	defer s.viewsMu.Unlock()
+
+	delete(s.sessions, sess)
+	for view, owner := range s.owners {
+		if owner == sess {
+			delete(s.owners, view)
+			if s.stale == nil {
+				s.stale = make(map[Peer]staleView)
+			}
+			s.stale[view] = staleView{speaker: sess.speaker, since: now}
+		}
+	}
+	s.owners = release(s.owners)
+}
+
+// purgeStale withdraws a stale view once a session of its speaker has been
+// open for the grace period after the view went stale without announcing
+// it again, the speaker sends every peer it still has right after it
+// connects, so the view belongs to a peer the speaker lost
+// a speaker without a session keeps its views, so a restart leaves
+// enrichment in place until the speaker is back
+func (s *Server) purgeStale() {
+	now := s.now()
+	grace := s.grace()
+
+	s.viewsMu.Lock()
+	defer s.viewsMu.Unlock()
+
+	for view, st := range s.stale {
+		for sess := range s.sessions {
+			start := st.since
+			if sess.opened.After(start) {
+				start = sess.opened
+			}
+			if sess.speaker != st.speaker || now.Before(start.Add(grace)) {
+				continue
+			}
+			s.table.RemovePeer(view)
+			delete(s.stale, view)
+			log.Info("bmp view aged out", "speaker", st.speaker, "peer", view.Address, "post_policy", view.PostPolicy)
+			break
+		}
+	}
+	s.stale = release(s.stale)
+}
+
+// sweep runs purgeStale until the server closes
+func (s *Server) sweep() {
+	defer s.wg.Done()
+
+	tick := time.NewTicker(staleSweep)
+	defer tick.Stop()
+	for {
+		select {
+		case <-s.done:
+			return
+		case <-tick.C:
+			s.purgeStale()
+		}
+	}
 }
 
 func newServer(ln net.Listener) *Server {
@@ -435,8 +631,9 @@ func Listen(cfg config.RIBConfig) (collector.Enricher, io.Closer, error) {
 	}
 
 	s := newServer(ln)
-	s.wg.Add(1)
+	s.wg.Add(2)
 	go s.accept()
+	go s.sweep()
 
 	return s, s, nil
 }
@@ -538,9 +735,12 @@ func (s *Server) accept() {
 // a peer down message withdraws that peer, and a peer up message withdraws
 // what an earlier session announced for the peer, because the speaker dumps
 // the peer's table again right after it, routes survive the end of a session
-// so a speaker restart leaves enrichment in place until the next dump
+// so a speaker restart leaves enrichment in place until the next dump, and
+// purgeStale drops the views the next session does not announce again
 func (s *Server) handleConn(conn net.Conn) {
 	log.Info("bmp session opened", "remote", conn.RemoteAddr())
+	sess := s.sessionOpened(conn)
+	defer s.sessionEnded(sess)
 
 	// the scanner starts small and doubles its buffer up to the largest
 	// message the session sends, an idle session holds 4 KiB
@@ -608,7 +808,7 @@ func (s *Server) handleConn(conn net.Conn) {
 		switch msg.Header.Type {
 		case bmp.BMP_MSG_PEER_UP_NOTIFICATION:
 			peer := peerFromHeader(msg.PeerHeader)
-			s.table.RemovePeerViews(peer)
+			s.peerChanged(peer)
 			peer.PostPolicy = false
 			delete(addPath, peer)
 			var opts []*bgp.MarshallingOption
@@ -629,7 +829,7 @@ func (s *Server) handleConn(conn net.Conn) {
 			continue
 		case bmp.BMP_MSG_PEER_DOWN_NOTIFICATION:
 			peer := peerFromHeader(msg.PeerHeader)
-			s.table.RemovePeerViews(peer)
+			s.peerChanged(peer)
 			for _, post := range []bool{false, true} {
 				peer.PostPolicy = post
 				delete(peers, peer)
@@ -678,7 +878,7 @@ func (s *Server) handleConn(conn net.Conn) {
 		}
 
 		changes += len(update.Reach) + len(update.Withdraw)
-		s.table.Apply(update)
+		s.apply(sess, update)
 	}
 
 	err := scanner.Err()
