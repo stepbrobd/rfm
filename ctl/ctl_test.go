@@ -3,9 +3,12 @@ package ctl
 import (
 	"context"
 	"errors"
+	"net"
 	"net/netip"
+	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -82,16 +85,25 @@ func startServer(t *testing.T, h Handler) *Client {
 	if err != nil {
 		t.Fatal(err)
 	}
+	serve(t, srv)
+	return &Client{Socket: sock}
+}
+
+// serve runs srv until stop is called or the test ends
+func serve(t *testing.T, srv *Server) (stop func()) {
+	t.Helper()
+
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
 	go func() { done <- srv.Serve(ctx) }()
-	t.Cleanup(func() {
+	stop = sync.OnceFunc(func() {
 		cancel()
 		if err := <-done; !errors.Is(err, context.Canceled) {
 			t.Errorf("Serve returned %v", err)
 		}
 	})
-	return &Client{Socket: sock}
+	t.Cleanup(stop)
+	return stop
 }
 
 func TestRoundTrip(t *testing.T) {
@@ -180,18 +192,91 @@ func TestBadRequests(t *testing.T) {
 
 func TestListenReplacesStaleSocket(t *testing.T) {
 	sock := filepath.Join(t.TempDir(), "rfm.sock")
-	first, err := Listen(sock, &fakeHandler{})
+	// an agent that died leaves its socket file behind
+	ln, err := net.ListenUnix("unix", &net.UnixAddr{Name: sock, Net: "unix"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	// an agent that died leaves the socket file behind
-	first.listener.Close()
+	ln.SetUnlinkOnClose(false)
+	ln.Close()
 
-	second, err := Listen(sock, &fakeHandler{})
+	srv, err := Listen(sock, &fakeHandler{rate: 10})
 	if err != nil {
 		t.Fatalf("Listen over a stale socket: %v", err)
 	}
-	second.listener.Close()
+	serve(t, srv)
+	if _, err := (&Client{Socket: sock}).Status(); err != nil {
+		t.Fatalf("status over the replaced socket: %v", err)
+	}
+}
+
+func TestListenRefusesLiveSocket(t *testing.T) {
+	c := startServer(t, &fakeHandler{rate: 10})
+
+	if srv, err := Listen(c.Socket, &fakeHandler{rate: 20}); err == nil {
+		srv.listener.Close()
+		t.Fatal("Listen took over the socket of a running agent")
+	} else if !strings.Contains(err.Error(), "in use") {
+		t.Fatalf("Listen error = %v, want the socket reported in use", err)
+	}
+	st, err := c.Status()
+	if err != nil || st.Sampling.Rate != 10 {
+		t.Fatalf("status = %+v err=%v, want the running agent", st, err)
+	}
+}
+
+func TestListenKeepsNonSocketFile(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "rfm.sock")
+	if err := os.WriteFile(path, []byte("keep"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	if srv, err := Listen(path, &fakeHandler{}); err == nil {
+		srv.listener.Close()
+		t.Fatal("Listen replaced a regular file")
+	}
+	if data, err := os.ReadFile(path); err != nil || string(data) != "keep" {
+		t.Fatalf("file after Listen = %q err=%v, want it untouched", data, err)
+	}
+}
+
+func TestServeRemovesItsSocket(t *testing.T) {
+	sock := filepath.Join(t.TempDir(), "rfm.sock")
+	srv, err := Listen(sock, &fakeHandler{})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	stop := serve(t, srv)
+	stop()
+	if _, err := os.Lstat(sock); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("socket after Serve stopped: %v, want it removed", err)
+	}
+}
+
+func TestServeKeepsReplacedSocket(t *testing.T) {
+	sock := filepath.Join(t.TempDir(), "rfm.sock")
+	first, err := Listen(sock, &fakeHandler{rate: 10})
+	if err != nil {
+		t.Fatal(err)
+	}
+	stopFirst := serve(t, first)
+
+	// the path is taken over by another agent while the first one runs
+	if err := os.Remove(sock); err != nil {
+		t.Fatal(err)
+	}
+	second, err := Listen(sock, &fakeHandler{rate: 20})
+	if err != nil {
+		t.Fatal(err)
+	}
+	serve(t, second)
+
+	stopFirst()
+	st, err := (&Client{Socket: sock}).Status()
+	if err != nil || st.Sampling.Rate != 20 {
+		t.Fatalf("status after the first agent stopped = %+v err=%v, want the second agent", st, err)
+	}
 }
 
 func TestClientWithoutAgent(t *testing.T) {

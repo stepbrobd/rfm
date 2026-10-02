@@ -11,6 +11,7 @@ import (
 	"os"
 	"strconv"
 	"sync"
+	"syscall"
 	"time"
 )
 
@@ -22,24 +23,79 @@ const requestTimeout = 5 * time.Second
 type Server struct {
 	handler  Handler
 	listener net.Listener
-	wg       sync.WaitGroup
+	path     string
+	// created is the socket file Listen made, close unlinks the path only
+	// while it still names this file
+	created   os.FileInfo
+	closeOnce sync.Once
+	wg        sync.WaitGroup
 }
 
 // Listen creates the socket at path, replacing a stale one left by an
-// earlier run, the socket is only reachable by the owner
+// earlier run, and refuses a path that is not a socket or that another
+// process still listens on, the socket is only reachable by the owner
 func Listen(path string, handler Handler) (*Server, error) {
-	if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
-		return nil, fmt.Errorf("remove stale control socket %q: %w", path, err)
+	if err := removeStale(path); err != nil {
+		return nil, err
 	}
-	ln, err := net.Listen("unix", path)
+	ln, err := net.ListenUnix("unix", &net.UnixAddr{Name: path, Net: "unix"})
 	if err != nil {
 		return nil, fmt.Errorf("listen control socket %q: %w", path, err)
 	}
-	if err := os.Chmod(path, 0o600); err != nil {
+	ln.SetUnlinkOnClose(false)
+	created, err := os.Lstat(path)
+	if err != nil {
 		ln.Close()
+		return nil, fmt.Errorf("stat control socket %q: %w", path, err)
+	}
+	s := &Server{handler: handler, listener: ln, path: path, created: created}
+	if err := os.Chmod(path, 0o600); err != nil {
+		s.close()
 		return nil, fmt.Errorf("chmod control socket %q: %w", path, err)
 	}
-	return &Server{handler: handler, listener: ln}, nil
+	return s, nil
+}
+
+// removeStale unlinks a socket at path that no process listens on and
+// refuses anything else, the file type is checked before the dial because
+// dialing a regular file fails with ECONNREFUSED as well
+func removeStale(path string) error {
+	fi, err := os.Lstat(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("stat control socket %q: %w", path, err)
+	}
+	if fi.Mode().Type() != os.ModeSocket {
+		return fmt.Errorf("control socket path %q exists and is not a socket", path)
+	}
+	conn, err := net.Dial("unix", path)
+	switch {
+	case err == nil:
+		conn.Close()
+		return fmt.Errorf("control socket %q is in use by another process", path)
+	case errors.Is(err, os.ErrNotExist):
+		return nil
+	case !errors.Is(err, syscall.ECONNREFUSED):
+		return fmt.Errorf("probe control socket %q: %w", path, err)
+	}
+	if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("remove stale control socket %q: %w", path, err)
+	}
+	return nil
+}
+
+// close unlinks the socket file unless another process has put a different
+// file at the path since Listen, the listener closes after the unlink, which
+// means the file is gone once Serve sees the listener closed
+func (s *Server) close() {
+	s.closeOnce.Do(func() {
+		if fi, err := os.Lstat(s.path); err == nil && os.SameFile(fi, s.created) {
+			_ = os.Remove(s.path)
+		}
+		s.listener.Close()
+	})
 }
 
 // Addr returns the socket path
@@ -51,7 +107,7 @@ func (s *Server) Addr() string {
 func (s *Server) Serve(ctx context.Context) error {
 	go func() {
 		<-ctx.Done()
-		s.listener.Close()
+		s.close()
 	}()
 
 	for {
