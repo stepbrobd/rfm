@@ -1,6 +1,7 @@
 package rib
 
 import (
+	"maps"
 	"math/rand/v2"
 	"net"
 	"net/netip"
@@ -46,7 +47,7 @@ func TestTableWithdraw(t *testing.T) {
 		},
 	})
 	tab.Apply(Update{
-		Withdraw: []netip.Prefix{pfx},
+		Withdraw: []Withdrawal{{Prefix: pfx}},
 	})
 
 	if _, ok := tab.Lookup(netip.MustParseAddr("2001:db8::1")); ok {
@@ -159,14 +160,14 @@ func TestTableDedupesMetadata(t *testing.T) {
 	}
 
 	tab.Apply(Update{
-		Withdraw: []netip.Prefix{netip.MustParsePrefix("203.0.113.0/24")},
+		Withdraw: []Withdrawal{{Prefix: netip.MustParsePrefix("203.0.113.0/24")}},
 	})
 	if got := len(tab.metas); got != 1 {
 		t.Fatalf("metadata entries after single withdraw = %d, want 1", got)
 	}
 
 	tab.Apply(Update{
-		Withdraw: []netip.Prefix{netip.MustParsePrefix("203.0.114.0/24")},
+		Withdraw: []Withdrawal{{Prefix: netip.MustParsePrefix("203.0.114.0/24")}},
 	})
 	if got := len(tab.metas); got != 0 {
 		t.Fatalf("metadata entries after full withdraw = %d, want 0", got)
@@ -440,6 +441,167 @@ func TestHandleConnPeerNotificationsIgnorePolicy(t *testing.T) {
 
 	_ = client.Close()
 	<-done
+}
+
+func TestHandleConnDecodesAddPath(t *testing.T) {
+	s := &Server{table: NewTable()}
+	client, done := startSession(t, s)
+
+	// the monitored router offered to receive paths and the peer to send
+	// them, so every update from the peer carries a path id
+	write(t, client, mustAddPathPeerUpWire(t, "192.0.2.2", bgp.BGP_ADD_PATH_RECEIVE, bgp.BGP_ADD_PATH_SEND))
+	write(t, client, mustAddPathWire(t, "203.0.113.0/24", 0x01020304, 65002, false))
+	write(t, client, mustAddPathWire(t, "203.0.113.0/24", 1, 65001, false))
+	waitForSummary(t, s, Summary{PrefixesV4: 1, Routes: 2, Peers: 1})
+
+	// the view serves its lowest path id
+	route, ok := s.Lookup(netip.MustParseAddr("203.0.113.7"))
+	if !ok || route.OriginASN != 65001 || route.Prefix != netip.MustParsePrefix("203.0.113.0/24") {
+		t.Fatalf("Lookup = %+v ok=%v, want 203.0.113.0/24 from 65001", route, ok)
+	}
+
+	// a withdraw takes one path and leaves the other
+	write(t, client, mustAddPathWire(t, "203.0.113.0/24", 1, 0, true))
+	waitForSummary(t, s, Summary{PrefixesV4: 1, Routes: 1, Peers: 1})
+	if route, ok := s.Lookup(netip.MustParseAddr("203.0.113.7")); !ok || route.OriginASN != 65002 {
+		t.Fatalf("Lookup after withdrawing path 1 = %+v ok=%v, want origin 65002", route, ok)
+	}
+
+	write(t, client, mustAddPathWire(t, "203.0.113.0/24", 0x01020304, 0, true))
+	waitForSummary(t, s, Summary{})
+
+	_ = client.Close()
+	<-done
+}
+
+func TestHandleConnWithoutAddPath(t *testing.T) {
+	s := &Server{table: NewTable()}
+	client, done := startSession(t, s)
+
+	// one side alone does not enable ADD-PATH
+	write(t, client, mustAddPathPeerUpWire(t, "192.0.2.2", bgp.BGP_ADD_PATH_RECEIVE, bgp.BGP_ADD_PATH_RECEIVE))
+	write(t, client, mustBMPWireFrom(t, "203.0.113.0/24", 65002, "192.0.2.2", 0))
+	waitForSummary(t, s, Summary{PrefixesV4: 1, Routes: 1, Peers: 1})
+
+	_ = client.Close()
+	<-done
+}
+
+func TestAddPathOptions(t *testing.T) {
+	open := func(tuples ...*bgp.CapAddPathTuple) *bgp.BGPMessage {
+		return bgp.NewBGPOpenMessage(65000, 90, "192.0.2.9", []bgp.OptionParameterInterface{
+			bgp.NewOptionParameterCapability([]bgp.ParameterCapabilityInterface{bgp.NewCapAddPath(tuples)}),
+		})
+	}
+	tuple := bgp.NewCapAddPathTuple
+
+	for _, tc := range []struct {
+		name           string
+		sent, received *bgp.BGPMessage
+		want           map[bgp.RouteFamily]bgp.BGPAddPathMode
+	}{
+		{
+			name:     "both ways",
+			sent:     open(tuple(bgp.RF_IPv4_UC, bgp.BGP_ADD_PATH_BOTH)),
+			received: open(tuple(bgp.RF_IPv4_UC, bgp.BGP_ADD_PATH_BOTH)),
+			want:     map[bgp.RouteFamily]bgp.BGPAddPathMode{bgp.RF_IPv4_UC: bgp.BGP_ADD_PATH_RECEIVE},
+		},
+		{
+			// the router sends paths to the peer, what it receives has none
+			name:     "router sends",
+			sent:     open(tuple(bgp.RF_IPv4_UC, bgp.BGP_ADD_PATH_SEND)),
+			received: open(tuple(bgp.RF_IPv4_UC, bgp.BGP_ADD_PATH_RECEIVE)),
+		},
+		{
+			name:     "per family",
+			sent:     open(tuple(bgp.RF_IPv4_UC, bgp.BGP_ADD_PATH_RECEIVE), tuple(bgp.RF_IPv6_UC, bgp.BGP_ADD_PATH_RECEIVE)),
+			received: open(tuple(bgp.RF_IPv6_UC, bgp.BGP_ADD_PATH_SEND)),
+			want:     map[bgp.RouteFamily]bgp.BGPAddPathMode{bgp.RF_IPv6_UC: bgp.BGP_ADD_PATH_RECEIVE},
+		},
+		{
+			name:     "no capability",
+			sent:     bgp.NewBGPOpenMessage(65000, 90, "192.0.2.9", nil),
+			received: bgp.NewBGPOpenMessage(65000, 90, "192.0.2.9", nil),
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			opts := addPathOptions(&bmp.BMPPeerUpNotification{SentOpenMsg: tc.sent, ReceivedOpenMsg: tc.received})
+			var got map[bgp.RouteFamily]bgp.BGPAddPathMode
+			if len(opts) > 0 {
+				got = opts[0].AddPath
+			}
+			if !maps.Equal(got, tc.want) {
+				t.Fatalf("modes = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
+// waitForSummary polls the server until its table summary is want
+func waitForSummary(t *testing.T, s *Server, want Summary) {
+	t.Helper()
+
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		got := s.Table().Summary()
+		if got == want {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("summary = %+v, want %+v", got, want)
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+}
+
+// mustAddPathPeerUpWire serializes a peer up for addr whose sent and
+// received OPEN offer ADD-PATH for ipv4 unicast in the given modes
+func mustAddPathPeerUpWire(t *testing.T, addr string, sent, received bgp.BGPAddPathMode) []byte {
+	t.Helper()
+
+	open := func(mode bgp.BGPAddPathMode) *bgp.BGPMessage {
+		return bgp.NewBGPOpenMessage(65000, 90, "192.0.2.9", []bgp.OptionParameterInterface{
+			bgp.NewOptionParameterCapability([]bgp.ParameterCapabilityInterface{
+				bgp.NewCapAddPath([]*bgp.CapAddPathTuple{bgp.NewCapAddPathTuple(bgp.RF_IPv4_UC, mode)}),
+			}),
+		})
+	}
+	peer := bmp.NewBMPPeerHeader(bmp.BMP_PEER_TYPE_GLOBAL, 0, 0, addr, 65000, addr, 0)
+	wire, err := bmp.NewBMPPeerUpNotification(*peer, "192.0.2.1", 179, 40000, open(sent), open(received)).Serialize()
+	if err != nil {
+		t.Fatalf("Serialize: %v", err)
+	}
+	return wire
+}
+
+// mustAddPathWire serializes a route monitoring message from 192.0.2.2 that
+// announces prefix from origin, or withdraws it, under an ADD-PATH path id
+func mustAddPathWire(t *testing.T, prefix string, pathID, origin uint32, withdraw bool) []byte {
+	t.Helper()
+
+	nlri := bgp.NewIPAddrPrefix(prefixBits(t, prefix), prefixAddr(t, prefix))
+	nlri.SetPathLocalIdentifier(pathID)
+	update := bgp.NewBGPUpdateMessage([]*bgp.IPAddrPrefix{nlri}, nil, nil)
+	if !withdraw {
+		update = bgp.NewBGPUpdateMessage(
+			nil,
+			[]bgp.PathAttributeInterface{
+				bgp.NewPathAttributeOrigin(0),
+				bgp.NewPathAttributeAsPath([]bgp.AsPathParamInterface{
+					bgp.NewAs4PathParam(bgp.BGP_ASPATH_ATTR_TYPE_SEQ, []uint32{origin}),
+				}),
+				bgp.NewPathAttributeNextHop("192.0.2.1"),
+			},
+			[]*bgp.IPAddrPrefix{nlri},
+		)
+	}
+	peer := bmp.NewBMPPeerHeader(bmp.BMP_PEER_TYPE_GLOBAL, 0, 0, "192.0.2.2", 65000, "192.0.2.2", 0)
+	send := &bgp.MarshallingOption{AddPath: map[bgp.RouteFamily]bgp.BGPAddPathMode{bgp.RF_IPv4_UC: bgp.BGP_ADD_PATH_SEND}}
+	wire, err := bmp.NewBMPRouteMonitoring(*peer, update).Serialize(send)
+	if err != nil {
+		t.Fatalf("Serialize: %v", err)
+	}
+	return wire
 }
 
 func TestServerCloseReturnsWithIdleConnection(t *testing.T) {
@@ -874,7 +1036,7 @@ func TestTableKeepsRoutesPerPeer(t *testing.T) {
 	}
 
 	// a withdraw from one peer leaves the other peer's route in place
-	tab.Apply(Update{Peer: a, Withdraw: []netip.Prefix{pfx}})
+	tab.Apply(Update{Peer: a, Withdraw: []Withdrawal{{Prefix: pfx}}})
 	route, ok = tab.Lookup(netip.MustParseAddr("203.0.113.9"))
 	if !ok || route.OriginASN != 64502 {
 		t.Fatalf("route after withdraw = %+v ok=%v, want origin 64502 from the other peer", route, ok)
@@ -883,7 +1045,7 @@ func TestTableKeepsRoutesPerPeer(t *testing.T) {
 		t.Fatalf("summary after withdraw = %+v, want 1 route from 1 peer", got)
 	}
 
-	tab.Apply(Update{Peer: b, Withdraw: []netip.Prefix{pfx}})
+	tab.Apply(Update{Peer: b, Withdraw: []Withdrawal{{Prefix: pfx}}})
 	if _, ok := tab.Lookup(netip.MustParseAddr("203.0.113.9")); ok {
 		t.Fatal("prefix still present after every peer withdrew it")
 	}
@@ -972,30 +1134,61 @@ func TestTableHeapPerPrefix(t *testing.T) {
 	}
 }
 
-// ribModel is the obvious RIB the table must agree with, every route per
-// view and a linear best path search
-type ribModel map[Peer]map[netip.Prefix]uint32
+// ribModel is the obvious RIB the table must agree with, every path per
+// view and prefix keyed by path id, a view serves its lowest path id and a
+// linear search picks the best view
+type ribModel map[Peer]map[netip.Prefix]map[uint32]uint32
 
-func (m ribModel) best(prefix netip.Prefix) (Peer, uint32, bool) {
-	var best Peer
-	var origin uint32
-	found := false
-	for peer, routes := range m {
-		if o, ok := routes[prefix]; ok && (!found || betterPeer(peer, best)) {
-			best, origin, found = peer, o, true
-		}
+// served returns the path id and origin a view serves for prefix
+func (m ribModel) served(peer Peer, prefix netip.Prefix) (uint32, uint32, bool) {
+	paths := m[peer][prefix]
+	if len(paths) == 0 {
+		return 0, 0, false
 	}
-	return best, origin, found
+	id := slices.Min(slices.Collect(maps.Keys(paths)))
+	return id, paths[id], true
 }
 
-func (m ribModel) lookup(addr netip.Addr) (netip.Prefix, Peer, uint32, bool) {
-	for bits := addr.BitLen(); bits >= 0; bits-- {
-		prefix, _ := addr.Prefix(bits)
-		if peer, origin, ok := m.best(prefix); ok {
-			return prefix, peer, origin, true
+func (m ribModel) best(prefix netip.Prefix) (Peer, uint32, uint32, bool) {
+	var best Peer
+	var pathID, origin uint32
+	found := false
+	for peer := range m {
+		if id, o, ok := m.served(peer, prefix); ok && (!found || betterPeer(peer, best)) {
+			best, pathID, origin, found = peer, id, o, true
 		}
 	}
-	return netip.Prefix{}, Peer{}, 0, false
+	return best, pathID, origin, found
+}
+
+func (m ribModel) lookup(addr netip.Addr) (netip.Prefix, Peer, uint32, uint32, bool) {
+	for bits := addr.BitLen(); bits >= 0; bits-- {
+		prefix, _ := addr.Prefix(bits)
+		if peer, pathID, origin, ok := m.best(prefix); ok {
+			return prefix, peer, pathID, origin, true
+		}
+	}
+	return netip.Prefix{}, Peer{}, 0, 0, false
+}
+
+func (m ribModel) reach(peer Peer, prefix netip.Prefix, pathID, origin uint32) {
+	if m[peer] == nil {
+		m[peer] = make(map[netip.Prefix]map[uint32]uint32)
+	}
+	if m[peer][prefix] == nil {
+		m[peer][prefix] = make(map[uint32]uint32)
+	}
+	m[peer][prefix][pathID] = origin
+}
+
+func (m ribModel) withdraw(peer Peer, prefix netip.Prefix, pathID uint32) {
+	delete(m[peer][prefix], pathID)
+	if len(m[peer][prefix]) == 0 {
+		delete(m[peer], prefix)
+	}
+	if len(m[peer]) == 0 {
+		delete(m, peer)
+	}
 }
 
 func (m ribModel) check(t *testing.T, tab *Table, probes []netip.Addr, step int) {
@@ -1005,13 +1198,13 @@ func (m ribModel) check(t *testing.T, tab *Table, probes []netip.Addr, step int)
 	prefixes := make(map[netip.Prefix]struct{})
 	metas := make(map[[2]any]struct{})
 	for peer, routes := range m {
-		if len(routes) > 0 {
-			want.Peers++
-		}
-		for prefix, origin := range routes {
-			want.Routes++
+		want.Peers++
+		for prefix, paths := range routes {
 			prefixes[prefix] = struct{}{}
-			metas[[2]any{peer, origin}] = struct{}{}
+			for _, origin := range paths {
+				want.Routes++
+				metas[[2]any{peer, origin}] = struct{}{}
+			}
 		}
 	}
 	for prefix := range prefixes {
@@ -1029,11 +1222,11 @@ func (m ribModel) check(t *testing.T, tab *Table, probes []netip.Addr, step int)
 	}
 
 	for _, addr := range probes {
-		prefix, peer, origin, ok := m.lookup(addr)
+		prefix, peer, pathID, origin, ok := m.lookup(addr)
 		route, gotOK := tab.Lookup(addr)
-		if gotOK != ok || route.Prefix != prefix || route.OriginASN != origin || route.Peer() != peer {
-			t.Fatalf("step %d: Lookup(%s) = %s origin %d from %+v ok=%v, want %s origin %d from %+v ok=%v",
-				step, addr, route.Prefix, route.OriginASN, route.Peer(), gotOK, prefix, origin, peer, ok)
+		if gotOK != ok || route.Prefix != prefix || route.OriginASN != origin || route.Peer() != peer || route.PathID != pathID {
+			t.Fatalf("step %d: Lookup(%s) = %s path %d origin %d from %+v ok=%v, want %s path %d origin %d from %+v ok=%v",
+				step, addr, route.Prefix, route.PathID, route.OriginASN, route.Peer(), gotOK, prefix, pathID, origin, peer, ok)
 		}
 		if prefix.Bits() == 0 {
 			origin = 0
@@ -1070,9 +1263,11 @@ func TestTableMatchesModel(t *testing.T) {
 	rng := rand.New(rand.NewPCG(1, 2))
 	tab := NewTable()
 	model := make(ribModel)
-	for step := range 4000 {
+	for step := range 6000 {
 		peer := peers[rng.IntN(len(peers))]
 		prefix := prefixes[rng.IntN(len(prefixes))]
+		// path ids 0 to 3 give a view up to four paths for a prefix
+		pathID := uint32(rng.IntN(4))
 		switch op := rng.IntN(10); {
 		case op < 5:
 			origin := uint32(64500 + rng.IntN(4))
@@ -1083,18 +1278,16 @@ func TestTableMatchesModel(t *testing.T) {
 				PeerAddress:       peer.Address,
 				PeerDistinguisher: peer.Distinguisher,
 				PostPolicy:        peer.PostPolicy,
+				PathID:            pathID,
 			}}})
-			if model[peer] == nil {
-				model[peer] = make(map[netip.Prefix]uint32)
-			}
-			model[peer][prefix] = origin
+			model.reach(peer, prefix, pathID, origin)
 		case op < 8:
-			tab.Apply(Update{Peer: peer, Withdraw: []netip.Prefix{prefix}})
-			delete(model[peer], prefix)
+			tab.Apply(Update{Peer: peer, Withdraw: []Withdrawal{{Prefix: prefix, PathID: pathID}}})
+			model.withdraw(peer, prefix, pathID)
 		case op < 9:
-			tab.Apply(Update{Withdraw: []netip.Prefix{prefix}})
-			for _, routes := range model {
-				delete(routes, prefix)
+			tab.Apply(Update{Withdraw: []Withdrawal{{Prefix: prefix, PathID: pathID}}})
+			for peer := range model {
+				model.withdraw(peer, prefix, pathID)
 			}
 		default:
 			tab.RemovePeer(peer)
@@ -1122,10 +1315,23 @@ func checkInvariants(t *testing.T, tab *Table) {
 			t.Fatalf("view %+v under key %+v holds %d routes", v.peer, peer, v.routes.Size())
 		}
 		routes += v.routes.Size()
-		for prefix := range v.routes.All() {
+		for prefix, head := range v.routes.All() {
 			if _, ok := tab.best.Get(prefix); !ok {
 				t.Fatalf("%s of %+v is missing from best", prefix, v.peer)
 			}
+			ids := map[uint32]bool{head.pathID: true}
+			for _, path := range v.more[prefix] {
+				if path.pathID <= head.pathID || ids[path.pathID] {
+					t.Fatalf("%s of %+v serves path %d next to path %d", prefix, v.peer, head.pathID, path.pathID)
+				}
+				ids[path.pathID] = true
+			}
+		}
+		for prefix, paths := range v.more {
+			if _, ok := v.routes.Get(prefix); !ok || len(paths) == 0 {
+				t.Fatalf("%s of %+v keeps %d other paths and no served one", prefix, v.peer, len(paths))
+			}
+			routes += len(paths)
 		}
 	}
 	if routes != tab.routes {
@@ -1175,7 +1381,7 @@ func TestRemovePeerWithConcurrentWriter(t *testing.T) {
 	wg.Go(func() {
 		for i := range 1 << 12 {
 			prefix := netip.PrefixFrom(netip.AddrFrom4([4]byte{1, byte(i >> 8), byte(i), 0}), 24)
-			tab.Apply(Update{Peer: Peer{Address: b}, Withdraw: []netip.Prefix{prefix}})
+			tab.Apply(Update{Peer: Peer{Address: b}, Withdraw: []Withdrawal{{Prefix: prefix}}})
 			tab.Apply(Update{Reach: []Route{{Prefix: prefix, OriginASN: 64999, PeerAddress: b}}})
 		}
 	})

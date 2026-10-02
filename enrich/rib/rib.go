@@ -63,6 +63,9 @@ type Route struct {
 	PeerAddress       netip.Addr
 	PeerDistinguisher uint64
 	PostPolicy        bool
+	// PathID tells apart the paths a view holds for one prefix when the
+	// session negotiated ADD-PATH, it is 0 otherwise
+	PathID uint32
 }
 
 // Peer returns the view this route belongs to
@@ -71,15 +74,19 @@ func (r Route) Peer() Peer {
 }
 
 // view holds the routes of one view, keyed by prefix in a trie of its own
+// with ADD-PATH a view holds several paths for a prefix, routes keeps the
+// one with the lowest path id, which the view serves, and more the others
 type view struct {
 	peer   Peer
 	routes bart.Table[viewRoute]
+	more   map[netip.Prefix][]viewRoute
 }
 
 // viewRoute is what a view keeps of a route, the prefix is its trie key and
 // the rest of the route sits in the interned metadata
 type viewRoute struct {
 	metaID      uint64
+	pathID      uint32
 	originASN   uint32
 	originASSet bool
 }
@@ -123,12 +130,19 @@ type routeMetaState struct {
 }
 
 // Update is a batch of RIB changes
-// Reach routes carry their own peer, Withdraw prefixes are withdrawn from
-// Peer, or from every peer when Peer is the zero value
+// Reach routes carry their own peer, Withdraw paths are withdrawn from Peer,
+// or from every peer when Peer is the zero value
 type Update struct {
 	Peer     Peer
 	Reach    []Route
-	Withdraw []netip.Prefix
+	Withdraw []Withdrawal
+}
+
+// Withdrawal names the path a withdraw removes, PathID is the ADD-PATH path
+// id and 0 when the session did not negotiate ADD-PATH
+type Withdrawal struct {
+	Prefix netip.Prefix
+	PathID uint32
 }
 
 // Summary counts what the table holds
@@ -178,18 +192,18 @@ func (t *Table) Apply(update Update) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	for _, prefix := range update.Withdraw {
-		prefix = prefix.Masked()
+	for _, w := range update.Withdraw {
+		prefix := w.Prefix.Masked()
 		if update.Peer == (Peer{}) {
 			// deleteRoute may drop the view from the map, which a range
 			// over it allows
 			for _, v := range t.views {
-				t.deleteRoute(prefix, v)
+				t.deleteRoute(prefix, w.PathID, v)
 			}
 			continue
 		}
 		if v := t.views[update.Peer]; v != nil {
-			t.deleteRoute(prefix, v)
+			t.deleteRoute(prefix, w.PathID, v)
 		}
 	}
 	for _, route := range update.Reach {
@@ -219,6 +233,10 @@ func (t *Table) RemovePeer(peer Peer) {
 	for prefix, value := range v.routes.All() {
 		t.releaseMeta(value.metaID)
 		t.routes--
+		for _, path := range v.more[prefix] {
+			t.releaseMeta(path.metaID)
+			t.routes--
+		}
 		t.withdrawn(prefix, v)
 		if n++; n%removeChunk == 0 {
 			t.mu.Unlock()
@@ -424,10 +442,20 @@ func (s *Server) handleConn(conn net.Conn) {
 	seenTypes := make(map[uint8]struct{})
 	peers := make(map[Peer]struct{})
 
+	// addPath holds the decode options of the peers whose peer up shows
+	// that they send ADD-PATH to the monitored router, keyed by address and
+	// distinguisher, the policy views of a peer share its session
+	addPath := make(map[Peer][]*bgp.MarshallingOption)
+	options := func(h bmp.BMPPeerHeader) []*bgp.MarshallingOption {
+		peer := peerFromHeader(h)
+		peer.PostPolicy = false
+		return addPath[peer]
+	}
+
 	for scanner.Scan() {
 		messages++
 
-		msg, err := bmp.ParseBMPMessage(scanner.Bytes())
+		msg, err := bmp.ParseBMPMessageWithOptions(scanner.Bytes(), options)
 		if err != nil {
 			if !parseErrLogged {
 				log.Error("parse bmp message", "remote", conn.RemoteAddr(), "err", err)
@@ -447,7 +475,14 @@ func (s *Server) handleConn(conn net.Conn) {
 		case bmp.BMP_MSG_PEER_UP_NOTIFICATION:
 			peer := peerFromHeader(msg.PeerHeader)
 			s.table.RemovePeerViews(peer)
-			log.Info("bmp peer up", "remote", conn.RemoteAddr(), "peer", peer.Address)
+			peer.PostPolicy = false
+			delete(addPath, peer)
+			if up, ok := msg.Body.(*bmp.BMPPeerUpNotification); ok {
+				if opts := addPathOptions(up); opts != nil {
+					addPath[peer] = opts
+				}
+			}
+			log.Info("bmp peer up", "remote", conn.RemoteAddr(), "peer", peer.Address, "add_path", addPath[peer] != nil)
 			continue
 		case bmp.BMP_MSG_PEER_DOWN_NOTIFICATION:
 			peer := peerFromHeader(msg.PeerHeader)
@@ -456,6 +491,8 @@ func (s *Server) handleConn(conn net.Conn) {
 				peer.PostPolicy = post
 				delete(peers, peer)
 			}
+			peer.PostPolicy = false
+			delete(addPath, peer)
 			log.Info("bmp peer down", "remote", conn.RemoteAddr(), "peer", peer.Address)
 			continue
 		case bmp.BMP_MSG_ROUTE_MONITORING:
@@ -583,17 +620,25 @@ func updateFromBMP(msg *bmp.BMPMessage) (Update, bool) {
 	attrs := routeAttrs(updateMsg.PathAttributes, msg.PeerHeader.Flags&bmp.BMP_PEER_FLAG_TWO_AS != 0)
 
 	out := Update{Peer: peerFromHeader(msg.PeerHeader)}
-	for _, withdraw := range updateMsg.WithdrawnRoutes {
-		if prefix, ok := prefixFromNLRI(withdraw); ok {
-			out.Withdraw = append(out.Withdraw, prefix)
+	reach := func(nlri bgp.AddrPrefixInterface) {
+		if prefix, ok := prefixFromNLRI(nlri); ok {
+			route := attrs.route(prefix, msg.PeerHeader)
+			route.PathID = nlri.PathIdentifier()
+			out.Reach = append(out.Reach, route)
 		}
 	}
-	for _, nlri := range updateMsg.NLRI {
+	withdraw := func(nlri bgp.AddrPrefixInterface) {
 		if prefix, ok := prefixFromNLRI(nlri); ok {
-			out.Reach = append(out.Reach, attrs.route(prefix, msg.PeerHeader))
+			out.Withdraw = append(out.Withdraw, Withdrawal{Prefix: prefix, PathID: nlri.PathIdentifier()})
 		}
 	}
 
+	for _, nlri := range updateMsg.WithdrawnRoutes {
+		withdraw(nlri)
+	}
+	for _, nlri := range updateMsg.NLRI {
+		reach(nlri)
+	}
 	for _, attr := range updateMsg.PathAttributes {
 		if otherFamily(attr) {
 			continue
@@ -601,20 +646,66 @@ func updateFromBMP(msg *bmp.BMPMessage) (Update, bool) {
 		switch a := attr.(type) {
 		case *bgp.PathAttributeMpReachNLRI:
 			for _, nlri := range a.Value {
-				if prefix, ok := prefixFromNLRI(nlri); ok {
-					out.Reach = append(out.Reach, attrs.route(prefix, msg.PeerHeader))
-				}
+				reach(nlri)
 			}
 		case *bgp.PathAttributeMpUnreachNLRI:
 			for _, nlri := range a.Value {
-				if prefix, ok := prefixFromNLRI(nlri); ok {
-					out.Withdraw = append(out.Withdraw, prefix)
-				}
+				withdraw(nlri)
 			}
 		}
 	}
 
 	return out, true
+}
+
+// addPathOptions returns the options that decode what the monitored router
+// receives from the peer of a peer up notification, RFC 7911 section 4 has
+// a family carry path ids when the router's OPEN, the sent one, offered to
+// receive them and the peer's OPEN, the received one, offered to send them
+func addPathOptions(up *bmp.BMPPeerUpNotification) []*bgp.MarshallingOption {
+	sent := addPathModes(up.SentOpenMsg)
+	received := addPathModes(up.ReceivedOpenMsg)
+
+	var modes map[bgp.RouteFamily]bgp.BGPAddPathMode
+	for family, mode := range sent {
+		if mode&bgp.BGP_ADD_PATH_RECEIVE != 0 && received[family]&bgp.BGP_ADD_PATH_SEND != 0 {
+			if modes == nil {
+				modes = make(map[bgp.RouteFamily]bgp.BGPAddPathMode)
+			}
+			modes[family] = bgp.BGP_ADD_PATH_RECEIVE
+		}
+	}
+	if modes == nil {
+		return nil
+	}
+	return []*bgp.MarshallingOption{{AddPath: modes}}
+}
+
+// addPathModes collects the ADD-PATH capability of an OPEN message by family
+func addPathModes(msg *bgp.BGPMessage) map[bgp.RouteFamily]bgp.BGPAddPathMode {
+	if msg == nil {
+		return nil
+	}
+	open, ok := msg.Body.(*bgp.BGPOpen)
+	if !ok {
+		return nil
+	}
+
+	modes := make(map[bgp.RouteFamily]bgp.BGPAddPathMode)
+	for _, param := range open.OptParams {
+		caps, ok := param.(*bgp.OptionParameterCapability)
+		if !ok {
+			continue
+		}
+		for _, c := range caps.Capability {
+			if addPath, ok := c.(*bgp.CapAddPath); ok {
+				for _, tuple := range addPath.Tuples {
+					modes[tuple.RouteFamily] = tuple.Mode
+				}
+			}
+		}
+	}
+	return modes
 }
 
 func describeRouteMonitoring(msg *bmp.BMPMessage) string {
@@ -705,33 +796,95 @@ func (t *Table) insertRoute(route Route) {
 	// never drops the last reference to it
 	value := viewRoute{
 		metaID:      t.internMeta(route.meta()),
+		pathID:      route.PathID,
 		originASN:   route.OriginASN,
 		originASSet: route.OriginASSet,
 	}
-	old, replaced := v.routes.Get(prefix)
-	v.routes.Insert(prefix, value)
-	if replaced {
-		t.releaseMeta(old.metaID)
-	} else {
+	head, ok := v.routes.Get(prefix)
+	switch {
+	case !ok:
+		v.routes.Insert(prefix, value)
 		t.routes++
+		t.offered(prefix, v, value, true)
+	case head.pathID == value.pathID:
+		v.routes.Insert(prefix, value)
+		t.releaseMeta(head.metaID)
+		t.offered(prefix, v, value, false)
+	default:
+		paths := v.more[prefix]
+		i := slices.IndexFunc(paths, func(p viewRoute) bool { return p.pathID == value.pathID })
+		switch {
+		case i >= 0:
+			t.releaseMeta(paths[i].metaID)
+			paths[i] = value
+		case value.pathID < head.pathID:
+			// the view serves its lowest path id whatever order the paths
+			// arrive in
+			paths = append(paths, head)
+			v.routes.Insert(prefix, value)
+			t.routes++
+			t.offered(prefix, v, value, false)
+		default:
+			paths = append(paths, value)
+			t.routes++
+		}
+		if v.more == nil {
+			v.more = make(map[netip.Prefix][]viewRoute)
+		}
+		v.more[prefix] = paths
 	}
-	t.offered(prefix, v, value, !replaced)
 }
 
-// deleteRoute drops the route of view v for prefix and updates best
+// deleteRoute drops path pathID of view v for prefix and updates best
 // it must be called with mu held
-func (t *Table) deleteRoute(prefix netip.Prefix, v *view) {
-	old, ok := v.routes.Get(prefix)
+func (t *Table) deleteRoute(prefix netip.Prefix, pathID uint32, v *view) {
+	head, ok := v.routes.Get(prefix)
 	if !ok {
 		return
 	}
-	v.routes.Delete(prefix)
-	t.releaseMeta(old.metaID)
+	paths := v.more[prefix]
+	if head.pathID != pathID {
+		i := slices.IndexFunc(paths, func(p viewRoute) bool { return p.pathID == pathID })
+		if i < 0 {
+			return
+		}
+		t.releaseMeta(paths[i].metaID)
+		t.routes--
+		v.setMore(prefix, slices.Delete(paths, i, i+1))
+		return
+	}
+
+	t.releaseMeta(head.metaID)
 	t.routes--
+	if len(paths) > 0 {
+		// the next lowest path id takes over
+		i := 0
+		for j, p := range paths {
+			if p.pathID < paths[i].pathID {
+				i = j
+			}
+		}
+		next := paths[i]
+		v.setMore(prefix, slices.Delete(paths, i, i+1))
+		v.routes.Insert(prefix, next)
+		t.offered(prefix, v, next, false)
+		return
+	}
+	v.routes.Delete(prefix)
 	if v.routes.Size() == 0 {
 		t.dropView(v)
 	}
 	t.withdrawn(prefix, v)
+}
+
+// setMore stores the other paths of prefix, dropping the entry when none
+// are left
+func (v *view) setMore(prefix netip.Prefix, paths []viewRoute) {
+	if len(paths) == 0 {
+		delete(v.more, prefix)
+		return
+	}
+	v.more[prefix] = paths
 }
 
 // offered updates best after view v announced value for prefix, added says
@@ -833,6 +986,7 @@ func (t *Table) route(prefix netip.Prefix, value viewRoute) (Route, bool) {
 		Prefix:      prefix,
 		OriginASN:   value.originASN,
 		OriginASSet: value.originASSet,
+		PathID:      value.pathID,
 	}
 	if value.metaID == 0 {
 		return route, true
