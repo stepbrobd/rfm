@@ -743,7 +743,9 @@ func (e *IPFIXExporter) dataElements(flow collector.ExportedFlow, isIPv6 bool) [
 		case "packetDeltaCount":
 			elements = append(elements, entities.NewUnsigned64InfoElement(ie, flow.Entry.Packets))
 		case "octetDeltaCount":
-			elements = append(elements, entities.NewUnsigned64InfoElement(ie, flow.Entry.Bytes))
+			// rfc 7012 counts ip header and payload here, the wire bytes
+			// with the l2 header stay with the prometheus counters
+			elements = append(elements, entities.NewUnsigned64InfoElement(ie, flow.Entry.IPBytes))
 		case "flowEndReason":
 			elements = append(elements, entities.NewUnsigned8InfoElement(ie, flow.EndReason))
 		case "samplingProbability":

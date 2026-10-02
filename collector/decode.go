@@ -26,6 +26,8 @@ type wireFlowEvent struct {
 	_       [7]uint8
 }
 
+// DecodeFlowEvent decodes one ring buffer record and refuses an event the
+// probe does not emit, so the methods of FlowEvent can rely on its fields
 func DecodeFlowEvent(raw []byte) (FlowEvent, error) {
 	if len(raw) < wireFlowEventSize {
 		return FlowEvent{}, fmt.Errorf("short flow event: %d < %d bytes", len(raw), wireFlowEventSize)
@@ -36,7 +38,7 @@ func DecodeFlowEvent(raw []byte) (FlowEvent, error) {
 		return FlowEvent{}, fmt.Errorf("decode flow event: %w", err)
 	}
 
-	return FlowEvent{
+	ev := FlowEvent{
 		Tstamp:  wire.Tstamp,
 		Ifindex: wire.Ifindex,
 		Dir:     wire.Dir,
@@ -48,5 +50,10 @@ func DecodeFlowEvent(raw []byte) (FlowEvent, error) {
 		Segs:    wire.Segs,
 		Len:     wire.Len,
 		L2Len:   wire.L2Len,
-	}, nil
+	}
+	// the probe counts the l2 header of every wire packet in len
+	if l2 := ev.Packets() * uint64(ev.L2Len); l2 > uint64(ev.Len) {
+		return FlowEvent{}, fmt.Errorf("flow event with %d bytes of l2 headers in %d wire bytes", l2, ev.Len)
+	}
+	return ev, nil
 }

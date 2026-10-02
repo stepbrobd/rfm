@@ -82,7 +82,7 @@ func TestIPFIXExportsToGoFlow2(t *testing.T) {
 			FirstSeen: time.Unix(1_700_000_000, 0).UTC(),
 			LastSeen:  time.Unix(1_700_000_000, 0).UTC(),
 			Packets:   3,
-			Bytes:     384,
+			IPBytes:   384,
 		},
 		EndReason: collector.FlowEndReasonIdleTimeout,
 	}

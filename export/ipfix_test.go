@@ -149,6 +149,57 @@ func TestIPFIXExportsEvictedFlowsOverUDP(t *testing.T) {
 	}
 }
 
+func TestIPFIXOctetDeltaCountCarriesIPBytes(t *testing.T) {
+	loadIPFIXRegistry.Do(registry.LoadRegistry)
+
+	conn := startIPFIXListener(t)
+	addr := conn.LocalAddr().(*net.UDPAddr)
+
+	exp, err := NewIPFIX(testIPFIXConfig(addr.IP.String(), addr.Port), 1)
+	if err != nil {
+		t.Fatalf("NewIPFIX: %v", err)
+	}
+	defer exp.Close()
+
+	c := collector.New(10*time.Second, nil, 0)
+	c.SetFlowExporter(exp)
+
+	t0 := time.Unix(1_700_000_000, 0).UTC()
+	// a gro skb of three 1500 byte ip packets, each behind an ethernet header
+	gro := collector.FlowEvent{
+		Ifindex: 7, Dir: 0, Proto: 6,
+		SrcAddr: netip.MustParseAddr("::ffff:10.0.0.1"),
+		DstAddr: netip.MustParseAddr("::ffff:10.0.0.2"),
+		SrcPort: 40000, DstPort: 443,
+		Segs: 3, Len: 3 * 1514, L2Len: 14,
+	}
+	// one 86 byte ip packet behind ethernet and a vlan tag
+	tagged := gro
+	tagged.Segs, tagged.Len, tagged.L2Len = 0, 104, 18
+	c.Record(gro, t0)
+	c.Record(tagged, t0)
+
+	// prometheus keeps counting wire bytes
+	if got := c.Flows()[gro.Key()].Bytes; got != 3*1514+104 {
+		t.Fatalf("flow bytes = %d, want the %d wire bytes", got, 3*1514+104)
+	}
+
+	c.Evict(t0.Add(11 * time.Second))
+	if err := exp.Flush(); err != nil {
+		t.Fatalf("Flush: %v", err)
+	}
+
+	msg := mustReadIPFIXDatagram(t, conn)
+	if got := len(msg.Sets); got != 2 {
+		t.Fatalf("set count = %d, want template and data", got)
+	}
+	_, fields := parseTemplateSet(t, msg.Sets[0])
+	record := parseDataRecord(t, msg.Sets[1], fields)
+	assertIPFIXDataUInt64(t, record, "packetDeltaCount", 4)
+	// octetDeltaCount is ip header plus payload (rfc 7012), no l2 header
+	assertIPFIXDataUInt64(t, record, "octetDeltaCount", 3*1500+86)
+}
+
 func TestIPFIXUsesConfiguredObservationDomainID(t *testing.T) {
 	loadIPFIXRegistry.Do(registry.LoadRegistry)
 
@@ -172,7 +223,7 @@ func TestIPFIXUsesConfiguredObservationDomainID(t *testing.T) {
 			SrcPort: 1234, DstPort: 80,
 		},
 		Entry: collector.FlowEntry{
-			FirstSeen: now, LastSeen: now, Packets: 1, Bytes: 100,
+			FirstSeen: now, LastSeen: now, Packets: 1, IPBytes: 100,
 		},
 		EndReason: collector.FlowEndReasonIdleTimeout,
 	}
@@ -213,7 +264,7 @@ func TestIPFIXSkipsCollectorTraffic(t *testing.T) {
 			FirstSeen: time.Unix(1_700_000_000, 0).UTC(),
 			LastSeen:  time.Unix(1_700_000_000, 0).UTC(),
 			Packets:   1,
-			Bytes:     128,
+			IPBytes:   128,
 		},
 		EndReason: collector.FlowEndReasonEndOfFlow,
 	}
@@ -258,7 +309,7 @@ func TestIPFIXExportsTrafficToCollectorDestinationFromOtherSocket(t *testing.T) 
 			FirstSeen: time.Unix(1_700_000_000, 0).UTC(),
 			LastSeen:  time.Unix(1_700_000_000, 0).UTC(),
 			Packets:   3,
-			Bytes:     384,
+			IPBytes:   384,
 		},
 		EndReason: collector.FlowEndReasonEndOfFlow,
 	}
@@ -588,7 +639,7 @@ func TestIPFIXTemplateSuppressedWithinRefreshWindow(t *testing.T) {
 			SrcPort: 1234, DstPort: 80,
 		},
 		Entry: collector.FlowEntry{
-			FirstSeen: now, LastSeen: now, Packets: 1, Bytes: 100,
+			FirstSeen: now, LastSeen: now, Packets: 1, IPBytes: 100,
 		},
 		EndReason: collector.FlowEndReasonIdleTimeout,
 	}
@@ -644,7 +695,7 @@ func TestIPFIXTemplateResendAfterRefreshTimeout(t *testing.T) {
 			SrcPort: 1234, DstPort: 80,
 		},
 		Entry: collector.FlowEntry{
-			FirstSeen: now, LastSeen: now, Packets: 1, Bytes: 100,
+			FirstSeen: now, LastSeen: now, Packets: 1, IPBytes: 100,
 		},
 		EndReason: collector.FlowEndReasonIdleTimeout,
 	}
@@ -686,7 +737,7 @@ func testFlow(src, dst string, port uint16, now time.Time) collector.ExportedFlo
 			SrcPort: port, DstPort: 443,
 		},
 		Entry: collector.FlowEntry{
-			FirstSeen: now, LastSeen: now, Packets: 2, Bytes: 300,
+			FirstSeen: now, LastSeen: now, Packets: 2, IPBytes: 300,
 		},
 		EndReason: collector.FlowEndReasonIdleTimeout,
 	}

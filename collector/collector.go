@@ -212,11 +212,13 @@ func (c *Collector) recordLocked(ev FlowEvent, now time.Time) (ExportedFlow, boo
 	key := ev.Key()
 	packets := ev.Packets()
 	bytes := uint64(ev.Len)
+	ipBytes := ev.IPBytes()
 	rate := uint64(c.sampleRateAtLocked(ev.Tstamp))
 
 	if state, ok := c.flows[key]; ok {
 		state.entry.Packets += packets
 		state.entry.Bytes += bytes
+		state.entry.IPBytes += ipBytes
 		state.entry.EstPackets += packets * rate
 		state.entry.EstBytes += bytes * rate
 		state.entry.LastSeen = now
@@ -251,6 +253,7 @@ func (c *Collector) recordLocked(ev FlowEvent, now time.Time) (ExportedFlow, boo
 			FirstSeen:  now,
 			Packets:    packets,
 			Bytes:      bytes,
+			IPBytes:    ipBytes,
 			EstPackets: packets * rate,
 			EstBytes:   bytes * rate,
 			LastSeen:   now,

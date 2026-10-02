@@ -510,8 +510,15 @@ func TestRunReaderErrorCleansUp(t *testing.T) {
 }
 
 func TestRunRingBufErrors(t *testing.T) {
-	// short garbage event that will fail DecodeFlowEvent
-	mr := &mockReader{events: [][]byte{{0x00, 0x01, 0x02}}}
+	// a short garbage event and one whose l2 headers do not fit its wire
+	// bytes both fail DecodeFlowEvent
+	malformed := FlowEvent{
+		Proto: 6, SrcPort: 1000, DstPort: 80,
+		SrcAddr: netip.MustParseAddr("::ffff:10.0.0.1"),
+		DstAddr: netip.MustParseAddr("::ffff:10.0.0.2"),
+		Segs:    2, Len: 20, L2Len: 14,
+	}
+	mr := &mockReader{events: [][]byte{{0x00, 0x01, 0x02}, encodeWireEvent(malformed)}}
 
 	c := New(30*time.Second, nil, 0)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -520,9 +527,9 @@ func TestRunRingBufErrors(t *testing.T) {
 	go func() { errCh <- c.Run(ctx, mr) }()
 
 	deadline := time.Now().Add(time.Second)
-	for c.Stats().RingBufErrors == 0 {
+	for c.Stats().RingBufErrors < 2 {
 		if time.Now().After(deadline) {
-			t.Fatal("timed out waiting for decode error to be counted")
+			t.Fatal("timed out waiting for decode errors to be counted")
 		}
 		time.Sleep(5 * time.Millisecond)
 	}
@@ -530,8 +537,8 @@ func TestRunRingBufErrors(t *testing.T) {
 	cancel()
 	<-errCh
 
-	if s := c.Stats(); s.RingBufErrors != 1 {
-		t.Fatalf("decode errors = %d, want 1", s.RingBufErrors)
+	if s := c.Stats(); s.RingBufErrors != 2 || s.ActiveFlows != 0 {
+		t.Fatalf("decode errors = %d with %d flows, want 2 and none recorded", s.RingBufErrors, s.ActiveFlows)
 	}
 }
 

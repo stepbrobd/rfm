@@ -67,6 +67,20 @@ func TestDecodeFlowEventShort(t *testing.T) {
 	}
 }
 
+func TestDecodeFlowEventRefusesEventsTheProbeCannotEmit(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		ev   FlowEvent
+	}{
+		// the probe counts the l2 header of every wire packet in len
+		{"l2 headers past the wire bytes", FlowEvent{Segs: 2, Len: 20, L2Len: 14}},
+	} {
+		if ev, err := DecodeFlowEvent(encodeWireEvent(tc.ev)); err == nil {
+			t.Errorf("%s: decoded %+v, want it refused", tc.name, ev)
+		}
+	}
+}
+
 // encodeWireEvent encodes a FlowEvent into wire format for testing
 // used by Run tests in collector_test.go
 func encodeWireEvent(ev FlowEvent) []byte {

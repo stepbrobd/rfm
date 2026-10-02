@@ -31,6 +31,7 @@ func (s *flowState) record(reason uint8) ExportedFlow {
 			LastSeen:   s.entry.LastSeen,
 			Packets:    s.entry.Packets - s.sent.Packets,
 			Bytes:      s.entry.Bytes - s.sent.Bytes,
+			IPBytes:    s.entry.IPBytes - s.sent.IPBytes,
 			EstPackets: s.entry.EstPackets - s.sent.EstPackets,
 			EstBytes:   s.entry.EstBytes - s.sent.EstBytes,
 		},

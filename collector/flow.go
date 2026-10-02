@@ -46,6 +46,13 @@ func (e FlowEvent) Packets() uint64 {
 	return uint64(e.Segs)
 }
 
+// IPBytes returns the IP bytes, header plus payload, of the wire packets the
+// event stands for, DecodeFlowEvent refuses an event whose L2 headers do not
+// fit in Len
+func (e FlowEvent) IPBytes() uint64 {
+	return uint64(e.Len) - e.Packets()*uint64(e.L2Len)
+}
+
 // Key returns the flow key for this event, suitable as a map key
 func (e FlowEvent) Key() FlowKey {
 	return FlowKey{
@@ -74,10 +81,13 @@ type FlowKey struct {
 // Packets and Bytes count what was sampled, EstPackets and EstBytes scale
 // every event by the sample rate in force when it was sampled, so they stay
 // unbiased estimates of the wire totals across runtime rate changes
+// Bytes are wire bytes like the interface counters, IPBytes leave out the L2
+// header of every packet, which is what IPFIX octet counts carry
 type FlowEntry struct {
 	FirstSeen  time.Time
 	Packets    uint64
 	Bytes      uint64
+	IPBytes    uint64
 	EstPackets uint64
 	EstBytes   uint64
 	LastSeen   time.Time
