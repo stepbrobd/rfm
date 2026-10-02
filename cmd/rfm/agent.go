@@ -164,11 +164,7 @@ func runAgent(cmd *cobra.Command, args []string) error {
 	addr := net.JoinHostPort(cfg.Agent.Prometheus.Host,
 		strconv.Itoa(cfg.Agent.Prometheus.Port))
 
-	mux := http.NewServeMux()
-	mux.Handle("/metrics", promhttp.HandlerFor(reg, promhttp.HandlerOpts{}))
-	// bound header reads so an idle client cannot hold a connection open
-	// forever when the endpoint is exposed beyond loopback
-	srv := &http.Server{Addr: addr, Handler: mux, ReadHeaderTimeout: 10 * time.Second}
+	srv := newMetricsServer(reg, metricsTimeout)
 
 	// start listener and fail immediately if bind fails
 	ln, err := net.Listen("tcp", addr)
@@ -238,4 +234,36 @@ func runAgent(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 	return runErr
+}
+
+// a scrape gathers and encodes every series, tens of MiB at the fleet's
+// series count, which the endpoint must not let clients multiply
+const (
+	// metricsInFlight lets a scraper and an operator's curl gather at the
+	// same time, further scrapes are refused with 503 until one is done
+	metricsInFlight = 2
+	// metricsTimeout bounds a gather, past it the scrape gets a 503
+	metricsTimeout = 30 * time.Second
+)
+
+// newMetricsServer serves reg on /metrics, gathers that run longer than
+// timeout are answered with 503
+// with a timeout the handler encodes into a buffer and gives up its slot
+// before the response goes out, so a client that does not read holds the
+// encoded body and no gather, and the write timeout ends its connection
+func newMetricsServer(reg prometheus.Gatherer, timeout time.Duration) *http.Server {
+	mux := http.NewServeMux()
+	mux.Handle("/metrics", promhttp.HandlerFor(reg, promhttp.HandlerOpts{
+		MaxRequestsInFlight: metricsInFlight,
+		Timeout:             timeout,
+	}))
+	// bound header reads, response writes and keep-alive idling so a client
+	// cannot hold a connection open forever when the endpoint is exposed
+	// beyond loopback
+	return &http.Server{
+		Handler:           mux,
+		ReadHeaderTimeout: 10 * time.Second,
+		WriteTimeout:      timeout + 30*time.Second,
+		IdleTimeout:       2 * time.Minute,
+	}
 }
