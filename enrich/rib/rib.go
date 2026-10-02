@@ -753,6 +753,8 @@ func (s *Server) handleConn(conn net.Conn) {
 	var parseErrors int
 	var appliedLogged bool
 	seenTypes := make(map[uint8]struct{})
+	// peers holds the views the session names for the log line at its end,
+	// at most maxViews of them
 	peers := make(map[Peer]struct{})
 
 	// addPath holds the decode options of the peers whose peer up shows
@@ -852,7 +854,9 @@ func (s *Server) handleConn(conn net.Conn) {
 			}
 			update.Reach = nil
 		}
-		peers[update.Peer] = struct{}{}
+		if len(peers) < maxViews {
+			peers[update.Peer] = struct{}{}
+		}
 
 		if len(update.Reach) > 0 || len(update.Withdraw) > 0 {
 			if !appliedLogged {

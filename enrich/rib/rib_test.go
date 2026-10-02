@@ -1037,6 +1037,41 @@ func TestHandleConnBoundsAddPathPeers(t *testing.T) {
 	<-done
 }
 
+func TestHandleConnBoundsViewsItCounts(t *testing.T) {
+	const views = 1 << 15
+
+	var before, after runtime.MemStats
+	runtime.GC()
+	runtime.ReadMemStats(&before)
+
+	// one session names many more views than the table keeps, each with an
+	// End-of-RIB marker
+	s := &Server{table: NewTable()}
+	client, done := startSession(t, s)
+	var wire []byte
+	for i := range views {
+		peer := bmp.NewBMPPeerHeader(bmp.BMP_PEER_TYPE_GLOBAL, 0, uint64(i+1), "192.0.2.3", 65003, "192.0.2.3", 0)
+		wire = append(wire, mustRouteMonitoringWire(t, peer, bgp.NewBGPUpdateMessage(nil, nil, nil))...)
+		if len(wire) >= 1<<16 || i == views-1 {
+			write(t, client, wire)
+			wire = wire[:0]
+		}
+	}
+	write(t, client, mustBMPWire(t, "203.0.113.0/24", 65002))
+	waitForRoute(t, s, "203.0.113.7", true)
+
+	runtime.GC()
+	runtime.ReadMemStats(&after)
+	perView := (int64(after.HeapAlloc) - int64(before.HeapAlloc)) / views
+	t.Logf("heap per view: %d bytes", perView)
+	if perView > 16 {
+		t.Fatalf("heap per view = %d bytes, want at most 16", perView)
+	}
+
+	_ = client.Close()
+	<-done
+}
+
 func TestTableLimitsRoutes(t *testing.T) {
 	tab := NewTable()
 	tab.maxRoutes = 2
