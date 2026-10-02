@@ -839,11 +839,7 @@ func (s *Server) handleConn(conn net.Conn) {
 			log.Info("bmp peer down", "remote", conn.RemoteAddr(), "peer", peer.Address)
 			continue
 		case bmp.BMP_MSG_ROUTE_MONITORING:
-			log.Debug(
-				"bmp route monitoring raw",
-				"remote", conn.RemoteAddr(),
-				"summary", describeRouteMonitoring(msg),
-			)
+			debugRouteMonitoring(conn.RemoteAddr(), msg)
 		}
 
 		update, ok := updateFromBMP(msg)
@@ -869,12 +865,14 @@ func (s *Server) handleConn(conn net.Conn) {
 				appliedLogged = true
 			}
 
-			log.Debug(
-				"bmp route monitoring applied",
-				"remote", conn.RemoteAddr(),
-				"reach", len(update.Reach),
-				"withdraw", len(update.Withdraw),
-			)
+			if log.GetLevel() <= log.DebugLevel {
+				log.Debug(
+					"bmp route monitoring applied",
+					"remote", conn.RemoteAddr(),
+					"reach", len(update.Reach),
+					"withdraw", len(update.Withdraw),
+				)
+			}
 		}
 
 		changes += len(update.Reach) + len(update.Withdraw)
@@ -1127,6 +1125,20 @@ func addPathModes(msg *bgp.BGPMessage) map[bgp.RouteFamily]bgp.BGPAddPathMode {
 		}
 	}
 	return modes
+}
+
+// debugRouteMonitoring logs a summary of a route monitoring message
+// arguments are built before log.Debug checks the level, and the summary
+// costs about as much as parsing the message, so the level is checked first
+func debugRouteMonitoring(remote net.Addr, msg *bmp.BMPMessage) {
+	if log.GetLevel() > log.DebugLevel {
+		return
+	}
+	log.Debug(
+		"bmp route monitoring raw",
+		"remote", remote,
+		"summary", describeRouteMonitoring(msg),
+	)
 }
 
 func describeRouteMonitoring(msg *bmp.BMPMessage) string {

@@ -11,14 +11,17 @@ import (
 	"math/rand/v2"
 	"net"
 	"net/netip"
+	"os"
 	"runtime"
 	"slices"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"syscall"
 	"testing"
 	"time"
 
+	"github.com/charmbracelet/log"
 	"github.com/osrg/gobgp/v3/pkg/packet/bgp"
 	"github.com/osrg/gobgp/v3/pkg/packet/bmp"
 )
@@ -469,6 +472,31 @@ func TestStaleViewsOfALateEndedSession(t *testing.T) {
 
 	_ = fresh.Close()
 	<-freshDone
+}
+
+func TestDebugSummaryCostsNothingAtInfo(t *testing.T) {
+	level := log.GetLevel()
+	log.SetLevel(log.InfoLevel)
+	defer log.SetLevel(level)
+
+	msg := mustBMPMessage(t, "203.0.113.0/24", 65002)
+	remote := &net.TCPAddr{IP: net.ParseIP("127.0.0.1"), Port: 40000}
+
+	// the summary costs about as much as parsing the message, and it is
+	// built for every route monitoring message of a full table dump
+	if allocs := testing.AllocsPerRun(100, func() { debugRouteMonitoring(remote, msg) }); allocs != 0 {
+		t.Fatalf("debug summary at info level allocated %v times, want none", allocs)
+	}
+
+	// at debug level the summary is still written
+	var out bytes.Buffer
+	log.SetOutput(&out)
+	defer log.SetOutput(os.Stderr)
+	log.SetLevel(log.DebugLevel)
+	debugRouteMonitoring(remote, msg)
+	if !strings.Contains(out.String(), "nlri0=203.0.113.0/24") {
+		t.Fatalf("debug output = %q, want the route monitoring summary", out.String())
+	}
 }
 
 func TestHandleConnPeerUpReplacesPeer(t *testing.T) {
