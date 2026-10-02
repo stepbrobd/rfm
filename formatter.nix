@@ -19,7 +19,7 @@ writeShellScriptBin "formatter" ''
   shopt -s globstar
 
   root="$PWD"
-  while [[ ! -f "$root/.git/index" ]]; do
+  while [[ ! -e "$root/.git" ]]; do
     if [[ "$root" == "/" ]]; then
       exit 1
     fi
