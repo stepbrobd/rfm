@@ -2,7 +2,11 @@ package rib
 
 import (
 	"bytes"
+	"context"
 	"encoding/binary"
+	"errors"
+	"fmt"
+	"io"
 	"maps"
 	"math/rand/v2"
 	"net"
@@ -10,6 +14,8 @@ import (
 	"runtime"
 	"slices"
 	"sync"
+	"sync/atomic"
+	"syscall"
 	"testing"
 	"time"
 
@@ -581,6 +587,13 @@ func mustAddPathPeerUpWire(t *testing.T, addr string, sent, received bgp.BGPAddP
 func mustAddPathWire(t *testing.T, prefix string, pathID, origin uint32, withdraw bool) []byte {
 	t.Helper()
 
+	return mustAddPathWireFrom(t, "192.0.2.2", prefix, pathID, origin, withdraw)
+}
+
+// mustAddPathWireFrom is mustAddPathWire for the peer at addr
+func mustAddPathWireFrom(t *testing.T, addr, prefix string, pathID, origin uint32, withdraw bool) []byte {
+	t.Helper()
+
 	nlri := bgp.NewIPAddrPrefix(prefixBits(t, prefix), prefixAddr(t, prefix))
 	nlri.SetPathLocalIdentifier(pathID)
 	update := bgp.NewBGPUpdateMessage([]*bgp.IPAddrPrefix{nlri}, nil, nil)
@@ -597,7 +610,7 @@ func mustAddPathWire(t *testing.T, prefix string, pathID, origin uint32, withdra
 			[]*bgp.IPAddrPrefix{nlri},
 		)
 	}
-	peer := bmp.NewBMPPeerHeader(bmp.BMP_PEER_TYPE_GLOBAL, 0, 0, "192.0.2.2", 65000, "192.0.2.2", 0)
+	peer := bmp.NewBMPPeerHeader(bmp.BMP_PEER_TYPE_GLOBAL, 0, 0, addr, 65000, addr, 0)
 	send := &bgp.MarshallingOption{AddPath: map[bgp.RouteFamily]bgp.BGPAddPathMode{bgp.RF_IPv4_UC: bgp.BGP_ADD_PATH_SEND}}
 	wire, err := bmp.NewBMPRouteMonitoring(*peer, update).Serialize(send)
 	if err != nil {
@@ -695,18 +708,375 @@ func rawRouteMonitoring(addr string, flags uint8, attrs, nlri []byte) []byte {
 	return slices.Concat(h, payload)
 }
 
+func TestHandleConnBuffersLazily(t *testing.T) {
+	const sessions = 64
+	s := &Server{table: NewTable()}
+
+	var before, after runtime.MemStats
+	runtime.GC()
+	runtime.ReadMemStats(&before)
+
+	// one small message per session, so every session has read once
+	for i := range sessions {
+		client, _ := startSession(t, s)
+		write(t, client, mustBMPWire(t, fmt.Sprintf("203.0.%d.0/24", i), 65002))
+	}
+	waitForSummary(t, s, Summary{PrefixesV4: sessions, Routes: sessions, Peers: 1})
+
+	runtime.GC()
+	runtime.ReadMemStats(&after)
+
+	// a session that allocates its buffer for the largest message up front
+	// holds 64 KiB however little the speaker sends
+	perSession := (int64(after.HeapAlloc) - int64(before.HeapAlloc)) / sessions
+	t.Logf("heap per session: %d bytes", perSession)
+	if perSession > 16<<10 {
+		t.Fatalf("heap per session = %d bytes, want at most 16 KiB", perSession)
+	}
+}
+
+func TestServerLimitsSessions(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("Listen: %v", err)
+	}
+	s := newServer(ln)
+	s.maxSessions = 2
+	s.wg.Add(1)
+	go s.accept()
+	defer s.Close()
+
+	dial := func() net.Conn {
+		t.Helper()
+		conn, err := net.Dial("tcp", ln.Addr().String())
+		if err != nil {
+			t.Fatalf("Dial: %v", err)
+		}
+		t.Cleanup(func() { _ = conn.Close() })
+		return conn
+	}
+	waitForSessions := func(want int) {
+		t.Helper()
+		deadline := time.Now().Add(2 * time.Second)
+		for s.Stats().Sessions != want {
+			if time.Now().After(deadline) {
+				t.Fatalf("sessions = %d, want %d", s.Stats().Sessions, want)
+			}
+			time.Sleep(5 * time.Millisecond)
+		}
+	}
+
+	first := dial()
+	dial()
+	waitForSessions(2)
+
+	// the session over the limit is closed right away
+	extra := dial()
+	_ = extra.SetReadDeadline(time.Now().Add(2 * time.Second))
+	if _, err := extra.Read(make([]byte, 1)); !errors.Is(err, io.EOF) {
+		t.Fatalf("read on the session over the limit = %v, want EOF", err)
+	}
+	if got := s.Stats().SessionsRejected; got != 1 {
+		t.Fatalf("rejected sessions = %d, want 1", got)
+	}
+
+	// a closed session makes room again
+	_ = first.Close()
+	waitForSessions(1)
+	dial()
+	waitForSessions(2)
+}
+
+func TestHandleConnBoundsAddPathPeers(t *testing.T) {
+	const peers = 1 << 14
+
+	var before, after runtime.MemStats
+	runtime.GC()
+	runtime.ReadMemStats(&before)
+
+	// one session brings up many more peers that send ADD-PATH than the
+	// table keeps views, 192.0.2.2 first
+	s := &Server{table: NewTable()}
+	client, done := startSession(t, s)
+	wire := mustAddPathPeerUpWire(t, "192.0.2.2", bgp.BGP_ADD_PATH_RECEIVE, bgp.BGP_ADD_PATH_SEND)
+	for i := range peers {
+		addr := netip.AddrFrom4([4]byte{10, byte(i >> 16), byte(i >> 8), byte(i)}).String()
+		wire = append(wire, mustAddPathPeerUpWire(t, addr, bgp.BGP_ADD_PATH_RECEIVE, bgp.BGP_ADD_PATH_SEND)...)
+		if len(wire) >= 1<<16 || i == peers-1 {
+			write(t, client, wire)
+			wire = wire[:0]
+		}
+	}
+	// past the peers it tracks the session cannot tell which peers send
+	// ADD-PATH, so it drops the updates of every peer it does not track,
+	// one past the limit whose path id 0x080a0000 would read as 10.0.0.0/8
+	// and one without ADD-PATH, and it still reads those of 192.0.2.2,
+	// which land after all peer ups as the session reads in order
+	write(t, client, mustAddPathWireFrom(t, "10.0.63.255", "198.51.100.0/24", 0x080a0000, 65003, false))
+	write(t, client, mustBMPWireFrom(t, "192.0.2.0/24", 65004, "192.0.2.4", 0))
+	write(t, client, mustAddPathWire(t, "203.0.113.0/24", 0x080a0000, 65002, false))
+	waitForRoute(t, s, "203.0.113.7", true)
+	for _, addr := range []string{"10.0.0.1", "198.51.100.7", "192.0.2.7"} {
+		if route, ok := s.Lookup(netip.MustParseAddr(addr)); ok {
+			t.Fatalf("Lookup(%s) = %+v, want no route from a peer the session does not track", addr, route)
+		}
+	}
+	if got := s.Stats().ParseErrors; got != 2 {
+		t.Fatalf("parse errors = %d, want the 2 updates dropped", got)
+	}
+
+	runtime.GC()
+	runtime.ReadMemStats(&after)
+	perPeer := (int64(after.HeapAlloc) - int64(before.HeapAlloc)) / peers
+	t.Logf("heap per peer: %d bytes", perPeer)
+	if perPeer > 64 {
+		t.Fatalf("heap per peer = %d bytes, want at most 64", perPeer)
+	}
+
+	_ = client.Close()
+	<-done
+}
+
+func TestTableLimitsRoutes(t *testing.T) {
+	tab := NewTable()
+	tab.maxRoutes = 2
+	peer := netip.MustParseAddr("192.0.2.1")
+	route := func(prefix string, origin uint32) Route {
+		return Route{Prefix: netip.MustParsePrefix(prefix), OriginASN: origin, PeerAddress: peer}
+	}
+
+	tab.Apply(Update{Reach: []Route{route("203.0.113.0/24", 1), route("198.51.100.0/24", 1), route("192.0.2.0/24", 1)}})
+	if got := tab.Summary(); got.Routes != 2 {
+		t.Fatalf("routes = %d, want the limit of 2", got.Routes)
+	}
+	if _, ok := tab.Lookup(netip.MustParseAddr("192.0.2.1")); ok {
+		t.Fatal("route past the limit was stored")
+	}
+	if got := tab.rejected.Load(); got != 1 {
+		t.Fatalf("rejected routes = %d, want 1", got)
+	}
+
+	// a route that replaces one the table holds does not grow it
+	tab.Apply(Update{Reach: []Route{route("203.0.113.0/24", 2)}})
+	if r, ok := tab.Lookup(netip.MustParseAddr("203.0.113.1")); !ok || r.OriginASN != 2 {
+		t.Fatalf("replaced route = %+v ok=%v, want origin 2", r, ok)
+	}
+
+	// a withdraw makes room again
+	tab.Apply(Update{Peer: Peer{Address: peer}, Withdraw: []Withdrawal{{Prefix: netip.MustParsePrefix("198.51.100.0/24")}}})
+	tab.Apply(Update{Reach: []Route{route("192.0.2.0/24", 1)}})
+	if _, ok := tab.Lookup(netip.MustParseAddr("192.0.2.1")); !ok {
+		t.Fatal("route not stored after a withdraw made room")
+	}
+	if got := tab.rejected.Load(); got != 1 {
+		t.Fatalf("rejected routes = %d, want 1", got)
+	}
+
+	// another ADD-PATH path of a prefix the table holds takes room
+	extra := route("203.0.113.0/24", 3)
+	extra.PathID = 7
+	tab.Apply(Update{Reach: []Route{extra}})
+	if got := tab.Summary(); got.Routes != 2 || tab.rejected.Load() != 2 {
+		t.Fatalf("routes = %d rejected = %d, want 2 and 2", got.Routes, tab.rejected.Load())
+	}
+	checkInvariants(t, tab)
+}
+
+func TestTableLimitsViews(t *testing.T) {
+	tab := NewTable()
+	tab.maxViews = 2
+	prefix := netip.MustParsePrefix("203.0.113.0/24")
+
+	for _, addr := range []string{"192.0.2.1", "192.0.2.2", "192.0.2.3"} {
+		tab.Apply(Update{Reach: []Route{{Prefix: prefix, OriginASN: 1, PeerAddress: netip.MustParseAddr(addr)}}})
+	}
+	if got := tab.Summary(); got.Peers != 2 || got.Routes != 2 {
+		t.Fatalf("summary = %+v, want the limit of 2 views", got)
+	}
+	if got := tab.rejected.Load(); got != 1 {
+		t.Fatalf("rejected routes = %d, want 1", got)
+	}
+
+	// a view the table holds still takes more routes
+	tab.Apply(Update{Reach: []Route{{Prefix: netip.MustParsePrefix("198.51.100.0/24"), PeerAddress: netip.MustParseAddr("192.0.2.1")}}})
+	if got := tab.Summary(); got.Routes != 3 {
+		t.Fatalf("routes = %d, want 3", got.Routes)
+	}
+	checkInvariants(t, tab)
+}
+
+// uniqueAttrsRoute returns route i of a speaker that gives every route an
+// AS path and communities of its own, pathLen ASNs, n communities and n
+// large communities
+func uniqueAttrsRoute(i, pathLen, n int) Route {
+	route := Route{
+		Prefix:      netip.PrefixFrom(netip.AddrFrom4([4]byte{byte(1 + i>>16), byte(i >> 8), byte(i), 0}), 24),
+		PeerASN:     64496,
+		PeerAddress: netip.MustParseAddr("192.0.2.1"),
+	}
+	for j := range pathLen {
+		route.ASPath = append(route.ASPath, uint32(4200000000+i*pathLen+j))
+	}
+	route.OriginASN = route.ASPath[pathLen-1]
+	for j := range n {
+		route.Communities = append(route.Communities, uint32(i*n+j))
+		route.LargeCommunities = append(route.LargeCommunities, LargeCommunity{GlobalAdmin: 4200000000, LocalData1: uint32(i), LocalData2: uint32(j)})
+	}
+	return route
+}
+
+func TestTableKeepsLeadingAttributes(t *testing.T) {
+	tab := NewTable()
+	route := uniqueAttrsRoute(0, 1000, 1000)
+	tab.Apply(Update{Reach: []Route{route}})
+
+	// labels need only the origin, which the route keeps whatever its
+	// path holds
+	addr := netip.MustParseAddr("1.0.0.1")
+	if labels, _ := tab.Enrich(addr, addr); labels.ASN != route.OriginASN {
+		t.Fatalf("label = %d, want the origin %d", labels.ASN, route.OriginASN)
+	}
+
+	// a lookup shows the leading part of each list and that it is cut
+	got, ok := tab.Lookup(addr)
+	if !ok || got.OriginASN != route.OriginASN || !got.Truncated {
+		t.Fatalf("Lookup = origin %d truncated=%v ok=%v, want origin %d truncated", got.OriginASN, got.Truncated, ok, route.OriginASN)
+	}
+	if !slices.Equal(got.ASPath, route.ASPath[:maxPathLen]) {
+		t.Fatalf("as path holds %d ASNs, want the leading %d", len(got.ASPath), maxPathLen)
+	}
+	if !slices.Equal(got.Communities, route.Communities[:maxCommunities]) {
+		t.Fatalf("communities hold %d values, want the leading %d", len(got.Communities), maxCommunities)
+	}
+	if !slices.Equal(got.LargeCommunities, route.LargeCommunities[:maxCommunities]) {
+		t.Fatalf("large communities hold %d values, want the leading %d", len(got.LargeCommunities), maxCommunities)
+	}
+
+	// a route whose lists fit is whole, though the table keeps the same
+	// values for the cut one
+	whole := route
+	whole.Prefix = netip.MustParsePrefix("2.0.0.0/24")
+	whole.ASPath = got.ASPath
+	whole.Communities = got.Communities
+	whole.LargeCommunities = got.LargeCommunities
+	tab.Apply(Update{Reach: []Route{whole}})
+	if got, ok := tab.Lookup(netip.MustParseAddr("2.0.0.1")); !ok || got.Truncated || !slices.Equal(got.ASPath, whole.ASPath) {
+		t.Fatalf("Lookup = path of %d ASNs truncated=%v ok=%v, want the whole path", len(got.ASPath), got.Truncated, ok)
+	}
+}
+
+func TestTableHeapPerRouteWithUniqueAttributes(t *testing.T) {
+	const n = 1 << 12
+
+	var before, after runtime.MemStats
+	runtime.GC()
+	runtime.ReadMemStats(&before)
+
+	tab := NewTable()
+	batch := make([]Route, 0, 256)
+	for i := range n {
+		batch = append(batch, uniqueAttrsRoute(i, 64, 256))
+		if len(batch) == cap(batch) {
+			tab.Apply(Update{Reach: batch})
+			batch = batch[:0]
+		}
+	}
+	batch = nil
+
+	runtime.GC()
+	runtime.ReadMemStats(&after)
+	if got := tab.Summary(); got.Routes != n {
+		t.Fatalf("summary = %+v, want %d routes", got, n)
+	}
+	runtime.KeepAlive(tab)
+
+	// a route with a 64 ASN path and 256 communities of each kind took
+	// 13 KiB, so 160k of them filled 2 GiB, a fiftieth of maxRoutes
+	perRoute := (int64(after.HeapAlloc) - int64(before.HeapAlloc)) / n
+	t.Logf("heap per route: %d bytes", perRoute)
+	if perRoute > 4<<10 {
+		t.Fatalf("heap per route = %d bytes, want at most 4 KiB", perRoute)
+	}
+}
+
+// failingListener fails every accept with err until it is closed, a
+// listener that ran out of file descriptors fails with EMFILE
+type failingListener struct {
+	err    error
+	calls  atomic.Int64
+	closed chan struct{}
+}
+
+func (l *failingListener) Accept() (net.Conn, error) {
+	l.calls.Add(1)
+	select {
+	case <-l.closed:
+		return nil, net.ErrClosed
+	default:
+		return nil, l.err
+	}
+}
+
+func (l *failingListener) Close() error {
+	close(l.closed)
+	return nil
+}
+
+func (l *failingListener) Addr() net.Addr {
+	return &net.TCPAddr{}
+}
+
+func TestAcceptBacksOffOnErrors(t *testing.T) {
+	ln := &failingListener{err: syscall.EMFILE, closed: make(chan struct{})}
+	s := newServer(ln)
+	s.wg.Add(1)
+	go s.accept()
+
+	time.Sleep(200 * time.Millisecond)
+	calls := ln.calls.Load()
+
+	// a temporary error leaves the listener running, Wait ends with its
+	// context
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err := s.Wait(ctx); !errors.Is(err, context.Canceled) {
+		t.Fatalf("Wait = %v, want the canceled context", err)
+	}
+	if err := s.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+
+	if calls > 20 {
+		t.Fatalf("accept ran %d times in 200ms of errors, want a backoff", calls)
+	}
+}
+
+func TestAcceptStopsOnPermanentErrors(t *testing.T) {
+	ln := &failingListener{err: syscall.EINVAL, closed: make(chan struct{})}
+	s := newServer(ln)
+	s.wg.Add(1)
+	go s.accept()
+	defer s.Close()
+
+	// an error that is not temporary stops the listener at once, and Wait
+	// hands it to the agent, which fails
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	if err := s.Wait(ctx); !errors.Is(err, syscall.EINVAL) {
+		t.Fatalf("Wait = %v, want the accept error", err)
+	}
+	if calls := ln.calls.Load(); calls != 1 {
+		t.Fatalf("accept ran %d times, want once", calls)
+	}
+}
+
 func TestServerCloseReturnsWithIdleConnection(t *testing.T) {
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatalf("Listen: %v", err)
 	}
 
-	s := &Server{
-		listener: ln,
-		table:    NewTable(),
-		done:     make(chan struct{}),
-		conns:    make(map[net.Conn]struct{}),
-	}
+	s := newServer(ln)
 	s.wg.Add(1)
 	go s.accept()
 
@@ -779,12 +1149,7 @@ func TestServerCloseReturnsAfterZeroLengthHeader(t *testing.T) {
 		t.Fatalf("Listen: %v", err)
 	}
 
-	s := &Server{
-		listener: ln,
-		table:    NewTable(),
-		done:     make(chan struct{}),
-		conns:    make(map[net.Conn]struct{}),
-	}
+	s := newServer(ln)
 	s.wg.Add(1)
 	go s.accept()
 
@@ -1178,8 +1543,8 @@ func TestTableCountsInconsistencies(t *testing.T) {
 		}
 	}
 	tab.RemovePeer(peer)
-	if got := tab.faults.Load(); got != 4 {
-		t.Fatalf("faults = %d, want 4", got)
+	if got := (&Server{table: tab}).Stats().Inconsistencies; got != 4 {
+		t.Fatalf("inconsistencies = %d, want 4", got)
 	}
 }
 

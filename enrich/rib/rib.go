@@ -2,6 +2,7 @@ package rib
 
 import (
 	"bufio"
+	"context"
 	"encoding/binary"
 	"errors"
 	"fmt"
@@ -13,6 +14,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/charmbracelet/log"
 	"github.com/gaissmai/bart"
@@ -23,13 +25,25 @@ import (
 )
 
 const (
-	// bmpScannerInitialBuf is the starting buffer size for the BMP message scanner
-	bmpScannerInitialBuf = 64 * 1024
 	// bmpScannerMaxBuf caps BMP message size, very big and prob not necessary (just in case)
 	bmpScannerMaxBuf = 1 << 20
 	// removeChunk is how many routes RemovePeer withdraws per hold of the
 	// write lock, the collector looks labels up under its own lock
 	removeChunk = 1024
+	// maxSessions bounds the BMP sessions open at once, a router runs one
+	// or a few and every session holds a goroutine and its read buffer
+	maxSessions = 16
+	// maxPathLen and maxCommunities bound what a route keeps of its
+	// attributes, labels need only the origin, which the route keeps apart,
+	// and a lookup shows the leading part of a longer list on a route
+	// marked truncated, a route whose attributes no other route shares then
+	// holds about 3 KiB of heap however long they are
+	maxPathLen     = 32
+	maxCommunities = 32
+	// maxRoutes bounds the routes the RIB keeps, six views of a full table
+	// of about 1.25M prefixes fit, and maxViews bounds the views
+	maxRoutes = 1 << 23
+	maxViews  = 1024
 )
 
 // LargeCommunity is a decoded RFC 8092 large community
@@ -66,6 +80,10 @@ type Route struct {
 	// PathID tells apart the paths a view holds for one prefix when the
 	// session negotiated ADD-PATH, it is 0 otherwise
 	PathID uint32
+	// Truncated marks a route of the table whose AS path, communities or
+	// large communities were longer than it keeps, they then hold only
+	// their leading values, see maxPathLen
+	Truncated bool
 }
 
 // Peer returns the view this route belongs to
@@ -111,6 +129,7 @@ type routeMeta struct {
 	PeerAddress       netip.Addr
 	PeerDistinguisher uint64
 	PostPolicy        bool
+	Truncated         bool
 }
 
 type routeMetaKey struct {
@@ -121,6 +140,7 @@ type routeMetaKey struct {
 	PeerAddress       netip.Addr
 	PeerDistinguisher uint64
 	PostPolicy        bool
+	Truncated         bool
 }
 
 type routeMetaState struct {
@@ -173,15 +193,25 @@ type Table struct {
 	metas    map[uint64]*routeMetaState
 	metaKeys map[routeMetaKey]uint64
 	nextMeta uint64
+
+	// maxRoutes and maxViews bound the routes and views a speaker can make
+	// the table hold, a route past either is counted in rejected and
+	// dropped, limitLogged is when that was last logged
+	maxRoutes   int
+	maxViews    int
+	rejected    atomic.Uint64
+	limitLogged time.Time
 }
 
 // NewTable creates an empty RIB table
 func NewTable() *Table {
 	return &Table{
-		views:    make(map[Peer]*view),
-		metas:    make(map[uint64]*routeMetaState),
-		metaKeys: make(map[routeMetaKey]uint64),
-		nextMeta: 1,
+		views:     make(map[Peer]*view),
+		metas:     make(map[uint64]*routeMetaState),
+		metaKeys:  make(map[routeMetaKey]uint64),
+		nextMeta:  1,
+		maxRoutes: maxRoutes,
+		maxViews:  maxViews,
 	}
 }
 
@@ -326,26 +356,68 @@ func (t *Table) Peers() []Peer {
 
 // Server owns a BMP listener and an in-memory RIB
 type Server struct {
-	listener    net.Listener
-	table       *Table
-	done        chan struct{}
-	wg          sync.WaitGroup
-	connsMu     sync.Mutex
-	conns       map[net.Conn]struct{}
-	closing     bool
-	parseErrors atomic.Uint64
+	listener net.Listener
+	table    *Table
+	done     chan struct{}
+	wg       sync.WaitGroup
+	connsMu  sync.Mutex
+	conns    map[net.Conn]struct{}
+	closing  bool
+	// failed closes when accept stopped on an error that is not temporary,
+	// which failure holds
+	failed  chan struct{}
+	failure error
+	// maxSessions bounds the sessions open at once, limitLogged is when the
+	// last session over it was logged, both under connsMu
+	maxSessions      int
+	limitLogged      time.Time
+	parseErrors      atomic.Uint64
+	sessionsRejected atomic.Uint64
+}
+
+func newServer(ln net.Listener) *Server {
+	return &Server{
+		listener:    ln,
+		table:       NewTable(),
+		done:        make(chan struct{}),
+		failed:      make(chan struct{}),
+		conns:       make(map[net.Conn]struct{}),
+		maxSessions: maxSessions,
+	}
 }
 
 // Stats counts what the BMP listener saw since it started
 type Stats struct {
+	// Sessions is the number of BMP sessions open now
+	Sessions int
+	// SessionsRejected counts the connections closed right after accept
+	// because the most sessions rfm serves at once were open
+	SessionsRejected uint64
 	// ParseErrors counts the messages that did not parse in full, the
-	// usable part of some of them still applies
+	// usable part of some of them still applies, and the updates a session
+	// dropped because it does not know the capabilities of their peer
 	ParseErrors uint64
+	// RoutesRejected counts the routes the RIB did not store because it
+	// held the most routes or views it keeps
+	RoutesRejected uint64
+	// Inconsistencies counts the lookups and updates that found the RIB
+	// contradicting itself, a bug in rfm, see Table.fault
+	Inconsistencies uint64
 }
 
 // Stats returns the counters of the BMP listener
 func (s *Server) Stats() Stats {
-	return Stats{ParseErrors: s.parseErrors.Load()}
+	s.connsMu.Lock()
+	sessions := len(s.conns)
+	s.connsMu.Unlock()
+
+	return Stats{
+		Sessions:         sessions,
+		SessionsRejected: s.sessionsRejected.Load(),
+		ParseErrors:      s.parseErrors.Load(),
+		RoutesRejected:   s.table.rejected.Load(),
+		Inconsistencies:  s.table.faults.Load(),
+	}
 }
 
 // Listen starts a BMP listener when configured
@@ -362,12 +434,7 @@ func Listen(cfg config.RIBConfig) (collector.Enricher, io.Closer, error) {
 		return nil, nil, fmt.Errorf("listen BMP %q: %w", addr, err)
 	}
 
-	s := &Server{
-		listener: ln,
-		table:    NewTable(),
-		done:     make(chan struct{}),
-		conns:    make(map[net.Conn]struct{}),
-	}
+	s := newServer(ln)
 	s.wg.Add(1)
 	go s.accept()
 
@@ -408,19 +475,50 @@ func (s *Server) Close() error {
 	return err
 }
 
+// Wait returns ctx.Err() once ctx is done, or the error that stopped the
+// listener, an accept error that is not temporary, the open sessions go on
+// until Close
+func (s *Server) Wait(ctx context.Context) error {
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-s.failed:
+		return s.failure
+	}
+}
+
 func (s *Server) accept() {
 	defer s.wg.Done()
 
+	var delay time.Duration
 	for {
 		conn, err := s.listener.Accept()
 		if err != nil {
+			if s.isClosing() {
+				return
+			}
+			// accept still marks fd exhaustion with the deprecated
+			// Temporary, any other error stops the listener for Wait to
+			// report
+			var te interface{ Temporary() bool }
+			if !errors.As(err, &te) || !te.Temporary() {
+				s.failure = fmt.Errorf("accept bmp connection: %w", err)
+				close(s.failed)
+				log.Error("bmp listener stopped", "err", err)
+				return
+			}
+			// a listener out of file descriptors fails every accept at
+			// once, so wait between tries as net/http does
+			delay = min(max(2*delay, 5*time.Millisecond), time.Second)
+			log.Warn("bmp accept", "err", err, "retry_in", delay)
 			select {
 			case <-s.done:
 				return
-			default:
-				continue
+			case <-time.After(delay):
 			}
+			continue
 		}
+		delay = 0
 
 		if !s.trackConn(conn) {
 			continue
@@ -444,9 +542,11 @@ func (s *Server) accept() {
 func (s *Server) handleConn(conn net.Conn) {
 	log.Info("bmp session opened", "remote", conn.RemoteAddr())
 
+	// the scanner starts small and doubles its buffer up to the largest
+	// message the session sends, an idle session holds 4 KiB
 	scanner := bufio.NewScanner(conn)
 	scanner.Split(splitBMP)
-	scanner.Buffer(make([]byte, bmpScannerInitialBuf), bmpScannerMaxBuf)
+	scanner.Buffer(nil, bmpScannerMaxBuf)
 
 	var messages int
 	var changes int
@@ -456,9 +556,13 @@ func (s *Server) handleConn(conn net.Conn) {
 	peers := make(map[Peer]struct{})
 
 	// addPath holds the decode options of the peers whose peer up shows
-	// that they send ADD-PATH to the monitored router, keyed by address and
-	// distinguisher, the policy views of a peer share its session
+	// that they send ADD-PATH to the monitored router, and nil for those
+	// whose peer up did not parse, keyed by address and distinguisher, the
+	// policy views of a peer share its session
+	// it holds at most maxViews peers, overflow records that a peer up
+	// came past them
 	addPath := make(map[Peer][]*bgp.MarshallingOption)
+	var overflow bool
 	options := func(h bmp.BMPPeerHeader) []*bgp.MarshallingOption {
 		peer := peerFromHeader(h)
 		peer.PostPolicy = false
@@ -467,12 +571,13 @@ func (s *Server) handleConn(conn net.Conn) {
 	// undecodable reports whether the session cannot read the updates of
 	// the peer of h, a peer up that did not parse leaves the capabilities
 	// of the peer unknown, and without them ADD-PATH path ids read as
-	// prefixes
+	// prefixes, after an overflow any peer the session does not hold may
+	// send them
 	undecodable := func(h bmp.BMPPeerHeader) bool {
 		peer := peerFromHeader(h)
 		peer.PostPolicy = false
 		opts, held := addPath[peer]
-		return held && opts == nil
+		return held && opts == nil || !held && overflow
 	}
 
 	for scanner.Scan() {
@@ -506,16 +611,21 @@ func (s *Server) handleConn(conn net.Conn) {
 			s.table.RemovePeerViews(peer)
 			peer.PostPolicy = false
 			delete(addPath, peer)
-			if up, ok := msg.Body.(*bmp.BMPPeerUpNotification); ok {
-				if opts := addPathOptions(up); opts != nil {
-					addPath[peer] = opts
-				}
-			} else {
-				// a body that did not parse leaves the capabilities of the
-				// peer unknown, which nil marks, see undecodable
-				addPath[peer] = nil
+			var opts []*bgp.MarshallingOption
+			up, parsed := msg.Body.(*bmp.BMPPeerUpNotification)
+			if parsed {
+				opts = addPathOptions(up)
 			}
-			log.Info("bmp peer up", "remote", conn.RemoteAddr(), "peer", peer.Address, "add_path", addPath[peer] != nil)
+			switch {
+			case parsed && opts == nil:
+				// a peer without ADD-PATH needs no entry
+			case len(addPath) < maxViews:
+				addPath[peer] = opts
+			case !overflow:
+				overflow = true
+				log.Error("bmp session past its add-path peer limit, dropping the updates of the peers it does not track", "remote", conn.RemoteAddr(), "peer", peer.Address, "limit", maxViews)
+			}
+			log.Info("bmp peer up", "remote", conn.RemoteAddr(), "peer", peer.Address, "add_path", opts != nil, "capabilities_known", parsed)
 			continue
 		case bmp.BMP_MSG_PEER_DOWN_NOTIFICATION:
 			peer := peerFromHeader(msg.PeerHeader)
@@ -665,7 +775,27 @@ func (s *Server) trackConn(conn net.Conn) bool {
 		_ = conn.Close()
 		return false
 	}
+	if len(s.conns) >= s.maxSessions {
+		_ = conn.Close()
+		rejected := s.sessionsRejected.Add(1)
+		if every(&s.limitLogged, time.Minute) {
+			log.Warn("bmp session limit reached, closing new sessions", "remote", conn.RemoteAddr(), "limit", s.maxSessions, "rejected", rejected)
+		}
+		return false
+	}
 	s.conns[conn] = struct{}{}
+	return true
+}
+
+// every reports whether interval passed since last and then moves last to
+// now, which keeps a log line about a limit to one per interval
+// the caller holds the lock that guards last
+func every(last *time.Time, interval time.Duration) bool {
+	now := time.Now()
+	if !last.IsZero() && now.Sub(*last) < interval {
+		return false
+	}
+	*last = now
 	return true
 }
 
@@ -878,6 +1008,21 @@ func (t *Table) insertRoute(route Route) {
 	}
 
 	v := t.views[route.Peer()]
+	var head viewRoute
+	var held bool
+	if v != nil {
+		head, held = v.routes.Get(prefix)
+	}
+	var paths []viewRoute
+	i := -1
+	if held && head.pathID != route.PathID {
+		paths = v.more[prefix]
+		i = slices.IndexFunc(paths, func(p viewRoute) bool { return p.pathID == route.PathID })
+	}
+	// a route that replaces the same path takes no room
+	if (!held || (head.pathID != route.PathID && i < 0)) && !t.admit(v == nil) {
+		return
+	}
 	if v == nil {
 		v = &view{peer: route.Peer()}
 		t.addView(v)
@@ -891,9 +1036,8 @@ func (t *Table) insertRoute(route Route) {
 		originASN:   route.OriginASN,
 		originASSet: route.OriginASSet,
 	}
-	head, ok := v.routes.Get(prefix)
 	switch {
-	case !ok:
+	case !held:
 		v.routes.Insert(prefix, value)
 		t.routes++
 		t.offered(prefix, v, value, true)
@@ -901,29 +1045,41 @@ func (t *Table) insertRoute(route Route) {
 		v.routes.Insert(prefix, value)
 		t.releaseMeta(head.metaID)
 		t.offered(prefix, v, value, false)
+	case i >= 0:
+		t.releaseMeta(paths[i].metaID)
+		paths[i] = value
+	case value.pathID < head.pathID:
+		// the view serves its lowest path id whatever order the paths
+		// arrive in
+		v.setMore(prefix, append(paths, head))
+		v.routes.Insert(prefix, value)
+		t.routes++
+		t.offered(prefix, v, value, false)
 	default:
-		paths := v.more[prefix]
-		i := slices.IndexFunc(paths, func(p viewRoute) bool { return p.pathID == value.pathID })
-		switch {
-		case i >= 0:
-			t.releaseMeta(paths[i].metaID)
-			paths[i] = value
-		case value.pathID < head.pathID:
-			// the view serves its lowest path id whatever order the paths
-			// arrive in
-			paths = append(paths, head)
-			v.routes.Insert(prefix, value)
-			t.routes++
-			t.offered(prefix, v, value, false)
-		default:
-			paths = append(paths, value)
-			t.routes++
-		}
-		if v.more == nil {
-			v.more = make(map[netip.Prefix][]viewRoute)
-		}
-		v.more[prefix] = paths
+		v.setMore(prefix, append(paths, value))
+		t.routes++
 	}
+}
+
+// admit reports whether the table has room for one more route, and for
+// one more view when newView is set, a route turned away is counted and
+// logged once a minute at most
+// it must be called with mu held
+func (t *Table) admit(newView bool) bool {
+	var limit string
+	switch {
+	case newView && len(t.views) >= t.maxViews:
+		limit = "views"
+	case t.routes >= t.maxRoutes:
+		limit = "routes"
+	default:
+		return true
+	}
+	rejected := t.rejected.Add(1)
+	if every(&t.limitLogged, time.Minute) {
+		log.Warn("rib limit reached, dropping routes", "limit", limit, "routes", t.routes, "views", len(t.views), "rejected", rejected)
+	}
+	return false
 }
 
 // deleteRoute drops path pathID of view v for prefix and updates best
@@ -974,6 +1130,9 @@ func (v *view) setMore(prefix netip.Prefix, paths []viewRoute) {
 	if len(paths) == 0 {
 		delete(v.more, prefix)
 		return
+	}
+	if v.more == nil {
+		v.more = make(map[netip.Prefix][]viewRoute)
 	}
 	v.more[prefix] = paths
 }
@@ -1097,6 +1256,7 @@ func (t *Table) route(prefix netip.Prefix, value viewRoute) (Route, bool) {
 	route.PeerAddress = routeMeta.PeerAddress
 	route.PeerDistinguisher = routeMeta.PeerDistinguisher
 	route.PostPolicy = routeMeta.PostPolicy
+	route.Truncated = routeMeta.Truncated
 	return route, true
 }
 
@@ -1275,16 +1435,25 @@ func (a attrs) route(prefix netip.Prefix, peer bmp.BMPPeerHeader) Route {
 	return route
 }
 
+// meta returns what the table keeps of r besides its prefix and origin, the
+// leading maxPathLen ASNs of its path and maxCommunities communities and
+// large communities each, and whether that cut any of them
 func (r Route) meta() routeMeta {
 	return routeMeta{
-		ASPath:            append([]uint32(nil), r.ASPath...),
-		Communities:       append([]uint32(nil), r.Communities...),
-		LargeCommunities:  append([]LargeCommunity(nil), r.LargeCommunities...),
+		ASPath:            leading(r.ASPath, maxPathLen),
+		Communities:       leading(r.Communities, maxCommunities),
+		LargeCommunities:  leading(r.LargeCommunities, maxCommunities),
 		PeerASN:           r.PeerASN,
 		PeerAddress:       r.PeerAddress,
 		PeerDistinguisher: r.PeerDistinguisher,
 		PostPolicy:        r.PostPolicy,
+		Truncated:         len(r.ASPath) > maxPathLen || len(r.Communities) > maxCommunities || len(r.LargeCommunities) > maxCommunities,
 	}
+}
+
+// leading returns a copy of at most the first n values of s
+func leading[T any](s []T, n int) []T {
+	return append([]T(nil), s[:min(len(s), n)]...)
 }
 
 func (m routeMeta) empty() bool {
@@ -1313,6 +1482,7 @@ func (m routeMeta) key() routeMetaKey {
 		PeerAddress:       m.PeerAddress,
 		PeerDistinguisher: m.PeerDistinguisher,
 		PostPolicy:        m.PostPolicy,
+		Truncated:         m.Truncated,
 	}
 }
 
