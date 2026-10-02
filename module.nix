@@ -68,7 +68,7 @@ in
                     iface_stats_size = std.mkOption {
                       type = std.types.ints.unsigned;
                       default = 0;
-                      description = "Override the BPF iface stats map capacity, 0 means auto-compute from interface count.";
+                      description = "Override the BPF iface stats map capacity, 0 keeps the default of 4096 counter keys. A pinned map of another capacity fails the start until the pin is removed or the host reboots.";
                     };
 
                     adaptive_sampling = std.mkOption {

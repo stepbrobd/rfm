@@ -67,19 +67,7 @@ func runAgent(cmd *cobra.Command, args []string) error {
 		enricher = backends.Enricher
 	}
 
-	ifaceStatsSize := cfg.Agent.BPF.IfaceStatsSize
-	if ifaceStatsSize == 0 {
-		// 2 directions and 3 protos (ipv4, ipv6, other) per interface, rounded up
-		ifaceStatsSize = max(len(ifaces)*8, 64)
-	}
-
-	p, err := probe.Load(probe.Config{
-		SampleRate:     cfg.Agent.BPF.SampleRate,
-		RingBufSize:    cfg.Agent.BPF.RingBufSize,
-		WakeupBatch:    cfg.Agent.BPF.WakeupBatch,
-		IfaceStatsSize: ifaceStatsSize,
-		PinPath:        cfg.Agent.BPF.PinPath,
-	})
+	p, err := probe.Load(probeConfig(cfg))
 	if err != nil {
 		return fmt.Errorf("load probe: %w", err)
 	}
@@ -265,5 +253,20 @@ func newMetricsServer(reg prometheus.Gatherer, timeout time.Duration) *http.Serv
 		ReadHeaderTimeout: 10 * time.Second,
 		WriteTimeout:      timeout + 30*time.Second,
 		IdleTimeout:       2 * time.Minute,
+	}
+}
+
+// probeConfig is the probe setup cfg asks for
+// iface_stats_size 0 keeps the size the object declares, 4096 counter keys,
+// rather than one sized for the links up at start, which interfaces that
+// come later would overflow, and which would change with the links up from
+// one start to the next, while a pinned map of another size fails the start
+func probeConfig(cfg *config.Config) probe.Config {
+	return probe.Config{
+		SampleRate:     cfg.Agent.BPF.SampleRate,
+		RingBufSize:    cfg.Agent.BPF.RingBufSize,
+		WakeupBatch:    cfg.Agent.BPF.WakeupBatch,
+		IfaceStatsSize: cfg.Agent.BPF.IfaceStatsSize,
+		PinPath:        cfg.Agent.BPF.PinPath,
 	}
 }
