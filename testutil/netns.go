@@ -24,6 +24,25 @@ const (
 	packetVNetHdrSockLevel = unix.SOL_PACKET
 )
 
+// virtioNetHdr is struct virtio_net_hdr, AF_PACKET sockets use the legacy
+// virtio byte order (vio_le), which is the byte order of the host
+type virtioNetHdr struct {
+	Flags      uint8
+	GSOType    uint8
+	HdrLen     uint16
+	GSOSize    uint16
+	CsumStart  uint16
+	CsumOffset uint16
+}
+
+func (h virtioNetHdr) marshal() []byte {
+	b, err := binary.Append(nil, binary.NativeEndian, h)
+	if err != nil {
+		panic(err)
+	}
+	return b
+}
+
 // NS is an isolated network namespace with a veth pair
 type NS struct {
 	veth *netlink.Veth
@@ -170,19 +189,20 @@ func (n *NS) SendGSO(t *testing.T, ifname string, pkt []byte, hdrLen, gsoSize ui
 		t.Fatalf("PACKET_VNET_HDR: %v", err)
 	}
 
-	// struct virtio_net_hdr, little endian on AF_PACKET
 	// the checksum fields locate the tcp checksum so the kernel accepts
 	// the frame as a partial checksum gso skb
-	hdr := make([]byte, virtioNetHdrLen)
-	hdr[0] = virtioNetHdrNeedsCsum
-	hdr[1] = virtioNetHdrGSOTCPv4
-	if binary.BigEndian.Uint16(pkt[12:14]) == EthPIPv6 {
-		hdr[1] = virtioNetHdrGSOTCPv6
+	vnet := virtioNetHdr{
+		Flags:      virtioNetHdrNeedsCsum,
+		GSOType:    virtioNetHdrGSOTCPv4,
+		HdrLen:     hdrLen,
+		GSOSize:    gsoSize,
+		CsumStart:  hdrLen - TCPHdrLen,
+		CsumOffset: tcpChecksumOffset,
 	}
-	binary.LittleEndian.PutUint16(hdr[2:4], hdrLen)
-	binary.LittleEndian.PutUint16(hdr[4:6], gsoSize)
-	binary.LittleEndian.PutUint16(hdr[6:8], hdrLen-TCPHdrLen)
-	binary.LittleEndian.PutUint16(hdr[8:10], tcpChecksumOffset)
+	if binary.BigEndian.Uint16(pkt[12:14]) == EthPIPv6 {
+		vnet.GSOType = virtioNetHdrGSOTCPv6
+	}
+	hdr := vnet.marshal()
 
 	addr := &syscall.SockaddrLinklayer{
 		Ifindex: dev.Attrs().Index,
