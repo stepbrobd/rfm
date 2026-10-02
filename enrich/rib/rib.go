@@ -8,9 +8,11 @@ import (
 	"io"
 	"net"
 	"net/netip"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	"github.com/charmbracelet/log"
 	"github.com/gaissmai/bart"
@@ -65,11 +67,30 @@ func (r Route) Peer() Peer {
 	return Peer{Address: r.PeerAddress, Distinguisher: r.PeerDistinguisher, PostPolicy: r.PostPolicy}
 }
 
-type routeValue struct {
-	Prefix      netip.Prefix
-	OriginASN   uint32
-	OriginASSet bool
-	MetaID      uint64
+// view holds the routes of one view, keyed by prefix in a trie of its own
+type view struct {
+	peer   Peer
+	routes bart.Table[viewRoute]
+}
+
+// viewRoute is what a view keeps of a route, the prefix is its trie key and
+// the rest of the route sits in the interned metadata
+type viewRoute struct {
+	metaID      uint64
+	originASN   uint32
+	originASSet bool
+}
+
+// bestRoute is the route the table serves for a prefix
+// it copies the origin of the winning view's route so labels read one trie,
+// and views counts the views that hold the prefix so the last withdraw
+// deletes it without searching the views
+type bestRoute struct {
+	view        *view
+	originASN   uint32
+	views       uint32
+	bits        uint8
+	originASSet bool
 }
 
 type routeMeta struct {
@@ -116,27 +137,30 @@ type Summary struct {
 }
 
 // Table is a longest-prefix-match routing table
-// the tries hold the best route per prefix, entries hold every route per
-// prefix and peer so the best route can be reselected on a withdraw
+// every view keeps its routes in a trie of its own and best keeps the route
+// that wins per prefix, so a prefix that one view announces costs an entry
+// in two tries and no map, and removing a view walks only its own routes
 type Table struct {
-	mu         sync.RWMutex
-	v4         bart.Table[routeValue]
-	v6         bart.Table[routeValue]
-	entries    map[netip.Prefix]map[Peer]routeValue
-	peerRoutes map[Peer]int
-	metas      map[uint64]*routeMetaState
-	metaKeys   map[routeMetaKey]uint64
-	nextMeta   uint64
+	mu   sync.RWMutex
+	best bart.Table[bestRoute]
+	// views holds the views with at least one route, order holds the same
+	// views by preference, see betterPeer
+	views    map[Peer]*view
+	order    []*view
+	routes   int
+	faults   atomic.Uint64
+	metas    map[uint64]*routeMetaState
+	metaKeys map[routeMetaKey]uint64
+	nextMeta uint64
 }
 
 // NewTable creates an empty RIB table
 func NewTable() *Table {
 	return &Table{
-		entries:    make(map[netip.Prefix]map[Peer]routeValue),
-		peerRoutes: make(map[Peer]int),
-		metas:      make(map[uint64]*routeMetaState),
-		metaKeys:   make(map[routeMetaKey]uint64),
-		nextMeta:   1,
+		views:    make(map[Peer]*view),
+		metas:    make(map[uint64]*routeMetaState),
+		metaKeys: make(map[routeMetaKey]uint64),
+		nextMeta: 1,
 	}
 }
 
@@ -148,12 +172,16 @@ func (t *Table) Apply(update Update) {
 	for _, prefix := range update.Withdraw {
 		prefix = prefix.Masked()
 		if update.Peer == (Peer{}) {
-			for peer := range t.entries[prefix] {
-				t.deleteRoute(prefix, peer)
+			// deleteRoute may drop the view from the map, which a range
+			// over it allows
+			for _, v := range t.views {
+				t.deleteRoute(prefix, v)
 			}
 			continue
 		}
-		t.deleteRoute(prefix, update.Peer)
+		if v := t.views[update.Peer]; v != nil {
+			t.deleteRoute(prefix, v)
+		}
 	}
 	for _, route := range update.Reach {
 		t.insertRoute(route)
@@ -165,13 +193,16 @@ func (t *Table) RemovePeer(peer Peer) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	if t.peerRoutes[peer] == 0 {
+	v := t.views[peer]
+	if v == nil {
 		return
 	}
-	for prefix, peers := range t.entries {
-		if _, ok := peers[peer]; ok {
-			t.deleteRoute(prefix, peer)
-		}
+	// out of order first, so withdrawn picks the next best among the others
+	t.dropView(v)
+	for prefix, value := range v.routes.All() {
+		t.releaseMeta(value.metaID)
+		t.routes--
+		t.withdrawn(prefix, v)
 	}
 }
 
@@ -194,11 +225,18 @@ func (t *Table) Lookup(addr netip.Addr) (Route, bool) {
 	t.mu.RLock()
 	defer t.mu.RUnlock()
 
-	value, ok := lookupTable(&t.v4, &t.v6, addr)
+	best, ok := t.best.Lookup(addr)
 	if !ok {
 		return Route{}, false
 	}
-	return t.route(value), true
+	// the winning view holds every prefix best credits to it
+	prefix := netip.PrefixFrom(addr, int(best.bits)).Masked()
+	value, ok := best.view.routes.Get(prefix)
+	if !ok {
+		t.fault("best credits a view with a prefix it does not hold", prefix)
+		return Route{}, false
+	}
+	return t.route(prefix, value)
 }
 
 // Enrich returns only the labels Prometheus needs
@@ -215,11 +253,11 @@ func (t *Table) labels(addr netip.Addr) collector.Labels {
 	t.mu.RLock()
 	defer t.mu.RUnlock()
 
-	value, ok := lookupTable(&t.v4, &t.v6, addr)
-	if !ok || value.Prefix.Bits() == 0 {
+	best, ok := t.best.Lookup(addr)
+	if !ok || best.bits == 0 {
 		return collector.Labels{}
 	}
-	return collector.Labels{ASN: value.OriginASN}
+	return collector.Labels{ASN: best.originASN}
 }
 
 // Summary counts the prefixes, routes and peers in the table
@@ -227,15 +265,11 @@ func (t *Table) Summary() Summary {
 	t.mu.RLock()
 	defer t.mu.RUnlock()
 
-	var routes int
-	for _, n := range t.peerRoutes {
-		routes += n
-	}
 	return Summary{
-		PrefixesV4: t.v4.Size(),
-		PrefixesV6: t.v6.Size(),
-		Routes:     routes,
-		Peers:      len(t.peerRoutes),
+		PrefixesV4: t.best.Size4(),
+		PrefixesV6: t.best.Size6(),
+		Routes:     t.routes,
+		Peers:      len(t.views),
 	}
 }
 
@@ -244,8 +278,8 @@ func (t *Table) Peers() []Peer {
 	t.mu.RLock()
 	defer t.mu.RUnlock()
 
-	out := make([]Peer, 0, len(t.peerRoutes))
-	for peer := range t.peerRoutes {
+	out := make([]Peer, 0, len(t.views))
+	for peer := range t.views {
 		out = append(out, peer)
 	}
 	return out
@@ -631,76 +665,138 @@ func describePrefix(nlri bgp.AddrPrefixInterface) string {
 	return fmt.Sprintf("%s flat=%v", nlri.String(), flat)
 }
 
-// insertRoute stores route under its peer and reselects the best route
+// insertRoute stores route in the view of its peer and updates best
 // it must be called with mu held
 func (t *Table) insertRoute(route Route) {
-	route.Prefix = route.Prefix.Masked()
-	peer := route.Peer()
-
-	peers, ok := t.entries[route.Prefix]
-	if !ok {
-		peers = make(map[Peer]routeValue)
-		t.entries[route.Prefix] = peers
+	prefix := route.Prefix.Masked()
+	if !prefix.IsValid() {
+		t.fault("a route without a valid prefix", route.Prefix)
+		return
 	}
-	if current, ok := peers[peer]; ok {
-		t.releaseMeta(current.MetaID)
+
+	v := t.views[route.Peer()]
+	if v == nil {
+		v = &view{peer: route.Peer()}
+		t.addView(v)
+	}
+
+	// intern before the release, a route that keeps its metadata then
+	// never drops the last reference to it
+	value := viewRoute{
+		metaID:      t.internMeta(route.meta()),
+		originASN:   route.OriginASN,
+		originASSet: route.OriginASSet,
+	}
+	old, replaced := v.routes.Get(prefix)
+	v.routes.Insert(prefix, value)
+	if replaced {
+		t.releaseMeta(old.metaID)
 	} else {
-		t.peerRoutes[peer]++
+		t.routes++
 	}
-
-	peers[peer] = routeValue{
-		Prefix:      route.Prefix,
-		OriginASN:   route.OriginASN,
-		OriginASSet: route.OriginASSet,
-		MetaID:      t.internMeta(route.meta()),
-	}
-	t.reselect(route.Prefix)
+	t.offered(prefix, v, value, !replaced)
 }
 
-// deleteRoute drops the route of peer for prefix and reselects the best
+// deleteRoute drops the route of view v for prefix and updates best
 // it must be called with mu held
-func (t *Table) deleteRoute(prefix netip.Prefix, peer Peer) {
-	peers, ok := t.entries[prefix]
+func (t *Table) deleteRoute(prefix netip.Prefix, v *view) {
+	old, ok := v.routes.Get(prefix)
 	if !ok {
 		return
 	}
-	current, ok := peers[peer]
-	if !ok {
-		return
+	v.routes.Delete(prefix)
+	t.releaseMeta(old.metaID)
+	t.routes--
+	if v.routes.Size() == 0 {
+		t.dropView(v)
 	}
-
-	t.releaseMeta(current.MetaID)
-	delete(peers, peer)
-	if t.peerRoutes[peer]--; t.peerRoutes[peer] == 0 {
-		delete(t.peerRoutes, peer)
-	}
-
-	if len(peers) == 0 {
-		delete(t.entries, prefix)
-		deletePrefix(&t.v4, &t.v6, prefix)
-		return
-	}
-	t.reselect(prefix)
+	t.withdrawn(prefix, v)
 }
 
-// reselect installs the best route for prefix in the trie
-// a post policy view wins over a pre policy one, then the lowest peer
-// address and distinguisher, which keeps the choice stable across updates
+// offered updates best after view v announced value for prefix, added says
+// that v did not hold prefix before
 // it must be called with mu held
-func (t *Table) reselect(prefix netip.Prefix) {
-	var best Peer
-	var value routeValue
-	found := false
-	for peer, v := range t.entries[prefix] {
-		if !found || betterPeer(peer, best) {
-			best, value, found = peer, v, true
+func (t *Table) offered(prefix netip.Prefix, v *view, value viewRoute, added bool) {
+	best, ok := t.best.Get(prefix)
+	if !ok {
+		t.best.Insert(prefix, bestRoute{
+			view:        v,
+			originASN:   value.originASN,
+			views:       1,
+			bits:        uint8(prefix.Bits()),
+			originASSet: value.originASSet,
+		})
+		return
+	}
+	if added {
+		best.views++
+	}
+	if best.view == v || betterPeer(v.peer, best.view.peer) {
+		best.view, best.originASN, best.originASSet = v, value.originASN, value.originASSet
+	}
+	t.best.Insert(prefix, best)
+}
+
+// withdrawn updates best after view v gave up prefix, when v won it the
+// first view in order that still holds prefix takes over
+// v may still hold prefix in its trie, so it is skipped
+// it must be called with mu held
+func (t *Table) withdrawn(prefix netip.Prefix, v *view) {
+	best, ok := t.best.Get(prefix)
+	if !ok {
+		t.fault("a view gave up a prefix best does not hold", prefix)
+		return
+	}
+	if best.views--; best.views == 0 {
+		t.best.Delete(prefix)
+		return
+	}
+	if best.view == v {
+		for _, w := range t.order {
+			if value, ok := w.routes.Get(prefix); ok && w != v {
+				best.view, best.originASN, best.originASSet = w, value.originASN, value.originASSet
+				break
+			}
 		}
 	}
-	if found {
-		insertValue(&t.v4, &t.v6, value)
+	t.best.Insert(prefix, best)
+}
+
+// fault counts a lookup or an update that found the table contradicting
+// itself, a bug in rfm, the lookup then finds no route and the update skips
+// what it would change, lookups hold mu for reading only, so the count is
+// atomic and only the first fault is logged
+func (t *Table) fault(what string, prefix netip.Prefix) {
+	if t.faults.Add(1) == 1 {
+		log.Error("rib table inconsistent, a bug in rfm", "fault", what, "prefix", prefix)
 	}
 }
 
+// addView adds v to the views and keeps order sorted by preference
+// it must be called with mu held
+func (t *Table) addView(v *view) {
+	t.views[v.peer] = v
+	i, _ := slices.BinarySearchFunc(t.order, v, func(a, b *view) int {
+		if betterPeer(a.peer, b.peer) {
+			return -1
+		}
+		return 1
+	})
+	t.order = slices.Insert(t.order, i, v)
+}
+
+// dropView removes v from the views and from order
+// it must be called with mu held
+func (t *Table) dropView(v *view) {
+	delete(t.views, v.peer)
+	if i := slices.Index(t.order, v); i >= 0 {
+		t.order = slices.Delete(t.order, i, i+1)
+	}
+}
+
+// betterPeer orders the views, a post policy view wins over a pre policy
+// one, then the lowest peer address and distinguisher, which keeps the
+// choice stable across updates
 func betterPeer(a, b Peer) bool {
 	if a.PostPolicy != b.PostPolicy {
 		return a.PostPolicy
@@ -711,19 +807,20 @@ func betterPeer(a, b Peer) bool {
 	return a.Distinguisher < b.Distinguisher
 }
 
-func (t *Table) route(value routeValue) Route {
+func (t *Table) route(prefix netip.Prefix, value viewRoute) (Route, bool) {
 	route := Route{
-		Prefix:      value.Prefix,
-		OriginASN:   value.OriginASN,
-		OriginASSet: value.OriginASSet,
+		Prefix:      prefix,
+		OriginASN:   value.originASN,
+		OriginASSet: value.originASSet,
 	}
-	if value.MetaID == 0 {
-		return route
+	if value.metaID == 0 {
+		return route, true
 	}
 
-	state, ok := t.metas[value.MetaID]
+	state, ok := t.metas[value.metaID]
 	if !ok {
-		return route
+		t.fault("a route refers to metadata the table released", prefix)
+		return Route{}, false
 	}
 
 	routeMeta := state.meta.clone()
@@ -734,7 +831,7 @@ func (t *Table) route(value routeValue) Route {
 	route.PeerAddress = routeMeta.PeerAddress
 	route.PeerDistinguisher = routeMeta.PeerDistinguisher
 	route.PostPolicy = routeMeta.PostPolicy
-	return route
+	return route, true
 }
 
 func (t *Table) internMeta(meta routeMeta) uint64 {
@@ -1029,30 +1126,6 @@ func prefixFromNLRI(nlri bgp.AddrPrefixInterface) (netip.Prefix, bool) {
 		return netip.Prefix{}, false
 	}
 	return prefix, true
-}
-
-func insertValue(v4, v6 *bart.Table[routeValue], value routeValue) {
-	if value.Prefix.Addr().Is4() {
-		v4.Insert(value.Prefix, value)
-		return
-	}
-	v6.Insert(value.Prefix, value)
-}
-
-func deletePrefix(v4, v6 *bart.Table[routeValue], prefix netip.Prefix) {
-	prefix = prefix.Masked()
-	if prefix.Addr().Is4() {
-		v4.Delete(prefix)
-		return
-	}
-	v6.Delete(prefix)
-}
-
-func lookupTable(v4, v6 *bart.Table[routeValue], addr netip.Addr) (routeValue, bool) {
-	if addr.Is4() {
-		return v4.Lookup(addr)
-	}
-	return v6.Lookup(addr)
 }
 
 func encodeUint32s(values []uint32) string {

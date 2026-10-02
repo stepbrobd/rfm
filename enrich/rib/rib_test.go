@@ -1,8 +1,10 @@
 package rib
 
 import (
+	"math/rand/v2"
 	"net"
 	"net/netip"
+	"runtime"
 	"slices"
 	"testing"
 	"time"
@@ -886,6 +888,218 @@ func TestTableKeepsRoutesPerPeer(t *testing.T) {
 	}
 	if got := tab.Summary(); got.Routes != 0 || got.PrefixesV4 != 0 || got.Peers != 0 {
 		t.Fatalf("summary after full withdraw = %+v, want empty", got)
+	}
+}
+
+func TestTableCountsInconsistencies(t *testing.T) {
+	tab := NewTable()
+	peer := Peer{Address: netip.MustParseAddr("192.0.2.1")}
+	lost := netip.MustParsePrefix("203.0.113.0/24")
+	bare := netip.MustParsePrefix("198.51.100.0/24")
+	orphan := netip.MustParsePrefix("192.0.2.0/24")
+	for i, prefix := range []netip.Prefix{lost, bare, orphan} {
+		origin := uint32(64501 + i)
+		tab.Apply(Update{Reach: []Route{{Prefix: prefix, OriginASN: origin, ASPath: []uint32{origin}, PeerAddress: peer.Address}}})
+	}
+
+	// a route without a prefix is a bug of the caller and stays out
+	tab.Apply(Update{Reach: []Route{{OriginASN: 64500, PeerAddress: peer.Address}}})
+
+	// best credits the view with a prefix it lost, a route refers to
+	// metadata the table released, and the view gives up a prefix best lost
+	v := tab.views[peer]
+	v.routes.Delete(lost)
+	value, _ := v.routes.Get(bare)
+	delete(tab.metas, value.metaID)
+	tab.best.Delete(orphan)
+
+	for _, addr := range []string{"203.0.113.7", "198.51.100.7"} {
+		if route, ok := tab.Lookup(netip.MustParseAddr(addr)); ok {
+			t.Fatalf("Lookup(%s) = %+v, want no route from a table that contradicts itself", addr, route)
+		}
+	}
+	tab.RemovePeer(peer)
+	if got := tab.faults.Load(); got != 4 {
+		t.Fatalf("faults = %d, want 4", got)
+	}
+}
+
+// fillTable announces n consecutive /24 prefixes from 1.0.0.0 by peer, with
+// a thousand distinct AS paths between them
+func fillTable(tab *Table, peer netip.Addr, n int) {
+	batch := make([]Route, 0, 1024)
+	for i := range n {
+		addr := netip.AddrFrom4([4]byte{byte(1 + i>>16), byte(i >> 8), byte(i), 0})
+		origin := uint32(64500 + i%1000)
+		batch = append(batch, Route{
+			Prefix:      netip.PrefixFrom(addr, 24),
+			OriginASN:   origin,
+			ASPath:      []uint32{64496, origin},
+			PeerASN:     64496,
+			PeerAddress: peer,
+		})
+		if len(batch) == cap(batch) || i == n-1 {
+			tab.Apply(Update{Reach: batch})
+			batch = batch[:0]
+		}
+	}
+}
+
+func TestTableHeapPerPrefix(t *testing.T) {
+	const n = 1 << 17
+
+	var before, after runtime.MemStats
+	runtime.GC()
+	runtime.ReadMemStats(&before)
+
+	tab := NewTable()
+	fillTable(tab, netip.MustParseAddr("192.0.2.1"), n)
+
+	runtime.GC()
+	runtime.ReadMemStats(&after)
+	if got := tab.Summary(); got.PrefixesV4 != n || got.Routes != n {
+		t.Fatalf("summary = %+v, want %d prefixes and routes", got, n)
+	}
+	runtime.KeepAlive(tab)
+
+	// a full table is about 1.25M prefixes, at the 983 bytes a prefix took
+	// with a map per prefix that is 1.2 GB on a 2 GB router
+	perPrefix := (int64(after.HeapAlloc) - int64(before.HeapAlloc)) / n
+	t.Logf("heap per prefix: %d bytes", perPrefix)
+	if perPrefix > 256 {
+		t.Fatalf("heap per prefix = %d bytes, want at most 256", perPrefix)
+	}
+}
+
+// ribModel is the obvious RIB the table must agree with, every route per
+// view and a linear best path search
+type ribModel map[Peer]map[netip.Prefix]uint32
+
+func (m ribModel) best(prefix netip.Prefix) (Peer, uint32, bool) {
+	var best Peer
+	var origin uint32
+	found := false
+	for peer, routes := range m {
+		if o, ok := routes[prefix]; ok && (!found || betterPeer(peer, best)) {
+			best, origin, found = peer, o, true
+		}
+	}
+	return best, origin, found
+}
+
+func (m ribModel) lookup(addr netip.Addr) (netip.Prefix, Peer, uint32, bool) {
+	for bits := addr.BitLen(); bits >= 0; bits-- {
+		prefix, _ := addr.Prefix(bits)
+		if peer, origin, ok := m.best(prefix); ok {
+			return prefix, peer, origin, true
+		}
+	}
+	return netip.Prefix{}, Peer{}, 0, false
+}
+
+func (m ribModel) check(t *testing.T, tab *Table, probes []netip.Addr, step int) {
+	t.Helper()
+
+	var want Summary
+	prefixes := make(map[netip.Prefix]struct{})
+	metas := make(map[[2]any]struct{})
+	for peer, routes := range m {
+		if len(routes) > 0 {
+			want.Peers++
+		}
+		for prefix, origin := range routes {
+			want.Routes++
+			prefixes[prefix] = struct{}{}
+			metas[[2]any{peer, origin}] = struct{}{}
+		}
+	}
+	for prefix := range prefixes {
+		if prefix.Addr().Is4() {
+			want.PrefixesV4++
+		} else {
+			want.PrefixesV6++
+		}
+	}
+	if got := tab.Summary(); got != want {
+		t.Fatalf("step %d: summary = %+v, want %+v", step, got, want)
+	}
+	if got := len(tab.metas); got != len(metas) {
+		t.Fatalf("step %d: metadata entries = %d, want %d", step, got, len(metas))
+	}
+
+	for _, addr := range probes {
+		prefix, peer, origin, ok := m.lookup(addr)
+		route, gotOK := tab.Lookup(addr)
+		if gotOK != ok || route.Prefix != prefix || route.OriginASN != origin || route.Peer() != peer {
+			t.Fatalf("step %d: Lookup(%s) = %s origin %d from %+v ok=%v, want %s origin %d from %+v ok=%v",
+				step, addr, route.Prefix, route.OriginASN, route.Peer(), gotOK, prefix, origin, peer, ok)
+		}
+		if prefix.Bits() == 0 {
+			origin = 0
+		}
+		if labels, _ := tab.Enrich(addr, addr); labels.ASN != origin {
+			t.Fatalf("step %d: label for %s = %d, want %d", step, addr, labels.ASN, origin)
+		}
+	}
+}
+
+func TestTableMatchesModel(t *testing.T) {
+	peers := []Peer{
+		{Address: netip.MustParseAddr("192.0.2.1")},
+		{Address: netip.MustParseAddr("192.0.2.1"), PostPolicy: true},
+		{Address: netip.MustParseAddr("192.0.2.2")},
+		{Address: netip.MustParseAddr("192.0.2.2"), Distinguisher: 5},
+		{Address: netip.MustParseAddr("2001:db8::2"), PostPolicy: true},
+	}
+	var prefixes []netip.Prefix
+	for _, s := range []string{
+		"0.0.0.0/0", "10.0.0.0/8", "10.1.0.0/16", "10.1.2.0/24", "10.1.2.128/25", "10.1.3.0/24",
+		"::/0", "2001:db8::/32", "2001:db8:1::/48",
+	} {
+		prefixes = append(prefixes, netip.MustParsePrefix(s))
+	}
+	var probes []netip.Addr
+	for _, s := range []string{
+		"10.1.2.200", "10.1.2.1", "10.1.3.1", "10.2.0.1", "11.0.0.1",
+		"2001:db8:1::1", "2001:db8:2::1", "2001:db9::1",
+	} {
+		probes = append(probes, netip.MustParseAddr(s))
+	}
+
+	rng := rand.New(rand.NewPCG(1, 2))
+	tab := NewTable()
+	model := make(ribModel)
+	for step := range 4000 {
+		peer := peers[rng.IntN(len(peers))]
+		prefix := prefixes[rng.IntN(len(prefixes))]
+		switch op := rng.IntN(10); {
+		case op < 5:
+			origin := uint32(64500 + rng.IntN(4))
+			tab.Apply(Update{Reach: []Route{{
+				Prefix:            prefix,
+				OriginASN:         origin,
+				ASPath:            []uint32{origin},
+				PeerAddress:       peer.Address,
+				PeerDistinguisher: peer.Distinguisher,
+				PostPolicy:        peer.PostPolicy,
+			}}})
+			if model[peer] == nil {
+				model[peer] = make(map[netip.Prefix]uint32)
+			}
+			model[peer][prefix] = origin
+		case op < 8:
+			tab.Apply(Update{Peer: peer, Withdraw: []netip.Prefix{prefix}})
+			delete(model[peer], prefix)
+		case op < 9:
+			tab.Apply(Update{Withdraw: []netip.Prefix{prefix}})
+			for _, routes := range model {
+				delete(routes, prefix)
+			}
+		default:
+			tab.RemovePeer(peer)
+			delete(model, peer)
+		}
+		model.check(t, tab, probes, step)
 	}
 }
 
