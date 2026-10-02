@@ -1,6 +1,8 @@
 package rib
 
 import (
+	"bytes"
+	"encoding/binary"
 	"maps"
 	"math/rand/v2"
 	"net"
@@ -604,6 +606,95 @@ func mustAddPathWire(t *testing.T, prefix string, pathID, origin uint32, withdra
 	return wire
 }
 
+func TestHandleConnRecoversFromParseErrors(t *testing.T) {
+	s := &Server{table: NewTable()}
+	client, done := startSession(t, s)
+
+	asPath := []byte{0x40, 2, 6, 2, 1, 0, 0, 0xfd, 0xea} // AS_PATH 65002
+	nextHop := []byte{0x40, 3, 4, 192, 0, 2, 1}
+	origin := []byte{0x40, 1, 1, 0}
+
+	// an ORIGIN of two bytes makes RFC 7606 treat the update as a withdraw
+	// of what it announces, so the route installed before goes away
+	write(t, client, mustBMPWire(t, "203.0.113.0/24", 65002))
+	waitForRoute(t, s, "203.0.113.7", true)
+	write(t, client, rawRouteMonitoring("192.0.2.2", bmp.BMP_PEER_FLAG_POST_POLICY,
+		slices.Concat([]byte{0x40, 1, 2, 0, 0}, asPath, nextHop), []byte{24, 203, 0, 113}))
+	waitForRoute(t, s, "203.0.113.7", false)
+
+	// a malformed AGGREGATOR is discarded and the route stays valid
+	write(t, client, rawRouteMonitoring("192.0.2.2", bmp.BMP_PEER_FLAG_POST_POLICY,
+		slices.Concat(origin, asPath, nextHop, []byte{0xc0, 7, 5, 0, 0, 0, 0, 0}), []byte{24, 198, 51, 100}))
+	waitForRoute(t, s, "198.51.100.7", true)
+
+	// a peer down whose notification does not parse still names the peer
+	write(t, client, rawPeerMessage(bmp.BMP_MSG_PEER_DOWN_NOTIFICATION, "192.0.2.2", []byte{bmp.BMP_PEER_DOWN_REASON_LOCAL_BGP_NOTIFICATION, 0xff, 0xff}))
+	waitForRoute(t, s, "198.51.100.7", false)
+
+	// and so does a peer up whose OPEN messages do not parse
+	write(t, client, mustBMPWire(t, "198.51.100.0/24", 65002))
+	waitForRoute(t, s, "198.51.100.7", true)
+	write(t, client, rawPeerMessage(bmp.BMP_MSG_PEER_UP_NOTIFICATION, "192.0.2.2", make([]byte, 24)))
+	waitForRoute(t, s, "198.51.100.7", false)
+
+	// without the capabilities of the peer its updates are dropped, ADD-PATH
+	// path id 0x080a0000 would read as 10.0.0.0/8, the route of another
+	// peer shows when the session got past it
+	write(t, client, mustAddPathWire(t, "203.0.113.0/24", 0x080a0000, 65002, false))
+	write(t, client, mustBMPWireFrom(t, "198.51.100.0/24", 65003, "192.0.2.3", 0))
+	waitForRoute(t, s, "198.51.100.7", true)
+	if route, ok := s.Lookup(netip.MustParseAddr("10.0.0.1")); ok {
+		t.Fatalf("Lookup(10.0.0.1) = %+v, want no route read from a path id", route)
+	}
+
+	// a peer up that parses makes its updates readable again
+	write(t, client, mustAddPathPeerUpWire(t, "192.0.2.2", bgp.BGP_ADD_PATH_RECEIVE, bgp.BGP_ADD_PATH_SEND))
+	write(t, client, mustAddPathWire(t, "203.0.113.0/24", 0x080a0000, 65002, false))
+	waitForRoute(t, s, "203.0.113.7", true)
+
+	_ = client.Close()
+	<-done
+
+	if got := s.Stats().ParseErrors; got != 5 {
+		t.Fatalf("parse errors = %d, want 5", got)
+	}
+}
+
+// rawPeerHeader builds a per peer header for the ipv4 peer addr
+func rawPeerHeader(addr string, flags uint8) []byte {
+	ip := netip.MustParseAddr(addr).As4()
+	h := make([]byte, bmp.BMP_PEER_HEADER_SIZE)
+	h[1] = flags
+	copy(h[22:26], ip[:])
+	binary.BigEndian.PutUint32(h[26:30], 65002)
+	copy(h[30:34], ip[:])
+	return h
+}
+
+// rawPeerMessage builds a BMP message of type with a per peer header for
+// addr and body as is
+func rawPeerMessage(typ uint8, addr string, body []byte) []byte {
+	payload := slices.Concat(rawPeerHeader(addr, 0), body)
+	h := []byte{bmp.BMP_VERSION, 0, 0, 0, 0, typ}
+	binary.BigEndian.PutUint32(h[1:5], uint32(bmp.BMP_HEADER_SIZE+len(payload)))
+	return slices.Concat(h, payload)
+}
+
+// rawRouteMonitoring builds a route monitoring message from addr whose
+// UPDATE carries attrs and nlri as given, malformed or not
+func rawRouteMonitoring(addr string, flags uint8, attrs, nlri []byte) []byte {
+	update := make([]byte, 4)
+	binary.BigEndian.PutUint16(update[2:4], uint16(len(attrs)))
+	update = slices.Concat(update, attrs, nlri)
+	header := slices.Concat(bytes.Repeat([]byte{0xff}, 16), []byte{0, 0, bgp.BGP_MSG_UPDATE})
+	binary.BigEndian.PutUint16(header[16:18], uint16(len(header)+len(update)))
+
+	payload := slices.Concat(rawPeerHeader(addr, flags), header, update)
+	h := []byte{bmp.BMP_VERSION, 0, 0, 0, 0, bmp.BMP_MSG_ROUTE_MONITORING}
+	binary.BigEndian.PutUint32(h[1:5], uint32(bmp.BMP_HEADER_SIZE+len(payload)))
+	return slices.Concat(h, payload)
+}
+
 func TestServerCloseReturnsWithIdleConnection(t *testing.T) {
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
@@ -672,6 +763,11 @@ func TestHandleConnEndsOnBadHeader(t *testing.T) {
 			case <-done:
 			case <-time.After(2 * time.Second):
 				t.Fatal("session did not end on a header no bmp version 3 message can have")
+			}
+			// the header is a message that did not parse, a bmp error
+			// like any other
+			if got := s.Stats().ParseErrors; got != 1 {
+				t.Fatalf("parse errors = %d, want the header that ended the session counted", got)
 			}
 		})
 	}

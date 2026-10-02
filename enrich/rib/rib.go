@@ -326,13 +326,26 @@ func (t *Table) Peers() []Peer {
 
 // Server owns a BMP listener and an in-memory RIB
 type Server struct {
-	listener net.Listener
-	table    *Table
-	done     chan struct{}
-	wg       sync.WaitGroup
-	connsMu  sync.Mutex
-	conns    map[net.Conn]struct{}
-	closing  bool
+	listener    net.Listener
+	table       *Table
+	done        chan struct{}
+	wg          sync.WaitGroup
+	connsMu     sync.Mutex
+	conns       map[net.Conn]struct{}
+	closing     bool
+	parseErrors atomic.Uint64
+}
+
+// Stats counts what the BMP listener saw since it started
+type Stats struct {
+	// ParseErrors counts the messages that did not parse in full, the
+	// usable part of some of them still applies
+	ParseErrors uint64
+}
+
+// Stats returns the counters of the BMP listener
+func (s *Server) Stats() Stats {
+	return Stats{ParseErrors: s.parseErrors.Load()}
 }
 
 // Listen starts a BMP listener when configured
@@ -437,7 +450,7 @@ func (s *Server) handleConn(conn net.Conn) {
 
 	var messages int
 	var changes int
-	var parseErrLogged bool
+	var parseErrors int
 	var appliedLogged bool
 	seenTypes := make(map[uint8]struct{})
 	peers := make(map[Peer]struct{})
@@ -451,17 +464,33 @@ func (s *Server) handleConn(conn net.Conn) {
 		peer.PostPolicy = false
 		return addPath[peer]
 	}
+	// undecodable reports whether the session cannot read the updates of
+	// the peer of h, a peer up that did not parse leaves the capabilities
+	// of the peer unknown, and without them ADD-PATH path ids read as
+	// prefixes
+	undecodable := func(h bmp.BMPPeerHeader) bool {
+		peer := peerFromHeader(h)
+		peer.PostPolicy = false
+		opts, held := addPath[peer]
+		return held && opts == nil
+	}
 
 	for scanner.Scan() {
 		messages++
 
 		msg, err := bmp.ParseBMPMessageWithOptions(scanner.Bytes(), options)
+		if msg != nil && msg.Header.Type == bmp.BMP_MSG_ROUTE_MONITORING && undecodable(msg.PeerHeader) {
+			msg, err = nil, fmt.Errorf("%w, peer %s", errUndecodable, msg.PeerHeader.PeerAddress)
+		}
+		var treatAsWithdraw bool
 		if err != nil {
-			if !parseErrLogged {
+			s.parseErrors.Add(1)
+			if parseErrors++; parseErrors == 1 {
 				log.Error("parse bmp message", "remote", conn.RemoteAddr(), "err", err)
-				parseErrLogged = true
 			}
-			continue
+			if msg, treatAsWithdraw = salvage(scanner.Bytes(), msg, err); msg == nil {
+				continue
+			}
 		}
 
 		if msg.Header.Type != bmp.BMP_MSG_ROUTE_MONITORING {
@@ -481,6 +510,10 @@ func (s *Server) handleConn(conn net.Conn) {
 				if opts := addPathOptions(up); opts != nil {
 					addPath[peer] = opts
 				}
+			} else {
+				// a body that did not parse leaves the capabilities of the
+				// peer unknown, which nil marks, see undecodable
+				addPath[peer] = nil
 			}
 			log.Info("bmp peer up", "remote", conn.RemoteAddr(), "peer", peer.Address, "add_path", addPath[peer] != nil)
 			continue
@@ -507,6 +540,12 @@ func (s *Server) handleConn(conn net.Conn) {
 		if !ok {
 			continue
 		}
+		if treatAsWithdraw {
+			for _, route := range update.Reach {
+				update.Withdraw = append(update.Withdraw, Withdrawal{Prefix: route.Prefix, PathID: route.PathID})
+			}
+			update.Reach = nil
+		}
 		peers[update.Peer] = struct{}{}
 
 		if len(update.Reach) > 0 || len(update.Withdraw) > 0 {
@@ -532,12 +571,64 @@ func (s *Server) handleConn(conn net.Conn) {
 		s.table.Apply(update)
 	}
 
-	if err := scanner.Err(); err != nil && !s.isClosing() {
+	err := scanner.Err()
+	if errors.Is(err, errBMPVersion) || errors.Is(err, errBMPLength) {
+		// a header no message can have ends the session, and it is a
+		// message that did not parse
+		s.parseErrors.Add(1)
+		parseErrors++
+	}
+	if err != nil && !s.isClosing() {
 		log.Error("read bmp stream", "remote", conn.RemoteAddr(), "err", err)
 	}
 
-	log.Info("bmp session closed", "remote", conn.RemoteAddr(), "messages", messages, "changes", changes, "peers", len(peers))
+	log.Info(
+		"bmp session closed",
+		"remote", conn.RemoteAddr(),
+		"messages", messages,
+		"parse_errors", parseErrors,
+		"changes", changes,
+		"peers", len(peers),
+	)
 }
+
+// salvage returns what a message that failed to parse still offers, and
+// whether the routes of an update must be withdrawn instead of installed
+// RFC 7606 has a receiver discard a malformed attribute that does not
+// change the route, or treat the update as a withdraw of every route it
+// carries, gobgp returns the update it decoded with an error that says
+// which, any other update error leaves nothing to trust
+// gobgp returns nothing when the body of a peer up or peer down does not
+// parse, but the per peer header in front of it still names the peer, and
+// that is all those two need
+func salvage(data []byte, msg *bmp.BMPMessage, err error) (*bmp.BMPMessage, bool) {
+	if len(data) >= bmp.BMP_HEADER_SIZE+bmp.BMP_PEER_HEADER_SIZE && data[0] == bmp.BMP_VERSION {
+		switch typ := data[5]; typ {
+		case bmp.BMP_MSG_PEER_UP_NOTIFICATION, bmp.BMP_MSG_PEER_DOWN_NOTIFICATION:
+			out := &bmp.BMPMessage{Header: bmp.BMPHeader{Version: bmp.BMP_VERSION, Type: typ}}
+			if out.PeerHeader.DecodeFromBytes(data[bmp.BMP_HEADER_SIZE:]) != nil {
+				return nil, false
+			}
+			return out, false
+		}
+	}
+
+	var msgErr *bgp.MessageError
+	if msg == nil || msg.Header.Type != bmp.BMP_MSG_ROUTE_MONITORING || !errors.As(err, &msgErr) {
+		return nil, false
+	}
+	switch msgErr.ErrorHandling {
+	case bgp.ERROR_HANDLING_ATTRIBUTE_DISCARD:
+		return msg, false
+	case bgp.ERROR_HANDLING_TREAT_AS_WITHDRAW:
+		return msg, true
+	}
+	return nil, false
+}
+
+// errUndecodable is the parse error of an update whose peer the session
+// cannot decode, see undecodable
+var errUndecodable = errors.New("bmp update of a peer whose capabilities are unknown")
 
 // errBMPLength ends a session whose header announces a length no message
 // can have
