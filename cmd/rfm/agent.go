@@ -223,37 +223,52 @@ func runAgent(ctx context.Context, path string, deps agentDeps) error {
 
 	handler.probe, handler.col, handler.ipfix, handler.backends = p, c, ipfixExp, backends
 
+	// a component that fails ends the run with its error, which makes the
+	// agent exit non zero for systemd to restart it, while ctx ends it
+	// cleanly on SIGTERM or SIGINT
 	// the goroutines are done before the probe and the reader close
-	ctx, cancel := context.WithCancel(ctx)
+	run, fail := context.WithCancelCause(ctx)
 	var wg sync.WaitGroup
 	defer wg.Wait()
-	defer cancel()
+	defer fail(nil)
 
 	if ctlSrv != nil {
 		wg.Go(func() {
-			if err := ctlSrv.Serve(ctx); err != nil && ctx.Err() == nil {
-				log.Error("control socket stopped", "err", err)
+			if err := ctlSrv.Serve(run); err != nil && run.Err() == nil {
+				fail(fmt.Errorf("control socket: %w", err))
+			}
+		})
+	}
+	// the bmp listener retries temporary accept errors and stops on any
+	// other, which fails the run, its open sessions end when the backends
+	// close
+	if backends != nil && backends.RIB != nil {
+		bmp := backends.RIB
+		wg.Go(func() {
+			if err := bmp.Wait(run); err != nil && run.Err() == nil {
+				fail(fmt.Errorf("bmp listener: %w", err))
 			}
 		})
 	}
 
 	// the watcher attaches the matching interfaces from its link dump and
-	// follows those that appear or vanish while the agent runs, a link it
-	// cannot attach, one without an ethernet header or one already gone, is
-	// a warning
+	// follows those that appear or vanish while the agent runs, a link
+	// without an ethernet header or one already gone is a warning, a link
+	// whose attach fails is retried and counted, and the watcher fails only
+	// when its first subscription cannot be opened
 	wg.Go(func() {
-		err := p.Watch(ctx, matcher, func(ev probe.LinkEvent) {
+		err := p.Watch(run, matcher, func(ev probe.LinkEvent) {
 			if ev.Attached {
 				log.Info("attached", "interface", ev.Name)
 			} else {
 				log.Info("detached", "interface", ev.Name)
 			}
 		})
-		if err != nil && ctx.Err() == nil {
-			log.Error("interface watch stopped", "err", err)
+		if err != nil && run.Err() == nil {
+			fail(fmt.Errorf("interface watch: %w", err))
 		}
 	})
-	wg.Go(func() { reportInterfaces(ctx, p, cfg.Agent.Interfaces) })
+	wg.Go(func() { reportInterfaces(run, p, cfg.Agent.Interfaces) })
 
 	// the metrics endpoint opens once the first link dump went through, by
 	// then the watcher attached the matching links, or queued a retry for
@@ -261,8 +276,8 @@ func runAgent(ctx context.Context, path string, deps agentDeps) error {
 	// others, a failed prune counts as a bpf_map error and the next dump
 	// tries again, the port stays closed while the watcher retries a dump
 	// that fails, the control socket answers meanwhile
-	if !waitSynced(ctx, p) {
-		return nil
+	if !waitSynced(run, p) {
+		return stopped(ctx, run)
 	}
 
 	// fail immediately if bind fails
@@ -273,12 +288,13 @@ func runAgent(ctx context.Context, path string, deps agentDeps) error {
 	log.Info("metrics server", "addr", ln.Addr().String())
 	wg.Go(func() {
 		if err := srv.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			log.Error("http server died, shutting down", "err", err)
-			cancel()
+			fail(fmt.Errorf("metrics server: %w", err))
 		}
 	})
 
-	runErr := c.Run(ctx, rd)
+	if err := c.Run(run, rd); err != nil && run.Err() == nil {
+		fail(fmt.Errorf("collector: %w", err))
+	}
 	if ipfixExp != nil {
 		c.Flush(collector.FlowEndReasonForcedEnd)
 		if err := ipfixExp.Close(); err != nil {
@@ -288,10 +304,16 @@ func runAgent(ctx context.Context, path string, deps agentDeps) error {
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer shutdownCancel()
 	srv.Shutdown(shutdownCtx)
-	if errors.Is(runErr, context.Canceled) {
+	return stopped(ctx, run)
+}
+
+// stopped is what the agent returns once run, derived from ctx, ended, nil
+// when ctx ended it and the failure that ended it otherwise
+func stopped(ctx, run context.Context) error {
+	if ctx.Err() != nil {
 		return nil
 	}
-	return runErr
+	return context.Cause(run)
 }
 
 // syncPoll is how often the agent looks for the watcher's first sync

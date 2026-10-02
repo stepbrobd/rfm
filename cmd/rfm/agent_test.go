@@ -61,6 +61,10 @@ type fakeProbe struct {
 	events   chan []byte
 	// dump, when set, holds the watcher's link dump back until it is closed
 	dump chan struct{}
+	// watchErr fails the watcher's first subscription, readErr every read
+	// of the ring
+	watchErr error
+	readErr  error
 }
 
 func newFakeProbe() *fakeProbe {
@@ -111,6 +115,9 @@ func (f *fakeProbe) sampleRate() uint32 {
 }
 
 func (f *fakeProbe) Watch(ctx context.Context, match func(string) bool, notify func(probe.LinkEvent)) error {
+	if f.watchErr != nil {
+		return f.watchErr
+	}
 	f.mu.Lock()
 	f.watching = true
 	dump := f.dump
@@ -159,7 +166,7 @@ func (f *fakeProbe) WatchState() probe.WatchState {
 func (f *fakeProbe) Stats() export.IfaceStatsSource { return fakeStats{f} }
 
 func (f *fakeProbe) Events() (collector.Reader, error) {
-	return &fakeReader{events: f.events}, nil
+	return &fakeReader{events: f.events, err: f.readErr}, nil
 }
 
 // fakeStats reports one received ipv4 packet on every attached interface
@@ -181,6 +188,7 @@ type fakeReader struct {
 	mu       sync.Mutex
 	deadline time.Time
 	events   <-chan []byte
+	err      error
 }
 
 func (r *fakeReader) SetDeadline(t time.Time) {
@@ -190,6 +198,9 @@ func (r *fakeReader) SetDeadline(t time.Time) {
 }
 
 func (r *fakeReader) ReadRawEvent() ([]byte, error) {
+	if r.err != nil {
+		return nil, r.err
+	}
 	r.mu.Lock()
 	wait := time.Until(r.deadline)
 	r.mu.Unlock()
@@ -578,6 +589,66 @@ socket = %q
 	}
 	startAgent(t, agentConfig(sock, pin), agentDeps{loadProbe: newFakeProbe().load})
 	waitCLI(t, sock, "status")
+}
+
+// refusingListener is a listener whose every accept fails for good
+type refusingListener struct{ net.Listener }
+
+func (l refusingListener) Accept() (net.Conn, error) {
+	return nil, errors.New("accept refused by the test")
+}
+
+func TestRunAgentFailsWithAFailedComponent(t *testing.T) {
+	lo := testutil.LoopbackName(t)
+	broken := errors.New("broken by the test")
+	for _, tc := range []struct {
+		name  string
+		probe func(*fakeProbe)
+		ln    func(net.Listener) net.Listener
+		want  string
+	}{
+		{name: "metrics server", ln: func(ln net.Listener) net.Listener { return refusingListener{ln} }, want: "accept refused by the test"},
+		{name: "interface watch", probe: func(f *fakeProbe) { f.watchErr = broken }, want: broken.Error()},
+		{name: "collector", probe: func(f *fakeProbe) { f.readErr = broken }, want: broken.Error()},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			cfgPath := writeTestConfig(t, fmt.Sprintf(`
+[agent]
+interfaces = [%q]
+
+[agent.control]
+socket = %q
+`, lo, filepath.Join(t.TempDir(), "rfm.sock")))
+			f := newFakeProbe()
+			if tc.probe != nil {
+				tc.probe(f)
+			}
+			listen := func(network, _ string) (net.Listener, error) {
+				ln, err := net.Listen(network, "127.0.0.1:0")
+				if err == nil && tc.ln != nil {
+					ln = tc.ln(ln)
+				}
+				return ln, err
+			}
+
+			// nothing cancels the run, the failure alone must end it, with
+			// an error that makes the agent exit non zero for systemd to
+			// restart it
+			done := make(chan error, 1)
+			go func() { done <- runAgent(context.Background(), cfgPath, agentDeps{loadProbe: f.load, listen: listen}) }()
+			select {
+			case err := <-done:
+				if err == nil || !strings.Contains(err.Error(), tc.name) || !strings.Contains(err.Error(), tc.want) {
+					t.Fatalf("agent returned %v, want the failure of the %s", err, tc.name)
+				}
+			case <-time.After(10 * time.Second):
+				t.Fatalf("agent still running after its %s failed", tc.name)
+			}
+			if !f.closed {
+				t.Fatal("probe not closed")
+			}
+		})
+	}
 }
 
 func TestRunAgentOnTheKernelProbe(t *testing.T) {
