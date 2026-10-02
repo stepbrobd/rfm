@@ -95,6 +95,35 @@ func TestTableEnrich(t *testing.T) {
 	}
 }
 
+func TestTableEnrichSkipsDefaultRoute(t *testing.T) {
+	tab := NewTable()
+	tab.Apply(Update{
+		Reach: []Route{
+			{Prefix: netip.MustParsePrefix("0.0.0.0/0"), OriginASN: 64500, ASPath: []uint32{64500}},
+			{Prefix: netip.MustParsePrefix("::/0"), OriginASN: 64501, ASPath: []uint32{64501}},
+			{Prefix: netip.MustParsePrefix("203.0.113.0/24"), OriginASN: 64496, ASPath: []uint32{64500, 64496}},
+		},
+	})
+
+	// the default route says which upstream carries the traffic, not who
+	// owns the address, so it leaves the label to the next backend
+	src, dst := tab.Enrich(netip.MustParseAddr("8.8.8.8"), netip.MustParseAddr("2001:db8::1"))
+	if src.ASN != 0 || dst.ASN != 0 {
+		t.Fatalf("labels from default routes = %d and %d, want 0 and 0", src.ASN, dst.ASN)
+	}
+
+	// a more specific route still labels
+	if _, dst := tab.Enrich(netip.MustParseAddr("8.8.8.8"), netip.MustParseAddr("203.0.113.7")); dst.ASN != 64496 {
+		t.Fatalf("dst ASN = %d, want 64496", dst.ASN)
+	}
+
+	// the default route stays visible to a lookup
+	route, ok := tab.Lookup(netip.MustParseAddr("8.8.8.8"))
+	if !ok || route.OriginASN != 64500 || route.Prefix != netip.MustParsePrefix("0.0.0.0/0") {
+		t.Fatalf("Lookup = %+v ok=%v, want the default route from 64500", route, ok)
+	}
+}
+
 func TestTableDedupesMetadata(t *testing.T) {
 	tab := NewTable()
 

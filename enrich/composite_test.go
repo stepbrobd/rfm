@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"ysun.co/rfm/collector"
+	"ysun.co/rfm/enrich/rib"
 )
 
 type fakeEnricher struct {
@@ -14,6 +15,27 @@ type fakeEnricher struct {
 
 func (f fakeEnricher) Enrich(src, dst netip.Addr) (collector.Labels, collector.Labels) {
 	return f.src, f.dst
+}
+
+func TestCompositeDefaultRouteFallsBackToMMDB(t *testing.T) {
+	tab := rib.NewTable()
+	tab.Apply(rib.Update{Reach: []rib.Route{
+		{Prefix: netip.MustParsePrefix("0.0.0.0/0"), OriginASN: 64500, ASPath: []uint32{64500}},
+	}})
+	c := composite{
+		enrichers: []collector.Enricher{
+			tab,
+			fakeEnricher{
+				src: collector.Labels{ASN: 15169, City: "Mountain View"},
+				dst: collector.Labels{ASN: 13335},
+			},
+		},
+	}
+
+	src, dst := c.Enrich(netip.MustParseAddr("8.8.8.8"), netip.MustParseAddr("1.1.1.1"))
+	if src != (collector.Labels{ASN: 15169, City: "Mountain View"}) || dst != (collector.Labels{ASN: 13335}) {
+		t.Fatalf("labels = %+v and %+v, want the MMDB labels behind a default route", src, dst)
+	}
 }
 
 func TestCompositeFirstNonZeroWins(t *testing.T) {

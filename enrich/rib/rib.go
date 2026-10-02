@@ -190,6 +190,9 @@ func (t *Table) Lookup(addr netip.Addr) (Route, bool) {
 }
 
 // Enrich returns only the labels Prometheus needs
+// a default route labels nothing, its origin is the upstream that carries
+// the traffic and not the network that owns the address, so the next
+// backend gets to label it
 func (t *Table) Enrich(src, dst netip.Addr) (collector.Labels, collector.Labels) {
 	return t.labels(src), t.labels(dst)
 }
@@ -201,7 +204,7 @@ func (t *Table) labels(addr netip.Addr) collector.Labels {
 	defer t.mu.RUnlock()
 
 	value, ok := lookupTable(&t.v4, &t.v6, addr)
-	if !ok {
+	if !ok || value.Prefix.Bits() == 0 {
 		return collector.Labels{}
 	}
 	return collector.Labels{ASN: value.OriginASN}
