@@ -276,6 +276,30 @@ func TestServeRemovesItsSocket(t *testing.T) {
 	}
 }
 
+func TestCloseRemovesTheSocketOfAServerThatNeverServed(t *testing.T) {
+	sock := filepath.Join(t.TempDir(), "rfm.sock")
+	srv, err := Listen(sock, &fakeHandler{})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// a start that fails after Listen and before Serve closes the server
+	if err := srv.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Lstat(sock); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("socket after Close: %v, want it removed", err)
+	}
+	if err := srv.Close(); err != nil {
+		t.Fatalf("second Close: %v", err)
+	}
+	if srv, err := Listen(sock, &fakeHandler{}); err != nil {
+		t.Fatalf("Listen after Close: %v", err)
+	} else {
+		srv.Close()
+	}
+}
+
 func TestServeKeepsReplacedSocket(t *testing.T) {
 	sock := filepath.Join(t.TempDir(), "rfm.sock")
 	first, err := Listen(sock, &fakeHandler{rate: 10})

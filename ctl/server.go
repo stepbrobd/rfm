@@ -107,6 +107,13 @@ func (s *Server) close() {
 	})
 }
 
+// Close closes the socket of a server that is not serving, Serve closes it
+// itself when it returns, closing twice is harmless
+func (s *Server) Close() error {
+	s.close()
+	return nil
+}
+
 // Addr returns the socket path
 func (s *Server) Addr() string {
 	return s.listener.Addr().String()

@@ -399,23 +399,91 @@ socket = %q
 	}
 }
 
+func TestRunAgentRefusesASecondAgent(t *testing.T) {
+	lo := testutil.LoopbackName(t)
+	dir := t.TempDir()
+	sock, pin := filepath.Join(dir, "rfm.sock"), filepath.Join(dir, "pin")
+	agentConfig := func(sock, pin string) string {
+		return writeTestConfig(t, fmt.Sprintf(`
+[agent]
+interfaces = [%q]
+
+[agent.bpf]
+pin_path = %q
+
+[agent.control]
+socket = %q
+`, lo, pin, sock))
+	}
+	run := startAgent(t, agentConfig(sock, pin), agentDeps{loadProbe: newFakeProbe().load})
+	waitCLI(t, sock, "status")
+
+	// an agent on the same socket or the same pin stops before it loads its
+	// programs, it would count the packets of an interface both attach a
+	// second time and delete the counters of every interface it does not
+	// attach
+	otherSock, otherPin := filepath.Join(dir, "other.sock"), filepath.Join(dir, "other-pin")
+	for _, second := range []struct{ sock, pin, refusal string }{
+		{sock, otherPin, "in use by another process"},
+		{otherSock, pin, "in use by another agent"},
+		{"", pin, "in use by another agent"},
+	} {
+		err := runAgent(context.Background(), agentConfig(second.sock, second.pin), noProbe(t))
+		if err == nil || !strings.Contains(err.Error(), second.refusal) {
+			t.Fatalf("agent on socket %q and pin %q = %v, want %q", second.sock, second.pin, err, second.refusal)
+		}
+	}
+	if _, err := os.Lstat(otherSock); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("a refused agent left its socket behind: %v", err)
+	}
+	if out, err := runCLI(t, sock, "status"); err != nil || !strings.Contains(out, "interfaces  "+lo) {
+		t.Fatalf("the running agent lost its socket: %q, %v", out, err)
+	}
+
+	// once it stops the next agent takes over the socket and the pin
+	if err := run.stop(t); err != nil {
+		t.Fatalf("agent stopped with %v, want nil", err)
+	}
+	startAgent(t, agentConfig(sock, pin), agentDeps{loadProbe: newFakeProbe().load})
+	waitCLI(t, sock, "status")
+}
+
 func TestRunAgentOnTheKernelProbe(t *testing.T) {
 	testutil.RequireRoot(t)
+	if _, err := os.Stat("/sys/fs/bpf"); err != nil {
+		t.Skipf("bpffs not mounted: %v", err)
+	}
 
 	lo := testutil.LoopbackName(t)
 	sock := filepath.Join(t.TempDir(), "rfm.sock")
+	pin := fmt.Sprintf("/sys/fs/bpf/rfm-test-%d-agent", os.Getpid())
+	t.Cleanup(func() { _ = os.RemoveAll(pin) })
 	cfgPath := writeTestConfig(t, fmt.Sprintf(`
 [agent]
 interfaces = [%q]
 
+[agent.bpf]
+pin_path = %q
+
 [agent.control]
 socket = %q
-`, lo, sock))
+`, lo, pin, sock))
 
 	run := startAgent(t, cfgPath, agentDeps{loadProbe: loadProbe})
 	status := waitCLI(t, sock, "status")
 	if !strings.Contains(status, "interfaces  "+lo) {
 		t.Fatalf("status output missing %s:\n%s", lo, status)
+	}
+	// the lock holds on the bpffs directory of the pin as well
+	second := writeTestConfig(t, fmt.Sprintf(`
+[agent]
+interfaces = [%q]
+
+[agent.bpf]
+pin_path = %q
+`, lo, pin))
+	if err := runAgent(context.Background(), second, noProbe(t)); err == nil || !strings.Contains(err.Error(), "in use by another agent") {
+		t.Fatalf("second agent on the pin = %v, want it refused", err)
 	}
 	// the scrapes run over the loopback, a later one counts an earlier one
 	want := fmt.Sprintf(`rfm_interface_rx_packets_total{family="ipv4",ifname=%q}`, lo)

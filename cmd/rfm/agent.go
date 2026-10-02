@@ -113,6 +113,29 @@ func runAgent(ctx context.Context, path string, deps agentDeps) error {
 	}
 	log.Info("interfaces matched", "count", len(ifaces), "names", names)
 
+	// a second agent with the same pin or the same control socket stops
+	// here, before it loads anything, the pin lock is released last, once
+	// the probe is closed
+	if pin := cfg.Agent.BPF.PinPath; pin != "" {
+		release, err := lockPin(pin)
+		if err != nil {
+			return err
+		}
+		defer release()
+	}
+	// the control socket is taken now and served once the agent is set up,
+	// a start that fails before removes it
+	handler := &controlHandler{started: started, cfg: cfg, cfgText: string(cfgText)}
+	var ctlSrv *ctl.Server
+	if socket := cfg.Agent.Control.Socket; socket != "" {
+		ctlSrv, err = ctl.Listen(socket, handler)
+		if err != nil {
+			return err
+		}
+		defer ctlSrv.Close()
+		log.Info("control socket", "path", socket)
+	}
+
 	backends, err := enrich.Build(cfg.Agent.Enrich)
 	if err != nil {
 		return err
@@ -215,24 +238,7 @@ func runAgent(ctx context.Context, path string, deps agentDeps) error {
 	}
 	log.Info("metrics server", "addr", ln.Addr().String())
 
-	var ctlSrv *ctl.Server
-	if cfg.Agent.Control.Socket != "" {
-		handler := &controlHandler{
-			started:  started,
-			cfg:      cfg,
-			cfgText:  string(cfgText),
-			probe:    p,
-			col:      c,
-			ipfix:    ipfixExp,
-			backends: backends,
-		}
-		ctlSrv, err = ctl.Listen(cfg.Agent.Control.Socket, handler)
-		if err != nil {
-			ln.Close()
-			return err
-		}
-		log.Info("control socket", "path", cfg.Agent.Control.Socket)
-	}
+	handler.probe, handler.col, handler.ipfix, handler.backends = p, c, ipfixExp, backends
 
 	// the goroutines are done before the probe and the reader close
 	ctx, cancel := context.WithCancel(ctx)
