@@ -740,6 +740,28 @@ host = "127.0.0.1"
 	}
 }
 
+func TestLoadIPFIXQueueUnlimitedTable(t *testing.T) {
+	path := writeTOML(t, `
+[agent]
+interfaces = ["eth0"]
+
+[agent.collector]
+max_flows = 0
+
+[agent.ipfix]
+host = "127.0.0.1"
+`)
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// an unlimited table sweeps at least as many flows as a default one
+	if cfg.Agent.IPFIX.QueueSize != 65536 {
+		t.Fatalf("queue_size = %d, want the default max_flows 65536", cfg.Agent.IPFIX.QueueSize)
+	}
+}
+
 func TestLoadIPFIXQueueSettings(t *testing.T) {
 	path := writeTOML(t, `
 [agent]

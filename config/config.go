@@ -1,6 +1,7 @@
 package config
 
 import (
+	"cmp"
 	"fmt"
 	"net"
 	"os"
@@ -58,6 +59,9 @@ type CollectorConfig struct {
 	ActiveTimeout   time.Duration `toml:"-"`
 }
 
+// DefaultMaxFlows is the flow table size when max_flows is not set
+const DefaultMaxFlows = 65536
+
 // IPFIXConfig controls export to a single IPFIX collector
 type IPFIXConfig struct {
 	Host                string
@@ -67,7 +71,9 @@ type IPFIXConfig struct {
 	ObservationDomainID uint32
 	// QueueSize bounds the records waiting for the sender goroutine, an
 	// eviction sweep can hand the exporter every flow in the table at once,
-	// so the default is max_flows or DefaultIPFIXQueueSize, whichever is larger
+	// so the default is max_flows or DefaultIPFIXQueueSize, whichever is
+	// larger, an unlimited table (max_flows 0) gets DefaultMaxFlows, and a
+	// sweep beyond that needs queue_size set to the expected table size
 	QueueSize int
 	// FlushInterval is how long the sender gathers records before a message
 	// goes out when fewer than a full message are waiting
@@ -242,7 +248,7 @@ func Load(path string) (*Config, error) {
 	raw.Agent.BPF.RingBufSize = 262144
 	raw.Agent.BPF.WakeupBatch = 64
 	raw.Agent.BPF.MaxSampleRate = 1000
-	raw.Agent.Collector.MaxFlows = 65536
+	raw.Agent.Collector.MaxFlows = DefaultMaxFlows
 	raw.Agent.Collector.EvictionTimeout = "30s"
 	raw.Agent.Collector.ActiveTimeout = "60s"
 	raw.Agent.IPFIX.TemplateRefresh = "60s"
@@ -284,7 +290,7 @@ func Load(path string) (*Config, error) {
 	raw.Agent.Enrich.RIB.BMP = raw.Agent.Enrich.RIB.BMP.WithDefaults()
 	queueSize := raw.Agent.IPFIX.QueueSize
 	if queueSize == 0 {
-		queueSize = max(DefaultIPFIXQueueSize, raw.Agent.Collector.MaxFlows)
+		queueSize = max(DefaultIPFIXQueueSize, cmp.Or(raw.Agent.Collector.MaxFlows, DefaultMaxFlows))
 	}
 	ipfixCfg := IPFIXConfig{
 		Host:                raw.Agent.IPFIX.Host,

@@ -175,7 +175,7 @@ in
                     queue_size = std.mkOption {
                       type = std.types.ints.unsigned;
                       default = 0;
-                      description = "Records that may wait for the IPFIX sender before new ones are dropped, 0 means max_flows or 4096, whichever is larger.";
+                      description = "Records that may wait for the IPFIX sender before new ones are dropped, 0 means max_flows or 4096, whichever is larger, and 65536 when max_flows is 0.";
                     };
 
                     flush_interval = std.mkOption {
