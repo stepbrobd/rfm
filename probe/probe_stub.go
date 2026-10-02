@@ -9,13 +9,6 @@ import (
 	"github.com/cilium/ebpf"
 )
 
-// LinkEvent is one attach or detach done by Watch
-type LinkEvent struct {
-	Name     string
-	Ifindex  int
-	Attached bool
-}
-
 var errUnsupported = errors.New("probe is only supported on linux")
 
 type Probe struct{}
@@ -66,4 +59,8 @@ func (p *Probe) SetSampleRate(uint32) error {
 
 func (p *Probe) Watch(context.Context, func(string) bool, func(LinkEvent)) error {
 	return errUnsupported
+}
+
+func (p *Probe) WatchState() WatchState {
+	return WatchState{}
 }

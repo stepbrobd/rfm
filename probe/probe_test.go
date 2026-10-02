@@ -22,6 +22,7 @@ import (
 	"github.com/cilium/ebpf/link"
 	"github.com/cilium/ebpf/ringbuf"
 	"github.com/vishvananda/netlink"
+	"github.com/vishvananda/netlink/nl"
 	"github.com/vishvananda/netns"
 	"golang.org/x/sys/unix"
 	"ysun.co/rfm/testutil"
@@ -1274,6 +1275,153 @@ func TestPinnedCountersSurviveReload(t *testing.T) {
 	}
 }
 
+// testWatch is a Watch running for a test
+type testWatch struct {
+	events chan LinkEvent
+	done   chan error
+	cancel context.CancelFunc
+	err    error
+	ended  bool
+}
+
+// startWatch runs Watch for the links named with prefix, the watcher needs a
+// thread inside the test namespace of its own, the test goroutine keeps the
+// one NewNS locked
+// gate, when set, holds back the first event until it is closed
+func startWatch(t *testing.T, p *Probe, ns *testutil.NS, prefix string, gate <-chan struct{}) *testWatch {
+	t.Helper()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	w := &testWatch{
+		events: make(chan LinkEvent, 1024),
+		done:   make(chan error, 1),
+		cancel: cancel,
+	}
+	go func() {
+		runtime.LockOSThread()
+		defer runtime.UnlockOSThread()
+		if err := netns.Set(ns.Handle()); err != nil {
+			w.done <- err
+			return
+		}
+		w.done <- p.Watch(ctx, func(name string) bool { return strings.HasPrefix(name, prefix) }, func(ev LinkEvent) {
+			if gate != nil {
+				<-gate
+			}
+			w.events <- ev
+		})
+	}()
+	t.Cleanup(func() { w.stop() })
+	return w
+}
+
+// next waits for the next attach or detach
+func (w *testWatch) next(t *testing.T) LinkEvent {
+	t.Helper()
+
+	select {
+	case ev := <-w.events:
+		return ev
+	case err := <-w.done:
+		w.ended, w.err = true, err
+		t.Fatalf("watch stopped: %v", err)
+	case <-time.After(3 * time.Second):
+		t.Fatal("timed out waiting for a link event")
+	}
+	return LinkEvent{}
+}
+
+// expect waits for one event per name, all attaches or all detaches
+func (w *testWatch) expect(t *testing.T, attached bool, names ...string) {
+	t.Helper()
+
+	want := map[string]bool{}
+	for _, name := range names {
+		want[name] = true
+	}
+	for range names {
+		ev := w.next(t)
+		if ev.Attached != attached || !want[ev.Name] {
+			t.Fatalf("unexpected event %+v, want attached=%v for %v", ev, attached, names)
+		}
+		delete(want, ev.Name)
+	}
+}
+
+// stop cancels the watcher and returns what Watch returned
+func (w *testWatch) stop() error {
+	w.cancel()
+	if !w.ended {
+		w.err, w.ended = <-w.done, true
+	}
+	return w.err
+}
+
+// addVeth creates a veth pair
+func addVeth(t *testing.T, name, peer string) *netlink.Veth {
+	t.Helper()
+
+	veth := &netlink.Veth{LinkAttrs: netlink.LinkAttrs{Name: name}, PeerName: peer}
+	if err := netlink.LinkAdd(veth); err != nil {
+		t.Fatal(err)
+	}
+	return veth
+}
+
+// ifindexOf returns the index of the named link
+func ifindexOf(t *testing.T, name string) int {
+	t.Helper()
+
+	l, err := netlink.LinkByName(name)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return l.Attrs().Index
+}
+
+// attachedSet returns the attached interfaces as a set
+func attachedSet(p *Probe) map[int]bool {
+	set := map[int]bool{}
+	for _, ifindex := range p.Attached() {
+		set[ifindex] = true
+	}
+	return set
+}
+
+// waitSubscribed waits until a socket in the namespace of the calling
+// thread listens to link messages and returns its netlink port id
+func waitSubscribed(t *testing.T) uint32 {
+	t.Helper()
+
+	var port uint32
+	testutil.Eventually(t, time.Second, 10*time.Millisecond, func() error {
+		raw, err := os.ReadFile("/proc/thread-self/net/netlink")
+		if err != nil {
+			return err
+		}
+		for _, line := range strings.Split(string(raw), "\n")[1:] {
+			f := strings.Fields(line)
+			if len(f) < 4 || f[1] != "0" {
+				continue
+			}
+			var pid uint32
+			var groups uint32
+			if _, err := fmt.Sscan(f[2], &pid); err != nil {
+				continue
+			}
+			if _, err := fmt.Sscanf(f[3], "%x", &groups); err != nil {
+				continue
+			}
+			if groups&(1<<(unix.RTNLGRP_LINK-1)) != 0 {
+				port = pid
+				return nil
+			}
+		}
+		return fmt.Errorf("no link subscription yet")
+	})
+	return port
+}
+
 func TestWatchFollowsInterfaces(t *testing.T) {
 	testutil.RequireRoot(t)
 
@@ -1286,56 +1434,11 @@ func TestWatchFollowsInterfaces(t *testing.T) {
 	}
 	defer p.Close()
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	w := startWatch(t, p, ns, "rfmw", nil)
+	waitSubscribed(t)
 
-	events := make(chan LinkEvent, 16)
-	watchErr := make(chan error, 1)
-	// the watcher needs a thread inside the test namespace of its own,
-	// the test goroutine keeps the one NewNS locked
-	go func() {
-		runtime.LockOSThread()
-		defer runtime.UnlockOSThread()
-		if err := netns.Set(ns.Handle()); err != nil {
-			watchErr <- err
-			return
-		}
-		watchErr <- p.Watch(ctx, func(name string) bool { return strings.HasPrefix(name, "rfmw") }, func(ev LinkEvent) {
-			events <- ev
-		})
-	}()
-
-	next := func() LinkEvent {
-		select {
-		case ev := <-events:
-			return ev
-		case err := <-watchErr:
-			t.Fatalf("watch stopped: %v", err)
-		case <-time.After(3 * time.Second):
-			t.Fatal("timed out waiting for a link event")
-		}
-		return LinkEvent{}
-	}
-
-	// give the subscription a moment to be in place before the first link
-	time.Sleep(50 * time.Millisecond)
-
-	veth := &netlink.Veth{LinkAttrs: netlink.LinkAttrs{Name: "rfmw0"}, PeerName: "rfmw1"}
-	if err := netlink.LinkAdd(veth); err != nil {
-		t.Fatal(err)
-	}
-
-	attached := map[string]bool{}
-	for range 2 {
-		ev := next()
-		if !ev.Attached {
-			t.Fatalf("unexpected detach event %+v", ev)
-		}
-		attached[ev.Name] = true
-	}
-	if !attached["rfmw0"] || !attached["rfmw1"] {
-		t.Fatalf("attached = %v, want rfmw0 and rfmw1", attached)
-	}
+	veth := addVeth(t, "rfmw0", "rfmw1")
+	w.expect(t, true, "rfmw0", "rfmw1")
 	if got := len(p.Attached()); got != 2 {
 		t.Fatalf("attached count = %d, want 2", got)
 	}
@@ -1343,57 +1446,266 @@ func TestWatchFollowsInterfaces(t *testing.T) {
 	// a matching link without an ethernet header is skipped, its events
 	// would come before the ones of the veth pair created after it
 	tun := addTun(t, "rfmwtun0")
-	veth2 := &netlink.Veth{LinkAttrs: netlink.LinkAttrs{Name: "rfmw2"}, PeerName: "rfmw3"}
-	if err := netlink.LinkAdd(veth2); err != nil {
-		t.Fatal(err)
-	}
-	attached = map[string]bool{}
-	for range 2 {
-		ev := next()
-		if !ev.Attached || ev.Ifindex == tun.Attrs().Index {
-			t.Fatalf("unexpected event %+v", ev)
-		}
-		attached[ev.Name] = true
-	}
-	if !attached["rfmw2"] || !attached["rfmw3"] {
-		t.Fatalf("attached = %v, want rfmw2 and rfmw3", attached)
+	veth2 := addVeth(t, "rfmw2", "rfmw3")
+	w.expect(t, true, "rfmw2", "rfmw3")
+	if attachedSet(p)[tun.Attrs().Index] {
+		t.Fatal("tun device attached")
 	}
 	if err := netlink.LinkDel(veth2); err != nil {
 		t.Fatal(err)
 	}
-	for range 2 {
-		if ev := next(); ev.Attached {
-			t.Fatalf("unexpected attach event %+v", ev)
-		}
-	}
+	w.expect(t, false, "rfmw2", "rfmw3")
 
 	// an interface outside the pattern is ignored
-	other := &netlink.Veth{LinkAttrs: netlink.LinkAttrs{Name: "other0"}, PeerName: "other1"}
-	if err := netlink.LinkAdd(other); err != nil {
-		t.Fatal(err)
-	}
+	other := addVeth(t, "other0", "other1")
 	defer netlink.LinkDel(other)
 
 	if err := netlink.LinkDel(veth); err != nil {
 		t.Fatal(err)
 	}
-	detached := map[string]bool{}
-	for range 2 {
-		ev := next()
-		if ev.Attached {
-			t.Fatalf("unexpected attach event %+v", ev)
-		}
-		detached[ev.Name] = true
-	}
-	if !detached["rfmw0"] || !detached["rfmw1"] {
-		t.Fatalf("detached = %v, want rfmw0 and rfmw1", detached)
-	}
+	w.expect(t, false, "rfmw0", "rfmw1")
 	if got := len(p.Attached()); got != 0 {
 		t.Fatalf("attached count after delete = %d, want 0", got)
 	}
 
-	cancel()
-	if err := <-watchErr; !errors.Is(err, context.Canceled) {
+	if err := w.stop(); !errors.Is(err, context.Canceled) {
 		t.Fatalf("watch returned %v, want context.Canceled", err)
+	}
+}
+
+func TestWatchReconcilesExistingLinks(t *testing.T) {
+	testutil.RequireRoot(t)
+
+	ns := testutil.NewNS(t)
+
+	p, err := Load(Config{})
+	if err != nil {
+		skipIfUnsupported(t, err)
+		t.Fatal(err)
+	}
+	defer p.Close()
+
+	// a pair that exists before the watcher starts, and a pair attached by
+	// hand that goes away while no watcher runs
+	addVeth(t, "rfmw0", "rfmw1")
+	stale := addVeth(t, "rfmw2", "rfmw3")
+	for _, name := range []string{"rfmw2", "rfmw3"} {
+		if err := p.Attach(ifindexOf(t, name)); err != nil {
+			skipIfUnsupported(t, err)
+			t.Fatal(err)
+		}
+	}
+	if err := netlink.LinkDel(stale); err != nil {
+		t.Fatal(err)
+	}
+
+	w := startWatch(t, p, ns, "rfmw", nil)
+	w.expect(t, true, "rfmw0", "rfmw1")
+	w.expect(t, false, "rfmw2", "rfmw3")
+
+	want := map[int]bool{ifindexOf(t, "rfmw0"): true, ifindexOf(t, "rfmw1"): true}
+	if got := attachedSet(p); len(got) != len(want) || !got[ifindexOf(t, "rfmw0")] || !got[ifindexOf(t, "rfmw1")] {
+		t.Fatalf("attached = %v, want %v", got, want)
+	}
+	if state := p.WatchState(); !state.Running || !state.Synced || state.Resubscribes != 0 || state.Errors != 0 {
+		t.Fatalf("watch state = %+v, want running and synced without errors", state)
+	}
+
+	w.stop()
+	if state := p.WatchState(); state.Running || state.Synced {
+		t.Fatalf("watch state after stop = %+v, want neither running nor synced", state)
+	}
+}
+
+func TestWatchSurvivesForeignMessages(t *testing.T) {
+	testutil.RequireRoot(t)
+
+	ns := testutil.NewNS(t)
+
+	p, err := Load(Config{})
+	if err != nil {
+		skipIfUnsupported(t, err)
+		t.Fatal(err)
+	}
+	defer p.Close()
+
+	w := startWatch(t, p, ns, "rfmw", nil)
+	port := waitSubscribed(t)
+
+	// another process can send to the subscription, its message is not a
+	// kernel one and the watcher must drop it and go on
+	fd, err := unix.Socket(unix.AF_NETLINK, unix.SOCK_RAW, unix.NETLINK_ROUTE)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer unix.Close(fd)
+	msg := make([]byte, unix.NLMSG_HDRLEN+unix.SizeofIfInfomsg)
+	binary.NativeEndian.PutUint32(msg[0:4], uint32(len(msg)))
+	binary.NativeEndian.PutUint16(msg[4:6], unix.RTM_NEWLINK)
+	if err := unix.Sendto(fd, msg, 0, &unix.SockaddrNetlink{Family: unix.AF_NETLINK, Pid: port}); err != nil {
+		t.Fatalf("send to the watcher: %v", err)
+	}
+
+	addVeth(t, "rfmw0", "rfmw1")
+	w.expect(t, true, "rfmw0", "rfmw1")
+	if state := p.WatchState(); state.Errors != 1 || state.Resubscribes != 0 || !state.Running {
+		t.Fatalf("watch state = %+v, want one dropped message on a running subscription", state)
+	}
+}
+
+// corruptLinkMessage has the watcher of p receive the first new link message
+// about name with an attribute that runs past the message
+func corruptLinkMessage(p *Probe, name string) {
+	done := false
+	p.mangle = func(typ uint16, data []byte) {
+		if done || typ != unix.RTM_NEWLINK {
+			return
+		}
+		if l, err := netlink.LinkDeserialize(nil, data); err != nil || l.Attrs().Name != name {
+			return
+		}
+		binary.NativeEndian.PutUint16(data[unix.SizeofIfInfomsg:], 0xffff)
+		done = true
+	}
+}
+
+func TestWatchResubscribesOnALinkItCannotDecode(t *testing.T) {
+	testutil.RequireRoot(t)
+
+	ns := testutil.NewNS(t)
+
+	p, err := Load(Config{})
+	if err != nil {
+		skipIfUnsupported(t, err)
+		t.Fatal(err)
+	}
+	defer p.Close()
+
+	// a link the watcher cannot read may need an attach, the dump of the
+	// next subscription attaches it
+	corruptLinkMessage(p, "rfmw0")
+	w := startWatch(t, p, ns, "rfmw", nil)
+	testutil.Eventually(t, time.Second, 10*time.Millisecond, func() error {
+		if !p.WatchState().Synced {
+			return fmt.Errorf("watch not synced")
+		}
+		return nil
+	})
+	addVeth(t, "rfmw0", "zzp0")
+	w.expect(t, true, "rfmw0")
+	if state := p.WatchState(); state.Resubscribes != 1 || state.Errors != 0 || !strings.Contains(state.LastError, "decode link message") {
+		t.Fatalf("watch state = %+v, want one resubscription for the link it could not decode", state)
+	}
+}
+
+func TestLinkDumpGoesToTheKernelAlone(t *testing.T) {
+	// as root the request stays in a namespace of its own, without root the
+	// dump must work as well, a send to the link group needs CAP_NET_ADMIN
+	if os.Geteuid() == 0 {
+		testutil.NewNS(t)
+	}
+
+	// another link subscriber, as a second agent or a routing daemon
+	other, err := unix.Socket(unix.AF_NETLINK, unix.SOCK_RAW|unix.SOCK_CLOEXEC, unix.NETLINK_ROUTE)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer unix.Close(other)
+	if err := unix.Bind(other, &unix.SockaddrNetlink{Family: unix.AF_NETLINK, Groups: 1 << (unix.RTNLGRP_LINK - 1)}); err != nil {
+		t.Fatal(err)
+	}
+
+	s, err := nl.Subscribe(unix.NETLINK_ROUTE, unix.RTNLGRP_LINK)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	port, err := s.GetPid()
+	if err != nil {
+		t.Fatal(err)
+	}
+	req, err := dumpLinks(s)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// the dump comes back on the subscribed socket
+	if err := s.SetReceiveTimeout(&unix.Timeval{Sec: 5}); err != nil {
+		t.Fatal(err)
+	}
+	for done := false; !done; {
+		msgs, from, err := s.Receive()
+		if err != nil {
+			t.Fatalf("receive the dump: %v", err)
+		}
+		for _, m := range msgs {
+			done = done || from.Pid == nl.PidKernel && m.Header.Seq == req.Seq && m.Header.Type == unix.NLMSG_DONE
+		}
+	}
+
+	// a copy of a request sent to the group lands on every other subscriber
+	// before the send returns
+	buf := make([]byte, 1<<16)
+	for {
+		_, from, err := unix.Recvfrom(other, buf, unix.MSG_DONTWAIT)
+		if errors.Is(err, unix.EAGAIN) {
+			break
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+		if sa, ok := from.(*unix.SockaddrNetlink); ok && sa.Pid == port {
+			t.Fatal("the link dump request reached another link subscriber")
+		}
+	}
+}
+
+func TestWatchResubscribesAfterOverflow(t *testing.T) {
+	testutil.RequireRoot(t)
+
+	ns := testutil.NewNS(t)
+
+	p, err := Load(Config{})
+	if err != nil {
+		skipIfUnsupported(t, err)
+		t.Fatal(err)
+	}
+	defer p.Close()
+
+	// the smallest receive buffer the kernel allows overflows while the
+	// watcher hangs in its first notification and a burst of links comes in
+	p.rcvbuf = 1
+	gate := make(chan struct{})
+	w := startWatch(t, p, ns, "rfmw", gate)
+	waitSubscribed(t)
+
+	addVeth(t, "rfmw0", "rfmw1")
+	const pairs = 100
+	var names []string
+	for i := range pairs {
+		name, peer := fmt.Sprintf("rfmw%d", 2*i+2), fmt.Sprintf("rfmw%d", 2*i+3)
+		addVeth(t, name, peer)
+		names = append(names, name, peer)
+	}
+	close(gate)
+
+	// the links of the burst are attached all the same
+	testutil.Eventually(t, 5*time.Second, 50*time.Millisecond, func() error {
+		select {
+		case err := <-w.done:
+			w.ended, w.err = true, err
+			t.Fatalf("watch stopped: %v", err)
+		default:
+		}
+		attached := attachedSet(p)
+		for _, name := range names {
+			if !attached[ifindexOf(t, name)] {
+				return fmt.Errorf("%s not attached", name)
+			}
+		}
+		return nil
+	})
+	if state := p.WatchState(); state.Resubscribes == 0 || !strings.Contains(state.LastError, "no buffer space") {
+		t.Fatalf("watch state = %+v, want a resubscription after ENOBUFS", state)
 	}
 }

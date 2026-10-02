@@ -18,6 +18,7 @@ import (
 
 // ifaceLinks are the two tcx links of one attached interface
 type ifaceLinks struct {
+	name    string
 	ingress link.Link
 	egress  link.Link
 }
@@ -30,6 +31,15 @@ type Probe struct {
 	// skipped holds the matching links Watch left alone because of their
 	// link type, so their warning is logged once
 	skipped map[int]bool
+
+	watchState WatchState
+
+	// rcvbuf overrides the receive buffer of the link subscription when
+	// set, tests shrink it to make the socket overflow
+	rcvbuf int
+	// mangle, when set, sees the type and payload of every received link
+	// message before the watcher reads them, tests corrupt one
+	mangle func(typ uint16, data []byte)
 }
 
 func Load(cfg Config) (*Probe, error) {
@@ -161,12 +171,13 @@ func (p *Probe) Attached() []int {
 // recreated interface starts from zero under its new index
 // detaching an interface that is not attached is not an error
 func (p *Probe) Detach(ifindex int) error {
-	_, err := p.detach(ifindex)
+	_, _, err := p.detach(ifindex)
 	return err
 }
 
-// detach is Detach reporting whether the interface was attached
-func (p *Probe) detach(ifindex int) (bool, error) {
+// detach is Detach reporting the name the interface was attached under and
+// whether it was attached
+func (p *Probe) detach(ifindex int) (string, bool, error) {
 	p.mu.Lock()
 	l, ok := p.links[ifindex]
 	if ok {
@@ -174,14 +185,14 @@ func (p *Probe) detach(ifindex int) (bool, error) {
 	}
 	p.mu.Unlock()
 	if !ok {
-		return false, nil
+		return "", false, nil
 	}
 
 	err := errors.Join(l.ingress.Close(), l.egress.Close())
 	if cerr := p.clearIfaceStats(ifindex); cerr != nil {
 		err = errors.Join(err, cerr)
 	}
-	return true, err
+	return l.name, true, err
 }
 
 // clearIfaceStats deletes every counter entry of ifindex
@@ -280,7 +291,7 @@ func (p *Probe) Attach(ifindex int) error {
 	if err := checkLinkType(l.Attrs()); err != nil {
 		return err
 	}
-	_, err = p.attach(ifindex)
+	_, err = p.attach(ifindex, l.Attrs().Name)
 	return err
 }
 
@@ -294,8 +305,9 @@ func checkLinkType(attrs *netlink.LinkAttrs) error {
 	return fmt.Errorf("link type %s: %w", attrs.EncapType, ErrUnsupportedLink)
 }
 
-// attach is Attach reporting whether the interface was newly attached
-func (p *Probe) attach(ifindex int) (bool, error) {
+// attach is Attach reporting whether the interface was newly attached, name
+// is kept for the detach event
+func (p *Probe) attach(ifindex int, name string) (bool, error) {
 	p.mu.Lock()
 	_, attached := p.links[ifindex]
 	p.mu.Unlock()
@@ -325,7 +337,7 @@ func (p *Probe) attach(ifindex int) (bool, error) {
 	}
 
 	p.mu.Lock()
-	p.links[ifindex] = ifaceLinks{ingress: ing, egress: egr}
+	p.links[ifindex] = ifaceLinks{name: name, ingress: ing, egress: egr}
 	p.mu.Unlock()
 	return true, nil
 }
