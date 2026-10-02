@@ -19,9 +19,13 @@ import (
 const DefaultReloadInterval = time.Minute
 
 // Open opens the configured MMDB databases and keeps them current
-// updaters such as geoipupdate replace the file in place, and a reader that
-// keeps the old mapping open serves stale data until restart, so the
-// enricher polls the paths and swaps in a fresh reader when a file changed
+// updaters such as geoipupdate rename a new file over the old one, and a
+// reader that keeps the old mapping open serves stale data until restart, so
+// the enricher polls the paths and swaps in a fresh reader when a file changed
+// the reader maps the file shared, so a rename is the only safe way to
+// replace it, a writer that truncates and rewrites the file in place shows
+// lookups a half written database and kills the agent with SIGBUS when a
+// lookup reads past the new end of the file
 // when no MMDB database is configured, it returns nil, nil, nil
 func Open(cfg config.MMDBConfig) (collector.Enricher, io.Closer, error) {
 	return OpenWithInterval(cfg, DefaultReloadInterval)
