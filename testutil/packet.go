@@ -21,6 +21,15 @@ const (
 	EthP8021AD = 0x88A8
 )
 
+// IPv6 next header values of the extension headers
+const (
+	IPProtoHopOpts  = 0
+	IPProtoRouting  = 43
+	IPProtoFragment = 44
+	IPProtoAH       = 51
+	IPProtoDstOpts  = 60
+)
+
 // Eth builds a raw ethernet frame
 func Eth(dst, src net.HardwareAddr, ethertype uint16, payload []byte) []byte {
 	frame := make([]byte, EthHdrLen+len(payload))
@@ -96,6 +105,47 @@ func IPv6(proto uint8, src, dst net.IP, payload []byte) []byte {
 	copy(hdr[8:24], src.To16())
 	copy(hdr[24:40], dst.To16())
 	copy(hdr[IPv6HdrLen:], payload)
+	return hdr
+}
+
+// IPv6Options builds an 8 byte hop-by-hop or destination options header
+// holding one PadN option
+func IPv6Options(next uint8) []byte {
+	return []byte{next, 0, 1, 4, 0, 0, 0, 0}
+}
+
+// IPv6Routing builds an 8 byte routing header with no segments left
+func IPv6Routing(next uint8) []byte {
+	return []byte{next, 0, 253, 0, 0, 0, 0, 0}
+}
+
+// IPv6FragmentHeader builds an IPv6 fragment header
+// offsetBytes must be a multiple of 8
+func IPv6FragmentHeader(next uint8, offsetBytes uint16, more bool, id uint32) []byte {
+	if offsetBytes%8 != 0 {
+		panic("offsetBytes must be a multiple of 8")
+	}
+
+	hdr := make([]byte, 8)
+	hdr[0] = next
+	// the offset in 8 byte units sits above the M flag and 2 reserved bits
+	frag := offsetBytes
+	if more {
+		frag |= 1
+	}
+	binary.BigEndian.PutUint16(hdr[2:4], frag)
+	binary.BigEndian.PutUint32(hdr[4:8], id)
+	return hdr
+}
+
+// IPv6AH builds an authentication header with a 4 byte ICV, 16 bytes in all
+func IPv6AH(next uint8) []byte {
+	hdr := make([]byte, 16)
+	hdr[0] = next
+	// payload length counts 4 byte units minus 2
+	hdr[1] = 16/4 - 2
+	binary.BigEndian.PutUint32(hdr[4:8], 0x100) // spi
+	binary.BigEndian.PutUint32(hdr[8:12], 1)    // sequence number
 	return hdr
 }
 
@@ -227,6 +277,17 @@ func EthIPv6TCP(srcIP, dstIP net.IP, srcPort, dstPort uint16) []byte {
 		defaultSrcMAC(),
 		EthPIPv6, // eth p ipv6
 		ip,
+	)
+}
+
+// EthIPv6 builds an eth+ipv6 frame whose payload starts with the header
+// next names, extension headers included
+func EthIPv6(srcIP, dstIP net.IP, next uint8, payload []byte) []byte {
+	return Eth(
+		defaultDstMAC(),
+		defaultSrcMAC(),
+		EthPIPv6,
+		IPv6(next, srcIP, dstIP, payload),
 	)
 }
 

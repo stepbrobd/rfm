@@ -243,3 +243,61 @@ func TestEthQinQIPv6UDP(t *testing.T) {
 		t.Fatalf("want payload ethertype 0x%04x, got 0x%04x", EthPIPv6, inner)
 	}
 }
+
+func TestIPv6FragmentHeader(t *testing.T) {
+	hdr := IPv6FragmentHeader(17, 1480, true, 0xdeadbeef)
+
+	if len(hdr) != 8 {
+		t.Fatalf("want len 8, got %d", len(hdr))
+	}
+	if hdr[0] != 17 {
+		t.Fatalf("next header = %d, want 17", hdr[0])
+	}
+
+	frag := binary.BigEndian.Uint16(hdr[2:4])
+	if offset := frag >> 3; offset != 1480/8 {
+		t.Fatalf("offset = %d units, want %d", offset, 1480/8)
+	}
+	if frag&1 != 1 {
+		t.Fatal("more fragments flag not set")
+	}
+	if id := binary.BigEndian.Uint32(hdr[4:8]); id != 0xdeadbeef {
+		t.Fatalf("id = 0x%08x, want 0xdeadbeef", id)
+	}
+}
+
+func TestIPv6ExtensionHeaderLengths(t *testing.T) {
+	// hop-by-hop, routing and destination options count 8 byte units beyond
+	// the first 8, AH counts 4 byte units minus 2
+	for name, hdr := range map[string][]byte{
+		"hop-by-hop": IPv6Options(6),
+		"routing":    IPv6Routing(6),
+	} {
+		if got, want := (int(hdr[1])+1)*8, len(hdr); got != want {
+			t.Fatalf("%s length field gives %d bytes, built %d", name, got, want)
+		}
+	}
+
+	ah := IPv6AH(17)
+	if got, want := (int(ah[1])+2)*4, len(ah); got != want {
+		t.Fatalf("ah length field gives %d bytes, built %d", got, want)
+	}
+}
+
+func TestEthIPv6(t *testing.T) {
+	src := net.ParseIP("fd00::1")
+	dst := net.ParseIP("fd00::2")
+	payload := append(IPv6Options(IPProtoFragment), IPv6FragmentHeader(17, 0, true, 1)...)
+
+	frame := EthIPv6(src, dst, IPProtoHopOpts, payload)
+
+	if len(frame) != EthHdrLen+IPv6HdrLen+len(payload) {
+		t.Fatalf("want len %d, got %d", EthHdrLen+IPv6HdrLen+len(payload), len(frame))
+	}
+	if next := frame[EthHdrLen+6]; next != IPProtoHopOpts {
+		t.Fatalf("next header = %d, want %d", next, IPProtoHopOpts)
+	}
+	if next := frame[EthHdrLen+IPv6HdrLen]; next != IPProtoFragment {
+		t.Fatalf("hop-by-hop next header = %d, want %d", next, IPProtoFragment)
+	}
+}

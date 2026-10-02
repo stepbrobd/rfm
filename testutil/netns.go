@@ -18,6 +18,7 @@ const (
 	virtioNetHdrLen        = 10
 	virtioNetHdrNeedsCsum  = 1
 	virtioNetHdrGSOTCPv4   = 1
+	virtioNetHdrGSOTCPv6   = 4
 	tcpChecksumOffset      = 16
 	packetVNetHdrSockopt   = unix.PACKET_VNET_HDR
 	packetVNetHdrSockLevel = unix.SOL_PACKET
@@ -140,13 +141,14 @@ func (n *NS) SendRawOn(t *testing.T, ifname string, pkt []byte) {
 	}
 }
 
-// SendGSO hands the kernel one TCPv4 GSO skb built from pkt, an ethernet
-// frame whose TCP payload is longer than gsoSize, the same way a virtio or
-// tap driver delivers a large frame, so the tc hooks see an skb that stands
-// for several wire packets
+// SendGSO hands the kernel one TCP GSO skb built from pkt, an IPv4 or IPv6
+// ethernet frame whose TCP payload is longer than gsoSize, the same way a
+// virtio or tap driver delivers a large frame, so the tc hooks see an skb
+// that stands for several wire packets
 // the skb leaves through the named interface, use the peer name to have it
 // arrive on the monitored end as ingress
-// hdrLen is the ethernet + ip + tcp header size of pkt
+// hdrLen is the ethernet + ip + tcp header size of pkt, IPv6 extension
+// headers included
 func (n *NS) SendGSO(t *testing.T, ifname string, pkt []byte, hdrLen, gsoSize uint16) {
 	t.Helper()
 
@@ -174,6 +176,9 @@ func (n *NS) SendGSO(t *testing.T, ifname string, pkt []byte, hdrLen, gsoSize ui
 	hdr := make([]byte, virtioNetHdrLen)
 	hdr[0] = virtioNetHdrNeedsCsum
 	hdr[1] = virtioNetHdrGSOTCPv4
+	if binary.BigEndian.Uint16(pkt[12:14]) == EthPIPv6 {
+		hdr[1] = virtioNetHdrGSOTCPv6
+	}
 	binary.LittleEndian.PutUint16(hdr[2:4], hdrLen)
 	binary.LittleEndian.PutUint16(hdr[4:6], gsoSize)
 	binary.LittleEndian.PutUint16(hdr[6:8], hdrLen-TCPHdrLen)

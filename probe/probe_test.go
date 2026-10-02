@@ -458,6 +458,106 @@ func TestFlowEventQinQIPv6UDP(t *testing.T) {
 	}
 }
 
+// v6 returns addr as the 16 address bytes of a flow event
+func v6(addr string) [16]uint8 {
+	return [16]uint8(net.ParseIP(addr).To16())
+}
+
+// readFlowEventFromSrc reads the first flow event of pkt, matched on its
+// source address, so a wrong protocol or wrong ports still find the event
+func readFlowEventFromSrc(t *testing.T, pkt []byte, src string) rfmRfmFlowEvent {
+	t.Helper()
+
+	return readFlowEvent(t, pkt, func(e rfmRfmFlowEvent) bool {
+		return e.SrcAddr == v6(src)
+	})
+}
+
+func TestFlowEventIPv6FirstFragmentKeepsPorts(t *testing.T) {
+	testutil.RequireRoot(t)
+
+	src := "fd00:3::1"
+	payload := append(testutil.IPv6FragmentHeader(17, 0, true, 0x1234), testutil.UDP(5001, 53)...)
+	pkt := testutil.EthIPv6(net.ParseIP(src), net.ParseIP("fd00:3::2"), testutil.IPProtoFragment, payload)
+
+	ev := readFlowEventFromSrc(t, pkt, src)
+	if ev.Proto != 17 {
+		t.Fatalf("proto = %d, want 17 behind the fragment header", ev.Proto)
+	}
+	if ev.SrcPort != 5001 || ev.DstPort != 53 {
+		t.Fatalf("ports = %d -> %d, want 5001 -> 53", ev.SrcPort, ev.DstPort)
+	}
+}
+
+func TestFlowEventIPv6NonInitialFragmentZeroPorts(t *testing.T) {
+	testutil.RequireRoot(t)
+
+	// the bytes behind a later fragment look like ports but are payload
+	src := "fd00:4::1"
+	payload := append(testutil.IPv6FragmentHeader(17, 8, true, 0x1234), testutil.UDP(5001, 53)...)
+	pkt := testutil.EthIPv6(net.ParseIP(src), net.ParseIP("fd00:4::2"), testutil.IPProtoFragment, payload)
+
+	ev := readFlowEventFromSrc(t, pkt, src)
+	if ev.Proto != 17 {
+		t.Fatalf("proto = %d, want 17 like a later IPv4 fragment", ev.Proto)
+	}
+	if ev.SrcPort != 0 || ev.DstPort != 0 {
+		t.Fatalf("ports = %d -> %d, want 0 -> 0", ev.SrcPort, ev.DstPort)
+	}
+}
+
+func TestFlowEventIPv6ExtensionHeaderChain(t *testing.T) {
+	testutil.RequireRoot(t)
+
+	src := "fd00:5::1"
+	var payload []byte
+	payload = append(payload, testutil.IPv6Options(testutil.IPProtoDstOpts)...)
+	payload = append(payload, testutil.IPv6Options(testutil.IPProtoRouting)...)
+	payload = append(payload, testutil.IPv6Routing(testutil.IPProtoAH)...)
+	payload = append(payload, testutil.IPv6AH(6)...)
+	payload = append(payload, testutil.TCP(4500, 443)...)
+	pkt := testutil.EthIPv6(net.ParseIP(src), net.ParseIP("fd00:5::2"), testutil.IPProtoHopOpts, payload)
+
+	ev := readFlowEventFromSrc(t, pkt, src)
+	if ev.Proto != 6 {
+		t.Fatalf("proto = %d, want 6 behind hop-by-hop, destination options, routing and AH", ev.Proto)
+	}
+	if ev.SrcPort != 4500 || ev.DstPort != 443 {
+		t.Fatalf("ports = %d -> %d, want 4500 -> 443", ev.SrcPort, ev.DstPort)
+	}
+}
+
+func TestFlowEventGROIngressIPv6ExtensionHeader(t *testing.T) {
+	testutil.RequireRoot(t)
+
+	// the gso skb carries a destination options header in front of TCP,
+	// which every wire packet repeats
+	const (
+		hdrLen = testutil.EthHdrLen + testutil.IPv6HdrLen + 8 + testutil.TCPHdrLen
+		wire   = gsoSegs * (hdrLen + gsoSize)
+	)
+	src := "fd00:7::1"
+	payload := append(testutil.IPv6Options(6), testutil.TCP(4600, 443)...)
+	payload = append(payload, make([]byte, gsoPayload)...)
+	frame := testutil.EthIPv6(net.ParseIP(src), net.ParseIP("fd00:7::2"), testutil.IPProtoDstOpts, payload)
+
+	ev := readFlowEventFrom(t, func(ns *testutil.NS) {
+		ns.SendGSO(t, "rfm1", frame, hdrLen, gsoSize)
+	}, func(e rfmRfmFlowEvent) bool {
+		return e.SrcAddr == v6(src) && e.Dir == 0
+	})
+
+	if ev.Segs != gsoSegs {
+		t.Fatalf("segs = %d, want %d", ev.Segs, gsoSegs)
+	}
+	if ev.Len != wire {
+		t.Fatalf("len = %d, want %d wire bytes", ev.Len, wire)
+	}
+	if ev.Proto != 6 {
+		t.Fatalf("proto = %d, want 6", ev.Proto)
+	}
+}
+
 // ifaceStats sums the per-CPU iface stats for key
 func ifaceStats(t *testing.T, p *Probe, key rfmRfmIfaceKey) (packets, bytes uint64) {
 	t.Helper()
