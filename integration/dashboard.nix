@@ -39,6 +39,18 @@ in
       dashboard = json.load(f)
     panels = {panel["title"]: panel for panel in dashboard["panels"]}
 
+    # each data source answers with its own ratio, which grafana must not
+    # add up across data sources
+    for panel in dashboard["panels"]:
+      summed = any(
+        "sum" in field.get("aggregations", [])
+        for step in panel.get("transformations", [])
+        if step["id"] == "groupBy"
+        for field in step["options"]["fields"].values()
+      )
+      ratios = [target["expr"] for target in panel.get("targets", []) if "/" in target["expr"]]
+      assert not (summed and ratios), f"{panel['title']} sums ratios across data sources: {ratios}"
+
     def prometheus(path: str, *params: str) -> list:
       # no -f, a rejected query answers with the reason in the body
       args = " ".join(f"--data-urlencode {shlex.quote(param)}" for param in params)

@@ -662,7 +662,7 @@
         "x": 20,
         "y": 0
       },
-      "description": "Percentage of max_flows capacity in use (default max: 65536)",
+      "description": "Share of the flow table in use on the fullest node, against the default max_flows of 65536.",
       "fieldConfig": {
         "defaults": {
           "unit": "percentunit",
@@ -710,7 +710,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum(rfm_collector_active_flows) / 65536",
+          "expr": "max(rfm_collector_active_flows) / 65536",
           "legendFormat": "Flow Table Utilization",
           "refId": "A",
           "instant": true
@@ -731,7 +731,7 @@
               "Value": {
                 "operation": "aggregate",
                 "aggregations": [
-                  "sum"
+                  "max"
                 ]
               }
             }
