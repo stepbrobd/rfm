@@ -27,6 +27,9 @@ const (
 	bmpScannerInitialBuf = 64 * 1024
 	// bmpScannerMaxBuf caps BMP message size, very big and prob not necessary (just in case)
 	bmpScannerMaxBuf = 1 << 20
+	// removeChunk is how many routes RemovePeer withdraws per hold of the
+	// write lock, the collector looks labels up under its own lock
+	removeChunk = 1024
 )
 
 // LargeCommunity is a decoded RFC 8092 large community
@@ -141,8 +144,12 @@ type Summary struct {
 // that wins per prefix, so a prefix that one view announces costs an entry
 // in two tries and no map, and removing a view walks only its own routes
 type Table struct {
-	mu   sync.RWMutex
-	best bart.Table[bestRoute]
+	// writeMu serializes the writers, RemovePeer releases mu between chunks
+	// for the readers but no writer may run then, best still counts the
+	// routes of the view it takes apart
+	writeMu sync.Mutex
+	mu      sync.RWMutex
+	best    bart.Table[bestRoute]
 	// views holds the views with at least one route, order holds the same
 	// views by preference, see betterPeer
 	views    map[Peer]*view
@@ -166,6 +173,8 @@ func NewTable() *Table {
 
 // Apply applies a batch of route updates
 func (t *Table) Apply(update Update) {
+	t.writeMu.Lock()
+	defer t.writeMu.Unlock()
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
@@ -189,7 +198,14 @@ func (t *Table) Apply(update Update) {
 }
 
 // RemovePeer withdraws every route learned from peer
+// the view leaves the table before the walk over its routes, so withdrawn
+// picks the next best among the other views, and the walk releases mu
+// every removeChunk routes while it keeps writeMu, readers then wait for
+// one chunk and not for a whole table, and until the walk gets to a prefix
+// they still find the view's route for it through best
 func (t *Table) RemovePeer(peer Peer) {
+	t.writeMu.Lock()
+	defer t.writeMu.Unlock()
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
@@ -199,10 +215,15 @@ func (t *Table) RemovePeer(peer Peer) {
 	}
 	// out of order first, so withdrawn picks the next best among the others
 	t.dropView(v)
+	n := 0
 	for prefix, value := range v.routes.All() {
 		t.releaseMeta(value.metaID)
 		t.routes--
 		t.withdrawn(prefix, v)
+		if n++; n%removeChunk == 0 {
+			t.mu.Unlock()
+			t.mu.Lock()
+		}
 	}
 }
 

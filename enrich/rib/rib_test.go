@@ -6,6 +6,7 @@ import (
 	"net/netip"
 	"runtime"
 	"slices"
+	"sync"
 	"testing"
 	"time"
 
@@ -1100,6 +1101,171 @@ func TestTableMatchesModel(t *testing.T) {
 			delete(model, peer)
 		}
 		model.check(t, tab, probes, step)
+		checkInvariants(t, tab)
+	}
+}
+
+// checkInvariants verifies that best, the views and the counters agree
+func checkInvariants(t *testing.T, tab *Table) {
+	t.Helper()
+
+	tab.mu.RLock()
+	defer tab.mu.RUnlock()
+
+	if n := tab.faults.Load(); n != 0 {
+		t.Fatalf("the table counted %d faults", n)
+	}
+
+	routes := 0
+	for peer, v := range tab.views {
+		if v.peer != peer || v.routes.Size() == 0 {
+			t.Fatalf("view %+v under key %+v holds %d routes", v.peer, peer, v.routes.Size())
+		}
+		routes += v.routes.Size()
+		for prefix := range v.routes.All() {
+			if _, ok := tab.best.Get(prefix); !ok {
+				t.Fatalf("%s of %+v is missing from best", prefix, v.peer)
+			}
+		}
+	}
+	if routes != tab.routes {
+		t.Fatalf("route counter = %d, views hold %d", tab.routes, routes)
+	}
+	byPreference := func(a, b *view) int {
+		switch {
+		case betterPeer(a.peer, b.peer):
+			return -1
+		case betterPeer(b.peer, a.peer):
+			return 1
+		}
+		return 0
+	}
+	if len(tab.order) != len(tab.views) || !slices.IsSortedFunc(tab.order, byPreference) {
+		t.Fatalf("order holds %d views out of preference, the table %d", len(tab.order), len(tab.views))
+	}
+
+	for prefix, best := range tab.best.All() {
+		var holders uint32
+		var first *view
+		var value viewRoute
+		for _, v := range tab.order {
+			if r, ok := v.routes.Get(prefix); ok {
+				if holders++; first == nil {
+					first, value = v, r
+				}
+			}
+		}
+		if best.views != holders || best.view != first || int(best.bits) != prefix.Bits() ||
+			best.originASN != value.originASN || best.originASSet != value.originASSet {
+			t.Fatalf("best for %s = %+v, want the route of %+v and %d views", prefix, best, first, holders)
+		}
+	}
+}
+
+func TestRemovePeerWithConcurrentWriter(t *testing.T) {
+	tab := NewTable()
+	a := netip.MustParseAddr("192.0.2.1")
+	b := netip.MustParseAddr("192.0.2.2")
+	fillTable(tab, a, 1<<14)
+	fillTable(tab, b, 1<<12)
+
+	// b churns the prefixes it shares with a while a goes away in chunks
+	var wg sync.WaitGroup
+	wg.Go(func() { tab.RemovePeer(Peer{Address: a}) })
+	wg.Go(func() {
+		for i := range 1 << 12 {
+			prefix := netip.PrefixFrom(netip.AddrFrom4([4]byte{1, byte(i >> 8), byte(i), 0}), 24)
+			tab.Apply(Update{Peer: Peer{Address: b}, Withdraw: []netip.Prefix{prefix}})
+			tab.Apply(Update{Reach: []Route{{Prefix: prefix, OriginASN: 64999, PeerAddress: b}}})
+		}
+	})
+	wg.Wait()
+
+	checkInvariants(t, tab)
+	if got := tab.Summary(); got != (Summary{PrefixesV4: 1 << 12, Routes: 1 << 12, Peers: 1}) {
+		t.Fatalf("summary = %+v, want only the routes of %s", got, b)
+	}
+	if route, ok := tab.Lookup(netip.MustParseAddr("1.0.0.1")); !ok || route.OriginASN != 64999 {
+		t.Fatalf("Lookup = %+v ok=%v, want origin 64999 from %s", route, ok, b)
+	}
+}
+
+func TestConcurrentRemovals(t *testing.T) {
+	const n = 1 << 13
+
+	for range 5 {
+		tab := NewTable()
+		a := netip.MustParseAddr("192.0.2.1")
+		b := netip.MustParseAddr("192.0.2.2")
+		c := netip.MustParseAddr("192.0.2.3")
+		fillTable(tab, a, n)
+		fillTable(tab, b, n)
+
+		// a, the preferred view, goes while b is taken apart, and c
+		// announces the prefixes again from the end, so it reaches prefixes
+		// that the removal of b has not withdrawn yet
+		var wg sync.WaitGroup
+		wg.Go(func() { tab.RemovePeer(Peer{Address: b}) })
+		wg.Go(func() {
+			tab.RemovePeer(Peer{Address: a})
+			for i := n - 1; i >= 0; i-- {
+				prefix := netip.PrefixFrom(netip.AddrFrom4([4]byte{byte(1 + i>>16), byte(i >> 8), byte(i), 0}), 24)
+				tab.Apply(Update{Reach: []Route{{Prefix: prefix, OriginASN: 64999, PeerAddress: c}}})
+			}
+		})
+		wg.Wait()
+
+		checkInvariants(t, tab)
+		if got := tab.Summary(); got != (Summary{PrefixesV4: n, Routes: n, Peers: 1}) {
+			t.Fatalf("summary = %+v, want only the routes of %s", got, c)
+		}
+	}
+}
+
+func TestRemovePeerLetsLookupsThrough(t *testing.T) {
+	const n = 1 << 17
+
+	tab := NewTable()
+	big := netip.MustParseAddr("192.0.2.1")
+	fillTable(tab, big, n)
+	probe := netip.MustParseAddr("1.0.0.1")
+
+	// the collector enriches under its own write lock, a lookup that waits
+	// for the whole removal stalls ingestion for as long
+	running := make(chan struct{})
+	stop := make(chan struct{})
+	longest := make(chan time.Duration)
+	go func() {
+		var worst time.Duration
+		for i := 0; ; i++ {
+			start := time.Now()
+			tab.Enrich(probe, probe)
+			worst = max(worst, time.Since(start))
+			if i == 0 {
+				close(running)
+			}
+			select {
+			case <-stop:
+				longest <- worst
+				return
+			default:
+			}
+		}
+	}()
+	<-running
+
+	start := time.Now()
+	tab.RemovePeer(Peer{Address: big})
+	total := time.Since(start)
+	close(stop)
+	worst := <-longest
+
+	if got := tab.Summary(); got != (Summary{}) {
+		t.Fatalf("summary after RemovePeer = %+v, want empty", got)
+	}
+	t.Logf("removal took %v, the longest lookup %v", total, worst)
+	if worst > total/2 {
+		t.Fatalf("a lookup waited %v of the %v removal", worst, total)
 	}
 }
 
