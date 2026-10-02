@@ -706,6 +706,7 @@ func TestCollectIPFIXStats(t *testing.T) {
 			QueueDropped: 3,
 			Unsent:       4,
 			EncodeErrors: 0,
+			SendFailed:   40,
 			SendErrors:   map[string]uint64{"EPERM": 5, "ECONNREFUSED": 1},
 		}
 	})
@@ -739,11 +740,12 @@ func TestCollectIPFIXStats(t *testing.T) {
 		"rfm_ipfix_dropped_records_total{reason=queue_full}":  3,
 		"rfm_ipfix_dropped_records_total{reason=unconnected}": 4,
 		"rfm_ipfix_dropped_records_total{reason=encode}":      0,
+		"rfm_ipfix_dropped_records_total{reason=send}":        40,
 		"rfm_ipfix_send_errors_total{errno=EPERM}":            5,
 		"rfm_ipfix_send_errors_total{errno=ECONNREFUSED}":     1,
-		// queue refusals, unsent and send errors count once each, a failed
-		// dial loses no record by itself
-		"rfm_errors_total{subsystem=ipfix}": 13,
+		// every lost record counts once by its reason, the failed messages
+		// and dials lose nothing beyond the records counted
+		"rfm_errors_total{subsystem=ipfix}": 47,
 	}
 	for name, val := range want {
 		if got[name] != val {

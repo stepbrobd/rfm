@@ -83,19 +83,18 @@ type IPFIXStats struct {
 	Unsent uint64
 	// EncodeErrors counts records that could not be turned into a data record
 	EncodeErrors uint64
+	// SendFailed counts the records lost with messages that failed to send
+	SendFailed uint64
 	// SendErrors counts failed sends by errno name, "other" when not an errno
 	SendErrors map[string]uint64
 }
 
-// Failures sums every way a record can be lost
-// a failed dial loses nothing by itself, the records it strands are counted
-// as unsent
+// Failures counts the lost records, every reason once, so it sums the
+// dropped record counters
+// failed dials and failed messages lose nothing beyond the records counted
+// as unsent and as failed sends
 func (s IPFIXStats) Failures() uint64 {
-	n := s.QueueDropped + s.Unsent + s.EncodeErrors
-	for _, v := range s.SendErrors {
-		n += v
-	}
-	return n
+	return s.QueueDropped + s.Unsent + s.EncodeErrors + s.SendFailed
 }
 
 // IPFIXExporter sends flow records to a single UDP IPFIX collector
@@ -414,7 +413,7 @@ func (e *IPFIXExporter) sendAll(pending []collector.ExportedFlow) {
 	ipv6Due := e.templateDue(&e.ipv6, now)
 
 	var msg ipfixMessage
-	for _, flow := range pending {
+	for i, flow := range pending {
 		isIPv6, err := flowIsIPv6(flow)
 		if err != nil {
 			e.mu.Lock()
@@ -428,6 +427,17 @@ func (e *IPFIXExporter) sendAll(pending []collector.ExportedFlow) {
 			ipv4Due = ipv4Due && !sent4
 			ipv6Due = ipv6Due && !sent6
 			msg = ipfixMessage{}
+
+			// a failed send that closed the socket leaves the rest of the
+			// batch without one, those records are unsent rather than
+			// failed sends one message at a time
+			e.mu.Lock()
+			if e.conn == nil {
+				e.stats.Unsent += uint64(len(pending) - i)
+				e.mu.Unlock()
+				return
+			}
+			e.mu.Unlock()
 		}
 		if isIPv6 {
 			msg.ipv6 = append(msg.ipv6, flow)
@@ -608,6 +618,7 @@ func (e *IPFIXExporter) countSendError(err error, records uint64, now time.Time)
 
 	e.mu.Lock()
 	e.stats.SendErrors[name]++
+	e.stats.SendFailed += records
 	total := e.stats.SendErrors[name]
 	if socketUnusable(err) && e.conn != nil {
 		_ = e.conn.Close()

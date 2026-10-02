@@ -134,7 +134,7 @@ var (
 	)
 	descIPFIXDropped = prometheus.NewDesc(
 		"rfm_ipfix_dropped_records_total",
-		"Total IPFIX records lost before they were sent, by reason.",
+		"Total IPFIX records lost, by reason.",
 		[]string{"reason"}, nil,
 	)
 	descIPFIXSendErrors = prometheus.NewDesc(
@@ -236,9 +236,10 @@ func (mc *MetricsCollector) Collect(ch chan<- prometheus.Metric) {
 	ipfix := mc.ipfix
 	mc.mu.Unlock()
 
-	// the ipfix subsystem error counter is every loss the exporter counted,
-	// the collector's own tally of refused records repeats the exporter's
-	// queue drops and only stands in when no exporter stats are wired
+	// the ipfix subsystem error counter is every record the exporter lost,
+	// the sum of the dropped records over their reasons, the collector's own
+	// tally of refused records repeats the exporter's refusals and only
+	// stands in when no exporter stats are wired
 	var ipfixErrs uint64
 	haveIPFIX := ipfix != nil
 	if haveIPFIX {
@@ -256,6 +257,7 @@ func (mc *MetricsCollector) Collect(ch chan<- prometheus.Metric) {
 		ch <- prometheus.MustNewConstMetric(descIPFIXDropped, prometheus.CounterValue, float64(s.QueueDropped), "queue_full")
 		ch <- prometheus.MustNewConstMetric(descIPFIXDropped, prometheus.CounterValue, float64(s.Unsent), "unconnected")
 		ch <- prometheus.MustNewConstMetric(descIPFIXDropped, prometheus.CounterValue, float64(s.EncodeErrors), "encode")
+		ch <- prometheus.MustNewConstMetric(descIPFIXDropped, prometheus.CounterValue, float64(s.SendFailed), "send")
 		for errno, n := range s.SendErrors {
 			ch <- prometheus.MustNewConstMetric(descIPFIXSendErrors, prometheus.CounterValue, float64(n), errno)
 		}

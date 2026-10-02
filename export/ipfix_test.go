@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/vmware/go-ipfix/pkg/registry"
+	"golang.org/x/sys/unix"
 	"ysun.co/rfm/collector"
 	"ysun.co/rfm/config"
 )
@@ -969,6 +970,54 @@ func TestIPFIXRefusesRecordsOnceClosed(t *testing.T) {
 	}
 	if got := len(exp.queue); got != 0 {
 		t.Fatalf("queue holds %d records after Close, want none", got)
+	}
+}
+
+func TestIPFIXCountsRecordsLostWithFailedMessages(t *testing.T) {
+	loadIPFIXRegistry.Do(registry.LoadRegistry)
+
+	conn := startIPFIXListener(t)
+	addr := conn.LocalAddr().(*net.UDPAddr)
+
+	exp, err := NewIPFIX(testIPFIXConfig(addr.IP.String(), addr.Port), 1)
+	if err != nil {
+		t.Fatalf("NewIPFIX: %v", err)
+	}
+	defer exp.Close()
+
+	// the socket can send no more, every send fails with EPIPE, which closes
+	// it and schedules a re-dial
+	raw, err := exp.conn.SyscallConn()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var shutErr error
+	if err := raw.Control(func(fd uintptr) { shutErr = unix.Shutdown(int(fd), unix.SHUT_WR) }); err != nil || shutErr != nil {
+		t.Fatalf("shutdown: %v %v", err, shutErr)
+	}
+
+	// three messages worth of records in one batch
+	now := time.Unix(1_700_000_000, 0).UTC()
+	for port := uint16(1); port <= 45; port++ {
+		if err := exp.ExportFlow(testFlow("::ffff:10.0.0.1", "::ffff:10.0.0.2", port, now)); err != nil {
+			t.Fatalf("ExportFlow: %v", err)
+		}
+	}
+	if err := exp.Flush(); err != nil {
+		t.Fatalf("Flush: %v", err)
+	}
+
+	// the first message fails and takes its records with it, the rest of the
+	// batch has no socket left and is not tried
+	s := exp.Stats()
+	if len(s.SendErrors) != 1 || s.SendErrors["EPIPE"] != 1 {
+		t.Fatalf("send errors = %v, want one failed message with EPIPE", s.SendErrors)
+	}
+	if s.SendFailed == 0 || s.Unsent == 0 || s.SendFailed+s.Unsent != 45 {
+		t.Fatalf("records lost with the message = %d, unsent = %d, want the 45 split between them", s.SendFailed, s.Unsent)
+	}
+	if s.Records != 0 || s.Failures() != 45 {
+		t.Fatalf("records sent = %d, failures = %d, want 0 and every one of the 45 lost", s.Records, s.Failures())
 	}
 }
 
