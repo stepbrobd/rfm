@@ -80,7 +80,7 @@ in
                     max_sample_rate = std.mkOption {
                       type = std.types.ints.positive;
                       default = 1000;
-                      description = "Upper bound for the adaptive sample rate.";
+                      description = "Upper bound for the adaptive sample rate and for any rate set with `rfm set sample-rate`.";
                     };
 
                     # the unit opens the mount root to its user and creates

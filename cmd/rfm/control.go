@@ -153,17 +153,14 @@ func (h *controlHandler) RIBSummary() (ctl.RIB, error) {
 	}, nil
 }
 
-// SetSampleRate changes the rate in the probe and records it for scaling
-// with adaptive sampling on, the controller may move it again later
+// SetSampleRate checks rate against max_sample_rate and hands it to the
+// collector, which writes the probe and records the rate for scaling in one
+// step with the adaptive changes, adaptive sampling then moves on from rate
 func (h *controlHandler) SetSampleRate(rate uint32) error {
-	if h.probe == nil {
-		return errors.New("probe not loaded")
+	if limit := h.cfg.Agent.BPF.MaxSampleRate; rate > limit {
+		return fmt.Errorf("rate %d above max_sample_rate %d", rate, limit)
 	}
-	if err := h.probe.SetSampleRate(rate); err != nil {
-		return err
-	}
-	h.col.SetSampleRateNow(rate)
-	return nil
+	return h.col.ApplySampleRate(rate)
 }
 
 func (h *controlHandler) ConfigShow() string {

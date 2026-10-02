@@ -23,6 +23,13 @@ func newRateController(base, max uint32) *rateController {
 	return &rateController{base: base, max: max, rate: base}
 }
 
+// reset makes rate the current rate, set elsewhere, and starts the quiet
+// streak over, the next steps move from there
+func (r *rateController) reset(rate uint32) {
+	r.rate = rate
+	r.quiet = 0
+}
+
 // step feeds the drops seen since the last tick and returns the rate to
 // apply and whether it changed
 func (r *rateController) step(drops uint64) (uint32, bool) {

@@ -1373,6 +1373,128 @@ func TestScrapeShowsANewRollupAtZeroFirst(t *testing.T) {
 	}
 }
 
+// rateRecorder stands in for the probe, it records every rate written to it
+type rateRecorder struct {
+	mu      sync.Mutex
+	applied []uint32
+	fail    error
+}
+
+func (r *rateRecorder) apply(n uint32) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.fail != nil {
+		return r.fail
+	}
+	r.applied = append(r.applied, n)
+	return nil
+}
+
+func (r *rateRecorder) last() uint32 {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.applied[len(r.applied)-1]
+}
+
+func TestManualRateResetsTheController(t *testing.T) {
+	c := New(30*time.Second, nil, 0)
+	c.SetSampleRate(10, 0)
+	probe := &rateRecorder{}
+	c.SetRateController(10, 1000, probe.apply)
+
+	// an operator sheds load with rfm set sample-rate 200
+	if err := c.ApplySampleRate(200); err != nil {
+		t.Fatal(err)
+	}
+	if probe.last() != 200 || c.SampleRate() != 200 {
+		t.Fatalf("probe %d collector %d, want both at 200", probe.last(), c.SampleRate())
+	}
+
+	// drops while sampling 1 in 200 coarsen from 200, not from the 10 the
+	// controller picked last
+	c.adapt(5)
+	if probe.last() != 400 || c.SampleRate() != 400 {
+		t.Fatalf("after drops probe %d collector %d, want both at 400", probe.last(), c.SampleRate())
+	}
+
+	// a quiet streak relaxes from there
+	for range quietTicks {
+		c.adapt(5)
+	}
+	if probe.last() != 200 || c.SampleRate() != 200 {
+		t.Fatalf("after a quiet streak probe %d collector %d, want both at 200", probe.last(), c.SampleRate())
+	}
+}
+
+func TestManualRateWaitsForAnAdaptiveStep(t *testing.T) {
+	c := New(30*time.Second, nil, 0)
+	c.SetSampleRate(10, 0)
+	probe := &rateRecorder{}
+	entered := make(chan struct{})
+	release := make(chan struct{})
+	var first sync.Once
+	c.SetRateController(10, 1000, func(n uint32) error {
+		first.Do(func() {
+			close(entered)
+			<-release
+		})
+		return probe.apply(n)
+	})
+
+	// the adaptive step is between its probe write and its history append
+	stepped := make(chan struct{})
+	go func() {
+		c.adapt(5)
+		close(stepped)
+	}()
+	<-entered
+
+	manual := make(chan error, 1)
+	go func() { manual <- c.ApplySampleRate(200) }()
+	select {
+	case err := <-manual:
+		close(release)
+		t.Fatalf("manual change finished during an adaptive step (err %v), the probe and the scaling can disagree", err)
+	case <-time.After(100 * time.Millisecond):
+	}
+
+	close(release)
+	<-stepped
+	if err := <-manual; err != nil {
+		t.Fatal(err)
+	}
+	if probe.last() != 200 || c.SampleRate() != 200 {
+		t.Fatalf("probe %d collector %d, want both at the manual 200", probe.last(), c.SampleRate())
+	}
+}
+
+func TestFailedRateChangesKeepTheRateInForce(t *testing.T) {
+	c := New(30*time.Second, nil, 0)
+	c.SetSampleRate(10, 0)
+	probe := &rateRecorder{fail: errors.New("map update failed")}
+	c.SetRateController(10, 1000, probe.apply)
+
+	if err := c.ApplySampleRate(200); err == nil {
+		t.Fatal("ApplySampleRate succeeded with a failing probe")
+	}
+	c.adapt(5)
+	if got := c.SampleRate(); got != 10 {
+		t.Fatalf("rate = %d, want the 10 the probe still samples at", got)
+	}
+	// a refused manual change goes back to the operator, a refused adaptive
+	// one has nobody to go back to and is counted
+	if got := c.Stats().BPFMapErrors; got != 1 {
+		t.Fatalf("bpf map errors = %d, want the one refused adaptive change", got)
+	}
+
+	// the controller steps from the rate the probe holds once writes work
+	probe.fail = nil
+	c.adapt(10)
+	if probe.last() != 20 || c.SampleRate() != 20 {
+		t.Fatalf("probe %d collector %d, want both at 20", probe.last(), c.SampleRate())
+	}
+}
+
 // asnPerSource gives every source address an asn of its own, so every flow
 // from a new source opens a new label tuple
 type asnPerSource struct{}

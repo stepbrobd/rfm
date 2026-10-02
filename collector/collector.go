@@ -50,10 +50,15 @@ type Collector struct {
 	// rate changed at runtime
 	rates []rateChange
 
-	// controller adapts the rate to ring drops when set, apply writes the
-	// new rate into the probe
-	controller *rateController
+	// rateMu serializes every sample rate change, manual or adaptive, so a
+	// change writes the probe and appends to rates in one step and the rate
+	// the probe samples at is always the last one in rates
+	// it guards the fields below and is taken before mu
+	rateMu sync.Mutex
+	// applyRate writes a new rate into the probe, controller adapts the
+	// rate to ring drops when set, SetRateController sets both
 	applyRate  func(uint32) error
+	controller *rateController
 	lastDrops  uint64
 
 	dropped     atomic.Uint64
@@ -125,43 +130,78 @@ func (c *Collector) SetSampleRate(rate uint32, since uint64) {
 	}
 }
 
-// SetRateController enables adaptive sampling between base and maxRate
-// apply installs a new rate in the probe, the collector records the change
-// for scaling once apply succeeded
+// SetRateApplier sets how a new sample rate is installed in the probe,
+// ApplySampleRate goes through apply and the collector records a change for
+// scaling once apply succeeded
+// it must be called before Run
+func (c *Collector) SetRateApplier(apply func(uint32) error) {
+	c.rateMu.Lock()
+	c.applyRate = apply
+	c.rateMu.Unlock()
+}
+
+// SetRateController enables adaptive sampling between base and maxRate, the
+// rates it picks go through apply, which also becomes the rate applier
 // it must be called before Run
 func (c *Collector) SetRateController(base, maxRate uint32, apply func(uint32) error) {
-	c.mu.Lock()
+	c.rateMu.Lock()
 	c.controller = newRateController(base, maxRate)
 	c.applyRate = apply
-	c.mu.Unlock()
+	c.rateMu.Unlock()
+}
+
+// ApplySampleRate installs rate in the probe and records it for scaling, the
+// adaptive controller, if any, continues from rate instead of the rate it
+// picked last
+func (c *Collector) ApplySampleRate(rate uint32) error {
+	if rate == 0 {
+		return errors.New("sample rate must be at least 1")
+	}
+
+	c.rateMu.Lock()
+	defer c.rateMu.Unlock()
+
+	if c.applyRate == nil {
+		return errors.New("no probe to apply the sample rate to")
+	}
+	if err := c.applyRate(rate); err != nil {
+		return err
+	}
+	c.SetSampleRate(rate, bootNow())
+	if c.controller != nil {
+		c.controller.reset(rate)
+	}
+	return nil
 }
 
 // adapt feeds the drop counter to the controller once per tick
+// a rate the probe refuses counts as a bpf map error, adapt has no caller to
+// return it to
 func (c *Collector) adapt(drops uint64) {
-	c.mu.Lock()
-	ctl, apply := c.controller, c.applyRate
+	c.rateMu.Lock()
+	defer c.rateMu.Unlock()
+
 	delta := drops - c.lastDrops
 	c.lastDrops = drops
-	c.mu.Unlock()
-	if ctl == nil {
+	if c.controller == nil {
 		return
 	}
 
-	rate, changed := ctl.step(delta)
+	prev := c.controller.rate
+	rate, changed := c.controller.step(delta)
 	if !changed {
 		return
 	}
-	if err := apply(rate); err != nil {
+	if err := c.applyRate(rate); err != nil {
+		// the probe still samples at the previous rate, so the controller
+		// steps from there next time
+		c.controller.reset(prev)
+		c.bpfMapErrs.Add(1)
 		log.Error("apply sample rate", "rate", rate, "err", err)
 		return
 	}
 	c.SetSampleRate(rate, bootNow())
 	log.Info("sample rate adapted", "rate", rate, "drops", delta)
-}
-
-// SetSampleRateNow records a rate change that applies from now on
-func (c *Collector) SetSampleRateNow(rate uint32) {
-	c.SetSampleRate(rate, bootNow())
 }
 
 // SampleRate returns the rate in force now

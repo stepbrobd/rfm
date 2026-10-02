@@ -1,7 +1,9 @@
 package main
 
 import (
+	"context"
 	"net/netip"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -76,6 +78,58 @@ func TestControlStatusWithoutOptionalBackends(t *testing.T) {
 	}
 	if h.ConfigShow() != "[agent]\n" {
 		t.Fatalf("config show = %q", h.ConfigShow())
+	}
+}
+
+func TestControlSetSampleRate(t *testing.T) {
+	h, c := testHandler(t)
+	var probe []uint32
+	c.SetRateController(10, 1000, func(n uint32) error {
+		probe = append(probe, n)
+		return nil
+	})
+
+	if err := h.SetSampleRate(5000); err == nil || !strings.Contains(err.Error(), "above max_sample_rate") {
+		t.Fatalf("rate 5000 = %v, want it refused above max_sample_rate", err)
+	}
+	if len(probe) != 0 {
+		t.Fatalf("a refused rate reached the probe: %v", probe)
+	}
+
+	if err := h.SetSampleRate(40); err != nil {
+		t.Fatalf("rate 40: %v", err)
+	}
+	if len(probe) != 1 || probe[0] != 40 || c.SampleRate() != 40 || h.Status().Sampling.Rate != 40 {
+		t.Fatalf("probe %v collector %d, want both at 40", probe, c.SampleRate())
+	}
+}
+
+func TestCLISetSampleRateAgainstTheAgent(t *testing.T) {
+	h, c := testHandler(t)
+	c.SetRateApplier(func(uint32) error { return nil })
+
+	sock := filepath.Join(t.TempDir(), "rfm.sock")
+	srv, err := ctl.Listen(sock, h)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() { done <- srv.Serve(ctx) }()
+	t.Cleanup(func() {
+		cancel()
+		<-done
+	})
+
+	out, err := runCLI(t, sock, "set", "sample-rate", "40")
+	if err != nil || !strings.Contains(out, "sampling 1 in 40") || c.SampleRate() != 40 {
+		t.Fatalf("set sample-rate 40: out=%q err=%v rate=%d", out, err, c.SampleRate())
+	}
+	if _, err := runCLI(t, sock, "set", "sample-rate", "5000"); err == nil || !strings.Contains(err.Error(), "above max_sample_rate") {
+		t.Fatalf("set sample-rate 5000: %v, want above max_sample_rate", err)
+	}
+	if got := c.SampleRate(); got != 40 {
+		t.Fatalf("rate = %d after a refused change, want 40", got)
 	}
 }
 
