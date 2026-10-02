@@ -221,7 +221,7 @@ func (c *Collector) recordLocked(ev FlowEvent, now time.Time) (ExportedFlow, boo
 		state.entry.IPBytes += ipBytes
 		state.entry.EstPackets += packets * rate
 		state.entry.EstBytes += bytes * rate
-		state.entry.LastSeen = now
+		state.seen(now)
 		state.rollup.add(packets, bytes, rate, now)
 		c.lru.MoveToBack(state.elem)
 		return ExportedFlow{}, false
@@ -262,6 +262,8 @@ func (c *Collector) recordLocked(ev FlowEvent, now time.Time) (ExportedFlow, boo
 		},
 		rollup:        rollup,
 		intervalStart: now,
+		first:         now,
+		last:          now,
 	}
 	state.elem = c.lru.PushBack(state)
 	state.active = c.activeQueue.PushBack(state)

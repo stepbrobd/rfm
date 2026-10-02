@@ -874,8 +874,8 @@ func TestActiveTimeoutExportsIntervalRecords(t *testing.T) {
 		t.Fatalf("exported flows after a quiet interval = %d, want 1", got)
 	}
 
-	// more traffic, then idle eviction exports only the remainder with the
-	// interval starting at the previous sweep
+	// more traffic, then idle eviction exports only the remainder over the
+	// events it carries
 	c.Record(ev, t0.Add(25*time.Second))
 	c.Evict(t0.Add(60 * time.Second))
 	if got := len(exp.flows); got != 2 {
@@ -888,8 +888,54 @@ func TestActiveTimeoutExportsIntervalRecords(t *testing.T) {
 	if last.Entry.Packets != 1 || last.Entry.Bytes != 100 {
 		t.Fatalf("final record = %d packets %d bytes, want 1 and 100", last.Entry.Packets, last.Entry.Bytes)
 	}
-	if !last.Entry.FirstSeen.Equal(t0.Add(22 * time.Second)) {
-		t.Fatalf("final interval start = %v, want the previous sweep at t0+22s", last.Entry.FirstSeen)
+	if !last.Entry.FirstSeen.Equal(t0.Add(25*time.Second)) || !last.Entry.LastSeen.Equal(t0.Add(25*time.Second)) {
+		t.Fatalf("final interval = %v..%v, want the one event at t0+25s", last.Entry.FirstSeen, last.Entry.LastSeen)
+	}
+}
+
+func TestIntervalRecordsSpanTheirEvents(t *testing.T) {
+	exp := &mockFlowExporter{}
+	c := New(30*time.Second, nil, 0)
+	c.SetFlowExporter(exp)
+	c.SetActiveTimeout(60 * time.Second)
+
+	t0 := time.Unix(1_700_000_000, 0)
+	ev := FlowEvent{
+		Proto: 6, SrcPort: 1000, DstPort: 80,
+		SrcAddr: netip.MustParseAddr("::ffff:10.0.0.1"),
+		DstAddr: netip.MustParseAddr("::ffff:10.0.0.2"),
+		Len:     100,
+	}
+	// events from different cpus reach the collector slightly out of order
+	c.Record(ev, t0.Add(time.Second))
+	c.Record(ev, t0)
+	c.Record(ev, t0.Add(10*time.Second))
+	c.Record(ev, t0.Add(9*time.Second))
+	if got := c.Flows()[ev.Key()]; !got.FirstSeen.Equal(t0) || !got.LastSeen.Equal(t0.Add(10*time.Second)) {
+		t.Fatalf("flow spans %v..%v, want the earliest and latest events t0..t0+10s", got.FirstSeen, got.LastSeen)
+	}
+	c.Record(ev, t0.Add(59*time.Second))
+
+	// the sweep marks the flow at its tick, then an event sampled before the
+	// tick is consumed after it
+	c.Evict(t0.Add(61 * time.Second))
+	late := t0.Add(60*time.Second + 950*time.Millisecond)
+	c.Record(ev, late)
+	c.Evict(t0.Add(121 * time.Second))
+
+	if got := len(exp.flows); got != 2 {
+		t.Fatalf("exported flows = %d, want 2", got)
+	}
+	for i, f := range exp.flows {
+		if f.Entry.LastSeen.Before(f.Entry.FirstSeen) {
+			t.Errorf("record %d ends at %v before it starts at %v", i, f.Entry.LastSeen, f.Entry.FirstSeen)
+		}
+	}
+	if first := exp.flows[0].Entry; !first.FirstSeen.Equal(t0) || !first.LastSeen.Equal(t0.Add(59*time.Second)) {
+		t.Errorf("active record spans %v..%v, want t0..t0+59s", first.FirstSeen, first.LastSeen)
+	}
+	if last := exp.flows[1].Entry; !last.FirstSeen.Equal(late) || !last.LastSeen.Equal(late) {
+		t.Errorf("idle record spans %v..%v, want the late event alone at %v", last.FirstSeen, last.LastSeen, late)
 	}
 }
 

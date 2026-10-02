@@ -16,10 +16,32 @@ type flowState struct {
 
 	// active is the position in the fifo of pending active timeout exports
 	active *list.Element
-	// intervalStart is the start of the not yet exported interval
+	// intervalStart is when the not yet exported interval began, the flow's
+	// creation or the sweep that marked it, the active timeout runs from it
 	intervalStart time.Time
+	// first and last are the earliest and latest event times since the last
+	// record, events from different cpus and events sampled before a sweep
+	// but consumed after it arrive out of order, so a record spans the
+	// events it carries and never ends before it starts
+	first, last time.Time
 	// sent holds the counters already exported by earlier records
 	sent FlowEntry
+}
+
+// seen extends the flow and its unexported interval to an event at now
+func (s *flowState) seen(now time.Time) {
+	if now.Before(s.entry.FirstSeen) {
+		s.entry.FirstSeen = now
+	}
+	if now.After(s.entry.LastSeen) {
+		s.entry.LastSeen = now
+	}
+	if s.first.IsZero() || now.Before(s.first) {
+		s.first = now
+	}
+	if now.After(s.last) {
+		s.last = now
+	}
 }
 
 // record returns the delta record for the unexported interval
@@ -27,8 +49,8 @@ func (s *flowState) record(reason uint8) ExportedFlow {
 	return ExportedFlow{
 		Key: s.key,
 		Entry: FlowEntry{
-			FirstSeen:  s.intervalStart,
-			LastSeen:   s.entry.LastSeen,
+			FirstSeen:  s.first,
+			LastSeen:   s.last,
 			Packets:    s.entry.Packets - s.sent.Packets,
 			Bytes:      s.entry.Bytes - s.sent.Bytes,
 			IPBytes:    s.entry.IPBytes - s.sent.IPBytes,
@@ -48,6 +70,7 @@ func (s *flowState) pending() bool {
 func (s *flowState) mark(now time.Time) {
 	s.sent = s.entry
 	s.intervalStart = now
+	s.first, s.last = time.Time{}, time.Time{}
 }
 
 // add accounts one event scaled by the rate that sampled it
