@@ -727,6 +727,54 @@ func TestIPFIXTemplateResendAfterRefreshTimeout(t *testing.T) {
 	}
 }
 
+func TestIPFIXSendsTemplatesFirstOnANewSocket(t *testing.T) {
+	loadIPFIXRegistry.Do(registry.LoadRegistry)
+
+	conn := startIPFIXListener(t)
+	addr := conn.LocalAddr().(*net.UDPAddr)
+
+	now := time.Unix(1_700_000_000, 0).UTC()
+	exp, err := NewIPFIX(testIPFIXConfig(addr.IP.String(), addr.Port), 1)
+	if err != nil {
+		t.Fatalf("NewIPFIX: %v", err)
+	}
+	defer exp.Close()
+	exp.nowFunc = func() time.Time { return now }
+
+	send := func() decodedIPFIXMessage {
+		t.Helper()
+		if err := exp.ExportFlow(testFlow("::ffff:10.0.0.1", "::ffff:10.0.0.2", 1, now)); err != nil {
+			t.Fatalf("ExportFlow: %v", err)
+		}
+		if err := exp.Flush(); err != nil {
+			t.Fatalf("Flush: %v", err)
+		}
+		return mustReadIPFIXDatagram(t, conn)
+	}
+	if msg := send(); len(msg.Sets) != 2 {
+		t.Fatalf("first message has %d sets, want template and data", len(msg.Sets))
+	}
+
+	// an unusable socket was closed, the next batch dials a new one from
+	// another source port, a new transport session that has seen no
+	// template yet
+	exp.mu.Lock()
+	_ = exp.conn.Close()
+	exp.conn = nil
+	exp.nextDial = time.Time{}
+	exp.mu.Unlock()
+
+	now = now.Add(time.Second)
+	msg := send()
+	var ids []uint16
+	for _, set := range msg.Sets {
+		ids = append(ids, set.ID)
+	}
+	if len(ids) != 2 || ids[0] != entitiesTemplateSetID {
+		t.Fatalf("first message on the new socket has set ids %v, want the template first", ids)
+	}
+}
+
 const entitiesTemplateSetID uint16 = 2
 
 // exportedFlow builds the record the collector sends for one interval of the

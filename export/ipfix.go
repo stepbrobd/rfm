@@ -705,6 +705,13 @@ func (e *IPFIXExporter) ensureConn(now time.Time) error {
 	e.dialBackoff = 0
 	e.nextDial = time.Time{}
 	e.mu.Unlock()
+
+	// a new socket is a new transport session, rfc 7011 scopes templates to
+	// it, so they go out again before any data set, the sender goroutine
+	// owns the template state and is the one dialing, or NewIPFIX is before
+	// it started
+	e.ipv4.sentAt = time.Time{}
+	e.ipv6.sentAt = time.Time{}
 	return nil
 }
 
