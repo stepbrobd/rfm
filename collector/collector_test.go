@@ -939,6 +939,60 @@ func TestIntervalRecordsSpanTheirEvents(t *testing.T) {
 	}
 }
 
+// idleReader has no events and waits a little on every read like a blocking
+// ring buffer read would, so Run does not spin
+type idleReader struct{}
+
+func (idleReader) ReadRawEvent() ([]byte, error) {
+	time.Sleep(time.Millisecond)
+	return nil, os.ErrDeadlineExceeded
+}
+func (idleReader) SetDeadline(time.Time)          {}
+func (idleReader) DroppedEvents() (uint64, error) { return 0, nil }
+func (idleReader) Close() error                   { return nil }
+
+// chanExporter hands every record to a channel, safe for the Run goroutines
+type chanExporter struct {
+	ch chan ExportedFlow
+}
+
+func (e *chanExporter) ExportFlow(flow ExportedFlow) error {
+	e.ch <- flow
+	return nil
+}
+
+func TestRunHonorsActiveTimeoutBelowHalfTheEvictionTimeout(t *testing.T) {
+	exp := &chanExporter{ch: make(chan ExportedFlow, 16)}
+	// half the eviction timeout is 5s, the active timeout is far shorter
+	c := New(10*time.Second, nil, 0)
+	c.SetFlowExporter(exp)
+	c.SetActiveTimeout(50 * time.Millisecond)
+
+	c.Record(FlowEvent{
+		Proto: 6, SrcPort: 1000, DstPort: 80,
+		SrcAddr: netip.MustParseAddr("::ffff:10.0.0.1"),
+		DstAddr: netip.MustParseAddr("::ffff:10.0.0.2"),
+		Len:     100,
+	}, time.Now())
+
+	ctx, cancel := context.WithCancel(context.Background())
+	errCh := make(chan error, 1)
+	go func() { errCh <- c.Run(ctx, idleReader{}) }()
+	defer func() {
+		cancel()
+		<-errCh
+	}()
+
+	select {
+	case flow := <-exp.ch:
+		if flow.EndReason != FlowEndReasonActiveTimeout {
+			t.Fatalf("end reason = %d, want the active timeout", flow.EndReason)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("no interval record within 2s although the active timeout is 50ms")
+	}
+}
+
 func TestEvictSkipsFullyExportedFlow(t *testing.T) {
 	exp := &mockFlowExporter{}
 	c := New(30*time.Second, nil, 0)

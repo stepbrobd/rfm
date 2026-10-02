@@ -463,7 +463,15 @@ func (c *Collector) Run(ctx context.Context, rd Reader) error {
 		return fmt.Errorf("eviction timeout must be positive, got %v", c.timeout)
 	}
 
-	tick := time.NewTicker(c.timeout / 2)
+	// the sweep also sends the interval records, so it runs at least as
+	// often as the active timeout, not only every half eviction timeout
+	period := c.timeout / 2
+	c.mu.RLock()
+	if c.active > 0 && c.active < period {
+		period = c.active
+	}
+	c.mu.RUnlock()
+	tick := time.NewTicker(period)
 	defer tick.Stop()
 
 	// derive a child context so the background goroutine exits
