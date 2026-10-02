@@ -129,9 +129,9 @@ type Route struct {
 
 // Handler answers control requests on behalf of the agent
 type Handler interface {
-	Status() Status
+	Status() (Status, error)
 	// FlowsTop returns the n busiest live flows ordered by "bytes" or "packets"
-	FlowsTop(n int, by string) []FlowRow
+	FlowsTop(n int, by string) ([]FlowRow, error)
 	FlowsCount() uint64
 	RIBLookup(addr netip.Addr) (Route, bool, error)
 	RIBSummary() (RIB, error)

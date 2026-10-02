@@ -16,7 +16,6 @@ import (
 	"ysun.co/rfm/enrich"
 	"ysun.co/rfm/enrich/rib"
 	"ysun.co/rfm/export"
-	"ysun.co/rfm/probe"
 )
 
 // controlHandler answers control socket requests from the live agent state
@@ -24,13 +23,45 @@ type controlHandler struct {
 	started  time.Time
 	cfg      *config.Config
 	cfgText  string
-	probe    *probe.Probe
+	probe    interface{ Attached() []int }
 	col      *collector.Collector
 	ipfix    *export.IPFIXExporter
 	backends *enrich.Backends
+	// interfaces lists the links of the host, net.Interfaces when nil
+	interfaces func() ([]net.Interface, error)
 }
 
-func (h *controlHandler) Status() ctl.Status {
+// ifnames maps interface indexes to names, an index without a link shows as
+// its number
+type ifnames map[int]string
+
+func (n ifnames) name(ifindex int) string {
+	if name, ok := n[ifindex]; ok {
+		return name
+	}
+	return strconv.Itoa(ifindex)
+}
+
+// linkNames resolves interface names for one request, every lookup of an index
+// dumps all links over netlink, so a request lists them once instead, and
+// fails when the dump does rather than show every interface as its number
+func (h *controlHandler) linkNames() (ifnames, error) {
+	list := h.interfaces
+	if list == nil {
+		list = net.Interfaces
+	}
+	links, err := list()
+	if err != nil {
+		return nil, fmt.Errorf("list links: %w", err)
+	}
+	names := make(ifnames, len(links))
+	for _, l := range links {
+		names[l.Index] = l.Name
+	}
+	return names, nil
+}
+
+func (h *controlHandler) Status() (ctl.Status, error) {
 	bi, _ := debug.ReadBuildInfo()
 	stats := h.col.Stats()
 
@@ -52,8 +83,12 @@ func (h *controlHandler) Status() ctl.Status {
 	}
 
 	if h.probe != nil {
+		names, err := h.linkNames()
+		if err != nil {
+			return ctl.Status{}, err
+		}
 		for _, ifindex := range h.probe.Attached() {
-			st.Interfaces = append(st.Interfaces, ctl.Interface{Name: ifname(ifindex), Ifindex: ifindex})
+			st.Interfaces = append(st.Interfaces, ctl.Interface{Name: names.name(ifindex), Ifindex: ifindex})
 		}
 		sort.Slice(st.Interfaces, func(i, j int) bool { return st.Interfaces[i].Ifindex < st.Interfaces[j].Ifindex })
 	}
@@ -76,18 +111,49 @@ func (h *controlHandler) Status() ctl.Status {
 		st.MMDB = &ctl.MMDB{ASNBuildEpoch: asn, CityBuildEpoch: city}
 	}
 	if h.backends != nil && h.backends.RIB != nil {
-		summary, _ := h.RIBSummary()
+		summary, err := h.RIBSummary()
+		if err != nil {
+			return ctl.Status{}, err
+		}
 		st.RIB = &summary
 	}
-	return st
+	return st, nil
 }
 
-func (h *controlHandler) FlowsTop(n int, by string) []ctl.FlowRow {
-	flows := h.col.Flows()
-	rows := make([]ctl.FlowRow, 0, len(flows))
-	for key, entry := range flows {
-		rows = append(rows, ctl.FlowRow{
-			Interface:  ifname(int(key.Ifindex)),
+// FlowsTop orders the live flows and builds rows for the first n only, so a
+// table of tens of thousands of flows costs one sort and one link dump
+func (h *controlHandler) FlowsTop(n int, by string) ([]ctl.FlowRow, error) {
+	type flow struct {
+		key   collector.FlowKey
+		entry collector.FlowEntry
+	}
+	snapshot := h.col.Flows()
+	flows := make([]flow, 0, len(snapshot))
+	for key, entry := range snapshot {
+		flows = append(flows, flow{key, entry})
+	}
+	sort.Slice(flows, func(i, j int) bool {
+		a, b := flows[i].entry, flows[j].entry
+		if by == "packets" {
+			if a.EstPackets != b.EstPackets {
+				return a.EstPackets > b.EstPackets
+			}
+		} else if a.EstBytes != b.EstBytes {
+			return a.EstBytes > b.EstBytes
+		}
+		return a.FirstSeen.Before(b.FirstSeen)
+	})
+	flows = flows[:min(n, len(flows))]
+
+	names, err := h.linkNames()
+	if err != nil {
+		return nil, err
+	}
+	rows := make([]ctl.FlowRow, len(flows))
+	for i, f := range flows {
+		key, entry := f.key, f.entry
+		rows[i] = ctl.FlowRow{
+			Interface:  names.name(int(key.Ifindex)),
 			Direction:  direction(key.Dir),
 			Proto:      key.Proto,
 			Src:        key.SrcAddr.Unmap(),
@@ -104,22 +170,9 @@ func (h *controlHandler) FlowsTop(n int, by string) []ctl.FlowRow {
 			EstBytes:   entry.EstBytes,
 			FirstSeen:  entry.FirstSeen,
 			LastSeen:   entry.LastSeen,
-		})
-	}
-	sort.Slice(rows, func(i, j int) bool {
-		if by == "packets" {
-			if rows[i].EstPackets != rows[j].EstPackets {
-				return rows[i].EstPackets > rows[j].EstPackets
-			}
-		} else if rows[i].EstBytes != rows[j].EstBytes {
-			return rows[i].EstBytes > rows[j].EstBytes
 		}
-		return rows[i].FirstSeen.Before(rows[j].FirstSeen)
-	})
-	if n < len(rows) {
-		rows = rows[:n]
 	}
-	return rows
+	return rows, nil
 }
 
 func (h *controlHandler) FlowsCount() uint64 {
@@ -191,14 +244,6 @@ func ctlRoute(r rib.Route) ctl.Route {
 		out.LargeCommunities = append(out.LargeCommunities, fmt.Sprintf("%d:%d:%d", c.GlobalAdmin, c.LocalData1, c.LocalData2))
 	}
 	return out
-}
-
-func ifname(ifindex int) string {
-	iface, err := net.InterfaceByIndex(ifindex)
-	if err != nil {
-		return strconv.Itoa(ifindex)
-	}
-	return iface.Name
 }
 
 func direction(dir uint8) string {

@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"errors"
+	"net"
 	"net/netip"
 	"path/filepath"
 	"strings"
@@ -42,27 +44,104 @@ func TestControlFlowsTopOrdersAndLimits(t *testing.T) {
 	mk(2, 5, 100)  // most packets
 	mk(3, 2, 200)
 
-	rows := h.FlowsTop(2, "bytes")
-	if len(rows) != 2 || rows[0].SrcPort != 1 || rows[1].SrcPort != 2 {
-		t.Fatalf("top by bytes = %+v", rows)
+	rows, err := h.FlowsTop(2, "bytes")
+	if err != nil || len(rows) != 2 || rows[0].SrcPort != 1 || rows[1].SrcPort != 2 {
+		t.Fatalf("top by bytes = %+v, %v", rows, err)
 	}
 	if rows[0].EstBytes != 50000 || rows[0].Packets != 1 {
 		t.Fatalf("row = %+v, want 50000 estimated bytes from 1 sampled packet", rows[0])
 	}
-	rows = h.FlowsTop(10, "packets")
-	if len(rows) != 3 || rows[0].SrcPort != 2 || rows[0].EstPackets != 50 {
-		t.Fatalf("top by packets = %+v", rows)
+	rows, err = h.FlowsTop(10, "packets")
+	if err != nil || len(rows) != 3 || rows[0].SrcPort != 2 || rows[0].EstPackets != 50 {
+		t.Fatalf("top by packets = %+v, %v", rows, err)
 	}
 	if h.FlowsCount() != 3 {
 		t.Fatalf("count = %d, want 3", h.FlowsCount())
 	}
 }
 
+// attachedProbe stands in for the probe the status lists interfaces of
+type attachedProbe []int
+
+func (a attachedProbe) Attached() []int { return a }
+
+func TestControlResolvesInterfaceNamesOncePerRequest(t *testing.T) {
+	h, c := testHandler(t)
+	var dumps int
+	h.interfaces = func() ([]net.Interface, error) {
+		dumps++
+		return []net.Interface{{Index: 1, Name: "eth0"}, {Index: 2, Name: "eth1"}}, nil
+	}
+	now := time.Now()
+	flow := func(ifindex uint32, port uint16, size uint32) {
+		c.Record(collector.FlowEvent{
+			Ifindex: ifindex, Proto: 17, SrcPort: port, DstPort: 53,
+			SrcAddr: netip.MustParseAddr("::ffff:10.0.0.1"),
+			DstAddr: netip.MustParseAddr("::ffff:10.0.0.2"),
+			Len:     size,
+		}, now)
+	}
+	// many small flows on eth1, the two largest on eth0 and on a link that
+	// is gone
+	for port := range uint16(500) {
+		flow(2, port+1000, 100)
+	}
+	flow(1, 1, 9000)
+	flow(7, 2, 8000)
+
+	rows, err := h.FlowsTop(2, "bytes")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if dumps != 1 {
+		t.Fatalf("flows top of %d flows listed the links %d times, want once", h.FlowsCount(), dumps)
+	}
+	if len(rows) != 2 || rows[0].Interface != "eth0" || rows[1].Interface != "7" {
+		t.Fatalf("top flows = %+v, want eth0 and the index of the gone link", rows)
+	}
+
+	dumps = 0
+	h.probe = attachedProbe{2, 1}
+	st, err := h.Status()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if dumps != 1 {
+		t.Fatalf("status listed the links %d times, want once", dumps)
+	}
+	if len(st.Interfaces) != 2 || st.Interfaces[0] != (ctl.Interface{Name: "eth0", Ifindex: 1}) || st.Interfaces[1] != (ctl.Interface{Name: "eth1", Ifindex: 2}) {
+		t.Fatalf("status interfaces = %+v, want eth0 and eth1 by index", st.Interfaces)
+	}
+}
+
+func TestControlFailsWithTheLinkDump(t *testing.T) {
+	h, c := testHandler(t)
+	refused := errors.New("refused by the test")
+	h.interfaces = func() ([]net.Interface, error) { return nil, refused }
+	h.probe = attachedProbe{2}
+	c.Record(collector.FlowEvent{
+		Ifindex: 2, Proto: 17, SrcPort: 1, DstPort: 53,
+		SrcAddr: netip.MustParseAddr("::ffff:10.0.0.1"),
+		DstAddr: netip.MustParseAddr("::ffff:10.0.0.2"),
+		Segs:    1,
+		Len:     100,
+	}, time.Now())
+
+	// without the dump every interface would show as its index, as one whose
+	// link is gone does, so the request fails with it instead
+	if _, err := h.Status(); !errors.Is(err, refused) {
+		t.Fatalf("status = %v, want the failed dump", err)
+	}
+	if _, err := h.FlowsTop(10, "bytes"); !errors.Is(err, refused) {
+		t.Fatalf("flows top = %v, want the failed dump", err)
+	}
+}
+
 func TestControlStatusWithoutOptionalBackends(t *testing.T) {
 	h, _ := testHandler(t)
-	st := h.Status()
-	if st.Sampling.Rate != 10 || st.Sampling.Max != 1000 || st.Flows.Max != 65536 {
-		t.Fatalf("status = %+v", st)
+	st, err := h.Status()
+	if err != nil || st.Sampling.Rate != 10 || st.Sampling.Max != 1000 || st.Flows.Max != 65536 {
+		t.Fatalf("status = %+v, %v", st, err)
 	}
 	if st.IPFIX != nil || st.MMDB != nil || st.RIB != nil {
 		t.Fatalf("optional sections must be nil without backends: %+v", st)
@@ -99,7 +178,11 @@ func TestControlSetSampleRate(t *testing.T) {
 	if err := h.SetSampleRate(40); err != nil {
 		t.Fatalf("rate 40: %v", err)
 	}
-	if len(probe) != 1 || probe[0] != 40 || c.SampleRate() != 40 || h.Status().Sampling.Rate != 40 {
+	st, err := h.Status()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(probe) != 1 || probe[0] != 40 || c.SampleRate() != 40 || st.Sampling.Rate != 40 {
 		t.Fatalf("probe %v collector %d, want both at 40", probe, c.SampleRate())
 	}
 }

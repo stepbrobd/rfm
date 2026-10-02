@@ -18,17 +18,17 @@ type fakeControl struct {
 	rate uint32
 }
 
-func (f *fakeControl) Status() ctl.Status {
+func (f *fakeControl) Status() (ctl.Status, error) {
 	return ctl.Status{
 		Version:    "test",
 		Uptime:     time.Minute,
 		Interfaces: []ctl.Interface{{Name: "eth0", Ifindex: 2}},
 		Sampling:   ctl.Sampling{Rate: f.rate, Base: 10, Max: 1000},
 		Flows:      ctl.Flows{Active: 3, Max: 65536},
-	}
+	}, nil
 }
 
-func (f *fakeControl) FlowsTop(n int, by string) []ctl.FlowRow {
+func (f *fakeControl) FlowsTop(n int, by string) ([]ctl.FlowRow, error) {
 	rows := []ctl.FlowRow{
 		{Interface: "eth0", Direction: "ingress", Proto: 6, Src: netip.MustParseAddr("10.0.0.1"), Dst: netip.MustParseAddr("10.0.0.2"), SrcPort: 1, DstPort: 443, EstBytes: 9000, EstPackets: 9, SrcASN: 64500, FirstSeen: time.Now()},
 		{Interface: "eth0", Direction: "egress", Proto: 17, Src: netip.MustParseAddr("10.0.0.2"), Dst: netip.MustParseAddr("10.0.0.1"), SrcPort: 53, DstPort: 2, EstBytes: 100, EstPackets: 50, FirstSeen: time.Now()},
@@ -39,7 +39,7 @@ func (f *fakeControl) FlowsTop(n int, by string) []ctl.FlowRow {
 	if n < len(rows) {
 		rows = rows[:n]
 	}
-	return rows
+	return rows, nil
 }
 
 func (f *fakeControl) FlowsCount() uint64 { return 2 }

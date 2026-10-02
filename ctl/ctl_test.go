@@ -20,19 +20,27 @@ type fakeHandler struct {
 	rate     uint32
 	reloaded int
 	rib      bool
+	// fail fails status and flows top, as an agent whose link dump fails
+	fail error
 }
 
-func (f *fakeHandler) Status() Status {
+func (f *fakeHandler) Status() (Status, error) {
+	if f.fail != nil {
+		return Status{}, f.fail
+	}
 	return Status{
 		Version:    "test",
 		Uptime:     3 * time.Second,
 		Interfaces: []Interface{{Name: "eth0", Ifindex: 2}},
 		Sampling:   Sampling{Rate: f.rate, Base: 10, Max: 1000, Adaptive: true},
 		Flows:      Flows{Active: 5, Max: 65536},
-	}
+	}, nil
 }
 
-func (f *fakeHandler) FlowsTop(n int, by string) []FlowRow {
+func (f *fakeHandler) FlowsTop(n int, by string) ([]FlowRow, error) {
+	if f.fail != nil {
+		return nil, f.fail
+	}
 	rows := []FlowRow{
 		{Interface: "eth0", Direction: "ingress", Proto: 6, Src: netip.MustParseAddr("10.0.0.1"), Dst: netip.MustParseAddr("10.0.0.2"), SrcPort: 1, DstPort: 80, Bytes: 300, Packets: 3},
 		{Interface: "eth0", Direction: "egress", Proto: 17, Src: netip.MustParseAddr("10.0.0.2"), Dst: netip.MustParseAddr("10.0.0.1"), SrcPort: 53, DstPort: 2, Bytes: 100, Packets: 5},
@@ -43,7 +51,7 @@ func (f *fakeHandler) FlowsTop(n int, by string) []FlowRow {
 	if n < len(rows) {
 		rows = rows[:n]
 	}
-	return rows
+	return rows, nil
 }
 
 func (f *fakeHandler) FlowsCount() uint64 { return 2 }
@@ -190,6 +198,17 @@ func TestBadRequests(t *testing.T) {
 	}
 	if err := c.SetSampleRate(0); err == nil {
 		t.Fatal("rate 0 must be rejected")
+	}
+}
+
+func TestHandlerErrorsReachTheClient(t *testing.T) {
+	c := startServer(t, &fakeHandler{fail: errors.New("list links: refused by the test")})
+
+	if _, err := c.Status(); err == nil || err.Error() != "list links: refused by the test" {
+		t.Fatalf("status error = %v, want the handler's error", err)
+	}
+	if _, err := c.FlowsTop(1, "bytes"); err == nil || err.Error() != "list links: refused by the test" {
+		t.Fatalf("flows top error = %v, want the handler's error", err)
 	}
 }
 

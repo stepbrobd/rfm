@@ -194,7 +194,7 @@ func (s *Server) dispatch(req Request) Response {
 func (s *Server) handle(req Request) (any, error) {
 	switch req.Command {
 	case CmdStatus:
-		return s.handler.Status(), nil
+		return s.handler.Status()
 	case CmdFlowsTop:
 		n := 20
 		if v := req.Args["n"]; v != "" {
@@ -211,7 +211,10 @@ func (s *Server) handle(req Request) (any, error) {
 		if by != "bytes" && by != "packets" {
 			return nil, fmt.Errorf("by must be bytes or packets, got %q", by)
 		}
-		rows := s.handler.FlowsTop(n, by)
+		rows, err := s.handler.FlowsTop(n, by)
+		if err != nil {
+			return nil, err
+		}
 		if rows == nil {
 			rows = []FlowRow{}
 		}
