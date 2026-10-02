@@ -1263,15 +1263,20 @@ func TestPinnedCountersSurviveReload(t *testing.T) {
 		t.Fatalf("packets after reload = %d, want %d from the pinned map", after, before)
 	}
 
-	// a different map shape replaces the stale pin instead of failing
+	// a map of another size is refused and the pin keeps its counters
 	p2.Close()
-	p3, err := Load(Config{PinPath: dir, IfaceStatsSize: 128})
+	_, err = Load(Config{PinPath: dir, IfaceStatsSize: 128})
+	if !errors.Is(err, ebpf.ErrMapIncompatible) || !strings.Contains(err.Error(), "MaxEntries: 4096 changed to 128") ||
+		!strings.Contains(err.Error(), "remove the pin file or reboot") {
+		t.Fatalf("load with a map of another size = %v, want the pin refused", err)
+	}
+	p3, err := Load(Config{PinPath: dir})
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer p3.Close()
-	if got := p3.IfaceStats().MaxEntries(); got != 128 {
-		t.Fatalf("max entries = %d, want 128", got)
+	if got, _ := ifaceStats(t, p3, key); got != before {
+		t.Fatalf("packets after a refused load = %d, want %d from the pinned map", got, before)
 	}
 }
 
@@ -1420,6 +1425,48 @@ func waitSubscribed(t *testing.T) uint32 {
 		return fmt.Errorf("no link subscription yet")
 	})
 	return port
+}
+
+func TestPinnedCountersRefuseIncompatibleFlags(t *testing.T) {
+	testutil.RequireRoot(t)
+
+	dir := pinDir(t)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	// a pin of the right shape whose flags differ, as another build may
+	// leave it, is refused like a pin of another size
+	spec, err := loadRfm()
+	if err != nil {
+		t.Fatal(err)
+	}
+	stale := spec.Maps["rfm_iface_stats"].Copy()
+	stale.Flags |= unix.BPF_F_NO_PREALLOC
+	m, err := ebpf.NewMap(stale)
+	if err != nil {
+		skipIfUnsupported(t, err)
+		t.Fatal(err)
+	}
+	defer m.Close()
+	if err := m.Pin(pinPathFor(dir)); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = Load(Config{PinPath: dir})
+	if !errors.Is(err, ebpf.ErrMapIncompatible) || !strings.Contains(err.Error(), "Flags") ||
+		!strings.Contains(err.Error(), "remove the pin file or reboot") {
+		t.Fatalf("load with a pin of other flags = %v, want the pin refused", err)
+	}
+	// the pin stays for the operator to remove
+	pinned, err := ebpf.LoadPinnedMap(pinPathFor(dir), nil)
+	if err != nil {
+		t.Fatalf("pin after the refused load: %v", err)
+	}
+	defer pinned.Close()
+	if flags := pinned.Flags(); flags&unix.BPF_F_NO_PREALLOC == 0 {
+		t.Fatalf("pinned map flags = %#x, the pin was replaced", flags)
+	}
 }
 
 func TestWatchFollowsInterfaces(t *testing.T) {

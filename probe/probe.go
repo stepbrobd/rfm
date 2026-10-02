@@ -9,7 +9,6 @@ import (
 	"path/filepath"
 	"sync"
 
-	"github.com/charmbracelet/log"
 	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/link"
 	"github.com/vishvananda/netlink"
@@ -60,8 +59,9 @@ func Load(cfg Config) (*Probe, error) {
 		}
 	}
 
-	// a pinned counter map from a previous run is reused when its shape
-	// still matches, so a restart or upgrade keeps the counters monotonic
+	// a pinned counter map from a previous run is reused, so a restart or
+	// upgrade keeps the counters monotonic, and one of another shape, size
+	// or flags fails the load
 	var opts ebpf.CollectionOptions
 	var pinned *ebpf.Map
 	if cfg.PinPath != "" {
@@ -110,9 +110,10 @@ func pinPathFor(dir string) string {
 	return filepath.Join(dir, "rfm_iface_stats")
 }
 
-// loadPinnedIfaceStats returns the pinned counter map under dir when one
-// exists and matches spec, a stale pin with another shape is removed
-// it returns nil, nil when there is nothing to reuse
+// loadPinnedIfaceStats returns the pinned counter map under dir, nil when
+// there is none yet
+// a pin the loader would refuse is an error that names the difference, the
+// pin stays with its counters until it is removed or the host reboots
 func loadPinnedIfaceStats(dir string, spec *ebpf.MapSpec) (*ebpf.Map, error) {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return nil, fmt.Errorf("create pin directory %q: %w", dir, err)
@@ -127,15 +128,10 @@ func loadPinnedIfaceStats(dir string, spec *ebpf.MapSpec) (*ebpf.Map, error) {
 		return nil, fmt.Errorf("load pinned iface stats %q: %w", path, err)
 	}
 
-	if m.Type() != spec.Type || m.KeySize() != spec.KeySize || m.ValueSize() != spec.ValueSize ||
-		m.MaxEntries() != spec.MaxEntries {
-		log.Warn("pinned iface stats do not match the configured map, starting fresh", "path", path)
-		err := m.Unpin()
+	// the same check the loader runs on a replacement map
+	if err := spec.Compatible(m); err != nil {
 		m.Close()
-		if err != nil {
-			return nil, fmt.Errorf("unpin stale iface stats %q: %w", path, err)
-		}
-		return nil, nil
+		return nil, fmt.Errorf("pinned iface stats %q do not match the configured map, remove the pin file or reboot to start the counters from zero: %w", path, err)
 	}
 	return m, nil
 }
