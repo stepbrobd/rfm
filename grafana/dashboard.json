@@ -127,6 +127,63 @@
         "refresh": 1,
         "regex": "",
         "label": "Data Source"
+      },
+      {
+        "name": "ifname",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${datasource}"
+        },
+        "definition": "label_values(rfm_interface_rx_bytes_total, ifname)",
+        "query": {
+          "query": "label_values(rfm_interface_rx_bytes_total, ifname)",
+          "refId": "PrometheusVariableQueryEditor-VariableQuery"
+        },
+        "current": {
+          "selected": true,
+          "text": [
+            "All"
+          ],
+          "value": [
+            "$__all"
+          ]
+        },
+        "hide": 0,
+        "includeAll": true,
+        "allValue": ".*",
+        "multi": true,
+        "options": [],
+        "refresh": 2,
+        "regex": "",
+        "sort": 1,
+        "label": "Interface"
+      },
+      {
+        "name": "direction",
+        "type": "custom",
+        "query": "ingress,egress",
+        "current": {
+          "selected": true,
+          "text": "ingress",
+          "value": "ingress"
+        },
+        "hide": 0,
+        "includeAll": false,
+        "multi": false,
+        "options": [
+          {
+            "selected": true,
+            "text": "ingress",
+            "value": "ingress"
+          },
+          {
+            "selected": false,
+            "text": "egress",
+            "value": "egress"
+          }
+        ],
+        "label": "Direction"
       }
     ]
   },
@@ -207,7 +264,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum(rate(rfm_interface_rx_bytes_total[$__rate_interval])) * 8",
+          "expr": "sum(rate(rfm_interface_rx_bytes_total{ifname=~\"$ifname\"}[$__rate_interval])) * 8",
           "legendFormat": "Ingress",
           "refId": "A",
           "instant": true
@@ -296,7 +353,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum(rate(rfm_interface_tx_bytes_total[$__rate_interval])) * 8",
+          "expr": "sum(rate(rfm_interface_tx_bytes_total{ifname=~\"$ifname\"}[$__rate_interval])) * 8",
           "legendFormat": "Egress",
           "refId": "A",
           "instant": true
@@ -385,7 +442,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum(rate(rfm_interface_rx_packets_total[$__rate_interval]))",
+          "expr": "sum(rate(rfm_interface_rx_packets_total{ifname=~\"$ifname\"}[$__rate_interval]))",
           "legendFormat": "Ingress",
           "refId": "A",
           "instant": true
@@ -474,7 +531,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum(rate(rfm_interface_tx_packets_total[$__rate_interval]))",
+          "expr": "sum(rate(rfm_interface_tx_packets_total{ifname=~\"$ifname\"}[$__rate_interval]))",
           "legendFormat": "Egress",
           "refId": "A",
           "instant": true
@@ -784,7 +841,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum(rate(rfm_interface_rx_bytes_total[$__rate_interval])) * 8",
+          "expr": "sum(rate(rfm_interface_rx_bytes_total{ifname=~\"$ifname\"}[$__rate_interval])) * 8",
           "legendFormat": "Ingress",
           "refId": "A"
         },
@@ -793,7 +850,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum(rate(rfm_interface_tx_bytes_total[$__rate_interval])) * 8",
+          "expr": "sum(rate(rfm_interface_tx_bytes_total{ifname=~\"$ifname\"}[$__rate_interval])) * 8",
           "legendFormat": "Egress",
           "refId": "B"
         }
@@ -952,7 +1009,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum(rate(rfm_interface_rx_packets_total[$__rate_interval]))",
+          "expr": "sum(rate(rfm_interface_rx_packets_total{ifname=~\"$ifname\"}[$__rate_interval]))",
           "legendFormat": "Ingress",
           "refId": "A"
         },
@@ -961,7 +1018,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum(rate(rfm_interface_tx_packets_total[$__rate_interval]))",
+          "expr": "sum(rate(rfm_interface_tx_packets_total{ifname=~\"$ifname\"}[$__rate_interval]))",
           "legendFormat": "Egress",
           "refId": "B"
         }
@@ -1021,7 +1078,7 @@
     {
       "type": "timeseries",
       "title": "Bandwidth by IP Family",
-      "description": "Traffic split by IPv4 vs IPv6.",
+      "description": "Traffic split by IP family, other counts frames that are not IP, such as ARP.",
       "datasource": {
         "type": "datasource",
         "uid": "-- Mixed --"
@@ -1085,7 +1142,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "(sum by (family) (rate(rfm_interface_rx_bytes_total[$__rate_interval])) + sum by (family) (rate(rfm_interface_tx_bytes_total[$__rate_interval]))) * 8",
+          "expr": "(sum by (family) (rate(rfm_interface_rx_bytes_total{ifname=~\"$ifname\"}[$__rate_interval])) + sum by (family) (rate(rfm_interface_tx_bytes_total{ifname=~\"$ifname\"}[$__rate_interval])) or sum by (family) (rate(rfm_interface_rx_bytes_total{ifname=~\"$ifname\"}[$__rate_interval])) or sum by (family) (rate(rfm_interface_tx_bytes_total{ifname=~\"$ifname\"}[$__rate_interval]))) * 8",
           "legendFormat": "{{family}}",
           "refId": "A"
         }
@@ -1145,6 +1202,7 @@
     {
       "type": "piechart",
       "title": "IPv4 vs IPv6 Traffic Share",
+      "description": "Share of IPv4 and IPv6 bytes over both directions, frames that are not IP left out.",
       "datasource": {
         "type": "datasource",
         "uid": "-- Mixed --"
@@ -1200,7 +1258,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum by (family) (rate(rfm_interface_rx_bytes_total[$__rate_interval]) + rate(rfm_interface_tx_bytes_total[$__rate_interval]))",
+          "expr": "sum by (family) (rate(rfm_interface_rx_bytes_total{family=~\"ipv4|ipv6\", ifname=~\"$ifname\"}[$__rate_interval])) + sum by (family) (rate(rfm_interface_tx_bytes_total{family=~\"ipv4|ipv6\", ifname=~\"$ifname\"}[$__rate_interval])) or sum by (family) (rate(rfm_interface_rx_bytes_total{family=~\"ipv4|ipv6\", ifname=~\"$ifname\"}[$__rate_interval])) or sum by (family) (rate(rfm_interface_tx_bytes_total{family=~\"ipv4|ipv6\", ifname=~\"$ifname\"}[$__rate_interval]))",
           "legendFormat": "{{family}}",
           "refId": "A",
           "instant": true
@@ -1291,7 +1349,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum(rate(rfm_interface_rx_bytes_total[$__rate_interval]))",
+          "expr": "sum(rate(rfm_interface_rx_bytes_total{ifname=~\"$ifname\"}[$__rate_interval]))",
           "legendFormat": "Ingress",
           "refId": "A",
           "instant": true
@@ -1301,7 +1359,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum(rate(rfm_interface_tx_bytes_total[$__rate_interval]))",
+          "expr": "sum(rate(rfm_interface_tx_bytes_total{ifname=~\"$ifname\"}[$__rate_interval]))",
           "legendFormat": "Egress",
           "refId": "B",
           "instant": true
@@ -1402,7 +1460,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum by (ifname) (rate(rfm_interface_rx_bytes_total[$__rate_interval])) * 8",
+          "expr": "sum by (ifname) (rate(rfm_interface_rx_bytes_total{ifname=~\"$ifname\"}[$__rate_interval])) * 8",
           "legendFormat": "${datasource:text} / {{ifname}}",
           "refId": "A"
         }
@@ -1476,7 +1534,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum by (ifname) (rate(rfm_interface_tx_bytes_total[$__rate_interval])) * 8",
+          "expr": "sum by (ifname) (rate(rfm_interface_tx_bytes_total{ifname=~\"$ifname\"}[$__rate_interval])) * 8",
           "legendFormat": "${datasource:text} / {{ifname}}",
           "refId": "A"
         }
@@ -1550,7 +1608,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum by (ifname) (rate(rfm_interface_rx_packets_total[$__rate_interval]))",
+          "expr": "sum by (ifname) (rate(rfm_interface_rx_packets_total{ifname=~\"$ifname\"}[$__rate_interval]))",
           "legendFormat": "${datasource:text} / {{ifname}}",
           "refId": "A"
         }
@@ -1624,7 +1682,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum by (ifname) (rate(rfm_interface_tx_packets_total[$__rate_interval]))",
+          "expr": "sum by (ifname) (rate(rfm_interface_tx_packets_total{ifname=~\"$ifname\"}[$__rate_interval]))",
           "legendFormat": "${datasource:text} / {{ifname}}",
           "refId": "A"
         }
@@ -1633,6 +1691,7 @@
     {
       "type": "piechart",
       "title": "Traffic by Protocol",
+      "description": "Estimated bytes per IP protocol over the dashboard time range, in the selected direction on the selected interfaces.",
       "datasource": {
         "type": "datasource",
         "uid": "-- Mixed --"
@@ -4271,7 +4330,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum by (proto) (rfm_flow_bytes)",
+          "expr": "sum by (proto) (increase(rfm_flow_bytes_total{direction=\"$direction\", ifname=~\"$ifname\"}[$__range]))",
           "legendFormat": "{{proto}}",
           "refId": "A",
           "instant": true
@@ -4543,6 +4602,7 @@
     {
       "type": "bargauge",
       "title": "Top Source ASNs by Traffic",
+      "description": "Estimated bytes per source ASN over the dashboard time range, in the selected direction on the selected interfaces.",
       "datasource": {
         "type": "datasource",
         "uid": "-- Mixed --"
@@ -4593,7 +4653,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "topk(20, sum by (src_asn) (rfm_flow_bytes{src_asn!=\"\"}))",
+          "expr": "topk(20, sum by (src_asn) (increase(rfm_flow_bytes_total{src_asn!=\"\", direction=\"$direction\", ifname=~\"$ifname\"}[$__range])))",
           "legendFormat": "{{src_asn}}",
           "refId": "A",
           "instant": true
@@ -4629,6 +4689,7 @@
     {
       "type": "bargauge",
       "title": "Top Destination ASNs by Traffic",
+      "description": "Estimated bytes per destination ASN over the dashboard time range, in the selected direction on the selected interfaces.",
       "datasource": {
         "type": "datasource",
         "uid": "-- Mixed --"
@@ -4679,7 +4740,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "topk(20, sum by (dst_asn) (rfm_flow_bytes{dst_asn!=\"\"}))",
+          "expr": "topk(20, sum by (dst_asn) (increase(rfm_flow_bytes_total{dst_asn!=\"\", direction=\"$direction\", ifname=~\"$ifname\"}[$__range])))",
           "legendFormat": "{{dst_asn}}",
           "refId": "A",
           "instant": true
@@ -4715,7 +4776,7 @@
     {
       "type": "table",
       "title": "ASN Pair Traffic",
-      "description": "Traffic between source and destination ASN pairs",
+      "description": "Estimated bytes and packets between source and destination ASNs over the dashboard time range, in the selected direction on the selected interfaces.",
       "datasource": {
         "type": "datasource",
         "uid": "-- Mixed --"
@@ -4800,7 +4861,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "topk(50, sum by (src_asn, dst_asn) (rfm_flow_bytes{src_asn!=\"\", dst_asn!=\"\"}))",
+          "expr": "topk(50, sum by (src_asn, dst_asn) (increase(rfm_flow_bytes_total{src_asn!=\"\", dst_asn!=\"\", direction=\"$direction\", ifname=~\"$ifname\"}[$__range])))",
           "legendFormat": "",
           "refId": "A",
           "instant": true,
@@ -4811,7 +4872,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "topk(50, sum by (src_asn, dst_asn) (rfm_flow_packets{src_asn!=\"\", dst_asn!=\"\"}))",
+          "expr": "topk(50, sum by (src_asn, dst_asn) (increase(rfm_flow_packets_total{src_asn!=\"\", dst_asn!=\"\", direction=\"$direction\", ifname=~\"$ifname\"}[$__range])))",
           "legendFormat": "",
           "refId": "B",
           "instant": true,
@@ -4869,6 +4930,7 @@
     {
       "type": "bargauge",
       "title": "Top Source Cities by Traffic",
+      "description": "Estimated bytes per source city over the dashboard time range, in the selected direction on the selected interfaces.",
       "datasource": {
         "type": "datasource",
         "uid": "-- Mixed --"
@@ -4919,7 +4981,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "topk(20, sum by (src_city) (rfm_flow_bytes{src_city!=\"\"}))",
+          "expr": "topk(20, sum by (src_city) (increase(rfm_flow_bytes_total{src_city!=\"\", direction=\"$direction\", ifname=~\"$ifname\"}[$__range])))",
           "legendFormat": "{{src_city}}",
           "refId": "A",
           "instant": true
@@ -4955,6 +5017,7 @@
     {
       "type": "bargauge",
       "title": "Top Destination Cities by Traffic",
+      "description": "Estimated bytes per destination city over the dashboard time range, in the selected direction on the selected interfaces.",
       "datasource": {
         "type": "datasource",
         "uid": "-- Mixed --"
@@ -5005,7 +5068,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "topk(20, sum by (dst_city) (rfm_flow_bytes{dst_city!=\"\"}))",
+          "expr": "topk(20, sum by (dst_city) (increase(rfm_flow_bytes_total{dst_city!=\"\", direction=\"$direction\", ifname=~\"$ifname\"}[$__range])))",
           "legendFormat": "{{dst_city}}",
           "refId": "A",
           "instant": true
@@ -5041,7 +5104,7 @@
     {
       "type": "table",
       "title": "City-to-City Traffic",
-      "description": "Traffic between source and destination city pairs",
+      "description": "Estimated bytes and packets between source and destination cities over the dashboard time range, in the selected direction on the selected interfaces.",
       "datasource": {
         "type": "datasource",
         "uid": "-- Mixed --"
@@ -5126,7 +5189,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "topk(50, sum by (src_city, dst_city) (rfm_flow_bytes{src_city!=\"\", dst_city!=\"\"}))",
+          "expr": "topk(50, sum by (src_city, dst_city) (increase(rfm_flow_bytes_total{src_city!=\"\", dst_city!=\"\", direction=\"$direction\", ifname=~\"$ifname\"}[$__range])))",
           "legendFormat": "",
           "refId": "A",
           "instant": true,
@@ -5137,7 +5200,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "topk(50, sum by (src_city, dst_city) (rfm_flow_packets{src_city!=\"\", dst_city!=\"\"}))",
+          "expr": "topk(50, sum by (src_city, dst_city) (increase(rfm_flow_packets_total{src_city!=\"\", dst_city!=\"\", direction=\"$direction\", ifname=~\"$ifname\"}[$__range])))",
           "legendFormat": "",
           "refId": "B",
           "instant": true,
