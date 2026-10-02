@@ -1,7 +1,84 @@
 { inputs, std, ... }:
 
+{ hostPkgs, ... }:
+
 let
   common = import ./lib { inherit inputs std; };
+
+  # whether the module takes these agent settings, evaluated on its own and
+  # forced deeply, the nixos options it sets take no part in that
+  accepts =
+    agent:
+    (std.tryEval (
+      std.deepSeq
+        (std.evalModules {
+          modules = [
+            inputs.self.nixosModules.default
+            {
+              _module.args.pkgs = hostPkgs;
+              _module.check = false;
+              services.rfm.settings.agent = {
+                interfaces = [ "eth1" ];
+              }
+              // agent;
+            }
+          ];
+        }).config.services.rfm.settings
+        true
+    )).success;
+
+  # the defaults, zero ports as the fleet runs them, which keep ipfix and
+  # bmp at their defaults or off and the ipfix source port ephemeral, other
+  # names where the socket and the pin may live, and the lowest ports the
+  # unit can bind next to a collector port below them, which it only sends to
+  honored = [
+    { }
+    {
+      control.socket = "";
+      bpf.pin_path = "";
+      ipfix = {
+        host = "192.0.2.1";
+        port = 2055;
+        bind.port = 0;
+      };
+      enrich.rib.bmp.port = 0;
+    }
+    {
+      control.socket = "/run/rfm/ctl.sock";
+      bpf.pin_path = "/sys/fs/bpf/rfm-lab";
+      prometheus.port = 65535;
+    }
+    {
+      prometheus.port = 1024;
+      ipfix = {
+        host = "192.0.2.1";
+        port = 1023;
+        bind.port = 1024;
+      };
+      enrich.rib.bmp.port = 1024;
+    }
+  ];
+
+  # a socket outside the runtime directory, a pin outside the bpffs mount
+  # root, a misspelled key, a port the agent rejects and ports below 1024,
+  # which the unit cannot bind without CAP_NET_BIND_SERVICE
+  unhonored = [
+    { control.socket = "/run/rfm.sock"; }
+    { control.socket = "/run/rfm/ctl/rfm.sock"; }
+    { bpf.pin_path = "/sys/fs/bpf/rfm/host"; }
+    { bpf.pin_path = "/run/rfm/bpf"; }
+    { bpf.sample_rte = 10; }
+    { enrich.rib.bmp.prot = 11019; }
+    { prometheus.port = 0; }
+    { prometheus.port = 1023; }
+    { enrich.rib.bmp.port = 1023; }
+    {
+      ipfix = {
+        host = "192.0.2.1";
+        bind.port = 1023;
+      };
+    }
+  ];
 in
 {
   name = "rfm-lifecycle";
@@ -42,6 +119,13 @@ in
 
   testScript = common.helpers + ''
     from datetime import timedelta
+
+    # the module refuses at evaluation what the hardened unit cannot honor,
+    # rather than deploying a unit that fails at start
+    refused = ${std.toJSON (map std.toJSON (std.filter (agent: !accepts agent) honored))}
+    assert refused == [], f"module refuses settings the unit honors: {refused}"
+    accepted = ${std.toJSON (map std.toJSON (std.filter accepts unhonored))}
+    assert accepted == [], f"module accepts settings the unit cannot honor: {accepted}"
 
     start_all()
     machines = [machine1, machine2, machine3, machine4]

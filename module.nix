@@ -8,6 +8,10 @@ let
   toml = pkgs.formats.toml { };
 
   configFile = toml.generate "rfm.toml" cfg.settings;
+
+  # a port the unit listens on or sends from, it holds no
+  # CAP_NET_BIND_SERVICE for one below 1024
+  boundPort = std.types.ints.between 1024 65535;
 in
 {
   options.services.rfm = {
@@ -17,12 +21,8 @@ in
 
     settings = std.mkOption {
       type = std.types.submodule {
-        freeformType = toml.type;
-
         options.agent = std.mkOption {
           type = std.types.submodule {
-            freeformType = toml.type;
-
             options = {
               interfaces = std.mkOption {
                 type = std.types.listOf std.types.str;
@@ -46,8 +46,6 @@ in
               bpf = std.mkOption {
                 default = { };
                 type = std.types.submodule {
-                  freeformType = toml.type;
-
                   options = {
                     sample_rate = std.mkOption {
                       type = std.types.ints.positive;
@@ -85,10 +83,12 @@ in
                       description = "Upper bound for the adaptive sample rate.";
                     };
 
+                    # the unit opens the mount root to its user and creates
+                    # the pin directory in it, nothing deeper
                     pin_path = std.mkOption {
-                      type = std.types.str;
+                      type = std.types.strMatching "(/sys/fs/bpf/[^/]+)?";
                       default = "/sys/fs/bpf/rfm";
-                      description = "bpffs directory that keeps the interface counters across restarts, empty keeps them private to the process.";
+                      description = "bpffs directory directly under /sys/fs/bpf that keeps the interface counters across restarts, empty keeps them private to the process.";
                     };
                   };
                 };
@@ -97,8 +97,6 @@ in
               collector = std.mkOption {
                 default = { };
                 type = std.types.submodule {
-                  freeformType = toml.type;
-
                   options = {
                     max_flows = std.mkOption {
                       type = std.types.ints.unsigned;
@@ -124,8 +122,6 @@ in
               ipfix = std.mkOption {
                 default = { };
                 type = std.types.submodule {
-                  freeformType = toml.type;
-
                   options = {
                     host = std.mkOption {
                       type = std.types.str;
@@ -136,14 +132,12 @@ in
                     port = std.mkOption {
                       type = std.types.ints.between 0 65535;
                       default = 0;
-                      description = "IPFIX collector UDP port.";
+                      description = "IPFIX collector UDP port, 0 means 4739 when a host is set and no export otherwise.";
                     };
 
                     bind = std.mkOption {
                       default = { };
                       type = std.types.submodule {
-                        freeformType = toml.type;
-
                         options = {
                           host = std.mkOption {
                             type = std.types.str;
@@ -152,7 +146,7 @@ in
                           };
 
                           port = std.mkOption {
-                            type = std.types.ints.between 0 65535;
+                            type = std.types.either (std.types.enum [ 0 ]) boundPort;
                             default = 0;
                             description = "IPFIX exporter local source port (0 = ephemeral).";
                           };
@@ -196,8 +190,6 @@ in
               prometheus = std.mkOption {
                 default = { };
                 type = std.types.submodule {
-                  freeformType = toml.type;
-
                   options = {
                     host = std.mkOption {
                       type = std.types.str;
@@ -206,7 +198,7 @@ in
                     };
 
                     port = std.mkOption {
-                      type = std.types.port;
+                      type = boundPort;
                       default = 9669;
                       description = "Prometheus metrics listen port.";
                     };
@@ -217,13 +209,13 @@ in
               control = std.mkOption {
                 default = { };
                 type = std.types.submodule {
-                  freeformType = toml.type;
-
                   options = {
+                    # the agent cannot write outside its runtime directory
+                    # and does not create directories for the socket
                     socket = std.mkOption {
-                      type = std.types.str;
+                      type = std.types.strMatching "(/run/rfm/[^/]+)?";
                       default = "/run/rfm/rfm.sock";
-                      description = "Unix socket the rfm command line talks to, empty disables it.";
+                      description = "Unix socket the rfm command line talks to, a file directly in /run/rfm, empty disables it.";
                     };
                   };
                 };
@@ -232,14 +224,10 @@ in
               enrich = std.mkOption {
                 default = { };
                 type = std.types.submodule {
-                  freeformType = toml.type;
-
                   options = {
                     mmdb = std.mkOption {
                       default = { };
                       type = std.types.submodule {
-                        freeformType = toml.type;
-
                         options = {
                           asn_db = std.mkOption {
                             type = std.types.str;
@@ -259,14 +247,10 @@ in
                     rib = std.mkOption {
                       default = { };
                       type = std.types.submodule {
-                        freeformType = toml.type;
-
                         options = {
                           bmp = std.mkOption {
                             default = { };
                             type = std.types.submodule {
-                              freeformType = toml.type;
-
                               options = {
                                 host = std.mkOption {
                                   type = std.types.str;
@@ -275,9 +259,9 @@ in
                                 };
 
                                 port = std.mkOption {
-                                  type = std.types.ints.between 0 65535;
+                                  type = std.types.either (std.types.enum [ 0 ]) boundPort;
                                   default = 0;
-                                  description = "BMP listen port for live RIB updates.";
+                                  description = "BMP listen port for live RIB updates, 0 means 11019 when a host is set and no listener otherwise.";
                                 };
                               };
                             };
