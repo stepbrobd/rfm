@@ -296,8 +296,9 @@ func (p *Probe) FlowDrops() *ebpf.Map {
 // the ingress program is anchored at the head of the TCX chain and the egress
 // program at its tail, so the counters see every frame the interface received
 // before another program can drop or redirect it and every frame that is
-// about to leave after other programs had their say, which is what the NIC
-// counters measure as well
+// about to leave after other programs had their say, both counted as wire
+// packets after segmentation, an egress frame before the qdisc, which may
+// still drop it
 // a link without an ethernet header is refused with ErrUnsupportedLink and a
 // link that does not exist with an error matching unix.ENODEV
 func (p *Probe) Attach(ifindex int) error {

@@ -229,8 +229,8 @@ static __always_inline int rfm_tc(struct __sk_buff *skb, __u8 dir)
 
 	// GRO (ingress) and GSO (egress) hand the tc hook one skb that stands
 	// for several wire packets, so account for the segments it carries and
-	// for the headers the merge removed, this keeps the counters equal to
-	// what the NIC saw on the wire instead of what the stack saw as skbs
+	// for the headers the merge removed, the counters then count wire
+	// packets after segmentation, on egress before the qdisc may drop them
 	__u32 len = skb->len;
 	__u32 segs = 1;
 	if (skb->gso_size && iface_proto) {
