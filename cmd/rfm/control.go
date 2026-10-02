@@ -25,7 +25,7 @@ type controlHandler struct {
 	cfgText  string
 	probe    interface{ Attached() []int }
 	col      *collector.Collector
-	ipfix    *export.IPFIXExporter
+	ipfix    func() export.IPFIXStats // nil without an exporter
 	backends *enrich.Backends
 	// interfaces lists the links of the host, net.Interfaces when nil
 	interfaces func() ([]net.Interface, error)
@@ -79,6 +79,7 @@ func (h *controlHandler) Status() (ctl.Status, error) {
 			Max:             h.cfg.Agent.Collector.MaxFlows,
 			DroppedEvents:   stats.DroppedEvents,
 			ForcedEvictions: stats.ForcedEvictions,
+			Folded:          stats.FoldedFlows,
 		},
 	}
 
@@ -94,7 +95,7 @@ func (h *controlHandler) Status() (ctl.Status, error) {
 	}
 
 	if h.ipfix != nil {
-		s := h.ipfix.Stats()
+		s := h.ipfix()
 		st.IPFIX = &ctl.IPFIX{
 			Collector:    h.cfg.Agent.IPFIX.Addr(),
 			Connected:    s.Connected,
@@ -102,6 +103,7 @@ func (h *controlHandler) Status() (ctl.Status, error) {
 			Records:      s.Records,
 			QueueDropped: s.QueueDropped,
 			Unsent:       s.Unsent,
+			SendFailed:   s.SendFailed,
 			SendErrors:   s.SendErrors,
 		}
 	}

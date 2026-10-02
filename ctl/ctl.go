@@ -65,6 +65,9 @@ type Flows struct {
 	Max             int    `json:"max"`
 	DroppedEvents   uint64 `json:"dropped_events"`
 	ForcedEvictions uint64 `json:"forced_evictions"`
+	// Folded counts the flows counted under empty enrichment labels because
+	// their label tuple found no room under the rollup cap
+	Folded uint64 `json:"folded"`
 }
 
 // IPFIX describes the exporter
@@ -76,6 +79,8 @@ type IPFIX struct {
 	QueueDropped uint64            `json:"queue_dropped"`
 	Unsent       uint64            `json:"unsent"`
 	SendErrors   map[string]uint64 `json:"send_errors,omitempty"`
+	// SendFailed counts the records lost with messages that failed to send
+	SendFailed uint64 `json:"send_failed"`
 }
 
 // MMDB describes the loaded databases by build epoch

@@ -13,6 +13,7 @@ import (
 	"ysun.co/rfm/collector"
 	"ysun.co/rfm/config"
 	"ysun.co/rfm/ctl"
+	"ysun.co/rfm/export"
 )
 
 func testHandler(t *testing.T) (*controlHandler, *collector.Collector) {
@@ -216,6 +217,44 @@ func TestCLISetSampleRateAgainstTheAgent(t *testing.T) {
 	}
 }
 
+// asnOfLastByte labels an address with its last byte as the ASN, so flows
+// between other addresses get label tuples of their own
+type asnOfLastByte struct{}
+
+func (asnOfLastByte) Enrich(src, dst netip.Addr) (collector.Labels, collector.Labels) {
+	return collector.Labels{ASN: uint32(src.As16()[15])}, collector.Labels{ASN: uint32(dst.As16()[15])}
+}
+
+func TestControlStatusCountsFoldedFlowsAndFailedSends(t *testing.T) {
+	h, _ := testHandler(t)
+	// one label tuple fits, the flow of the second folds under empty labels
+	c := collector.New(30*time.Second, asnOfLastByte{}, 1)
+	h.col = c
+	now := time.Now()
+	for _, src := range []string{"::ffff:192.0.2.1", "::ffff:192.0.2.2"} {
+		c.Record(collector.FlowEvent{
+			Ifindex: 1, Proto: 6, SrcPort: 1, DstPort: 443,
+			SrcAddr: netip.MustParseAddr(src),
+			DstAddr: netip.MustParseAddr("::ffff:198.51.100.7"),
+			Len:     100,
+		}, now)
+	}
+	h.ipfix = func() export.IPFIXStats {
+		return export.IPFIXStats{Connected: true, Messages: 3, Records: 40, Unsent: 2, SendFailed: 5}
+	}
+
+	st, err := h.Status()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if folded := c.Stats().FoldedFlows; folded != 1 || st.Flows.Folded != folded {
+		t.Fatalf("status folded = %d, collector folded %d, want both 1", st.Flows.Folded, folded)
+	}
+	if st.IPFIX == nil || st.IPFIX.SendFailed != 5 || st.IPFIX.Unsent != 2 || st.IPFIX.Records != 40 {
+		t.Fatalf("status ipfix = %+v, want the records lost in failed sends next to the others", st.IPFIX)
+	}
+}
+
 func TestPrintStatus(t *testing.T) {
 	var b strings.Builder
 	printStatus(&b, ctl.Status{
@@ -223,12 +262,12 @@ func TestPrintStatus(t *testing.T) {
 		Uptime:     90 * time.Second,
 		Interfaces: []ctl.Interface{{Name: "eth0", Ifindex: 2}},
 		Sampling:   ctl.Sampling{Rate: 20, Base: 10, Max: 1000, Adaptive: true},
-		Flows:      ctl.Flows{Active: 12, Max: 65536},
-		IPFIX:      &ctl.IPFIX{Collector: "[::1]:4739", Connected: true, Messages: 3, Records: 40, SendErrors: map[string]uint64{"EPERM": 2}},
+		Flows:      ctl.Flows{Active: 12, Max: 65536, Folded: 4},
+		IPFIX:      &ctl.IPFIX{Collector: "[::1]:4739", Connected: true, Messages: 3, Records: 40, SendFailed: 6, SendErrors: map[string]uint64{"EPERM": 2}},
 		MMDB:       &ctl.MMDB{ASNBuildEpoch: 1_700_000_000},
 	})
 	out := b.String()
-	for _, want := range []string{"1 in 20 (adaptive, base 10, max 1000)", "12 active of 65536", "[::1]:4739 connected", "EPERM=2", "asn 2023-11-14, city none"} {
+	for _, want := range []string{"1 in 20 (adaptive, base 10, max 1000)", "12 active of 65536", "4 folded under empty labels", "[::1]:4739 connected", "6 lost in failed sends", "EPERM=2", "asn 2023-11-14, city none"} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("status output missing %q:\n%s", want, out)
 		}

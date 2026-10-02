@@ -67,8 +67,8 @@ func printStatus(w io.Writer, st ctl.Status) {
 		sampling += fmt.Sprintf(" (adaptive, base %d, max %d)", st.Sampling.Base, st.Sampling.Max)
 	}
 	fmt.Fprintf(tw, "sampling\t%s\n", sampling)
-	fmt.Fprintf(tw, "flows\t%d active of %d, %d ring drops, %d forced evictions\n",
-		st.Flows.Active, st.Flows.Max, st.Flows.DroppedEvents, st.Flows.ForcedEvictions)
+	fmt.Fprintf(tw, "flows\t%d active of %d, %d ring drops, %d forced evictions, %d folded under empty labels\n",
+		st.Flows.Active, st.Flows.Max, st.Flows.DroppedEvents, st.Flows.ForcedEvictions, st.Flows.Folded)
 	if st.IPFIX != nil {
 		state := "disconnected"
 		if st.IPFIX.Connected {
@@ -78,8 +78,8 @@ func printStatus(w io.Writer, st ctl.Status) {
 		for errno, n := range st.IPFIX.SendErrors {
 			errs = append(errs, fmt.Sprintf("%s=%d", errno, n))
 		}
-		line := fmt.Sprintf("%s %s, %d messages, %d records, %d queue drops, %d unsent",
-			st.IPFIX.Collector, state, st.IPFIX.Messages, st.IPFIX.Records, st.IPFIX.QueueDropped, st.IPFIX.Unsent)
+		line := fmt.Sprintf("%s %s, %d messages, %d records, %d queue drops, %d unsent, %d lost in failed sends",
+			st.IPFIX.Collector, state, st.IPFIX.Messages, st.IPFIX.Records, st.IPFIX.QueueDropped, st.IPFIX.Unsent, st.IPFIX.SendFailed)
 		if len(errs) > 0 {
 			line += ", send errors " + strings.Join(errs, " ")
 		}

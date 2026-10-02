@@ -221,7 +221,10 @@ func runAgent(ctx context.Context, path string, deps agentDeps) error {
 
 	srv := newMetricsServer(reg, metricsTimeout)
 
-	handler.probe, handler.col, handler.ipfix, handler.backends = p, c, ipfixExp, backends
+	handler.probe, handler.col, handler.backends = p, c, backends
+	if ipfixExp != nil {
+		handler.ipfix = ipfixExp.Stats
+	}
 
 	// a component that fails ends the run with its error, which makes the
 	// agent exit non zero for systemd to restart it, while ctx ends it
