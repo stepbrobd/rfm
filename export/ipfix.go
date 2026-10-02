@@ -705,15 +705,15 @@ func (e *IPFIXExporter) dataElements(flow collector.ExportedFlow, isIPv6 bool) [
 		t = &e.ipv6
 	}
 
-	srcAddr := flow.Key.SrcAddr.Unmap()
-	dstAddr := flow.Key.DstAddr.Unmap()
+	srcAddr := netip.AddrFrom16(flow.SrcAddr).Unmap()
+	dstAddr := netip.AddrFrom16(flow.DstAddr).Unmap()
 
 	var ingressIf uint32
 	var egressIf uint32
-	if flow.Key.Dir == 0 {
-		ingressIf = flow.Key.Ifindex
+	if flow.Dir == 0 {
+		ingressIf = flow.Ifindex
 	} else {
-		egressIf = flow.Key.Ifindex
+		egressIf = flow.Ifindex
 	}
 
 	elements := make([]entities.InfoElementWithValue, 0, len(t.names))
@@ -725,27 +725,27 @@ func (e *IPFIXExporter) dataElements(flow collector.ExportedFlow, isIPv6 bool) [
 		case "destinationIPv4Address", "destinationIPv6Address":
 			elements = append(elements, entities.NewIPAddressInfoElement(ie, net.IP(dstAddr.AsSlice())))
 		case "sourceTransportPort":
-			elements = append(elements, entities.NewUnsigned16InfoElement(ie, flow.Key.SrcPort))
+			elements = append(elements, entities.NewUnsigned16InfoElement(ie, flow.SrcPort))
 		case "destinationTransportPort":
-			elements = append(elements, entities.NewUnsigned16InfoElement(ie, flow.Key.DstPort))
+			elements = append(elements, entities.NewUnsigned16InfoElement(ie, flow.DstPort))
 		case "protocolIdentifier":
-			elements = append(elements, entities.NewUnsigned8InfoElement(ie, flow.Key.Proto))
+			elements = append(elements, entities.NewUnsigned8InfoElement(ie, flow.Proto))
 		case "ingressInterface":
 			elements = append(elements, entities.NewUnsigned32InfoElement(ie, ingressIf))
 		case "egressInterface":
 			elements = append(elements, entities.NewUnsigned32InfoElement(ie, egressIf))
 		case "flowDirection":
-			elements = append(elements, entities.NewUnsigned8InfoElement(ie, flow.Key.Dir))
+			elements = append(elements, entities.NewUnsigned8InfoElement(ie, flow.Dir))
 		case "flowStartMilliseconds":
-			elements = append(elements, entities.NewDateTimeMillisecondsInfoElement(ie, uint64(flow.Entry.FirstSeen.UnixMilli())))
+			elements = append(elements, entities.NewDateTimeMillisecondsInfoElement(ie, uint64(flow.Start/int64(time.Millisecond))))
 		case "flowEndMilliseconds":
-			elements = append(elements, entities.NewDateTimeMillisecondsInfoElement(ie, uint64(flow.Entry.LastSeen.UnixMilli())))
+			elements = append(elements, entities.NewDateTimeMillisecondsInfoElement(ie, uint64(flow.End/int64(time.Millisecond))))
 		case "packetDeltaCount":
-			elements = append(elements, entities.NewUnsigned64InfoElement(ie, flow.Entry.Packets))
+			elements = append(elements, entities.NewUnsigned64InfoElement(ie, flow.Packets))
 		case "octetDeltaCount":
 			// rfc 7012 counts ip header and payload here, the wire bytes
 			// with the l2 header stay with the prometheus counters
-			elements = append(elements, entities.NewUnsigned64InfoElement(ie, flow.Entry.IPBytes))
+			elements = append(elements, entities.NewUnsigned64InfoElement(ie, flow.Octets))
 		case "flowEndReason":
 			elements = append(elements, entities.NewUnsigned8InfoElement(ie, flow.EndReason))
 		case "samplingProbability":
@@ -753,8 +753,8 @@ func (e *IPFIXExporter) dataElements(flow collector.ExportedFlow, isIPv6 bool) [
 			// tracks runtime rate changes, an empty estimate falls back to
 			// the configured rate
 			prob := e.samplingProb
-			if flow.Entry.EstPackets > 0 {
-				prob = flow.Entry.SamplingProbability()
+			if flow.EstPackets > 0 {
+				prob = flow.SamplingProbability()
 			}
 			elements = append(elements, entities.NewFloat64InfoElement(ie, prob))
 		}
@@ -763,11 +763,8 @@ func (e *IPFIXExporter) dataElements(flow collector.ExportedFlow, isIPv6 bool) [
 }
 
 func flowIsIPv6(flow collector.ExportedFlow) (bool, error) {
-	src := flow.Key.SrcAddr.Unmap()
-	dst := flow.Key.DstAddr.Unmap()
-	if !src.IsValid() || !dst.IsValid() {
-		return false, fmt.Errorf("flow has invalid addresses")
-	}
+	src := netip.AddrFrom16(flow.SrcAddr).Unmap()
+	dst := netip.AddrFrom16(flow.DstAddr).Unmap()
 	if src.Is4() != dst.Is4() {
 		return false, fmt.Errorf("flow address families do not match")
 	}
@@ -777,7 +774,7 @@ func flowIsIPv6(flow collector.ExportedFlow) (bool, error) {
 // isOwnExportFlow reports whether flow is this exporter's own udp stream to
 // the collector, which must not be exported again
 func (e *IPFIXExporter) isOwnExportFlow(flow collector.ExportedFlow) bool {
-	if flow.Key.Proto != 17 {
+	if flow.Proto != 17 {
 		return false
 	}
 
@@ -789,13 +786,10 @@ func (e *IPFIXExporter) isOwnExportFlow(flow collector.ExportedFlow) bool {
 		return false
 	}
 
-	if flow.Key.SrcPort != localPort || flow.Key.DstPort != e.collectorPort {
+	if flow.SrcPort != localPort || flow.DstPort != e.collectorPort {
 		return false
 	}
-	src := flow.Key.SrcAddr.Unmap()
-	dst := flow.Key.DstAddr.Unmap()
-	if !src.IsValid() || !dst.IsValid() {
-		return false
-	}
+	src := netip.AddrFrom16(flow.SrcAddr).Unmap()
+	dst := netip.AddrFrom16(flow.DstAddr).Unmap()
 	return src == localAddr && dst == e.collectorAddr
 }

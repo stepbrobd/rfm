@@ -361,8 +361,8 @@ func (c *Collector) recordLocked(ev FlowEvent, now time.Time, labels map[addrPai
 		},
 		rollup:        rollup,
 		intervalStart: now,
-		first:         now,
-		last:          now,
+		first:         now.UnixNano(),
+		last:          now.UnixNano(),
 	}
 	state.elem = c.lru.PushBack(state)
 	state.active = c.activeQueue.PushBack(state)

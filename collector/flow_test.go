@@ -2,8 +2,47 @@ package collector
 
 import (
 	"net/netip"
+	"reflect"
 	"testing"
 )
+
+// hasPointers reports whether a value of typ holds a pointer the garbage
+// collector has to follow
+func hasPointers(typ reflect.Type) bool {
+	switch typ.Kind() {
+	case reflect.Pointer, reflect.UnsafePointer, reflect.Slice, reflect.Map, reflect.Chan,
+		reflect.Func, reflect.Interface, reflect.String:
+		return true
+	case reflect.Array:
+		return typ.Len() > 0 && hasPointers(typ.Elem())
+	case reflect.Struct:
+		for field := range typ.Fields() {
+			if hasPointers(field.Type) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func TestExportedFlowIsCompactAndPointerFree(t *testing.T) {
+	// the ipfix queue holds as many records as the flow table holds flows,
+	// a record with pointers would have every collection scan the queue
+	typ := reflect.TypeFor[ExportedFlow]()
+	if hasPointers(typ) {
+		t.Fatal("ExportedFlow holds pointers")
+	}
+	if size := typ.Size(); size > 96 {
+		t.Fatalf("ExportedFlow is %d bytes, want at most 96", size)
+	}
+
+	// a flow keeps the counters its records already carried, not a copy of
+	// its whole entry
+	sent, _ := reflect.TypeFor[flowState]().FieldByName("sent")
+	if size := sent.Type.Size(); size > 32 {
+		t.Fatalf("flowState.sent is %d bytes, want the counters a record carries", size)
+	}
+}
 
 func TestFlowEventKey(t *testing.T) {
 	ev := FlowEvent{

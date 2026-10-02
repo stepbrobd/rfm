@@ -68,8 +68,8 @@ func TestIPFIXExportsToGoFlow2(t *testing.T) {
 	}
 	defer exp.Close()
 
-	flow := collector.ExportedFlow{
-		Key: collector.FlowKey{
+	flow := exportedFlow(
+		collector.FlowKey{
 			Ifindex: 7,
 			Dir:     0,
 			Proto:   17,
@@ -78,14 +78,14 @@ func TestIPFIXExportsToGoFlow2(t *testing.T) {
 			SrcPort: 12345,
 			DstPort: 53,
 		},
-		Entry: collector.FlowEntry{
+		collector.FlowEntry{
 			FirstSeen: time.Unix(1_700_000_000, 0).UTC(),
 			LastSeen:  time.Unix(1_700_000_000, 0).UTC(),
 			Packets:   3,
 			IPBytes:   384,
 		},
-		EndReason: collector.FlowEndReasonIdleTimeout,
-	}
+		collector.FlowEndReasonIdleTimeout,
+	)
 	if err := exp.ExportFlow(flow); err != nil {
 		t.Fatalf("ExportFlow: %v", err)
 	}

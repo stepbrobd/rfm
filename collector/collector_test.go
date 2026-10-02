@@ -574,6 +574,29 @@ func (m *mockFlowExporter) ExportFlow(flow ExportedFlow) error {
 	return m.err
 }
 
+// recordKey returns the key of the flow a record belongs to
+func recordKey(f ExportedFlow) FlowKey {
+	return FlowKey{
+		Ifindex: f.Ifindex,
+		Dir:     f.Dir,
+		Proto:   f.Proto,
+		SrcAddr: netip.AddrFrom16(f.SrcAddr),
+		DstAddr: netip.AddrFrom16(f.DstAddr),
+		SrcPort: f.SrcPort,
+		DstPort: f.DstPort,
+	}
+}
+
+// firstSeen returns the time of the first packet a record carries
+func firstSeen(f ExportedFlow) time.Time {
+	return time.Unix(0, f.Start)
+}
+
+// lastSeen returns the time of the last packet a record carries
+func lastSeen(f ExportedFlow) time.Time {
+	return time.Unix(0, f.End)
+}
+
 func TestEvictExportsExpiredFlow(t *testing.T) {
 	exp := &mockFlowExporter{}
 	c := New(10*time.Second, nil, 0)
@@ -598,14 +621,14 @@ func TestEvictExportsExpiredFlow(t *testing.T) {
 		t.Fatalf("exported flows = %d, want 1", got)
 	}
 	flow := exp.flows[0]
-	if flow.Key != ev.Key() {
-		t.Fatalf("exported key = %+v, want %+v", flow.Key, ev.Key())
+	if recordKey(flow) != ev.Key() {
+		t.Fatalf("exported key = %+v, want %+v", recordKey(flow), ev.Key())
 	}
-	if flow.Entry.FirstSeen != t0 {
-		t.Fatalf("first seen = %v, want %v", flow.Entry.FirstSeen, t0)
+	if !firstSeen(flow).Equal(t0) {
+		t.Fatalf("first seen = %v, want %v", firstSeen(flow), t0)
 	}
-	if flow.Entry.LastSeen != t0 {
-		t.Fatalf("last seen = %v, want %v", flow.Entry.LastSeen, t0)
+	if !lastSeen(flow).Equal(t0) {
+		t.Fatalf("last seen = %v, want %v", lastSeen(flow), t0)
 	}
 	if flow.EndReason != FlowEndReasonIdleTimeout {
 		t.Fatalf("end reason = %d, want %d", flow.EndReason, FlowEndReasonIdleTimeout)
@@ -637,8 +660,8 @@ func TestRecordForcedEvictionExportsOldestFlow(t *testing.T) {
 	if got := len(exp.flows); got != 1 {
 		t.Fatalf("exported flows = %d, want 1", got)
 	}
-	if exp.flows[0].Key != ev1.Key() {
-		t.Fatalf("exported key = %+v, want %+v", exp.flows[0].Key, ev1.Key())
+	if recordKey(exp.flows[0]) != ev1.Key() {
+		t.Fatalf("exported key = %+v, want %+v", recordKey(exp.flows[0]), ev1.Key())
 	}
 	if exp.flows[0].EndReason != FlowEndReasonLackOfResources {
 		t.Fatalf("end reason = %d, want %d", exp.flows[0].EndReason, FlowEndReasonLackOfResources)
@@ -722,8 +745,8 @@ func TestEvictOrderFollowsLastSeen(t *testing.T) {
 	if got := len(exp.flows); got != 2 {
 		t.Fatalf("exported flows = %d, want 2", got)
 	}
-	if exp.flows[0].Key.SrcPort != 2 || exp.flows[1].Key.SrcPort != 3 {
-		t.Fatalf("eviction order = [%d %d], want [2 3]", exp.flows[0].Key.SrcPort, exp.flows[1].Key.SrcPort)
+	if exp.flows[0].SrcPort != 2 || exp.flows[1].SrcPort != 3 {
+		t.Fatalf("eviction order = [%d %d], want [2 3]", exp.flows[0].SrcPort, exp.flows[1].SrcPort)
 	}
 	if _, ok := c.Flows()[mk(1).Key()]; !ok {
 		t.Fatal("refreshed flow was evicted")
@@ -784,8 +807,8 @@ func TestRecordBatchForcedEvictionExports(t *testing.T) {
 	if got := len(exp.flows); got != 1 {
 		t.Fatalf("exported flows = %d, want 1", got)
 	}
-	if exp.flows[0].Key != a.Key() {
-		t.Fatalf("exported key = %+v, want %+v", exp.flows[0].Key, a.Key())
+	if recordKey(exp.flows[0]) != a.Key() {
+		t.Fatalf("exported key = %+v, want %+v", recordKey(exp.flows[0]), a.Key())
 	}
 	if _, ok := c.Flows()[b.Key()]; !ok {
 		t.Fatal("new flow missing after forced eviction")
@@ -858,11 +881,11 @@ func TestActiveTimeoutExportsIntervalRecords(t *testing.T) {
 	if first.EndReason != FlowEndReasonActiveTimeout {
 		t.Fatalf("end reason = %d, want %d", first.EndReason, FlowEndReasonActiveTimeout)
 	}
-	if first.Entry.Packets != 2 || first.Entry.Bytes != 200 {
-		t.Fatalf("interval record = %d packets %d bytes, want 2 and 200", first.Entry.Packets, first.Entry.Bytes)
+	if first.Packets != 2 || first.Octets != 200 {
+		t.Fatalf("interval record = %d packets %d octets, want 2 and 200", first.Packets, first.Octets)
 	}
-	if !first.Entry.FirstSeen.Equal(t0) || !first.Entry.LastSeen.Equal(t0.Add(5*time.Second)) {
-		t.Fatalf("interval = %v..%v, want t0..t0+5s", first.Entry.FirstSeen, first.Entry.LastSeen)
+	if !firstSeen(first).Equal(t0) || !lastSeen(first).Equal(t0.Add(5*time.Second)) {
+		t.Fatalf("interval = %v..%v, want t0..t0+5s", firstSeen(first), lastSeen(first))
 	}
 	if _, ok := c.Flows()[ev.Key()]; !ok {
 		t.Fatal("flow left the table on an active export")
@@ -888,11 +911,11 @@ func TestActiveTimeoutExportsIntervalRecords(t *testing.T) {
 	if last.EndReason != FlowEndReasonIdleTimeout {
 		t.Fatalf("end reason = %d, want %d", last.EndReason, FlowEndReasonIdleTimeout)
 	}
-	if last.Entry.Packets != 1 || last.Entry.Bytes != 100 {
-		t.Fatalf("final record = %d packets %d bytes, want 1 and 100", last.Entry.Packets, last.Entry.Bytes)
+	if last.Packets != 1 || last.Octets != 100 {
+		t.Fatalf("final record = %d packets %d octets, want 1 and 100", last.Packets, last.Octets)
 	}
-	if !last.Entry.FirstSeen.Equal(t0.Add(25*time.Second)) || !last.Entry.LastSeen.Equal(t0.Add(25*time.Second)) {
-		t.Fatalf("final interval = %v..%v, want the one event at t0+25s", last.Entry.FirstSeen, last.Entry.LastSeen)
+	if !firstSeen(last).Equal(t0.Add(25*time.Second)) || !lastSeen(last).Equal(t0.Add(25*time.Second)) {
+		t.Fatalf("final interval = %v..%v, want the one event at t0+25s", firstSeen(last), lastSeen(last))
 	}
 }
 
@@ -930,15 +953,15 @@ func TestIntervalRecordsSpanTheirEvents(t *testing.T) {
 		t.Fatalf("exported flows = %d, want 2", got)
 	}
 	for i, f := range exp.flows {
-		if f.Entry.LastSeen.Before(f.Entry.FirstSeen) {
-			t.Errorf("record %d ends at %v before it starts at %v", i, f.Entry.LastSeen, f.Entry.FirstSeen)
+		if f.End < f.Start {
+			t.Errorf("record %d ends at %v before it starts at %v", i, lastSeen(f), firstSeen(f))
 		}
 	}
-	if first := exp.flows[0].Entry; !first.FirstSeen.Equal(t0) || !first.LastSeen.Equal(t0.Add(59*time.Second)) {
-		t.Errorf("active record spans %v..%v, want t0..t0+59s", first.FirstSeen, first.LastSeen)
+	if first := exp.flows[0]; !firstSeen(first).Equal(t0) || !lastSeen(first).Equal(t0.Add(59*time.Second)) {
+		t.Errorf("active record spans %v..%v, want t0..t0+59s", firstSeen(first), lastSeen(first))
 	}
-	if last := exp.flows[1].Entry; !last.FirstSeen.Equal(late) || !last.LastSeen.Equal(late) {
-		t.Errorf("idle record spans %v..%v, want the late event alone at %v", last.FirstSeen, last.LastSeen, late)
+	if last := exp.flows[1]; !firstSeen(last).Equal(late) || !lastSeen(last).Equal(late) {
+		t.Errorf("idle record spans %v..%v, want the late event alone at %v", firstSeen(last), lastSeen(last), late)
 	}
 }
 
@@ -1180,9 +1203,9 @@ func TestExportedRecordCarriesEstimateDelta(t *testing.T) {
 	if got := len(exp.flows); got != 1 {
 		t.Fatalf("exported flows = %d, want 1", got)
 	}
-	rec := exp.flows[0].Entry
-	if rec.Packets != 1 || rec.EstPackets != 100 || rec.EstBytes != 6000 {
-		t.Fatalf("record = %+v, want 1 sampled packet standing for 100 packets and 6000 bytes", rec)
+	rec := exp.flows[0]
+	if rec.Packets != 1 || rec.EstPackets != 100 || rec.Octets != 60 {
+		t.Fatalf("record = %+v, want 1 sampled packet of 60 octets standing for 100 packets", rec)
 	}
 	if got := rec.SamplingProbability(); got != 0.01 {
 		t.Fatalf("sampling probability = %v, want 0.01", got)

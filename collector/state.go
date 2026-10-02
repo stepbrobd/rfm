@@ -20,12 +20,16 @@ type flowState struct {
 	// creation or the sweep that marked it, the active timeout runs from it
 	intervalStart time.Time
 	// first and last are the earliest and latest event times since the last
-	// record, events from different cpus and events sampled before a sweep
-	// but consumed after it arrive out of order, so a record spans the
-	// events it carries and never ends before it starts
-	first, last time.Time
-	// sent holds the counters already exported by earlier records
-	sent FlowEntry
+	// record in unix nanoseconds, 0 before the first, events from different
+	// cpus and events sampled before a sweep but consumed after it arrive out
+	// of order, so a record spans the events it carries and never ends
+	// before it starts
+	first, last int64
+	// sent holds the counters earlier records carried, the ones a record
+	// needs and no more
+	sent struct {
+		packets, ipBytes, estPackets uint64
+	}
 }
 
 // seen extends the flow and its unexported interval to an event at now
@@ -36,41 +40,46 @@ func (s *flowState) seen(now time.Time) {
 	if now.After(s.entry.LastSeen) {
 		s.entry.LastSeen = now
 	}
-	if s.first.IsZero() || now.Before(s.first) {
-		s.first = now
+	n := now.UnixNano()
+	if s.first == 0 || n < s.first {
+		s.first = n
 	}
-	if now.After(s.last) {
-		s.last = now
+	if n > s.last {
+		s.last = n
 	}
 }
 
 // record returns the delta record for the unexported interval
 func (s *flowState) record(reason uint8) ExportedFlow {
 	return ExportedFlow{
-		Key: s.key,
-		Entry: FlowEntry{
-			FirstSeen:  s.first,
-			LastSeen:   s.last,
-			Packets:    s.entry.Packets - s.sent.Packets,
-			Bytes:      s.entry.Bytes - s.sent.Bytes,
-			IPBytes:    s.entry.IPBytes - s.sent.IPBytes,
-			EstPackets: s.entry.EstPackets - s.sent.EstPackets,
-			EstBytes:   s.entry.EstBytes - s.sent.EstBytes,
-		},
-		EndReason: reason,
+		SrcAddr:    s.key.SrcAddr.As16(),
+		DstAddr:    s.key.DstAddr.As16(),
+		Start:      s.first,
+		End:        s.last,
+		Packets:    s.entry.Packets - s.sent.packets,
+		Octets:     s.entry.IPBytes - s.sent.ipBytes,
+		EstPackets: s.entry.EstPackets - s.sent.estPackets,
+		Ifindex:    s.key.Ifindex,
+		SrcPort:    s.key.SrcPort,
+		DstPort:    s.key.DstPort,
+		Dir:        s.key.Dir,
+		Proto:      s.key.Proto,
+		EndReason:  reason,
 	}
 }
 
 // pending reports whether the flow saw packets since its last record
 func (s *flowState) pending() bool {
-	return s.entry.Packets != s.sent.Packets
+	return s.entry.Packets != s.sent.packets
 }
 
 // mark records that everything up to now went out in a record
 func (s *flowState) mark(now time.Time) {
-	s.sent = s.entry
+	s.sent.packets = s.entry.Packets
+	s.sent.ipBytes = s.entry.IPBytes
+	s.sent.estPackets = s.entry.EstPackets
 	s.intervalStart = now
-	s.first, s.last = time.Time{}, time.Time{}
+	s.first, s.last = 0, 0
 }
 
 // rollupState is one label tuple with the counters a scrape exposes

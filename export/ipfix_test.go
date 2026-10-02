@@ -215,18 +215,18 @@ func TestIPFIXUsesConfiguredObservationDomainID(t *testing.T) {
 	defer exp.Close()
 
 	now := time.Unix(1_700_000_000, 0).UTC()
-	flow := collector.ExportedFlow{
-		Key: collector.FlowKey{
+	flow := exportedFlow(
+		collector.FlowKey{
 			Ifindex: 1, Dir: 0, Proto: 6,
 			SrcAddr: netip.MustParseAddr("::ffff:10.0.0.1"),
 			DstAddr: netip.MustParseAddr("::ffff:10.0.0.2"),
 			SrcPort: 1234, DstPort: 80,
 		},
-		Entry: collector.FlowEntry{
+		collector.FlowEntry{
 			FirstSeen: now, LastSeen: now, Packets: 1, IPBytes: 100,
 		},
-		EndReason: collector.FlowEndReasonIdleTimeout,
-	}
+		collector.FlowEndReasonIdleTimeout,
+	)
 
 	if err := exp.ExportFlow(flow); err != nil {
 		t.Fatalf("ExportFlow: %v", err)
@@ -250,8 +250,8 @@ func TestIPFIXSkipsCollectorTraffic(t *testing.T) {
 	}
 	defer exp.Close()
 
-	collectorFlow := collector.ExportedFlow{
-		Key: collector.FlowKey{
+	collectorFlow := exportedFlow(
+		collector.FlowKey{
 			Ifindex: 1,
 			Dir:     1,
 			Proto:   17,
@@ -260,14 +260,14 @@ func TestIPFIXSkipsCollectorTraffic(t *testing.T) {
 			SrcPort: exp.localPort,
 			DstPort: exp.collectorPort,
 		},
-		Entry: collector.FlowEntry{
+		collector.FlowEntry{
 			FirstSeen: time.Unix(1_700_000_000, 0).UTC(),
 			LastSeen:  time.Unix(1_700_000_000, 0).UTC(),
 			Packets:   1,
 			IPBytes:   128,
 		},
-		EndReason: collector.FlowEndReasonEndOfFlow,
-	}
+		collector.FlowEndReasonEndOfFlow,
+	)
 
 	if err := exp.ExportFlow(collectorFlow); err != nil {
 		t.Fatalf("ExportFlow: %v", err)
@@ -295,8 +295,8 @@ func TestIPFIXExportsTrafficToCollectorDestinationFromOtherSocket(t *testing.T) 
 		srcPort++
 	}
 
-	otherFlow := collector.ExportedFlow{
-		Key: collector.FlowKey{
+	otherFlow := exportedFlow(
+		collector.FlowKey{
 			Ifindex: 1,
 			Dir:     1,
 			Proto:   17,
@@ -305,14 +305,14 @@ func TestIPFIXExportsTrafficToCollectorDestinationFromOtherSocket(t *testing.T) 
 			SrcPort: srcPort,
 			DstPort: exp.collectorPort,
 		},
-		Entry: collector.FlowEntry{
+		collector.FlowEntry{
 			FirstSeen: time.Unix(1_700_000_000, 0).UTC(),
 			LastSeen:  time.Unix(1_700_000_000, 0).UTC(),
 			Packets:   3,
 			IPBytes:   384,
 		},
-		EndReason: collector.FlowEndReasonEndOfFlow,
-	}
+		collector.FlowEndReasonEndOfFlow,
+	)
 
 	if err := exp.ExportFlow(otherFlow); err != nil {
 		t.Fatalf("ExportFlow: %v", err)
@@ -631,18 +631,18 @@ func TestIPFIXTemplateSuppressedWithinRefreshWindow(t *testing.T) {
 	defer exp.Close()
 	exp.nowFunc = func() time.Time { return now }
 
-	flow := collector.ExportedFlow{
-		Key: collector.FlowKey{
+	flow := exportedFlow(
+		collector.FlowKey{
 			Ifindex: 1, Dir: 0, Proto: 6,
 			SrcAddr: netip.MustParseAddr("::ffff:10.0.0.1"),
 			DstAddr: netip.MustParseAddr("::ffff:10.0.0.2"),
 			SrcPort: 1234, DstPort: 80,
 		},
-		Entry: collector.FlowEntry{
+		collector.FlowEntry{
 			FirstSeen: now, LastSeen: now, Packets: 1, IPBytes: 100,
 		},
-		EndReason: collector.FlowEndReasonIdleTimeout,
-	}
+		collector.FlowEndReasonIdleTimeout,
+	)
 
 	// first export should include template + data
 	if err := exp.ExportFlow(flow); err != nil {
@@ -687,18 +687,18 @@ func TestIPFIXTemplateResendAfterRefreshTimeout(t *testing.T) {
 	defer exp.Close()
 	exp.nowFunc = func() time.Time { return now }
 
-	flow := collector.ExportedFlow{
-		Key: collector.FlowKey{
+	flow := exportedFlow(
+		collector.FlowKey{
 			Ifindex: 1, Dir: 0, Proto: 6,
 			SrcAddr: netip.MustParseAddr("::ffff:10.0.0.1"),
 			DstAddr: netip.MustParseAddr("::ffff:10.0.0.2"),
 			SrcPort: 1234, DstPort: 80,
 		},
-		Entry: collector.FlowEntry{
+		collector.FlowEntry{
 			FirstSeen: now, LastSeen: now, Packets: 1, IPBytes: 100,
 		},
-		EndReason: collector.FlowEndReasonIdleTimeout,
-	}
+		collector.FlowEndReasonIdleTimeout,
+	)
 
 	// first export includes template
 	if err := exp.ExportFlow(flow); err != nil {
@@ -728,19 +728,39 @@ func TestIPFIXTemplateResendAfterRefreshTimeout(t *testing.T) {
 
 const entitiesTemplateSetID uint16 = 2
 
-func testFlow(src, dst string, port uint16, now time.Time) collector.ExportedFlow {
+// exportedFlow builds the record the collector sends for one interval of the
+// flow key, with the times and counters of e
+func exportedFlow(key collector.FlowKey, e collector.FlowEntry, reason uint8) collector.ExportedFlow {
 	return collector.ExportedFlow{
-		Key: collector.FlowKey{
+		SrcAddr:    key.SrcAddr.As16(),
+		DstAddr:    key.DstAddr.As16(),
+		Start:      e.FirstSeen.UnixNano(),
+		End:        e.LastSeen.UnixNano(),
+		Packets:    e.Packets,
+		Octets:     e.IPBytes,
+		EstPackets: e.EstPackets,
+		Ifindex:    key.Ifindex,
+		SrcPort:    key.SrcPort,
+		DstPort:    key.DstPort,
+		Dir:        key.Dir,
+		Proto:      key.Proto,
+		EndReason:  reason,
+	}
+}
+
+func testFlow(src, dst string, port uint16, now time.Time) collector.ExportedFlow {
+	return exportedFlow(
+		collector.FlowKey{
 			Ifindex: 1, Dir: 0, Proto: 6,
 			SrcAddr: netip.MustParseAddr(src),
 			DstAddr: netip.MustParseAddr(dst),
 			SrcPort: port, DstPort: 443,
 		},
-		Entry: collector.FlowEntry{
+		collector.FlowEntry{
 			FirstSeen: now, LastSeen: now, Packets: 2, IPBytes: 300,
 		},
-		EndReason: collector.FlowEndReasonIdleTimeout,
-	}
+		collector.FlowEndReasonIdleTimeout,
+	)
 }
 
 func TestIPFIXPacksRecordsIntoOneMessage(t *testing.T) {
