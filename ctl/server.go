@@ -1,11 +1,11 @@
 package ctl
 
 import (
-	"bufio"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"net/netip"
 	"os"
@@ -13,11 +13,20 @@ import (
 	"sync"
 	"syscall"
 	"time"
+
+	"github.com/charmbracelet/log"
 )
 
 // requestTimeout bounds one connection so a stuck client cannot pin a
 // server goroutine
 const requestTimeout = 5 * time.Second
+
+// maxRequestSize bounds one request, real ones are a few hundred bytes
+const maxRequestSize = 64 << 10
+
+// maxConns bounds the connections served at once, further clients wait in
+// the listen backlog
+const maxConns = 16
 
 // Server answers requests on a unix socket
 type Server struct {
@@ -103,28 +112,46 @@ func (s *Server) Addr() string {
 	return s.listener.Addr().String()
 }
 
-// Serve answers connections until ctx is done
+// Serve answers connections until ctx is done or accept fails with an error
+// that is not temporary, and closes the socket when it returns
 func (s *Server) Serve(ctx context.Context) error {
-	go func() {
-		<-ctx.Done()
-		s.close()
-	}()
+	stop := context.AfterFunc(ctx, s.close)
+	defer stop()
+	defer s.wg.Wait()
+	defer s.close()
 
+	slots := make(chan struct{}, maxConns)
+	var delay time.Duration
 	for {
+		select {
+		case slots <- struct{}{}:
+		case <-ctx.Done():
+			return ctx.Err()
+		}
 		conn, err := s.listener.Accept()
 		if err != nil {
+			<-slots
 			if ctx.Err() != nil {
-				s.wg.Wait()
 				return ctx.Err()
 			}
-			var ne net.Error
-			if errors.As(err, &ne) && ne.Timeout() {
-				continue
+			// accept still marks fd exhaustion with the deprecated
+			// Temporary, which net/http retries on as well
+			var te interface{ Temporary() bool }
+			if !errors.As(err, &te) || !te.Temporary() {
+				return fmt.Errorf("accept control connection: %w", err)
 			}
-			s.wg.Wait()
-			return fmt.Errorf("accept control connection: %w", err)
+			delay = min(max(2*delay, 5*time.Millisecond), time.Second)
+			log.Error("accept control connection", "err", err, "retry_in", delay)
+			select {
+			case <-time.After(delay):
+			case <-ctx.Done():
+				return ctx.Err()
+			}
+			continue
 		}
+		delay = 0
 		s.wg.Go(func() {
+			defer func() { <-slots }()
 			defer conn.Close()
 			s.serveConn(conn)
 		})
@@ -135,8 +162,13 @@ func (s *Server) serveConn(conn net.Conn) {
 	_ = conn.SetDeadline(time.Now().Add(requestTimeout))
 
 	var req Request
-	if err := json.NewDecoder(bufio.NewReader(conn)).Decode(&req); err != nil {
-		writeResponse(conn, Response{Error: "decode request: " + err.Error()})
+	body := &io.LimitedReader{R: conn, N: maxRequestSize}
+	if err := json.NewDecoder(body).Decode(&req); err != nil {
+		msg := "decode request: " + err.Error()
+		if body.N == 0 {
+			msg = fmt.Sprintf("request exceeds %d bytes", maxRequestSize)
+		}
+		writeResponse(conn, Response{Error: msg})
 		return
 	}
 	writeResponse(conn, s.dispatch(req))

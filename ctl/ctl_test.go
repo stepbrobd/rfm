@@ -2,6 +2,7 @@ package ctl
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net"
 	"net/netip"
@@ -9,6 +10,8 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
+	"syscall"
 	"testing"
 	"time"
 )
@@ -276,6 +279,107 @@ func TestServeKeepsReplacedSocket(t *testing.T) {
 	st, err := (&Client{Socket: sock}).Status()
 	if err != nil || st.Sampling.Rate != 20 {
 		t.Fatalf("status after the first agent stopped = %+v err=%v, want the second agent", st, err)
+	}
+}
+
+func TestServeRejectsOversizedRequest(t *testing.T) {
+	c := startServer(t, &fakeHandler{})
+	conn, err := net.Dial("unix", c.Socket)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	_ = conn.SetDeadline(time.Now().Add(requestTimeout))
+
+	// the write may fail once the server stops reading at the limit
+	req := Request{Command: CmdStatus, Args: map[string]string{"pad": strings.Repeat("x", maxRequestSize)}}
+	go json.NewEncoder(conn).Encode(req)
+
+	var resp Response
+	if err := json.NewDecoder(conn).Decode(&resp); err != nil {
+		t.Fatalf("read response: %v", err)
+	}
+	if !strings.Contains(resp.Error, "exceeds") {
+		t.Fatalf("response error = %q data = %s, want an error for the request size", resp.Error, resp.Data)
+	}
+}
+
+func TestServeCapsConnections(t *testing.T) {
+	c := startServer(t, &fakeHandler{rate: 10})
+
+	// idle clients hold their slot until they hang up or time out
+	idle := make([]net.Conn, maxConns)
+	for i := range idle {
+		conn, err := net.Dial("unix", c.Socket)
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { conn.Close() })
+		idle[i] = conn
+	}
+
+	waiting := &Client{Socket: c.Socket, Timeout: 200 * time.Millisecond}
+	if _, err := waiting.Status(); err == nil {
+		t.Fatalf("status answered with %d connections open, want it to wait for a slot", maxConns)
+	}
+
+	idle[0].Close()
+	if _, err := c.Status(); err != nil {
+		t.Fatalf("status after a slot freed: %v", err)
+	}
+}
+
+// failingListener fails accepts with err while fails is positive
+type failingListener struct {
+	net.Listener
+	err   error
+	fails atomic.Int32
+}
+
+func (l *failingListener) Accept() (net.Conn, error) {
+	if l.fails.Add(-1) >= 0 {
+		return nil, l.err
+	}
+	return l.Listener.Accept()
+}
+
+func acceptError(errno syscall.Errno) error {
+	return &net.OpError{Op: "accept", Net: "unix", Err: os.NewSyscallError("accept4", errno)}
+}
+
+func TestServeRetriesTemporaryAcceptErrors(t *testing.T) {
+	sock := filepath.Join(t.TempDir(), "rfm.sock")
+	srv, err := Listen(sock, &fakeHandler{rate: 10})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// fd exhaustion, for example under a connection flood
+	ln := &failingListener{Listener: srv.listener, err: acceptError(syscall.EMFILE)}
+	ln.fails.Store(3)
+	srv.listener = ln
+	serve(t, srv)
+
+	if _, err := (&Client{Socket: sock}).Status(); err != nil {
+		t.Fatalf("status after temporary accept errors: %v", err)
+	}
+}
+
+func TestServeClosesSocketOnAcceptError(t *testing.T) {
+	sock := filepath.Join(t.TempDir(), "rfm.sock")
+	srv, err := Listen(sock, &fakeHandler{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ln := &failingListener{Listener: srv.listener, err: acceptError(syscall.EINVAL)}
+	ln.fails.Store(1)
+	srv.listener = ln
+
+	if err := srv.Serve(context.Background()); !errors.Is(err, syscall.EINVAL) {
+		t.Fatalf("Serve returned %v, want the accept error", err)
+	}
+	// clients are refused at once instead of waiting out their timeout
+	if _, err := os.Lstat(sock); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("socket after Serve failed: %v, want it removed", err)
 	}
 }
 
