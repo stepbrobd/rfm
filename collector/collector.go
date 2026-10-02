@@ -661,12 +661,16 @@ func (c *Collector) Run(ctx context.Context, rd Reader) error {
 	tick := time.NewTicker(period)
 	defer tick.Stop()
 
-	// derive a child context so the background goroutine exits
-	// when Run returns, even on non-context reader errors
+	// derive a child context so the background goroutine exits when Run
+	// returns, even on non-context reader errors, and wait for it, the
+	// caller flushes and closes the exporter next and a sweep still
+	// exporting would strand its records
+	var sweeps sync.WaitGroup
+	defer sweeps.Wait()
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	go func() {
+	sweeps.Go(func() {
 		for {
 			select {
 			case <-ctx.Done():
@@ -677,7 +681,7 @@ func (c *Collector) Run(ctx context.Context, rd Reader) error {
 				c.pollDrops(rd)
 			}
 		}
-	}()
+	})
 
 	events := make([]FlowEvent, 0, readBatch)
 	times := make([]time.Time, 0, readBatch)

@@ -1019,6 +1019,54 @@ func TestRunHonorsActiveTimeoutBelowHalfTheEvictionTimeout(t *testing.T) {
 	}
 }
 
+// blockingExporter holds the first export until released
+type blockingExporter struct {
+	once    sync.Once
+	entered chan struct{}
+	release chan struct{}
+}
+
+func (e *blockingExporter) ExportFlow(ExportedFlow) error {
+	e.once.Do(func() { close(e.entered) })
+	<-e.release
+	return nil
+}
+
+func TestRunWaitsForItsSweep(t *testing.T) {
+	exp := &blockingExporter{entered: make(chan struct{}), release: make(chan struct{})}
+	var releaseOnce sync.Once
+	release := func() { releaseOnce.Do(func() { close(exp.release) }) }
+	defer release()
+
+	c := New(20*time.Millisecond, nil, 0)
+	c.SetFlowExporter(exp)
+	// idle already, the first sweep exports it
+	c.Record(FlowEvent{
+		Proto: 6, SrcPort: 1000, DstPort: 80,
+		SrcAddr: netip.MustParseAddr("::ffff:10.0.0.1"),
+		DstAddr: netip.MustParseAddr("::ffff:10.0.0.2"),
+		Len:     100,
+	}, time.Now().Add(-time.Second))
+
+	ctx, cancel := context.WithCancel(context.Background())
+	errCh := make(chan error, 1)
+	go func() { errCh <- c.Run(ctx, idleReader{}) }()
+	<-exp.entered
+
+	// the agent flushes and closes the exporter once Run returns, a sweep
+	// still exporting then would strand its records
+	cancel()
+	select {
+	case <-errCh:
+		t.Fatal("Run returned while its sweep was still exporting")
+	case <-time.After(100 * time.Millisecond):
+	}
+	release()
+	if err := <-errCh; !errors.Is(err, context.Canceled) {
+		t.Fatalf("Run returned %v, want context.Canceled", err)
+	}
+}
+
 // blockingEnricher holds Enrich for one source address until released, like
 // a rib lookup that waits behind a peer purge
 type blockingEnricher struct {

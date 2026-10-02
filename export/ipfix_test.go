@@ -946,6 +946,32 @@ func TestIPFIXQueueFullDropsRecords(t *testing.T) {
 	}
 }
 
+func TestIPFIXRefusesRecordsOnceClosed(t *testing.T) {
+	loadIPFIXRegistry.Do(registry.LoadRegistry)
+
+	conn := startIPFIXListener(t)
+	addr := conn.LocalAddr().(*net.UDPAddr)
+
+	exp, err := NewIPFIX(testIPFIXConfig(addr.IP.String(), addr.Port), 1)
+	if err != nil {
+		t.Fatalf("NewIPFIX: %v", err)
+	}
+	if err := exp.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+
+	// nothing drains the queue any more, a record queued now is lost
+	if err := exp.ExportFlow(testFlow("::ffff:10.0.0.1", "::ffff:10.0.0.2", 1, time.Now())); err == nil {
+		t.Fatal("ExportFlow after Close succeeded")
+	}
+	if got := exp.Stats().Unsent; got != 1 {
+		t.Fatalf("unsent = %d, want the refused record counted", got)
+	}
+	if got := len(exp.queue); got != 0 {
+		t.Fatalf("queue holds %d records after Close, want none", got)
+	}
+}
+
 func TestIPFIXCountsSendErrorsByErrno(t *testing.T) {
 	loadIPFIXRegistry.Do(registry.LoadRegistry)
 

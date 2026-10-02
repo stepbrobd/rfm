@@ -78,7 +78,8 @@ type IPFIXStats struct {
 	Records  uint64
 	// QueueDropped counts records refused because the queue was full
 	QueueDropped uint64
-	// Unsent counts records dropped because no socket was available
+	// Unsent counts records dropped because no socket was available, the
+	// records refused after Close among them
 	Unsent uint64
 	// EncodeErrors counts records that could not be turned into a data record
 	EncodeErrors uint64
@@ -110,8 +111,13 @@ type IPFIXExporter struct {
 	done      chan struct{}
 	closeOnce sync.Once
 
-	// mu guards the socket, the endpoints read by isOwnExportFlow, and stats
-	mu            sync.Mutex
+	// mu guards the socket, the endpoints read by isOwnExportFlowLocked,
+	// closed and stats
+	mu sync.Mutex
+	// closed is set by Close before the sender drains the queue for the
+	// last time, ExportFlow queues under mu only while it is clear, so no
+	// record lands in a queue nobody drains
+	closed        bool
 	conn          *net.UDPConn
 	localAddr     netip.Addr
 	localPort     uint16
@@ -258,9 +264,13 @@ func (e *IPFIXExporter) Stats() IPFIXStats {
 	return s
 }
 
-// Close sends what is still queued and closes the socket
+// Close sends what is still queued and closes the socket, later records are
+// refused and counted as unsent
 func (e *IPFIXExporter) Close() error {
 	e.closeOnce.Do(func() {
+		e.mu.Lock()
+		e.closed = true
+		e.mu.Unlock()
 		close(e.stop)
 	})
 	<-e.done
@@ -288,9 +298,17 @@ func (e *IPFIXExporter) Flush() error {
 }
 
 // ExportFlow queues a completed flow for export
-// it returns an error when the queue is full, the record is then lost
+// it returns an error when the queue is full or the exporter is closed, the
+// record is then lost and counted
 func (e *IPFIXExporter) ExportFlow(flow collector.ExportedFlow) error {
-	if e.isOwnExportFlow(flow) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	if e.closed {
+		e.stats.Unsent++
+		return errors.New("ipfix exporter closed")
+	}
+	if e.isOwnExportFlowLocked(flow) {
 		return nil
 	}
 
@@ -298,9 +316,7 @@ func (e *IPFIXExporter) ExportFlow(flow collector.ExportedFlow) error {
 	case e.queue <- flow:
 		return nil
 	default:
-		e.mu.Lock()
 		e.stats.QueueDropped++
-		e.mu.Unlock()
 		return errors.New("ipfix queue full")
 	}
 }
@@ -771,25 +787,17 @@ func flowIsIPv6(flow collector.ExportedFlow) (bool, error) {
 	return src.Is6(), nil
 }
 
-// isOwnExportFlow reports whether flow is this exporter's own udp stream to
-// the collector, which must not be exported again
-func (e *IPFIXExporter) isOwnExportFlow(flow collector.ExportedFlow) bool {
-	if flow.Proto != 17 {
+// isOwnExportFlowLocked reports whether flow is this exporter's own udp
+// stream to the collector, which must not be exported again
+// it must be called with mu held
+func (e *IPFIXExporter) isOwnExportFlowLocked(flow collector.ExportedFlow) bool {
+	if flow.Proto != 17 || e.conn == nil {
 		return false
 	}
-
-	e.mu.Lock()
-	connected := e.conn != nil
-	localAddr, localPort := e.localAddr, e.localPort
-	e.mu.Unlock()
-	if !connected {
-		return false
-	}
-
-	if flow.SrcPort != localPort || flow.DstPort != e.collectorPort {
+	if flow.SrcPort != e.localPort || flow.DstPort != e.collectorPort {
 		return false
 	}
 	src := netip.AddrFrom16(flow.SrcAddr).Unmap()
 	dst := netip.AddrFrom16(flow.DstAddr).Unmap()
-	return src == localAddr && dst == e.collectorAddr
+	return src == e.localAddr && dst == e.collectorAddr
 }
