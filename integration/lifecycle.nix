@@ -16,9 +16,33 @@ in
       machine3
       machine4
       ;
+
+    # the asn database is written after boot, as geoipupdate's first run
+    # waits for network-online.target and rfm does not
+    machine5 =
+      { pkgs, ... }:
+      {
+        imports = [ (common.mkBase "192.168.1.5") ];
+
+        environment.etc."rfm-test-asn-db".text = "${pkgs.dbip-asn-lite}/share/dbip/dbip-asn-lite.mmdb";
+
+        services.rfm = {
+          enable = true;
+          settings.agent = {
+            interfaces = [ "eth1" ];
+            enrich.mmdb.asn_db = "/var/lib/rfm-test/asn.mmdb";
+          };
+        };
+
+        # restarts faster than the default limit of five starts in ten
+        # seconds allows, which only a unit without a start limit survives
+        systemd.services.rfm.serviceConfig.RestartSec = std.mkForce "100ms";
+      };
   };
 
   testScript = common.helpers + ''
+    from datetime import timedelta
+
     start_all()
     machines = [machine1, machine2, machine3, machine4]
 
@@ -53,5 +77,15 @@ in
       assert "1 in 7" in m.succeed("rfm status"), "sample rate change not visible in status"
       m.succeed("rfm status --json | grep -q '\"rate\": 7'")
       m.succeed("rfm set sample-rate 1")
+
+    # a start that fails until a file shows up is retried for as long as it
+    # fails, on machine5 well past the default limit of five starts in ten
+    # seconds, and succeeds once the file exists
+    machine5.wait_for_unit("multi-user.target")
+    machine5.wait_until_succeeds('test "$(systemctl show -P NRestarts rfm.service)" -gt 20', timeout=timedelta(seconds=60))
+    machine5.fail("systemctl is-active rfm.service")
+    machine5.succeed('install -D -m 0644 "$(cat /etc/rfm-test-asn-db)" /var/lib/rfm-test/asn.mmdb')
+    machine5.wait_until_succeeds("systemctl is-active rfm.service", timeout=timedelta(seconds=60))
+    machine5.wait_for_open_port(9669)
   '';
 }

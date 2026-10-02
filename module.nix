@@ -314,6 +314,10 @@ in
       description = "Router Flow Monitor agent";
       after = [ "network.target" ];
       wantedBy = [ "multi-user.target" ];
+      # a start fails while a matched interface, a listen address or an
+      # mmdb file is not there yet, so the unit retries every few seconds
+      # without a start limit instead of giving up within a second
+      startLimitIntervalSec = 0;
       serviceConfig = {
         # systemd mounts bpffs with mode 0700, which the agent's user cannot
         # traverse, so the mount root is opened to 0711 (traverse only) and
@@ -325,6 +329,7 @@ in
         ];
         ExecStart = "${cfg.package}/bin/rfm agent -c ${configFile}";
         Restart = "on-failure";
+        RestartSec = "5s";
         User = "rfm";
         Group = "rfm";
         RuntimeDirectory = "rfm";
