@@ -294,7 +294,22 @@ func (mc *MetricsCollector) collectIfaceStats(ch chan<- prometheus.Metric) {
 		return
 	}
 
-	for _, e := range entries {
+	// deleting the key under a hash map iterator restarts the walk, so a
+	// scrape that overlaps a detach can read a key twice, and the registry
+	// fails the whole scrape over a repeated series, the later read wins
+	type statKey struct {
+		ifindex    uint32
+		dir, proto uint8
+	}
+	last := make(map[statKey]int, len(entries))
+	for i, e := range entries {
+		last[statKey{e.Ifindex, e.Dir, e.Proto}] = i
+	}
+
+	for i, e := range entries {
+		if last[statKey{e.Ifindex, e.Dir, e.Proto}] != i {
+			continue
+		}
 		ifname := mc.ifname(e.Ifindex)
 		family := familyString(e.Proto)
 

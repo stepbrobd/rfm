@@ -282,6 +282,40 @@ func TestCollectIfaceStats(t *testing.T) {
 	assertCounter(t, vals, "rfm_interface_tx_packets_total", 5)
 }
 
+func TestCollectIfaceStatsSkipsKeysSeenTwice(t *testing.T) {
+	// deleting the key under the cursor restarts a hash map walk, so a scrape
+	// that overlaps a detach can read a key twice
+	src := &mockIfaceStats{
+		entries: []IfaceStatsEntry{
+			{Ifindex: 1, Dir: 0, Proto: 4, Packets: 10, Bytes: 1000},
+			{Ifindex: 1, Dir: 1, Proto: 4, Packets: 5, Bytes: 500},
+			{Ifindex: 1, Dir: 0, Proto: 4, Packets: 11, Bytes: 1100},
+		},
+	}
+	mc := New(src, nil)
+	mc.resolveIfname = func(uint32) string { return "eth0" }
+	reg := prometheus.NewRegistry()
+	reg.MustRegister(mc)
+
+	mfs, err := reg.Gather()
+	if err != nil {
+		t.Fatalf("gather: %v", err)
+	}
+	for _, mf := range mfs {
+		if mf.GetName() != "rfm_interface_rx_bytes_total" {
+			continue
+		}
+		if got := len(mf.GetMetric()); got != 1 {
+			t.Fatalf("rx series = %d, want 1", got)
+		}
+		if got := mf.GetMetric()[0].GetCounter().GetValue(); got != 1100 {
+			t.Fatalf("rx bytes = %v, want the later read 1100", got)
+		}
+		return
+	}
+	t.Fatal("rfm_interface_rx_bytes_total missing")
+}
+
 func TestCollectCachesIfnames(t *testing.T) {
 	src := &mockIfaceStats{
 		entries: []IfaceStatsEntry{
