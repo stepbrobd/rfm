@@ -8,6 +8,8 @@ import (
 // Enricher provides optional metadata for flow addresses
 // implementations include MMDB (GeoIP) and BMP/RIB lookups
 // a nil Enricher means zero-value labels
+// the collector calls Enrich without its own lock held, so calls from
+// concurrent recorders may overlap
 type Enricher interface {
 	Enrich(src, dst netip.Addr) (srcLabels, dstLabels Labels)
 }

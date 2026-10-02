@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/netip"
 	"os"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -990,6 +991,110 @@ func TestRunHonorsActiveTimeoutBelowHalfTheEvictionTimeout(t *testing.T) {
 		}
 	case <-time.After(2 * time.Second):
 		t.Fatal("no interval record within 2s although the active timeout is 50ms")
+	}
+}
+
+// blockingEnricher holds Enrich for one source address until released, like
+// a rib lookup that waits behind a peer purge
+type blockingEnricher struct {
+	slow    netip.Addr
+	once    sync.Once
+	entered chan struct{}
+	release chan struct{}
+}
+
+func (e *blockingEnricher) Enrich(src, dst netip.Addr) (Labels, Labels) {
+	if src != e.slow {
+		return Labels{ASN: 64501}, Labels{}
+	}
+	e.once.Do(func() { close(e.entered) })
+	<-e.release
+	return Labels{ASN: 64500}, Labels{}
+}
+
+func TestSlowEnricherDoesNotStallTheCollector(t *testing.T) {
+	e := &blockingEnricher{
+		slow:    netip.MustParseAddr("::ffff:192.0.2.1"),
+		entered: make(chan struct{}),
+		release: make(chan struct{}),
+	}
+	var releaseOnce sync.Once
+	release := func() { releaseOnce.Do(func() { close(e.release) }) }
+	defer release()
+
+	c := New(30*time.Second, e, 0)
+	now := time.Now()
+	known := FlowEvent{
+		Proto: 6, SrcPort: 1000, DstPort: 80,
+		SrcAddr: netip.MustParseAddr("::ffff:10.0.0.1"),
+		DstAddr: netip.MustParseAddr("::ffff:10.0.0.2"),
+		Len:     100,
+	}
+	c.Record(known, now)
+
+	slow := known
+	slow.SrcAddr = e.slow
+	recorded := make(chan struct{})
+	go func() {
+		c.Record(slow, now)
+		close(recorded)
+	}()
+	<-e.entered
+
+	// while the new flow waits for its labels, an existing flow keeps
+	// counting and the table stays readable
+	done := make(chan struct{})
+	go func() {
+		c.Record(known, now)
+		c.Stats()
+		c.Flows()
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		release()
+		t.Fatal("recording and reads stalled behind a slow enricher")
+	}
+	if got := c.Flows()[known.Key()].Packets; got != 2 {
+		t.Fatalf("packets of the known flow = %d, want 2", got)
+	}
+
+	release()
+	<-recorded
+	if got := c.Flows()[slow.Key()]; got.Packets != 1 || got.Src.ASN != 64500 {
+		t.Fatalf("slow flow = %+v, want one packet with the labels the enricher returned", got)
+	}
+}
+
+func TestRecordBatchEnrichesFlowsForcedOutWithinTheBatch(t *testing.T) {
+	e := &blockingEnricher{slow: netip.MustParseAddr("::ffff:192.0.2.1")}
+	c := New(30*time.Second, e, 1)
+	t0 := time.Now()
+
+	a := FlowEvent{
+		Proto: 6, SrcPort: 1000, DstPort: 80,
+		SrcAddr: netip.MustParseAddr("::ffff:10.0.0.1"),
+		DstAddr: netip.MustParseAddr("::ffff:10.0.0.2"),
+		Len:     100,
+	}
+	b := a
+	b.SrcPort = 2000
+	c.Record(a, t0)
+
+	// b forces a out of a table of one, then a comes back as a new flow in
+	// the same batch and still needs its labels
+	c.RecordBatch([]FlowEvent{b, a}, []time.Time{t0.Add(time.Millisecond), t0.Add(2 * time.Millisecond)})
+
+	flows := c.Flows()
+	if len(flows) != 1 {
+		t.Fatalf("flows = %d, want 1", len(flows))
+	}
+	if got, ok := flows[a.Key()]; !ok || got.Packets != 1 || got.Src.ASN != 64501 {
+		t.Fatalf("flow a = %+v (present %v), want it back with one packet and its labels", got, ok)
+	}
+	if got := c.Stats().ForcedEvictions; got != 2 {
+		t.Fatalf("forced evictions = %d, want 2", got)
 	}
 }
 

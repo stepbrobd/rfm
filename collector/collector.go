@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/netip"
 	"os"
 	"sync"
 	"sync/atomic"
@@ -190,32 +191,110 @@ func (c *Collector) Record(ev FlowEvent, now time.Time) {
 
 // RecordBatch records several events under one lock acquisition
 // at[i] is the observation time of evs[i]
+// the labels of new flows are resolved before the lock is taken, an enricher
+// can be slow, a rib lookup waits behind a peer purge, and must not hold up
+// recording, scrapes and the control socket
 func (c *Collector) RecordBatch(evs []FlowEvent, at []time.Time) {
+	labels := c.newFlowLabels(evs)
+
 	var expired []ExportedFlow
+	var unresolved []int
 
 	c.mu.Lock()
 	for i, ev := range evs {
-		if ended, ok := c.recordLocked(ev, at[i]); ok {
+		ended, evicted, ok := c.recordLocked(ev, at[i], labels)
+		if !ok {
+			unresolved = append(unresolved, i)
+		} else if evicted {
 			expired = append(expired, ended)
 		}
 	}
 	exp := c.exporter
 	c.mu.Unlock()
 
+	// a flow that left the table after the labels were looked up, evicted
+	// by a sweep or forced out earlier in this batch, comes back as a new
+	// flow, its labels are resolved now and the events recorded in a second
+	// pass that always has the labels it needs
+	if len(unresolved) > 0 {
+		pairs := make([]addrPair, len(unresolved))
+		for j, i := range unresolved {
+			pairs[j] = addrPair{evs[i].SrcAddr, evs[i].DstAddr}
+		}
+		labels = c.enrich(pairs, labels)
+
+		c.mu.Lock()
+		for _, i := range unresolved {
+			if ended, evicted, _ := c.recordLocked(evs[i], at[i], labels); evicted {
+				expired = append(expired, ended)
+			}
+		}
+		exp = c.exporter
+		c.mu.Unlock()
+	}
+
 	c.exportFlows(exp, expired)
 }
 
+// addrPair is what one Enrich call looks up
+type addrPair struct {
+	src, dst netip.Addr
+}
+
+// labelPair is what one Enrich call returns
+type labelPair struct {
+	src, dst Labels
+}
+
+// newFlowLabels resolves the labels of the events whose flow is not in the
+// table yet, the lookups run without the lock
+func (c *Collector) newFlowLabels(evs []FlowEvent) map[addrPair]labelPair {
+	if c.enricher == nil {
+		return nil
+	}
+	var pairs []addrPair
+	c.mu.RLock()
+	for _, ev := range evs {
+		if _, ok := c.flows[ev.Key()]; !ok {
+			pairs = append(pairs, addrPair{ev.SrcAddr, ev.DstAddr})
+		}
+	}
+	c.mu.RUnlock()
+	return c.enrich(pairs, nil)
+}
+
+// enrich adds the labels of every pair not in labels yet and returns the map
+// it must be called without mu held
+func (c *Collector) enrich(pairs []addrPair, labels map[addrPair]labelPair) map[addrPair]labelPair {
+	if c.enricher == nil {
+		return labels
+	}
+	for _, p := range pairs {
+		if _, ok := labels[p]; ok {
+			continue
+		}
+		if labels == nil {
+			labels = make(map[addrPair]labelPair, len(pairs))
+		}
+		src, dst := c.enricher.Enrich(p.src, p.dst)
+		labels[p] = labelPair{src, dst}
+	}
+	return labels
+}
+
 // recordLocked creates or updates the flow for ev
+// a new flow takes its labels from labels, ok is false when they are missing
+// and the event was not recorded
 // it returns the flow forced out to make room, if any
 // it must be called with mu held
-func (c *Collector) recordLocked(ev FlowEvent, now time.Time) (ExportedFlow, bool) {
+func (c *Collector) recordLocked(ev FlowEvent, now time.Time, labels map[addrPair]labelPair) (ended ExportedFlow, evicted, ok bool) {
 	key := ev.Key()
 	packets := ev.Packets()
 	bytes := uint64(ev.Len)
 	ipBytes := ev.IPBytes()
 	rate := uint64(c.sampleRateAtLocked(ev.Tstamp))
 
-	if state, ok := c.flows[key]; ok {
+	if state, found := c.flows[key]; found {
 		state.entry.Packets += packets
 		state.entry.Bytes += bytes
 		state.entry.IPBytes += ipBytes
@@ -224,21 +303,24 @@ func (c *Collector) recordLocked(ev FlowEvent, now time.Time) (ExportedFlow, boo
 		state.seen(now)
 		state.rollup.add(packets, bytes, rate, now)
 		c.lru.MoveToBack(state.elem)
-		return ExportedFlow{}, false
-	}
-
-	var ended ExportedFlow
-	var evicted bool
-	if c.maxFlows > 0 && len(c.flows) >= c.maxFlows {
-		ended, evicted = c.evictOldestLocked(FlowEndReasonLackOfResources)
+		return ExportedFlow{}, false, true
 	}
 
 	// enrichment happens once per flow, the labels then ride along with
 	// every event of the flow and with the rollup it lands in
-	var src, dst Labels
+	var lp labelPair
 	if c.enricher != nil {
-		src, dst = c.enricher.Enrich(ev.SrcAddr, ev.DstAddr)
+		var resolved bool
+		if lp, resolved = labels[addrPair{ev.SrcAddr, ev.DstAddr}]; !resolved {
+			return ExportedFlow{}, false, false
+		}
 	}
+	src, dst := lp.src, lp.dst
+
+	if c.maxFlows > 0 && len(c.flows) >= c.maxFlows {
+		ended, evicted = c.evictOldestLocked(FlowEndReasonLackOfResources)
+	}
+
 	rk := RollupKey{Ifindex: ev.Ifindex, Dir: ev.Dir, Proto: ev.Proto, Src: src, Dst: dst}
 	rollup, ok := c.rollups[rk]
 	if !ok {
@@ -268,7 +350,7 @@ func (c *Collector) recordLocked(ev FlowEvent, now time.Time) (ExportedFlow, boo
 	state.elem = c.lru.PushBack(state)
 	state.active = c.activeQueue.PushBack(state)
 	c.flows[key] = state
-	return ended, evicted
+	return ended, evicted, true
 }
 
 // removeLocked drops a flow from the table and both lists
