@@ -211,8 +211,12 @@ func TestCLIConfigAndReload(t *testing.T) {
 }
 
 func TestCLIWithoutAgent(t *testing.T) {
-	_, err := runCLI(t, filepath.Join(t.TempDir(), "none.sock"), "status")
+	out, err := runCLI(t, filepath.Join(t.TempDir(), "none.sock"), "status")
 	if err == nil || !strings.Contains(err.Error(), "is the agent running") {
 		t.Fatalf("error = %v, want a hint that the agent is not running", err)
+	}
+	// main prints the error, cobra must print neither it nor the usage
+	if out != "" {
+		t.Fatalf("the command printed %q next to the error main prints", out)
 	}
 }

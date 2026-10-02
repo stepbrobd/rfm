@@ -9,9 +9,13 @@ import (
 
 var cfgFile string
 
+// main prints a failed command's error once, cobra would print it a second
+// time and the usage with it, which a runtime error does not call for
 var root = &cobra.Command{
-	Use:   "rfm",
-	Short: "Router Flow Monitor",
+	Use:           "rfm",
+	Short:         "Router Flow Monitor",
+	SilenceErrors: true,
+	SilenceUsage:  true,
 }
 
 func init() {
