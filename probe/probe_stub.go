@@ -36,6 +36,10 @@ func (p *Probe) IfaceStats() *ebpf.Map {
 	return nil
 }
 
+func (p *Probe) IfaceStatsErrors() (uint64, error) {
+	return 0, errUnsupported
+}
+
 func (p *Probe) FlowEvents() *ebpf.Map {
 	return nil
 }

@@ -213,6 +213,40 @@ func TestIfaceCounters(t *testing.T) {
 	t.Logf("packets=%d bytes=%d", packets, bytes)
 }
 
+func TestIfaceStatsErrorsCountFullMap(t *testing.T) {
+	testutil.RequireRoot(t)
+
+	ns := testutil.NewNS(t)
+
+	// one slot holds one key, every other key is refused
+	p, err := Load(Config{IfaceStatsSize: 1})
+	if err != nil {
+		skipIfUnsupported(t, err)
+		t.Fatal(err)
+	}
+	defer p.Close()
+
+	if err := p.Attach(ns.Ifindex()); err != nil {
+		skipIfUnsupported(t, err)
+		t.Fatal(err)
+	}
+
+	pkt := testutil.EthIPv4UDP(net.IPv4(10, 0, 8, 1), net.IPv4(10, 0, 8, 2), 8000, 53)
+	ns.SendRaw(t, pkt)
+	ns.SendRawOn(t, ns.Name(), pkt)
+
+	testutil.Eventually(t, time.Second, 10*time.Millisecond, func() error {
+		n, err := p.IfaceStatsErrors()
+		if err != nil {
+			return err
+		}
+		if n == 0 {
+			return fmt.Errorf("no refused counter update counted")
+		}
+		return nil
+	})
+}
+
 func TestIfaceCountersVLAN(t *testing.T) {
 	testutil.RequireRoot(t)
 

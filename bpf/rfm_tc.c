@@ -40,6 +40,15 @@ struct {
 	__type(value, struct rfm_iface_value);
 } rfm_iface_stats SEC(".maps");
 
+// rfm_iface_errors counts the counter updates rfm_iface_stats refused, a
+// full map is the usual cause and leaves the traffic of the new key uncounted
+struct {
+	__uint(type, BPF_MAP_TYPE_PERCPU_ARRAY);
+	__uint(max_entries, 1);
+	__type(key, __u32);
+	__type(value, __u64);
+} rfm_iface_errors SEC(".maps");
+
 struct {
 	__uint(type, BPF_MAP_TYPE_RINGBUF);
 	__uint(max_entries, 256 * 1024);
@@ -266,7 +275,14 @@ static __always_inline int rfm_tc(struct __sk_buff *skb, __u8 dir)
 		val->bytes += len;
 	} else {
 		struct rfm_iface_value init = { .packets = segs, .bytes = len };
-		bpf_map_update_elem(&rfm_iface_stats, &ikey, &init, BPF_ANY);
+		if (bpf_map_update_elem(&rfm_iface_stats, &ikey, &init,
+					BPF_ANY)) {
+			__u32 err_key = 0;
+			__u64 *errs = bpf_map_lookup_elem(&rfm_iface_errors,
+							  &err_key);
+			if (errs)
+				(*errs)++;
+		}
 	}
 
 	// skip non-IP traffic for flow events

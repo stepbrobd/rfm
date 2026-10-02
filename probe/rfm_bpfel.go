@@ -41,6 +41,7 @@ const (
 	rfmMapRfmConfig      = "rfm_config"
 	rfmMapRfmFlowDrops   = "rfm_flow_drops"
 	rfmMapRfmFlowEvents  = "rfm_flow_events"
+	rfmMapRfmIfaceErrors = "rfm_iface_errors"
 	rfmMapRfmIfaceStats  = "rfm_iface_stats"
 	rfmMapRfmSubmitCount = "rfm_submit_count"
 	rfmProgRfmTcEgress   = "rfm_tc_egress"
@@ -100,6 +101,7 @@ type rfmMapSpecs struct {
 	RfmConfig      *ebpf.MapSpec `ebpf:"rfm_config"`
 	RfmFlowDrops   *ebpf.MapSpec `ebpf:"rfm_flow_drops"`
 	RfmFlowEvents  *ebpf.MapSpec `ebpf:"rfm_flow_events"`
+	RfmIfaceErrors *ebpf.MapSpec `ebpf:"rfm_iface_errors"`
 	RfmIfaceStats  *ebpf.MapSpec `ebpf:"rfm_iface_stats"`
 	RfmSubmitCount *ebpf.MapSpec `ebpf:"rfm_submit_count"`
 }
@@ -133,6 +135,7 @@ type rfmMaps struct {
 	RfmConfig      *ebpf.Map `ebpf:"rfm_config"`
 	RfmFlowDrops   *ebpf.Map `ebpf:"rfm_flow_drops"`
 	RfmFlowEvents  *ebpf.Map `ebpf:"rfm_flow_events"`
+	RfmIfaceErrors *ebpf.Map `ebpf:"rfm_iface_errors"`
 	RfmIfaceStats  *ebpf.Map `ebpf:"rfm_iface_stats"`
 	RfmSubmitCount *ebpf.Map `ebpf:"rfm_submit_count"`
 }
@@ -142,6 +145,7 @@ func (m *rfmMaps) Close() error {
 		m.RfmConfig,
 		m.RfmFlowDrops,
 		m.RfmFlowEvents,
+		m.RfmIfaceErrors,
 		m.RfmIfaceStats,
 		m.RfmSubmitCount,
 	)

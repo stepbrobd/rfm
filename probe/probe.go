@@ -238,6 +238,21 @@ func (p *Probe) IfaceStats() *ebpf.Map {
 	return p.objs.RfmIfaceStats
 }
 
+// IfaceStatsErrors returns how many counter updates the programs could not
+// store in the interface counter map, a full map is the usual cause, the
+// traffic of a refused key goes uncounted
+func (p *Probe) IfaceStatsErrors() (uint64, error) {
+	var vals []uint64
+	if err := p.objs.RfmIfaceErrors.Lookup(uint32(0), &vals); err != nil {
+		return 0, fmt.Errorf("read iface stats errors: %w", err)
+	}
+	var total uint64
+	for _, v := range vals {
+		total += v
+	}
+	return total, nil
+}
+
 func (p *Probe) FlowEvents() *ebpf.Map {
 	return p.objs.RfmFlowEvents
 }
