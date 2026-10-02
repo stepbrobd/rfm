@@ -2,6 +2,8 @@ package rib
 
 import (
 	"bufio"
+	"encoding/binary"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -342,7 +344,7 @@ func (s *Server) handleConn(conn net.Conn) {
 	log.Info("bmp session opened", "remote", conn.RemoteAddr())
 
 	scanner := bufio.NewScanner(conn)
-	scanner.Split(bmp.SplitBMP)
+	scanner.Split(splitBMP)
 	scanner.Buffer(make([]byte, bmpScannerInitialBuf), bmpScannerMaxBuf)
 
 	var messages int
@@ -425,6 +427,33 @@ func (s *Server) handleConn(conn net.Conn) {
 	}
 
 	log.Info("bmp session closed", "remote", conn.RemoteAddr(), "messages", messages, "changes", changes, "peers", len(peers))
+}
+
+// errBMPLength ends a session whose header announces a length no message
+// can have
+var errBMPLength = errors.New("bmp message length out of bounds")
+
+// errBMPVersion ends a session whose speaker sends a version other than the
+// one RFC 7854 defines
+var errBMPVersion = errors.New("unsupported bmp version")
+
+// splitBMP frames BMP messages like bmp.SplitBMP but fails on a version
+// other than 3 and on a length shorter than the common header or longer
+// than the scanner buffers
+// SplitBMP hands back an empty token for a zero length, which the scanner
+// returns forever without reading again, waits for more data after a
+// header of another version, and waits for the rest of a message that
+// cannot fit until the buffer limit ends the session
+func splitBMP(data []byte, atEOF bool) (int, []byte, error) {
+	if len(data) > 0 && data[0] != bmp.BMP_VERSION {
+		return 0, nil, fmt.Errorf("%w %d, rfm reads version %d from rfc 7854", errBMPVersion, data[0], bmp.BMP_VERSION)
+	}
+	if len(data) >= bmp.BMP_HEADER_SIZE {
+		if n := binary.BigEndian.Uint32(data[1:5]); n < bmp.BMP_HEADER_SIZE || n > bmpScannerMaxBuf {
+			return 0, nil, fmt.Errorf("%w: %d bytes", errBMPLength, n)
+		}
+	}
+	return bmp.SplitBMP(data, atEOF)
 }
 
 func (s *Server) trackConn(conn net.Conn) bool {

@@ -422,6 +422,80 @@ func TestServerCloseReturnsWithIdleConnection(t *testing.T) {
 	}
 }
 
+func TestHandleConnEndsOnBadHeader(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		header []byte
+	}{
+		{"zero", []byte{3, 0, 0, 0, 0, 0}},
+		{"below header", []byte{3, 0, 0, 0, 5, 0}},
+		{"above cap", []byte{3, 0xff, 0xff, 0xff, 0xff, 0}},
+		// versions 1 and 2 belong to the drafts before RFC 7854
+		{"version 2", []byte{2, 0, 0, 0, 6, 0}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			serverConn, clientConn := net.Pipe()
+			defer clientConn.Close()
+
+			s := &Server{table: NewTable()}
+			done := make(chan struct{})
+			go func() {
+				defer close(done)
+				s.handleConn(serverConn)
+			}()
+
+			if _, err := clientConn.Write(tc.header); err != nil {
+				t.Fatalf("Write: %v", err)
+			}
+			select {
+			case <-done:
+			case <-time.After(2 * time.Second):
+				t.Fatal("session did not end on a header no bmp version 3 message can have")
+			}
+		})
+	}
+}
+
+func TestServerCloseReturnsAfterZeroLengthHeader(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("Listen: %v", err)
+	}
+
+	s := &Server{
+		listener: ln,
+		table:    NewTable(),
+		done:     make(chan struct{}),
+		conns:    make(map[net.Conn]struct{}),
+	}
+	s.wg.Add(1)
+	go s.accept()
+
+	clientConn, err := net.Dial("tcp", ln.Addr().String())
+	if err != nil {
+		t.Fatalf("Dial: %v", err)
+	}
+	defer clientConn.Close()
+	if _, err := clientConn.Write([]byte{3, 0, 0, 0, 0, 0}); err != nil {
+		t.Fatalf("Write: %v", err)
+	}
+	time.Sleep(20 * time.Millisecond)
+
+	done := make(chan error, 1)
+	go func() {
+		done <- s.Close()
+	}()
+
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("Close: %v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("Close blocked behind a session that read a zero length header")
+	}
+}
+
 func TestUpdateFromBMPRouteMetadata(t *testing.T) {
 	update := bgp.NewBGPUpdateMessage(
 		nil,
