@@ -525,7 +525,7 @@ func updateFromBMP(msg *bmp.BMPMessage) (Update, bool) {
 		return Update{}, false
 	}
 
-	attrs := routeAttrs(updateMsg.PathAttributes)
+	attrs := routeAttrs(updateMsg.PathAttributes, msg.PeerHeader.Flags&bmp.BMP_PEER_FLAG_TWO_AS != 0)
 
 	out := Update{Peer: peerFromHeader(msg.PeerHeader)}
 	for _, withdraw := range updateMsg.WithdrawnRoutes {
@@ -786,14 +786,27 @@ type attrs struct {
 	largeCommunities []LargeCommunity
 }
 
-func routeAttrs(pathAttrs []bgp.PathAttributeInterface) attrs {
+// routeAttrs decodes the attributes rfm keeps from a route
+// twoByteAS is the A flag of the per peer header, the route then comes in
+// the legacy format whose AS_PATH holds AS_TRANS for every 4-byte ASN, and
+// the real ASNs are in AS4_PATH
+func routeAttrs(pathAttrs []bgp.PathAttributeInterface, twoByteAS bool) attrs {
 	var out attrs
+	var asPath []bgp.AsPathParamInterface
+	var as4Path []*bgp.As4PathParam
+	var aggregator *bgp.PathAttributeAggregator
+	var as4Aggregator bool
 
 	for _, attr := range pathAttrs {
 		switch a := attr.(type) {
 		case *bgp.PathAttributeAsPath:
-			out.asPath = flattenASPath(a.Value)
-			out.originASN, out.originASSet = originASN(a.Value)
+			asPath = a.Value
+		case *bgp.PathAttributeAs4Path:
+			as4Path = a.Value
+		case *bgp.PathAttributeAggregator:
+			aggregator = a
+		case *bgp.PathAttributeAs4Aggregator:
+			as4Aggregator = true
 		case *bgp.PathAttributeCommunities:
 			out.communities = append([]uint32(nil), a.Value...)
 		case *bgp.PathAttributeLargeCommunities:
@@ -808,7 +821,75 @@ func routeAttrs(pathAttrs []bgp.PathAttributeInterface) attrs {
 		}
 	}
 
+	// RFC 6793 section 4.2.3, an aggregator that is not AS_TRANS next to
+	// AS4_AGGREGATOR means a 2-byte speaker aggregated the route after
+	// AS4_PATH was written, so AS4_PATH no longer describes it
+	stale := aggregator != nil && as4Aggregator && aggregator.Value.AS != bgp.AS_TRANS
+	if twoByteAS && len(as4Path) > 0 && !stale {
+		asPath = mergeAS4Path(asPath, as4Path)
+	}
+	out.asPath = flattenASPath(asPath)
+	out.originASN, out.originASSet = originASN(asPath)
+
 	return out
+}
+
+// mergeAS4Path rebuilds the path of a route from the legacy format as RFC
+// 6793 section 4.2.3 does, AS4_PATH holds the tail of the path and AS_PATH
+// gives the leading ASNs that AS4_PATH lacks together with confederation
+// segments next to them, an AS4_PATH that counts more ASNs than AS_PATH is
+// ignored
+func mergeAS4Path(asPath []bgp.AsPathParamInterface, as4Path []*bgp.As4PathParam) []bgp.AsPathParamInterface {
+	var tail []bgp.AsPathParamInterface
+	for _, seg := range as4Path {
+		// AS4_PATH never carries confederation segments, RFC 6793 section 6
+		// has a receiver discard them
+		if isConfed(seg) {
+			continue
+		}
+		tail = append(tail, seg)
+	}
+
+	need := pathLen(asPath) - pathLen(tail)
+	if need < 0 {
+		return asPath
+	}
+
+	var out []bgp.AsPathParamInterface
+	for _, seg := range asPath {
+		switch {
+		case isConfed(seg):
+			// every segment before it was taken, so it leads the path or
+			// follows a taken segment and goes along
+		case need == 0:
+			return append(out, tail...)
+		case seg.GetType() == bgp.BGP_ASPATH_ATTR_TYPE_SEQ && seg.ASLen() > need:
+			seg = bgp.NewAs4PathParam(bgp.BGP_ASPATH_ATTR_TYPE_SEQ, seg.GetAS()[:need])
+			need = 0
+		default:
+			need -= seg.ASLen()
+		}
+		out = append(out, seg)
+	}
+	return append(out, tail...)
+}
+
+// pathLen counts the ASNs of a path for route selection, an AS_SET counts
+// as one and confederation segments count as none
+func pathLen(path []bgp.AsPathParamInterface) int {
+	var n int
+	for _, seg := range path {
+		n += seg.ASLen()
+	}
+	return n
+}
+
+func isConfed(seg bgp.AsPathParamInterface) bool {
+	switch seg.GetType() {
+	case bgp.BGP_ASPATH_ATTR_TYPE_CONFED_SEQ, bgp.BGP_ASPATH_ATTR_TYPE_CONFED_SET:
+		return true
+	}
+	return false
 }
 
 func (a attrs) route(prefix netip.Prefix, peer bmp.BMPPeerHeader) Route {

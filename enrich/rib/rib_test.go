@@ -3,6 +3,7 @@ package rib
 import (
 	"net"
 	"net/netip"
+	"slices"
 	"testing"
 	"time"
 
@@ -958,6 +959,127 @@ func TestRemovePeerViewsKeepsOtherDistinguishers(t *testing.T) {
 	}
 	if got := tab.Peers(); len(got) != 1 || got[0] != (Peer{Address: addr, Distinguisher: 7}) {
 		t.Fatalf("peers = %v, want only the view with distinguisher 7", got)
+	}
+}
+
+func TestUpdateFromBMPMergesAS4Path(t *testing.T) {
+	seq := func(asns ...uint16) bgp.AsPathParamInterface {
+		return bgp.NewAsPathParam(bgp.BGP_ASPATH_ATTR_TYPE_SEQ, asns)
+	}
+	seq4 := func(asns ...uint32) *bgp.As4PathParam {
+		return bgp.NewAs4PathParam(bgp.BGP_ASPATH_ATTR_TYPE_SEQ, asns)
+	}
+	const trans = bgp.AS_TRANS
+
+	for _, tc := range []struct {
+		name     string
+		flags    uint8
+		asPath   []bgp.AsPathParamInterface
+		as4Path  []*bgp.As4PathParam
+		extra    []bgp.PathAttributeInterface
+		wantPath []uint32
+		origin   uint32
+		asSet    bool
+	}{
+		{
+			name:     "same length",
+			flags:    bmp.BMP_PEER_FLAG_TWO_AS,
+			asPath:   []bgp.AsPathParamInterface{seq(65010, trans)},
+			as4Path:  []*bgp.As4PathParam{seq4(65010, 4200000001)},
+			wantPath: []uint32{65010, 4200000001},
+			origin:   4200000001,
+		},
+		{
+			name:     "leading asns from as_path",
+			flags:    bmp.BMP_PEER_FLAG_TWO_AS,
+			asPath:   []bgp.AsPathParamInterface{seq(64500, 65010, trans)},
+			as4Path:  []*bgp.As4PathParam{seq4(65010, 4200000001)},
+			wantPath: []uint32{64500, 65010, 4200000001},
+			origin:   4200000001,
+		},
+		{
+			name:  "set counts as one",
+			flags: bmp.BMP_PEER_FLAG_TWO_AS,
+			asPath: []bgp.AsPathParamInterface{
+				seq(64500, 65010),
+				bgp.NewAsPathParam(bgp.BGP_ASPATH_ATTR_TYPE_SET, []uint16{trans, 65020}),
+			},
+			as4Path: []*bgp.As4PathParam{
+				seq4(65010),
+				bgp.NewAs4PathParam(bgp.BGP_ASPATH_ATTR_TYPE_SET, []uint32{4200000002, 65020}),
+			},
+			wantPath: []uint32{64500, 65010, 4200000002, 65020},
+			asSet:    true,
+		},
+		{
+			name:  "leading confederation segment",
+			flags: bmp.BMP_PEER_FLAG_TWO_AS,
+			asPath: []bgp.AsPathParamInterface{
+				bgp.NewAsPathParam(bgp.BGP_ASPATH_ATTR_TYPE_CONFED_SEQ, []uint16{65100}),
+				seq(65010, trans),
+			},
+			as4Path:  []*bgp.As4PathParam{seq4(65010, 4200000001)},
+			wantPath: []uint32{65100, 65010, 4200000001},
+			origin:   4200000001,
+		},
+		{
+			name:     "as4_path longer than as_path",
+			flags:    bmp.BMP_PEER_FLAG_TWO_AS,
+			asPath:   []bgp.AsPathParamInterface{seq(trans)},
+			as4Path:  []*bgp.As4PathParam{seq4(65010, 4200000001)},
+			wantPath: []uint32{trans},
+			origin:   trans,
+		},
+		{
+			name:     "four byte session",
+			asPath:   []bgp.AsPathParamInterface{bgp.NewAs4PathParam(bgp.BGP_ASPATH_ATTR_TYPE_SEQ, []uint32{65010, trans})},
+			as4Path:  []*bgp.As4PathParam{seq4(65010, 4200000001)},
+			wantPath: []uint32{65010, trans},
+			origin:   trans,
+		},
+		{
+			name:    "aggregator not as_trans",
+			flags:   bmp.BMP_PEER_FLAG_TWO_AS,
+			asPath:  []bgp.AsPathParamInterface{seq(65010, 65030)},
+			as4Path: []*bgp.As4PathParam{seq4(65010, 4200000001)},
+			extra: []bgp.PathAttributeInterface{
+				bgp.NewPathAttributeAggregator(uint16(65030), "192.0.2.30"),
+				bgp.NewPathAttributeAs4Aggregator(4200000001, "192.0.2.30"),
+			},
+			wantPath: []uint32{65010, 65030},
+			origin:   65030,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			attrs := []bgp.PathAttributeInterface{
+				bgp.NewPathAttributeOrigin(0),
+				bgp.NewPathAttributeAsPath(tc.asPath),
+				bgp.NewPathAttributeNextHop("192.0.2.1"),
+				bgp.NewPathAttributeAs4Path(tc.as4Path),
+			}
+			update := bgp.NewBGPUpdateMessage(nil, append(attrs, tc.extra...), []*bgp.IPAddrPrefix{bgp.NewIPAddrPrefix(24, "203.0.113.0")})
+			peer := bmp.NewBMPPeerHeader(bmp.BMP_PEER_TYPE_GLOBAL, tc.flags, 0, "192.0.2.2", trans, "192.0.2.2", 0)
+
+			// through the wire so gobgp decodes the 2-byte AS_PATH itself
+			wire, err := bmp.NewBMPRouteMonitoring(*peer, update).Serialize()
+			if err != nil {
+				t.Fatalf("Serialize: %v", err)
+			}
+			msg, err := bmp.ParseBMPMessage(wire)
+			if err != nil {
+				t.Fatalf("ParseBMPMessage: %v", err)
+			}
+
+			out, ok := updateFromBMP(msg)
+			if !ok || len(out.Reach) != 1 {
+				t.Fatalf("updateFromBMP = %+v ok=%v, want one route", out, ok)
+			}
+			route := out.Reach[0]
+			if !slices.Equal(route.ASPath, tc.wantPath) || route.OriginASN != tc.origin || route.OriginASSet != tc.asSet {
+				t.Fatalf("path %v origin %d set %v, want path %v origin %d set %v",
+					route.ASPath, route.OriginASN, route.OriginASSet, tc.wantPath, tc.origin, tc.asSet)
+			}
+		})
 	}
 }
 
