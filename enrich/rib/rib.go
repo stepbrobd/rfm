@@ -175,6 +175,18 @@ func (t *Table) RemovePeer(peer Peer) {
 	}
 }
 
+// RemovePeerViews withdraws every route learned from the pre and the post
+// policy view of peer's address and distinguisher
+// peer up and peer down concern the BGP session, which feeds both views, and
+// a speaker need not set the L flag of their per peer header to match the
+// routes, BIRD always sends them as pre policy
+func (t *Table) RemovePeerViews(peer Peer) {
+	for _, post := range []bool{false, true} {
+		peer.PostPolicy = post
+		t.RemovePeer(peer)
+	}
+}
+
 // Lookup returns the best matching route for addr
 func (t *Table) Lookup(addr netip.Addr) (Route, bool) {
 	addr = addr.Unmap()
@@ -379,13 +391,16 @@ func (s *Server) handleConn(conn net.Conn) {
 		switch msg.Header.Type {
 		case bmp.BMP_MSG_PEER_UP_NOTIFICATION:
 			peer := peerFromHeader(msg.PeerHeader)
-			s.table.RemovePeer(peer)
+			s.table.RemovePeerViews(peer)
 			log.Info("bmp peer up", "remote", conn.RemoteAddr(), "peer", peer.Address)
 			continue
 		case bmp.BMP_MSG_PEER_DOWN_NOTIFICATION:
 			peer := peerFromHeader(msg.PeerHeader)
-			s.table.RemovePeer(peer)
-			delete(peers, peer)
+			s.table.RemovePeerViews(peer)
+			for _, post := range []bool{false, true} {
+				peer.PostPolicy = post
+				delete(peers, peer)
+			}
 			log.Info("bmp peer down", "remote", conn.RemoteAddr(), "peer", peer.Address)
 			continue
 		case bmp.BMP_MSG_ROUTE_MONITORING:

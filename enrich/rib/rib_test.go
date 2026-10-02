@@ -412,6 +412,32 @@ func TestHandleConnPeerDownWithdrawsPeer(t *testing.T) {
 	<-done
 }
 
+func TestHandleConnPeerNotificationsIgnorePolicy(t *testing.T) {
+	s := &Server{table: NewTable()}
+	client, done := startSession(t, s)
+
+	// BIRD sends peer up and peer down with the L flag clear whatever the
+	// monitoring policy, so they must reach the post policy routes too
+	write(t, client, mustBMPWire(t, "198.51.100.0/24", 65003))
+	write(t, client, mustBMPWireFrom(t, "203.0.113.0/24", 65004, "192.0.2.4", 0))
+	waitForRoute(t, s, "198.51.100.7", true)
+	waitForRoute(t, s, "203.0.113.7", true)
+
+	write(t, client, mustPeerDownWire(t, "192.0.2.2", 0))
+	waitForRoute(t, s, "198.51.100.7", false)
+	if _, ok := s.Lookup(netip.MustParseAddr("203.0.113.7")); !ok {
+		t.Fatal("peer down for 192.0.2.2 removed the routes of 192.0.2.4")
+	}
+
+	write(t, client, mustBMPWire(t, "198.51.100.0/24", 65003))
+	waitForRoute(t, s, "198.51.100.7", true)
+	write(t, client, mustPeerUpWire(t, "192.0.2.2", 0))
+	waitForRoute(t, s, "198.51.100.7", false)
+
+	_ = client.Close()
+	<-done
+}
+
 func TestServerCloseReturnsWithIdleConnection(t *testing.T) {
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
@@ -593,10 +619,67 @@ func TestPrefixFromLabeledVPNNLRI(t *testing.T) {
 	}
 }
 
+// startSession runs handleConn on one end of a pipe and returns the other
+// end with a channel that closes when the session ends
+func startSession(t *testing.T, s *Server) (net.Conn, chan struct{}) {
+	t.Helper()
+
+	serverConn, clientConn := net.Pipe()
+	t.Cleanup(func() { _ = clientConn.Close() })
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		s.handleConn(serverConn)
+	}()
+	return clientConn, done
+}
+
+func write(t *testing.T, conn net.Conn, wire []byte) {
+	t.Helper()
+
+	if _, err := conn.Write(wire); err != nil {
+		t.Fatalf("Write: %v", err)
+	}
+}
+
+func mustPeerUpWire(t *testing.T, addr string, flags uint8) []byte {
+	t.Helper()
+
+	peer := bmp.NewBMPPeerHeader(bmp.BMP_PEER_TYPE_GLOBAL, flags, 0, addr, 65003, addr, 0)
+	open := bgp.NewBGPOpenMessage(65003, 90, addr, nil)
+	wire, err := bmp.NewBMPPeerUpNotification(*peer, "192.0.2.1", 179, 40000, open, open).Serialize()
+	if err != nil {
+		t.Fatalf("Serialize: %v", err)
+	}
+	return wire
+}
+
+func mustPeerDownWire(t *testing.T, addr string, flags uint8) []byte {
+	t.Helper()
+
+	peer := bmp.NewBMPPeerHeader(bmp.BMP_PEER_TYPE_GLOBAL, flags, 0, addr, 65003, addr, 0)
+	wire, err := bmp.NewBMPPeerDownNotification(*peer, bmp.BMP_PEER_DOWN_REASON_PEER_DE_CONFIGURED, nil, nil).Serialize()
+	if err != nil {
+		t.Fatalf("Serialize: %v", err)
+	}
+	return wire
+}
+
 func mustBMPWire(t *testing.T, prefix string, origin uint32) []byte {
 	t.Helper()
 
-	wire, err := mustBMPMessage(t, prefix, origin).Serialize()
+	return mustBMPWireFrom(t, prefix, origin, "192.0.2.2", bmp.BMP_PEER_FLAG_POST_POLICY)
+}
+
+// mustBMPWireFrom serializes a route monitoring message for prefix from the
+// peer at addr with the given per peer header flags
+func mustBMPWireFrom(t *testing.T, prefix string, origin uint32, addr string, flags uint8) []byte {
+	t.Helper()
+
+	msg := mustBMPMessage(t, prefix, origin)
+	msg.PeerHeader = *bmp.NewBMPPeerHeader(bmp.BMP_PEER_TYPE_LOCAL_RIB, flags, 0, addr, origin, addr, 0)
+	wire, err := msg.Serialize()
 	if err != nil {
 		t.Fatalf("Serialize: %v", err)
 	}
@@ -734,6 +817,28 @@ func TestRemovePeerDropsOnlyThatPeer(t *testing.T) {
 	}
 	if got := len(tab.metas); got != 1 {
 		t.Fatalf("metadata entries = %d, want 1", got)
+	}
+}
+
+func TestRemovePeerViewsKeepsOtherDistinguishers(t *testing.T) {
+	tab := NewTable()
+	addr := netip.MustParseAddr("192.0.2.1")
+	pfx := netip.MustParsePrefix("203.0.113.0/24")
+
+	tab.Apply(Update{Reach: []Route{
+		{Prefix: pfx, OriginASN: 1, PeerAddress: addr},
+		{Prefix: pfx, OriginASN: 2, PeerAddress: addr, PostPolicy: true},
+		{Prefix: pfx, OriginASN: 3, PeerAddress: addr, PeerDistinguisher: 7},
+	}})
+
+	tab.RemovePeerViews(Peer{Address: addr, PostPolicy: true})
+
+	route, ok := tab.Lookup(netip.MustParseAddr("203.0.113.1"))
+	if !ok || route.OriginASN != 3 {
+		t.Fatalf("route = %+v ok=%v, want origin 3 from the other distinguisher", route, ok)
+	}
+	if got := tab.Peers(); len(got) != 1 || got[0] != (Peer{Address: addr, Distinguisher: 7}) {
+		t.Fatalf("peers = %v, want only the view with distinguisher 7", got)
 	}
 }
 
