@@ -167,7 +167,8 @@ func (p *Probe) Attached() []int {
 }
 
 // Detach removes the programs from ifindex and drops its counters, so a
-// recreated interface starts from zero under its new index
+// recreated interface starts from zero under its new index, Watch detaches
+// the links that go itself and only tests call Detach
 // detaching an interface that is not attached is not an error
 func (p *Probe) Detach(ifindex int) error {
 	_, _, err := p.detach(ifindex)

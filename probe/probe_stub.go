@@ -41,10 +41,6 @@ func (p *Probe) FlowDrops() *ebpf.Map {
 	return nil
 }
 
-func (p *Probe) Detach(int) error {
-	return errUnsupported
-}
-
 func (p *Probe) Attached() []int {
 	return nil
 }
