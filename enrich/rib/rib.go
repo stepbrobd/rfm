@@ -540,6 +540,9 @@ func updateFromBMP(msg *bmp.BMPMessage) (Update, bool) {
 	}
 
 	for _, attr := range updateMsg.PathAttributes {
+		if otherFamily(attr) {
+			continue
+		}
 		switch a := attr.(type) {
 		case *bgp.PathAttributeMpReachNLRI:
 			for _, nlri := range a.Value {
@@ -897,40 +900,54 @@ func originASN(path []bgp.AsPathParamInterface) (uint32, bool) {
 	return asns[len(asns)-1], false
 }
 
+// otherFamily reports whether attr is an MP_REACH_NLRI or MP_UNREACH_NLRI
+// of a family other than ipv4 and ipv6 unicast, gobgp decodes multicast
+// NLRI into the types of unicast ones, and a multicast route would replace
+// or withdraw the unicast route of its prefix
+func otherFamily(attr bgp.PathAttributeInterface) bool {
+	var afi uint16
+	var safi uint8
+	switch a := attr.(type) {
+	case *bgp.PathAttributeMpReachNLRI:
+		afi, safi = a.AFI, a.SAFI
+	case *bgp.PathAttributeMpUnreachNLRI:
+		afi, safi = a.AFI, a.SAFI
+	default:
+		return false
+	}
+	switch bgp.AfiSafiToRouteFamily(afi, safi) {
+	case bgp.RF_IPv4_UC, bgp.RF_IPv6_UC:
+		return false
+	}
+	return true
+}
+
+// prefixFromNLRI returns the prefix of a unicast NLRI
+// the RIB models the global table, so VPN routes, which belong to a VRF,
+// and every other family are skipped, an ipv4 mapped ipv6 prefix stays ipv6
+// because unmapping it would leave more prefix bits than address bits
+// multicast NLRI come in the types of unicast ones, otherFamily skips them
 func prefixFromNLRI(nlri bgp.AddrPrefixInterface) (netip.Prefix, bool) {
-	if prefix, ok := prefixFromFlat(nlri.Flat()); ok {
-		return prefix, true
+	var ip net.IP
+	var bits uint8
+	switch n := nlri.(type) {
+	case *bgp.IPAddrPrefix:
+		ip, bits = n.Prefix, n.Length
+	case *bgp.IPv6AddrPrefix:
+		ip, bits = n.Prefix, n.Length
+	default:
+		return netip.Prefix{}, false
 	}
 
-	prefix, err := netip.ParsePrefix(nlri.String())
+	addr, ok := netip.AddrFromSlice(ip)
+	if !ok {
+		return netip.Prefix{}, false
+	}
+	prefix, err := addr.Prefix(int(bits))
 	if err != nil {
 		return netip.Prefix{}, false
 	}
 	return prefix, true
-}
-
-func prefixFromFlat(flat map[string]string) (netip.Prefix, bool) {
-	pfx, ok := flat["Prefix"]
-	if !ok || pfx == "" {
-		return netip.Prefix{}, false
-	}
-
-	bits, ok := flat["PrefixLen"]
-	if !ok || bits == "" {
-		return netip.Prefix{}, false
-	}
-
-	n, err := strconv.Atoi(bits)
-	if err != nil {
-		return netip.Prefix{}, false
-	}
-
-	addr, err := netip.ParseAddr(pfx)
-	if err != nil {
-		return netip.Prefix{}, false
-	}
-
-	return netip.PrefixFrom(addr.Unmap(), n).Masked(), true
 }
 
 func insertValue(v4, v6 *bart.Table[routeValue], value routeValue) {

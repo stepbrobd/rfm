@@ -602,20 +602,139 @@ func TestUpdateFromBMPRouteMetadata(t *testing.T) {
 	}
 }
 
-func TestPrefixFromLabeledVPNNLRI(t *testing.T) {
-	nlri := bgp.NewLabeledVPNIPAddrPrefix(
-		24,
-		"203.0.113.0",
-		*bgp.NewMPLSLabelStack(100),
-		bgp.NewRouteDistinguisherTwoOctetAS(65000, 1),
-	)
-
-	prefix, ok := prefixFromNLRI(nlri)
-	if !ok {
-		t.Fatal("prefixFromNLRI should decode labeled VPN prefix")
+func TestPrefixFromNLRI(t *testing.T) {
+	vpn := func(rd uint32) bgp.AddrPrefixInterface {
+		return bgp.NewLabeledVPNIPAddrPrefix(
+			24,
+			"203.0.113.0",
+			*bgp.NewMPLSLabelStack(100),
+			bgp.NewRouteDistinguisherTwoOctetAS(65000, rd),
+		)
 	}
-	if prefix != netip.MustParsePrefix("203.0.113.0/24") {
-		t.Fatalf("prefix = %s, want 203.0.113.0/24", prefix)
+
+	for _, tc := range []struct {
+		name string
+		nlri bgp.AddrPrefixInterface
+		want netip.Prefix
+		ok   bool
+	}{
+		{"ipv4", bgp.NewIPAddrPrefix(24, "203.0.113.0"), netip.MustParsePrefix("203.0.113.0/24"), true},
+		{"ipv6", bgp.NewIPv6AddrPrefix(32, "2001:db8::"), netip.MustParsePrefix("2001:db8::/32"), true},
+		// an ipv4 mapped ipv6 prefix stays an ipv6 prefix, unmapping it
+		// would give an ipv4 address 96 bits of prefix
+		{"mapped", bgp.NewIPv6AddrPrefix(96, "::ffff:0.0.0.0"), netip.MustParsePrefix("::ffff:0.0.0.0/96"), true},
+		// a VPN route belongs to a VRF and not to the global table, and
+		// without the route distinguisher two VRFs would overwrite each other
+		{"vpn", vpn(1), netip.Prefix{}, false},
+		{"labeled unicast", bgp.NewLabeledIPAddrPrefix(24, "203.0.113.0", *bgp.NewMPLSLabelStack(100)), netip.Prefix{}, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got, ok := prefixFromNLRI(tc.nlri)
+			if ok != tc.ok || got != tc.want {
+				t.Fatalf("prefixFromNLRI = %s ok=%v, want %s ok=%v", got, ok, tc.want, tc.ok)
+			}
+		})
+	}
+}
+
+func TestUpdateFromBMPSkipsVPNRoutes(t *testing.T) {
+	update := bgp.NewBGPUpdateMessage(
+		nil,
+		[]bgp.PathAttributeInterface{
+			bgp.NewPathAttributeOrigin(0),
+			bgp.NewPathAttributeAsPath([]bgp.AsPathParamInterface{
+				bgp.NewAs4PathParam(bgp.BGP_ASPATH_ATTR_TYPE_SEQ, []uint32{65010}),
+			}),
+			bgp.NewPathAttributeMpReachNLRI("192.0.2.1", []bgp.AddrPrefixInterface{
+				bgp.NewLabeledVPNIPAddrPrefix(24, "10.0.0.0", *bgp.NewMPLSLabelStack(100), bgp.NewRouteDistinguisherTwoOctetAS(65000, 1)),
+			}),
+		},
+		nil,
+	)
+	peer := bmp.NewBMPPeerHeader(bmp.BMP_PEER_TYPE_GLOBAL, 0, 0, "192.0.2.2", 65010, "192.0.2.2", 0)
+
+	out, ok := updateFromBMP(bmp.NewBMPRouteMonitoring(*peer, update))
+	if !ok {
+		t.Fatal("updateFromBMP should accept route-monitoring message")
+	}
+	if len(out.Reach) != 0 {
+		t.Fatalf("reach = %+v, want no global routes from a VPN update", out.Reach)
+	}
+}
+
+func TestUpdateFromBMPSkipsMulticastRoutes(t *testing.T) {
+	v4 := bgp.NewIPAddrPrefix(24, "203.0.113.0")
+	v6 := bgp.NewIPv6AddrPrefix(32, "2001:db8::")
+
+	for _, tc := range []struct {
+		name     string
+		nlri     bgp.AddrPrefixInterface
+		nexthop  string
+		safi     uint8
+		withdraw bool
+		want     int
+	}{
+		{"ipv4 unicast reach", v4, "192.0.2.1", bgp.SAFI_UNICAST, false, 1},
+		{"ipv6 unicast reach", v6, "2001:db8::1", bgp.SAFI_UNICAST, false, 1},
+		{"ipv4 unicast withdraw", v4, "", bgp.SAFI_UNICAST, true, 1},
+		// a multicast route shares the prefix and the path id of the
+		// unicast route, which it would replace or withdraw
+		{"ipv4 multicast reach", v4, "192.0.2.1", bgp.SAFI_MULTICAST, false, 0},
+		{"ipv6 multicast reach", v6, "2001:db8::1", bgp.SAFI_MULTICAST, false, 0},
+		{"ipv4 multicast withdraw", v4, "", bgp.SAFI_MULTICAST, true, 0},
+		{"ipv6 multicast withdraw", v6, "", bgp.SAFI_MULTICAST, true, 0},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var attrs []bgp.PathAttributeInterface
+			if tc.withdraw {
+				unreach := bgp.NewPathAttributeMpUnreachNLRI([]bgp.AddrPrefixInterface{tc.nlri})
+				unreach.SAFI = tc.safi
+				attrs = []bgp.PathAttributeInterface{unreach}
+			} else {
+				reach := bgp.NewPathAttributeMpReachNLRI(tc.nexthop, []bgp.AddrPrefixInterface{tc.nlri})
+				reach.SAFI = tc.safi
+				attrs = []bgp.PathAttributeInterface{
+					bgp.NewPathAttributeOrigin(0),
+					bgp.NewPathAttributeAsPath([]bgp.AsPathParamInterface{
+						bgp.NewAs4PathParam(bgp.BGP_ASPATH_ATTR_TYPE_SEQ, []uint32{65010}),
+					}),
+					reach,
+				}
+			}
+			peer := bmp.NewBMPPeerHeader(bmp.BMP_PEER_TYPE_GLOBAL, 0, 0, "192.0.2.2", 65010, "192.0.2.2", 0)
+
+			// through the wire so gobgp decodes the NLRI by the family the
+			// attribute names
+			wire, err := bmp.NewBMPRouteMonitoring(*peer, bgp.NewBGPUpdateMessage(nil, attrs, nil)).Serialize()
+			if err != nil {
+				t.Fatalf("Serialize: %v", err)
+			}
+			msg, err := bmp.ParseBMPMessage(wire)
+			if err != nil {
+				t.Fatalf("ParseBMPMessage: %v", err)
+			}
+
+			out, ok := updateFromBMP(msg)
+			if !ok {
+				t.Fatal("updateFromBMP should accept route-monitoring message")
+			}
+			if got := len(out.Reach) + len(out.Withdraw); got != tc.want {
+				t.Fatalf("reach %+v withdraw %+v, want %d routes", out.Reach, out.Withdraw, tc.want)
+			}
+		})
+	}
+}
+
+func TestTableCountsMappedPrefixAsIPv6(t *testing.T) {
+	tab := NewTable()
+	prefix, ok := prefixFromNLRI(bgp.NewIPv6AddrPrefix(96, "::ffff:0.0.0.0"))
+	if !ok {
+		t.Fatal("prefixFromNLRI rejected an ipv4 mapped ipv6 prefix")
+	}
+	tab.Apply(Update{Reach: []Route{{Prefix: prefix, OriginASN: 64500}}})
+
+	if got := tab.Summary(); got != (Summary{PrefixesV6: 1, Routes: 1, Peers: 1}) {
+		t.Fatalf("summary = %+v, want one ipv6 prefix", got)
 	}
 }
 
