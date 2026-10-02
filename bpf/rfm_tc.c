@@ -3,12 +3,6 @@
 #include <bpf/bpf_endian.h>
 #include <bpf/bpf_helpers.h>
 
-#define TC_ACT_OK 0
-#define TC_ACT_SHOT 2
-#define TC_ACT_UNSPEC -1
-#define TC_ACT_PIPE 3
-#define TC_ACT_RECLASSIFY 1
-
 #define ETH_P_IP 0x0800
 #define ETH_P_IPV6 0x86DD
 #define ETH_P_8021Q 0x8100
@@ -95,13 +89,16 @@ static __always_inline __u32 rfm_hdr_len(void *l3, void *end, __u16 eth_proto,
 	return l2_len + l3_len;
 }
 
+// the programs only observe, so every exit returns TCX_NEXT (TC_ACT_UNSPEC)
+// and later TCX programs and the filters of a clsact or ingress qdisc still
+// run, TC_ACT_OK is TCX_PASS and would end the chain at rfm
 static __always_inline int rfm_tc(struct __sk_buff *skb, __u8 dir)
 {
 	void *data = (void *)(long)skb->data;
 	void *end = (void *)(long)skb->data_end;
 
 	if (data + sizeof(struct ethhdr) > end)
-		return TC_ACT_OK;
+		return TCX_NEXT;
 
 	struct ethhdr *eth = data;
 	__u16 eth_proto = bpf_ntohs(eth->h_proto);
@@ -118,7 +115,7 @@ static __always_inline int rfm_tc(struct __sk_buff *skb, __u8 dir)
 			break;
 
 		if (l3 + sizeof(struct rfm_vlan_hdr) > end)
-			return TC_ACT_OK;
+			return TCX_NEXT;
 
 		struct rfm_vlan_hdr *vlan = l3;
 		eth_proto = bpf_ntohs(vlan->encap_proto);
@@ -178,15 +175,15 @@ static __always_inline int rfm_tc(struct __sk_buff *skb, __u8 dir)
 
 	// skip non-IP traffic for flow events
 	if (iface_proto == 0)
-		return TC_ACT_OK;
+		return TCX_NEXT;
 
 	__u32 cfg_key = 0;
 	struct rfm_config *cfg = bpf_map_lookup_elem(&rfm_config, &cfg_key);
 	if (!cfg || cfg->sample_rate == 0)
-		return TC_ACT_OK;
+		return TCX_NEXT;
 
 	if (bpf_get_prandom_u32() % cfg->sample_rate != 0)
-		return TC_ACT_OK;
+		return TCX_NEXT;
 
 	// parse IP headers into a stack event
 	struct rfm_flow_event ev = {
@@ -202,7 +199,7 @@ static __always_inline int rfm_tc(struct __sk_buff *skb, __u8 dir)
 	if (eth_proto == ETH_P_IP) {
 		struct iphdr *ip = l3;
 		if ((void *)(ip + 1) > end)
-			return TC_ACT_OK;
+			return TCX_NEXT;
 
 		ev.proto = ip->protocol;
 		__u16 frag_off = bpf_ntohs(ip->frag_off);
@@ -219,7 +216,7 @@ static __always_inline int rfm_tc(struct __sk_buff *skb, __u8 dir)
 		// use actual IHL to skip IP options
 		__u8 ihl = ip->ihl;
 		if (ihl < 5)
-			return TC_ACT_OK;
+			return TCX_NEXT;
 
 		l4 = (void *)ip + ((__u16)ihl << 2);
 
@@ -229,7 +226,7 @@ static __always_inline int rfm_tc(struct __sk_buff *skb, __u8 dir)
 	} else {
 		struct ipv6hdr *ip6 = l3;
 		if ((void *)(ip6 + 1) > end)
-			return TC_ACT_OK;
+			return TCX_NEXT;
 
 		ev.proto = ip6->nexthdr;
 		__builtin_memcpy(ev.src_addr, &ip6->saddr, 16);
@@ -241,7 +238,7 @@ static __always_inline int rfm_tc(struct __sk_buff *skb, __u8 dir)
 	// extract ports for TCP and UDP
 	if (l4 && (ev.proto == IPPROTO_TCP || ev.proto == IPPROTO_UDP)) {
 		if (l4 + 4 > end)
-			return TC_ACT_OK;
+			return TCX_NEXT;
 		ev.src_port = bpf_ntohs(*(__u16 *)l4);
 		ev.dst_port = bpf_ntohs(*(__u16 *)(l4 + 2));
 	}
@@ -254,7 +251,7 @@ static __always_inline int rfm_tc(struct __sk_buff *skb, __u8 dir)
 		__u64 *drops = bpf_map_lookup_elem(&rfm_flow_drops, &drop_key);
 		if (drops)
 			(*drops)++;
-		return TC_ACT_OK;
+		return TCX_NEXT;
 	}
 
 	__builtin_memcpy(ring_ev, &ev, sizeof(ev));
@@ -271,7 +268,7 @@ static __always_inline int rfm_tc(struct __sk_buff *skb, __u8 dir)
 		flags = BPF_RB_FORCE_WAKEUP;
 	bpf_ringbuf_submit(ring_ev, flags);
 
-	return TC_ACT_OK;
+	return TCX_NEXT;
 }
 
 SEC("tc/ingress")

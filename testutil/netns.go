@@ -109,7 +109,15 @@ func (n *NS) Name() string {
 func (n *NS) SendRaw(t *testing.T, pkt []byte) {
 	t.Helper()
 
-	peer, err := netlink.LinkByName("rfm1")
+	n.SendRawOn(t, "rfm1", pkt)
+}
+
+// SendRawOn sends a raw packet out the named interface, use the monitored
+// end to have it leave through its egress hook
+func (n *NS) SendRawOn(t *testing.T, ifname string, pkt []byte) {
+	t.Helper()
+
+	dev, err := netlink.LinkByName(ifname)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -124,7 +132,7 @@ func (n *NS) SendRaw(t *testing.T, pkt []byte) {
 	defer syscall.Close(fd)
 
 	addr := &syscall.SockaddrLinklayer{
-		Ifindex: peer.Attrs().Index,
+		Ifindex: dev.Attrs().Index,
 	}
 	if err := syscall.Sendto(fd, pkt, 0, addr); err != nil {
 		SkipIfUnprivileged(t, err)

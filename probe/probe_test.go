@@ -23,6 +23,7 @@ import (
 	"github.com/cilium/ebpf/ringbuf"
 	"github.com/vishvananda/netlink"
 	"github.com/vishvananda/netns"
+	"golang.org/x/sys/unix"
 	"ysun.co/rfm/testutil"
 )
 
@@ -616,28 +617,71 @@ func TestFlowEventPlainPacketOneSegment(t *testing.T) {
 	}
 }
 
+// countingProgram builds a sched_cls program that adds one to slot of counts
+// for every packet and then hands the packet on, TCX_NEXT and TC_ACT_UNSPEC
+// are both -1
+func countingProgram(t *testing.T, counts *ebpf.Map, slot uint32) *ebpf.Program {
+	t.Helper()
+
+	prog, err := ebpf.NewProgram(&ebpf.ProgramSpec{
+		Type: ebpf.SchedCLS,
+		Instructions: asm.Instructions{
+			asm.StoreImm(asm.RFP, -4, int64(slot), asm.Word),
+			asm.LoadMapPtr(asm.R1, counts.FD()),
+			asm.Mov.Reg(asm.R2, asm.RFP),
+			asm.Add.Imm(asm.R2, -4),
+			asm.FnMapLookupElem.Call(),
+			asm.JEq.Imm(asm.R0, 0, "next"),
+			asm.Mov.Imm(asm.R1, 1),
+			asm.StoreXAdd(asm.R0, asm.R1, asm.DWord),
+			asm.Mov.Imm(asm.R0, -1).WithSymbol("next"),
+			asm.Return(),
+		},
+		License: "MIT",
+	})
+	if err != nil {
+		skipIfUnsupported(t, err)
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { prog.Close() })
+	return prog
+}
+
 func TestAttachOrder(t *testing.T) {
 	testutil.RequireRoot(t)
 
 	ns := testutil.NewNS(t)
 
 	// a foreign tcx program is attached on both hooks before rfm, the
-	// counters must still run first on ingress and last on egress
-	other, err := ebpf.NewProgram(&ebpf.ProgramSpec{
-		Type:         ebpf.SchedCLS,
-		Instructions: asm.Instructions{asm.Mov.Imm(asm.R0, 0), asm.Return()},
-		License:      "MIT",
+	// counters must still run first on ingress and last on egress, and the
+	// programs behind rfm must still see every packet, the foreign tcx
+	// program on ingress and the tc filters of a clsact qdisc on both hooks
+	const (
+		tcxIngress = iota
+		tcxEgress
+		tcIngress
+		tcEgress
+	)
+	counts, err := ebpf.NewMap(&ebpf.MapSpec{
+		Type:       ebpf.Array,
+		KeySize:    4,
+		ValueSize:  8,
+		MaxEntries: 4,
 	})
 	if err != nil {
 		skipIfUnsupported(t, err)
 		t.Fatal(err)
 	}
-	defer other.Close()
+	defer counts.Close()
 
-	for _, at := range []ebpf.AttachType{ebpf.AttachTCXIngress, ebpf.AttachTCXEgress} {
+	others := map[ebpf.AttachType]*ebpf.Program{
+		ebpf.AttachTCXIngress: countingProgram(t, counts, tcxIngress),
+		ebpf.AttachTCXEgress:  countingProgram(t, counts, tcxEgress),
+	}
+	for at, prog := range others {
 		l, err := link.AttachTCX(link.TCXOptions{
 			Interface: ns.Ifindex(),
-			Program:   other,
+			Program:   prog,
 			Attach:    at,
 		})
 		if err != nil {
@@ -645,6 +689,35 @@ func TestAttachOrder(t *testing.T) {
 			t.Fatal(err)
 		}
 		defer l.Close()
+	}
+
+	clsact := &netlink.GenericQdisc{
+		QdiscAttrs: netlink.QdiscAttrs{
+			LinkIndex: ns.Ifindex(),
+			Handle:    netlink.MakeHandle(0xffff, 0),
+			Parent:    netlink.HANDLE_CLSACT,
+		},
+		QdiscType: "clsact",
+	}
+	if err := netlink.QdiscAdd(clsact); err != nil {
+		t.Fatalf("add clsact: %v", err)
+	}
+	for parent, slot := range map[uint32]uint32{netlink.HANDLE_MIN_INGRESS: tcIngress, netlink.HANDLE_MIN_EGRESS: tcEgress} {
+		filter := &netlink.BpfFilter{
+			FilterAttrs: netlink.FilterAttrs{
+				LinkIndex: ns.Ifindex(),
+				Parent:    parent,
+				Handle:    1,
+				Protocol:  unix.ETH_P_ALL,
+				Priority:  1,
+			},
+			Fd:           countingProgram(t, counts, slot).FD(),
+			Name:         "rfm-test",
+			DirectAction: true,
+		}
+		if err := netlink.FilterAdd(filter); err != nil {
+			t.Fatalf("add tc filter: %v", err)
+		}
 	}
 
 	p, err := Load(Config{})
@@ -670,7 +743,10 @@ func TestAttachOrder(t *testing.T) {
 		}
 		return id
 	}
-	otherID := progID(other)
+	otherID := map[ebpf.AttachType]ebpf.ProgramID{}
+	for at, prog := range others {
+		otherID[at] = progID(prog)
+	}
 	ingressID := progID(p.objs.RfmTcIngress)
 	egressID := progID(p.objs.RfmTcEgress)
 
@@ -686,12 +762,37 @@ func TestAttachOrder(t *testing.T) {
 		return ids
 	}
 
-	if got := order(ebpf.AttachTCXIngress); len(got) != 2 || got[0] != ingressID || got[1] != otherID {
-		t.Fatalf("ingress order = %v, want [rfm %d, other %d]", got, ingressID, otherID)
+	if got, other := order(ebpf.AttachTCXIngress), otherID[ebpf.AttachTCXIngress]; len(got) != 2 || got[0] != ingressID || got[1] != other {
+		t.Fatalf("ingress order = %v, want [rfm %d, other %d]", got, ingressID, other)
 	}
-	if got := order(ebpf.AttachTCXEgress); len(got) != 2 || got[0] != otherID || got[1] != egressID {
-		t.Fatalf("egress order = %v, want [other %d, rfm %d]", got, otherID, egressID)
+	if got, other := order(ebpf.AttachTCXEgress), otherID[ebpf.AttachTCXEgress]; len(got) != 2 || got[0] != other || got[1] != egressID {
+		t.Fatalf("egress order = %v, want [other %d, rfm %d]", got, other, egressID)
 	}
+
+	// rfm only observes, every program behind it must still run, the counts
+	// start over so that background traffic from before the attach is gone
+	names := []string{"tcx ingress", "tcx egress", "tc ingress", "tc egress"}
+	for slot := range names {
+		if err := counts.Put(uint32(slot), uint64(0)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	pkt := testutil.EthIPv4UDP(net.IPv4(10, 0, 6, 1), net.IPv4(10, 0, 6, 2), 6000, 53)
+	ns.SendRaw(t, pkt)
+	ns.SendRawOn(t, ns.Name(), pkt)
+
+	testutil.Eventually(t, time.Second, 10*time.Millisecond, func() error {
+		for slot, name := range names {
+			var n uint64
+			if err := counts.Lookup(uint32(slot), &n); err != nil {
+				return err
+			}
+			if n == 0 {
+				return fmt.Errorf("%s program saw no packets", name)
+			}
+		}
+		return nil
+	})
 }
 
 func TestSetSampleRate(t *testing.T) {
