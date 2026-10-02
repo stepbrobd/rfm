@@ -223,7 +223,8 @@ func (c *Collector) sampleRateAtLocked(tstamp uint64) uint32 {
 }
 
 // SetActiveTimeout makes every sweep export an interval record for flows
-// whose unexported interval is at least d old, 0 disables the sweep
+// whose unexported interval is at least d old, a sweep of Run already when it
+// is less than half a period short, 0 disables the sweep
 // it must be called before Run
 func (c *Collector) SetActiveTimeout(d time.Duration) {
 	c.mu.Lock()
@@ -497,6 +498,13 @@ func (c *Collector) evictOldestLocked(reason uint8) (ExportedFlow, bool) {
 // and, when an active timeout is set, exports an interval record for every
 // flow whose unexported interval is at least that old
 func (c *Collector) Evict(now time.Time) {
+	c.sweep(now, 0)
+}
+
+// sweep is Evict for a sweep that repeats every period, it sends the interval
+// record of a flow at the sweep nearest the end of its active timeout instead
+// of the first sweep after it
+func (c *Collector) sweep(now time.Time, period time.Duration) {
 	cutoff := now.Add(-c.timeout)
 	var expired []ExportedFlow
 
@@ -527,13 +535,18 @@ func (c *Collector) Evict(now time.Time) {
 	}
 
 	if c.active > 0 {
+		// an exact comparison would hold a flow marked a whole number of
+		// periods ago back by one more period whenever its tick comes a few
+		// microseconds early, or whenever a flow created after the tick that
+		// marked it but before that sweep ran sits ahead of it in the queue
+		due := c.active - period/2
 		for {
 			front := c.activeQueue.Front()
 			if front == nil {
 				break
 			}
 			state := front.Value.(*flowState)
-			if now.Sub(state.intervalStart) < c.active {
+			if now.Sub(state.intervalStart) < due {
 				break
 			}
 			if state.pending() {
@@ -678,6 +691,19 @@ const readBatch = 64
 // readDeadline bounds a blocking read so the loop notices a cancelled context
 const readDeadline = 100 * time.Millisecond
 
+// sweepPeriod is how often Run sweeps, every half eviction timeout, or, as
+// the sweep also sends the interval records, the active timeout split into
+// the fewest equal parts no longer than that, so the records of a flow fall
+// on a sweep one active timeout apart
+func sweepPeriod(timeout, active time.Duration) time.Duration {
+	period := timeout / 2
+	if active <= 0 {
+		return period
+	}
+	parts := (active + period - 1) / period
+	return active / parts
+}
+
 // Run reads events from rd, decodes them, and records them until ctx is done
 // It also runs a background goroutine for eviction and drop counter polling
 // the drop counter is polled from that goroutine only, once per tick, so the
@@ -690,13 +716,8 @@ func (c *Collector) Run(ctx context.Context, rd Reader) error {
 		return fmt.Errorf("eviction timeout must be positive, got %v", c.timeout)
 	}
 
-	// the sweep also sends the interval records, so it runs at least as
-	// often as the active timeout, not only every half eviction timeout
-	period := c.timeout / 2
 	c.mu.RLock()
-	if c.active > 0 && c.active < period {
-		period = c.active
-	}
+	period := sweepPeriod(c.timeout, c.active)
 	c.mu.RUnlock()
 	tick := time.NewTicker(period)
 	defer tick.Stop()
@@ -717,7 +738,7 @@ func (c *Collector) Run(ctx context.Context, rd Reader) error {
 				return
 			case t := <-tick.C:
 				refreshBootOffset()
-				c.Evict(t)
+				c.sweep(t, period)
 				c.pollDrops(rd)
 			}
 		}

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/netip"
 	"os"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -965,6 +966,89 @@ func TestIntervalRecordsSpanTheirEvents(t *testing.T) {
 	}
 }
 
+func TestSweepSendsIntervalRecordsAtTheSweepNearestTheirActiveTimeout(t *testing.T) {
+	const period = 10 * time.Second
+	t0 := time.Unix(1_700_000_000, 0)
+	a := FlowEvent{
+		Proto: 6, SrcPort: 1000, DstPort: 80,
+		SrcAddr: netip.MustParseAddr("::ffff:10.0.0.1"),
+		DstAddr: netip.MustParseAddr("::ffff:10.0.0.2"),
+		Len:     100,
+	}
+	b := a
+	b.SrcPort = 2000
+	newCollector := func() (*Collector, *mockFlowExporter) {
+		exp := &mockFlowExporter{}
+		c := New(30*time.Second, nil, 0)
+		c.SetFlowExporter(exp)
+		c.SetActiveTimeout(period)
+		return c, exp
+	}
+
+	// ticks come a few microseconds off their schedule either way, a flow
+	// marked at one sweep is due at the next also when its tick is early
+	c, exp := newCollector()
+	c.Record(a, t0)
+	c.sweep(t0.Add(period), period)
+	c.Record(a, t0.Add(period+period/2))
+	c.sweep(t0.Add(2*period-time.Microsecond), period)
+	if got := len(exp.flows); got != 2 {
+		t.Fatalf("records after a tick a microsecond early = %d, want 2", got)
+	}
+
+	// a flow created between a tick and its sweep sits ahead of the flows the
+	// sweep marks, a millisecond short of its own active timeout at the next
+	// sweep it must not hold them back
+	c, exp = newCollector()
+	c.Record(a, t0)
+	c.Record(b, t0.Add(period+time.Millisecond))
+	c.sweep(t0.Add(period), period)
+	c.Record(a, t0.Add(period+period/2))
+	c.sweep(t0.Add(2*period), period)
+	if got := len(exp.flows); got != 3 {
+		t.Fatalf("records = %d, want two of the flow the first sweep marked and one of the newer flow", got)
+	}
+}
+
+func TestSweepsKeepIntervalRecordsOneActiveTimeoutApart(t *testing.T) {
+	const eviction = 30 * time.Second
+	t0 := time.Unix(1_700_000_000, 0)
+	ev := FlowEvent{
+		Proto: 6, SrcPort: 1000, DstPort: 80,
+		SrcAddr: netip.MustParseAddr("::ffff:10.0.0.1"),
+		DstAddr: netip.MustParseAddr("::ffff:10.0.0.2"),
+		Segs:    1,
+		Len:     100,
+	}
+	// active timeouts below, at and past half the eviction timeout, among
+	// them ones no multiple of it and one no sweep period divides to the
+	// nanosecond
+	for _, active := range []time.Duration{5 * time.Second, 15 * time.Second, 20 * time.Second, 40 * time.Second, 50 * time.Second, 60 * time.Second} {
+		period := sweepPeriod(eviction, active)
+		if period > eviction/2 {
+			t.Fatalf("active timeout %v: sweeps every %v, want at most half the eviction timeout", active, period)
+		}
+		exp := &mockFlowExporter{}
+		c := New(eviction, nil, config.DefaultMaxFlows)
+		c.SetFlowExporter(exp)
+		c.SetActiveTimeout(active)
+
+		// the flow sees a packet before every sweep
+		var sent []time.Duration
+		for now := t0; now.Sub(t0) < 3*active+period/2; now = now.Add(period) {
+			c.Record(ev, now)
+			c.sweep(now, period)
+			if len(exp.flows) > len(sent) {
+				sent = append(sent, now.Sub(t0).Round(time.Millisecond))
+			}
+		}
+		want := []time.Duration{active, 2 * active, 3 * active}
+		if !slices.Equal(sent, want) {
+			t.Fatalf("active timeout %v, sweeps every %v: interval records at %v, want %v", active, period, sent, want)
+		}
+	}
+}
+
 // idleReader has no events and waits a little on every read like a blocking
 // ring buffer read would, so Run does not spin
 type idleReader struct{}
@@ -977,45 +1061,81 @@ func (idleReader) SetDeadline(time.Time)          {}
 func (idleReader) DroppedEvents() (uint64, error) { return 0, nil }
 func (idleReader) Close() error                   { return nil }
 
-// chanExporter hands every record to a channel, safe for the Run goroutines
-type chanExporter struct {
-	ch chan ExportedFlow
+// sweepCounter stands in for the ring buffer and the exporter of Run, it has
+// no events, counts the sweeps by their poll of the drop counter, which comes
+// after their exports, and hands the sweep of every interval record to a
+// channel, safe for the Run goroutines
+type sweepCounter struct {
+	idleReader
+	sweeps  atomic.Uint64
+	records chan uint64
 }
 
-func (e *chanExporter) ExportFlow(flow ExportedFlow) error {
-	e.ch <- flow
+func (s *sweepCounter) DroppedEvents() (uint64, error) {
+	s.sweeps.Add(1)
+	return 0, nil
+}
+
+func (s *sweepCounter) ExportFlow(flow ExportedFlow) error {
+	if flow.EndReason == FlowEndReasonActiveTimeout {
+		s.records <- s.sweeps.Load()
+	}
 	return nil
 }
 
 func TestRunHonorsActiveTimeoutBelowHalfTheEvictionTimeout(t *testing.T) {
-	exp := &chanExporter{ch: make(chan ExportedFlow, 16)}
+	sc := &sweepCounter{records: make(chan uint64, 16)}
 	// half the eviction timeout is 5s, the active timeout is far shorter
 	c := New(10*time.Second, nil, 0)
-	c.SetFlowExporter(exp)
+	c.SetFlowExporter(sc)
 	c.SetActiveTimeout(50 * time.Millisecond)
 
-	c.Record(FlowEvent{
+	ev := FlowEvent{
 		Proto: 6, SrcPort: 1000, DstPort: 80,
 		SrcAddr: netip.MustParseAddr("::ffff:10.0.0.1"),
 		DstAddr: netip.MustParseAddr("::ffff:10.0.0.2"),
 		Len:     100,
-	}, time.Now())
+	}
+	c.Record(ev, time.Now())
 
 	ctx, cancel := context.WithCancel(context.Background())
 	errCh := make(chan error, 1)
-	go func() { errCh <- c.Run(ctx, idleReader{}) }()
+	go func() { errCh <- c.Run(ctx, sc) }()
+	// the flow keeps going with a packet every millisecond
+	traffic := make(chan struct{})
+	go func() {
+		defer close(traffic)
+		tick := time.NewTicker(time.Millisecond)
+		defer tick.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case now := <-tick.C:
+				c.Record(ev, now)
+			}
+		}
+	}()
 	defer func() {
 		cancel()
+		<-traffic
 		<-errCh
 	}()
 
-	select {
-	case flow := <-exp.ch:
-		if flow.EndReason != FlowEndReasonActiveTimeout {
-			t.Fatalf("end reason = %d, want the active timeout", flow.EndReason)
+	// the sweep runs at the active timeout, so every sweep sends an interval
+	// record, also the ones whose tick comes a few microseconds short of a
+	// period after the tick before
+	var last uint64
+	for i := range 10 {
+		select {
+		case sweep := <-sc.records:
+			if i > 0 && sweep != last+1 {
+				t.Fatalf("interval records %d and %d are %d sweeps apart, want one active timeout", i, i+1, sweep-last)
+			}
+			last = sweep
+		case <-time.After(2 * time.Second):
+			t.Fatal("no interval record within 2s although the active timeout is 50ms")
 		}
-	case <-time.After(2 * time.Second):
-		t.Fatal("no interval record within 2s although the active timeout is 50ms")
 	}
 }
 
