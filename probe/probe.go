@@ -197,12 +197,29 @@ func (p *Probe) detach(ifindex int) (string, bool, error) {
 
 // clearIfaceStats deletes every counter entry of ifindex
 func (p *Probe) clearIfaceStats(ifindex int) error {
+	return p.deleteIfaceStats(func(i uint32) bool { return i == uint32(ifindex) })
+}
+
+// pruneIfaceStats deletes the counter entries of every interface that is not
+// attached
+func (p *Probe) pruneIfaceStats() error {
+	p.mu.Lock()
+	attached := make(map[uint32]bool, len(p.links))
+	for ifindex := range p.links {
+		attached[uint32(ifindex)] = true
+	}
+	p.mu.Unlock()
+	return p.deleteIfaceStats(func(i uint32) bool { return !attached[i] })
+}
+
+// deleteIfaceStats deletes the counter entries whose ifindex drop accepts
+func (p *Probe) deleteIfaceStats(drop func(ifindex uint32) bool) error {
 	var key rfmRfmIfaceKey
 	var vals []rfmRfmIfaceValue
 	var keys []rfmRfmIfaceKey
 	iter := p.objs.RfmIfaceStats.Iterate()
 	for iter.Next(&key, &vals) {
-		if key.Ifindex == uint32(ifindex) {
+		if drop(key.Ifindex) {
 			keys = append(keys, key)
 		}
 	}
@@ -211,7 +228,7 @@ func (p *Probe) clearIfaceStats(ifindex int) error {
 	}
 	for _, k := range keys {
 		if err := p.objs.RfmIfaceStats.Delete(k); err != nil && !errors.Is(err, ebpf.ErrKeyNotExist) {
-			return fmt.Errorf("delete iface stats %d: %w", ifindex, err)
+			return fmt.Errorf("delete iface stats %d: %w", k.Ifindex, err)
 		}
 	}
 	return nil

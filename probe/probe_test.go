@@ -1709,3 +1709,150 @@ func TestWatchResubscribesAfterOverflow(t *testing.T) {
 		t.Fatalf("watch state = %+v, want a resubscription after ENOBUFS", state)
 	}
 }
+
+// pinDir returns a bpffs directory for the pinned counters of one test
+func pinDir(t *testing.T) string {
+	t.Helper()
+
+	if _, err := os.Stat("/sys/fs/bpf"); err != nil {
+		t.Skipf("bpffs not mounted: %v", err)
+	}
+	dir := fmt.Sprintf("/sys/fs/bpf/rfm-test-%d-%s", os.Getpid(), t.Name())
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	return dir
+}
+
+// putIfaceStats stores packets for key on the first CPU
+func putIfaceStats(t *testing.T, p *Probe, key rfmRfmIfaceKey, packets uint64) {
+	t.Helper()
+
+	vals := make([]rfmRfmIfaceValue, ebpf.MustPossibleCPU())
+	vals[0] = rfmRfmIfaceValue{Packets: packets, Bytes: 100 * packets}
+	if err := p.IfaceStats().Put(key, vals); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestWatchPrunesPinnedCounters(t *testing.T) {
+	testutil.RequireRoot(t)
+
+	dir := pinDir(t)
+	ns := testutil.NewNS(t)
+	other := addVeth(t, "other0", "other1")
+
+	// an earlier run counted rfm0 and other0, this run only matches rfm0
+	p, err := Load(Config{PinPath: dir})
+	if err != nil {
+		skipIfUnsupported(t, err)
+		t.Fatal(err)
+	}
+	kept := rfmRfmIfaceKey{Ifindex: uint32(ns.Ifindex()), Dir: 0, Proto: 4}
+	stale := rfmRfmIfaceKey{Ifindex: uint32(other.Attrs().Index), Dir: 0, Proto: 4}
+	putIfaceStats(t, p, kept, 7)
+	putIfaceStats(t, p, stale, 9)
+	if err := p.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	p, err = Load(Config{PinPath: dir})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer p.Close()
+
+	w := startWatch(t, p, ns, ns.Name(), nil)
+	w.expect(t, true, ns.Name())
+	testutil.Eventually(t, time.Second, 10*time.Millisecond, func() error {
+		if !p.WatchState().Synced {
+			return fmt.Errorf("watch not synced")
+		}
+		return nil
+	})
+
+	if packets, _ := ifaceStats(t, p, kept); packets < 7 {
+		t.Fatalf("counters of the attached interface = %d packets, want at least the 7 pinned", packets)
+	}
+	if packets, _ := ifaceStats(t, p, stale); packets != 0 {
+		t.Fatalf("counters of an interface this run did not attach survived: %d packets", packets)
+	}
+}
+
+func TestWatchRetriesAFailedPrune(t *testing.T) {
+	testutil.RequireRoot(t)
+
+	ns := testutil.NewNS(t)
+	other := addVeth(t, "other0", "other1")
+
+	p, err := Load(Config{})
+	if err != nil {
+		skipIfUnsupported(t, err)
+		t.Fatal(err)
+	}
+	defer p.Close()
+
+	// counters of an interface this run does not attach, in a map that
+	// refuses every delete from userspace
+	stale := rfmRfmIfaceKey{Ifindex: uint32(other.Attrs().Index), Dir: 0, Proto: 4}
+	putIfaceStats(t, p, stale, 9)
+	if err := p.IfaceStats().Freeze(); err != nil {
+		t.Fatal(err)
+	}
+
+	// the failed prune is counted, and the dump of the next subscription,
+	// which a link the watcher cannot decode starts, tries it again
+	corruptLinkMessage(p, "rfmw0")
+	startWatch(t, p, ns, "rfmw", nil)
+	testutil.Eventually(t, time.Second, 10*time.Millisecond, func() error {
+		if st := p.WatchState(); !st.Synced || st.PruneErrors != 1 {
+			return fmt.Errorf("watch state = %+v, want a failed prune after the first dump", st)
+		}
+		return nil
+	})
+	addVeth(t, "rfmw0", "zzp0")
+	testutil.Eventually(t, time.Second, 10*time.Millisecond, func() error {
+		if st := p.WatchState(); st.Resubscribes != 1 || st.PruneErrors != 2 {
+			return fmt.Errorf("watch state = %+v, want a second failed prune after the next dump", st)
+		}
+		return nil
+	})
+	if packets, _ := ifaceStats(t, p, stale); packets != 9 {
+		t.Fatalf("counters in the frozen map = %d packets, want the 9 put", packets)
+	}
+}
+
+func TestWatchClearsCountersOfDeletedLinks(t *testing.T) {
+	testutil.RequireRoot(t)
+
+	ns := testutil.NewNS(t)
+
+	p, err := Load(Config{})
+	if err != nil {
+		skipIfUnsupported(t, err)
+		t.Fatal(err)
+	}
+	defer p.Close()
+
+	w := startWatch(t, p, ns, "rfmw", nil)
+	testutil.Eventually(t, time.Second, 10*time.Millisecond, func() error {
+		if !p.WatchState().Synced {
+			return fmt.Errorf("watch not synced")
+		}
+		return nil
+	})
+
+	// counters of a link this run never attached, as a pinned map from an
+	// earlier run holds them, go when the link goes
+	other := addVeth(t, "other0", "other1")
+	key := rfmRfmIfaceKey{Ifindex: uint32(other.Attrs().Index), Dir: 1, Proto: 6}
+	putIfaceStats(t, p, key, 3)
+	if err := netlink.LinkDel(other); err != nil {
+		t.Fatal(err)
+	}
+
+	// a matching pair after the delete orders the check behind it
+	addVeth(t, "rfmw0", "rfmw1")
+	w.expect(t, true, "rfmw0", "rfmw1")
+	if packets, _ := ifaceStats(t, p, key); packets != 0 {
+		t.Fatalf("counters of a deleted link survived: %d packets", packets)
+	}
+}

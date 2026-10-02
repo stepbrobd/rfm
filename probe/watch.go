@@ -29,6 +29,9 @@ const (
 // the dump and the next message is lost, and once the dump is through every
 // attached interface that is gone is detached, which catches up with links
 // that came or went before Watch ran or while a subscription was down
+// after the first dump the counters of every interface that is not attached
+// are deleted, a pinned map from an earlier run may hold them, and a link
+// that goes loses its counters whether this run attached it or not
 // a subscription that fails, on ENOBUFS after a burst of link messages for
 // one, is opened again after a pause, a message the watcher cannot use is
 // logged and counted and ends nothing, WatchState reports both
@@ -45,10 +48,25 @@ func (p *Probe) Watch(ctx context.Context, match func(name string) bool, notify 
 	}
 	defer p.updateWatch(func(st *WatchState) { st.Running, st.Synced = false, false })
 
+	// once the first dump is reconciled every interface of this run is
+	// attached, counters a pinned map kept for any other one are stale
+	pruned := false
+	onSync := func() {
+		if pruned {
+			return
+		}
+		if err := p.pruneIfaceStats(); err != nil {
+			log.Error("prune interface counters", "err", err)
+			p.updateWatch(func(st *WatchState) { st.PruneErrors++ })
+			return
+		}
+		pruned = true
+	}
+
 	opened := false
 	retry := watchRetryMin
 	for {
-		synced, err := p.watch(ctx, match, notify, &opened)
+		synced, err := p.watch(ctx, match, notify, onSync, &opened)
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
@@ -74,10 +92,10 @@ func (p *Probe) Watch(ctx context.Context, match func(name string) bool, notify 
 	}
 }
 
-// watch runs one link subscription until it fails or ctx is done, opened is
-// set once the socket is open and synced reports whether its dump went
-// through
-func (p *Probe) watch(ctx context.Context, match func(string) bool, notify func(LinkEvent), opened *bool) (synced bool, err error) {
+// watch runs one link subscription until it fails or ctx is done, onSync
+// runs after its dump is reconciled, opened is set once the socket is open
+// and synced reports whether the dump went through
+func (p *Probe) watch(ctx context.Context, match func(string) bool, notify func(LinkEvent), onSync func(), opened *bool) (synced bool, err error) {
 	s, err := nl.Subscribe(unix.NETLINK_ROUTE, unix.RTNLGRP_LINK)
 	if err != nil {
 		return false, fmt.Errorf("subscribe to link updates: %w", err)
@@ -153,6 +171,7 @@ func (p *Probe) watch(ctx context.Context, match func(string) bool, notify func(
 					continue
 				}
 				p.reconcile(seen, notify)
+				onSync()
 				seen, synced = nil, true
 				p.updateWatch(func(st *WatchState) { st.Synced = true })
 			case unix.NLMSG_ERROR:
@@ -262,11 +281,16 @@ func (p *Probe) reconcile(seen map[int]bool, notify func(LinkEvent)) {
 	}
 }
 
-// forget detaches an interface that is gone
+// forget detaches an interface that is gone and drops its counters, which a
+// pinned map from an earlier run can hold even when this run never attached
+// the interface
 func (p *Probe) forget(ifindex int, notify func(LinkEvent)) {
 	name, detached, err := p.detach(ifindex)
+	if !detached {
+		err = p.clearIfaceStats(ifindex)
+	}
 	if err != nil {
-		log.Error("detach interface", "interface", name, "err", err)
+		log.Error("detach interface", "interface", name, "ifindex", ifindex, "err", err)
 	}
 	if detached {
 		notify(LinkEvent{Name: name, Ifindex: ifindex, Attached: false})
