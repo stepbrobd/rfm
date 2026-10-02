@@ -236,6 +236,11 @@ func (p *Probe) watch(ctx context.Context, match func(string) bool, notify func(
 					// of a fresh subscription catches up
 					return synced, fmt.Errorf("decode link message: %w", err)
 				}
+				// a port that leaves its bridge, or whose bridge goes, gets a
+				// delete message of the bridge family and stays
+				if m.Header.Type == unix.RTM_DELLINK && nl.DeserializeIfInfomsg(m.Data).Family == unix.AF_BRIDGE {
+					continue
+				}
 				attrs := l.Attrs()
 				// a message next to the dump is at least as recent as it
 				if seen != nil {

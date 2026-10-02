@@ -2085,3 +2085,53 @@ func TestWatchRetriesAFailedAttach(t *testing.T) {
 		t.Fatalf("counters after the attach = %d packets, want at least the 5 pinned", packets)
 	}
 }
+
+func TestWatchKeepsAPortThatLeavesItsBridge(t *testing.T) {
+	testutil.RequireRoot(t)
+
+	ns := testutil.NewNS(t)
+
+	p, err := Load(Config{})
+	if err != nil {
+		skipIfUnsupported(t, err)
+		t.Fatal(err)
+	}
+	defer p.Close()
+
+	br := &netlink.Bridge{LinkAttrs: netlink.LinkAttrs{Name: "zzbr0"}}
+	if err := netlink.LinkAdd(br); err != nil {
+		t.Fatal(err)
+	}
+	port := addVeth(t, "rfmw0", "zzp0")
+	if err := netlink.LinkSetMaster(port, br); err != nil {
+		t.Fatal(err)
+	}
+	w := startWatch(t, p, ns, "rfmw", nil)
+	w.expect(t, true, "rfmw0")
+	ifindex := ifindexOf(t, "rfmw0")
+	key := rfmRfmIfaceKey{Ifindex: uint32(ifindex), Dir: 0, Proto: 4}
+	putIfaceStats(t, p, key, 1000)
+
+	// the bridge sends a delete message of its own family for a port that
+	// leaves it, on a release and when the bridge goes, the port stays
+	if err := netlink.LinkSetNoMaster(port); err != nil {
+		t.Fatal(err)
+	}
+	if err := netlink.LinkSetMaster(port, br); err != nil {
+		t.Fatal(err)
+	}
+	if err := netlink.LinkDel(br); err != nil {
+		t.Fatal(err)
+	}
+
+	// a matching pair after the bridge changes orders the checks behind
+	// their messages, a detach of the port would come first
+	addVeth(t, "rfmw1", "zzp1")
+	w.expect(t, true, "rfmw1")
+	if !attachedSet(p)[ifindex] {
+		t.Fatal("the port was detached when it left its bridge")
+	}
+	if packets, _ := ifaceStats(t, p, key); packets != 1000 {
+		t.Fatalf("counters of the port after it left its bridge = %d packets, want the 1000 it had", packets)
+	}
+}
