@@ -100,8 +100,8 @@ type FlowEntry struct {
 }
 
 // RollupKey is the label tuple the Prometheus flow series are keyed by
-// it carries no ports, so its cardinality is bounded by interfaces, protocols
-// and the enrichment labels seen
+// it carries no ports, and the tuples with enrichment labels are capped at
+// the flow table size, see New
 type RollupKey struct {
 	Ifindex uint32
 	Dir     uint8
@@ -138,4 +138,7 @@ type Stats struct {
 	RingBufErrors   uint64
 	BPFMapErrors    uint64
 	IPFIXErrors     uint64
+	// FoldedFlows counts the flows whose label tuple found no room under the
+	// rollup cap and that count under empty enrichment labels instead
+	FoldedFlows uint64
 }

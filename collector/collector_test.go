@@ -9,6 +9,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"ysun.co/rfm/config"
 )
 
 func TestRecord(t *testing.T) {
@@ -1297,6 +1299,58 @@ func TestScrapeShowsANewRollupAtZeroFirst(t *testing.T) {
 	c.Record(ev, t0)
 	if s := scrape(); s.Packets != 2 || s.EstPackets != 20 {
 		t.Fatalf("third scrape = %+v, want each later packet right away", s)
+	}
+}
+
+// asnPerSource gives every source address an asn of its own, so every flow
+// from a new source opens a new label tuple
+type asnPerSource struct{}
+
+func (asnPerSource) Enrich(src, dst netip.Addr) (Labels, Labels) {
+	b := src.As16()
+	return Labels{ASN: 64512 + uint32(b[14])<<8 + uint32(b[15])}, Labels{}
+}
+
+func sourceEvent(i int) FlowEvent {
+	return FlowEvent{
+		Ifindex: 2, Dir: 0, Proto: 17, SrcPort: 5000, DstPort: 53,
+		SrcAddr: netip.AddrFrom4([4]byte{10, 1, byte(i >> 8), byte(i)}),
+		DstAddr: netip.MustParseAddr("10.0.0.1"),
+		Len:     100,
+	}
+}
+
+func TestRollupsAreCappedAtMaxFlows(t *testing.T) {
+	c := New(30*time.Second, asnPerSource{}, 100)
+	t0 := time.Now()
+
+	// a scan from many networks, one packet per source
+	for i := range 20_000 {
+		c.Record(sourceEvent(i), t0)
+	}
+
+	rollups := rollupCounters(c)
+	overflow := RollupKey{Ifindex: 2, Dir: 0, Proto: 17}
+	if len(rollups) > 101 {
+		t.Fatalf("rollups = %d, want at most 100 tuples and the overflow tuple", len(rollups))
+	}
+	var packets uint64
+	for _, r := range rollups {
+		packets += r.Packets
+	}
+	if packets != 20_000 {
+		t.Fatalf("packets over all tuples = %d, want every one of the 20000", packets)
+	}
+	folded := c.Stats().FoldedFlows
+	if folded == 0 || rollups[overflow].Packets != folded {
+		t.Fatalf("folded flows = %d, overflow tuple = %+v, want the folded flows counted under empty labels", folded, rollups[overflow])
+	}
+}
+
+func TestUnlimitedFlowsCapRollupsAtTheDefault(t *testing.T) {
+	c := New(30*time.Second, asnPerSource{}, 0)
+	if c.maxRollups != config.DefaultMaxFlows {
+		t.Fatalf("rollup cap = %d, want %d with max_flows 0", c.maxRollups, config.DefaultMaxFlows)
 	}
 }
 

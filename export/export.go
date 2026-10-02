@@ -96,6 +96,11 @@ var (
 		"Total flows forcibly evicted due to table overflow.",
 		nil, nil,
 	)
+	descFoldedFlows = prometheus.NewDesc(
+		"rfm_collector_folded_flows_total",
+		"Total flows counted under empty enrichment labels because their label tuple found no room under the rollup cap.",
+		nil, nil,
+	)
 	descErrorsTotal = prometheus.NewDesc(
 		"rfm_errors_total",
 		"Total errors encountered by subsystem.",
@@ -155,6 +160,7 @@ var (
 		descActiveFlows,
 		descDroppedEvents,
 		descForcedEvictions,
+		descFoldedFlows,
 		descErrorsTotal,
 		descIPFIXConnected,
 		descIPFIXDials,
@@ -255,6 +261,7 @@ func (mc *MetricsCollector) Collect(ch chan<- prometheus.Metric) {
 		ch <- prometheus.MustNewConstMetric(descActiveFlows, prometheus.GaugeValue, float64(stats.ActiveFlows))
 		ch <- prometheus.MustNewConstMetric(descDroppedEvents, prometheus.CounterValue, float64(stats.DroppedEvents))
 		ch <- prometheus.MustNewConstMetric(descForcedEvictions, prometheus.CounterValue, float64(stats.ForcedEvictions))
+		ch <- prometheus.MustNewConstMetric(descFoldedFlows, prometheus.CounterValue, float64(stats.FoldedFlows))
 		bpfErrs += stats.BPFMapErrors
 		ch <- prometheus.MustNewConstMetric(descErrorsTotal, prometheus.CounterValue, float64(stats.RingBufErrors), "ring_buffer")
 		if !haveIPFIX {

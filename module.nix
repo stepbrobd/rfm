@@ -101,7 +101,7 @@ in
                     max_flows = std.mkOption {
                       type = std.types.ints.unsigned;
                       default = 65536;
-                      description = "Maximum number of active flows.";
+                      description = "Maximum number of active flows, 0 means no limit. It also caps the label tuples with enrichment labels in the flow metrics, at 65536 when 0, and a flow whose tuple finds no room counts under empty labels.";
                     };
 
                     eviction_timeout = std.mkOption {

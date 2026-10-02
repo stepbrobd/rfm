@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/charmbracelet/log"
+	"ysun.co/rfm/config"
 )
 
 // Collector aggregates flow events into an in-memory flow table
@@ -30,12 +31,19 @@ type Collector struct {
 	activeQueue *list.List
 	// rollups accumulate per label tuple and outlive the flows behind
 	// them, an idle tuple is dropped after RollupRetention eviction timeouts
-	rollups  map[RollupKey]*rollupState
-	timeout  time.Duration
-	active   time.Duration
-	enricher Enricher
-	exporter FlowExporter
-	maxFlows int
+	// at most maxRollups tuples carry enrichment labels, a new flow whose
+	// tuple finds no room counts under the tuple of its interface, direction
+	// and protocol with empty labels, which never needs room of its own
+	rollups    map[RollupKey]*rollupState
+	maxRollups int
+	// idleRollups lists the tuples no live flow counts under, longest idle
+	// at the front, the ones retention or a new tuple may drop
+	idleRollups *list.List
+	timeout     time.Duration
+	active      time.Duration
+	enricher    Enricher
+	exporter    FlowExporter
+	maxFlows    int
 	// rates lists the sample rates in force over boot time, oldest first,
 	// so an event is scaled by the rate that sampled it even after the
 	// rate changed at runtime
@@ -49,6 +57,7 @@ type Collector struct {
 
 	dropped     atomic.Uint64
 	forced      atomic.Uint64
+	folded      atomic.Uint64
 	ringBufErrs atomic.Uint64
 	bpfMapErrs  atomic.Uint64
 	ipfixErrs   atomic.Uint64
@@ -57,12 +66,20 @@ type Collector struct {
 // New creates a collector that evicts flows older than timeout
 // enricher may be nil
 // maxFlows <= 0 means unlimited
+// the label tuples with enrichment labels are capped at maxFlows, or at
+// config.DefaultMaxFlows when the flow table is unlimited
 func New(timeout time.Duration, enricher Enricher, maxFlows int) *Collector {
+	maxRollups := maxFlows
+	if maxRollups <= 0 {
+		maxRollups = config.DefaultMaxFlows
+	}
 	return &Collector{
 		flows:       make(map[FlowKey]*flowState),
 		lru:         list.New(),
 		activeQueue: list.New(),
 		rollups:     make(map[RollupKey]*rollupState),
+		maxRollups:  maxRollups,
+		idleRollups: list.New(),
 		timeout:     timeout,
 		enricher:    enricher,
 		maxFlows:    maxFlows,
@@ -323,12 +340,8 @@ func (c *Collector) recordLocked(ev FlowEvent, now time.Time, labels map[addrPai
 		ended, evicted = c.evictOldestLocked(FlowEndReasonLackOfResources)
 	}
 
-	rk := RollupKey{Ifindex: ev.Ifindex, Dir: ev.Dir, Proto: ev.Proto, Src: src, Dst: dst}
-	rollup, found := c.rollups[rk]
-	if !found {
-		rollup = &rollupState{}
-		c.rollups[rk] = rollup
-	}
+	rollup := c.rollupLocked(RollupKey{Ifindex: ev.Ifindex, Dir: ev.Dir, Proto: ev.Proto, Src: src, Dst: dst})
+	c.attachLocked(rollup)
 	rollup.add(packets, bytes, rate, now)
 
 	state := &flowState{
@@ -355,12 +368,69 @@ func (c *Collector) recordLocked(ev FlowEvent, now time.Time, labels map[addrPai
 	return ended, evicted, true
 }
 
+// rollupLocked returns the tuple a new flow with key rk counts under
+// when the labeled tuples fill the cap, the longest idle one makes room if a
+// scrape has shown all it counted, its series then ends at that value and
+// a sum over all series stays exact, otherwise the flow folds into the tuple
+// with empty labels, whose counts a scrape shows like any other
+// it must be called with mu held
+func (c *Collector) rollupLocked(rk RollupKey) *rollupState {
+	if r, ok := c.rollups[rk]; ok {
+		return r
+	}
+	labeled := rk.Src != (Labels{}) || rk.Dst != (Labels{})
+	if labeled && len(c.rollups) >= c.maxRollups {
+		front := c.idleRollups.Front()
+		if front != nil && front.Value.(*rollupState).shown {
+			c.dropRollupLocked(front.Value.(*rollupState))
+		} else {
+			c.folded.Add(1)
+			rk = RollupKey{Ifindex: rk.Ifindex, Dir: rk.Dir, Proto: rk.Proto}
+			if r, ok := c.rollups[rk]; ok {
+				return r
+			}
+		}
+	}
+	r := &rollupState{key: rk}
+	c.rollups[rk] = r
+	return r
+}
+
+// attachLocked counts a new live flow under r
+// it must be called with mu held
+func (c *Collector) attachLocked(r *rollupState) {
+	if r.idle != nil {
+		c.idleRollups.Remove(r.idle)
+		r.idle = nil
+	}
+	r.flows++
+}
+
+// detachLocked takes a live flow off r, a tuple without live flows becomes
+// a candidate for retention and for making room
+// it must be called with mu held
+func (c *Collector) detachLocked(r *rollupState) {
+	r.flows--
+	if r.flows == 0 {
+		r.idle = c.idleRollups.PushBack(r)
+	}
+}
+
+// dropRollupLocked removes an idle tuple, its series leaves the scrape
+// it must be called with mu held
+func (c *Collector) dropRollupLocked(r *rollupState) {
+	c.idleRollups.Remove(r.idle)
+	r.idle = nil
+	delete(c.rollups, r.key)
+}
+
 // removeLocked drops a flow from the table and both lists
 // it must be called with mu held
 func (c *Collector) removeLocked(state *flowState) {
 	c.lru.Remove(state.elem)
 	c.activeQueue.Remove(state.active)
 	delete(c.flows, state.key)
+	c.detachLocked(state.rollup)
 }
 
 // evictOldestLocked removes the flow with the oldest LastSeen
@@ -400,14 +470,16 @@ func (c *Collector) Evict(now time.Time) {
 		}
 	}
 
-	if len(c.rollups) > 0 {
-
-		stale := now.Add(-RollupRetention * c.timeout)
-		for rk, rollup := range c.rollups {
-			if rollup.LastSeen.Before(stale) {
-				delete(c.rollups, rk)
-			}
+	// idle tuples are listed in the order they lost their last flow, which
+	// follows their last packet closely, so the sweep stops at the first one
+	// still inside the retention
+	stale := now.Add(-RollupRetention * c.timeout)
+	for {
+		front := c.idleRollups.Front()
+		if front == nil || !front.Value.(*rollupState).LastSeen.Before(stale) {
+			break
 		}
+		c.dropRollupLocked(front.Value.(*rollupState))
 	}
 
 	if c.active > 0 {
@@ -470,6 +542,7 @@ func (c *Collector) ScrapeRollups(buf []RollupSample) []RollupSample {
 		if r.exposed {
 			s.Packets, s.Bytes = r.Packets, r.Bytes
 			s.EstPackets, s.EstBytes = r.EstPackets, r.EstBytes
+			r.shown = true
 		}
 		r.exposed = true
 		buf = append(buf, s)
@@ -487,6 +560,7 @@ func (c *Collector) Stats() Stats {
 		ActiveFlows:     activeFlows,
 		DroppedEvents:   c.dropped.Load(),
 		ForcedEvictions: c.forced.Load(),
+		FoldedFlows:     c.folded.Load(),
 		RingBufErrors:   c.ringBufErrs.Load(),
 		BPFMapErrors:    c.bpfMapErrs.Load(),
 		IPFIXErrors:     c.ipfixErrs.Load(),
@@ -505,6 +579,7 @@ func (c *Collector) Flush(reason uint8) {
 			if state.pending() {
 				expired = append(expired, state.record(reason))
 			}
+			c.detachLocked(state.rollup)
 		}
 	}
 	c.flows = make(map[FlowKey]*flowState)

@@ -76,12 +76,20 @@ func (s *flowState) mark(now time.Time) {
 // rollupState is one label tuple with the counters a scrape exposes
 type rollupState struct {
 	RollupCounters
+	key RollupKey
+	// flows counts the live flows that count under the tuple
+	flows int
+	// idle is the position in the collector's idle list while flows is 0
+	idle *list.Element
 	// exposed is set once a scrape showed the tuple, at zero the first time
 	exposed bool
+	// shown is set while the last scrape showed every count of the tuple,
+	// only then may it be dropped without losing counts nobody saw
+	shown bool
 }
 
 // add accounts one event scaled by the rate that sampled it
-func (r *RollupCounters) add(packets, bytes, rate uint64, now time.Time) {
+func (r *rollupState) add(packets, bytes, rate uint64, now time.Time) {
 	r.Packets += packets
 	r.Bytes += bytes
 	r.EstPackets += packets * rate
@@ -89,4 +97,5 @@ func (r *RollupCounters) add(packets, bytes, rate uint64, now time.Time) {
 	if now.After(r.LastSeen) {
 		r.LastSeen = now
 	}
+	r.shown = false
 }

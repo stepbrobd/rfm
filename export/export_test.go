@@ -225,6 +225,7 @@ func TestDescribe(t *testing.T) {
 		"rfm_collector_active_flows",
 		"rfm_collector_dropped_events_total",
 		"rfm_collector_forced_evictions_total",
+		"rfm_collector_folded_flows_total",
 		"rfm_errors_total",
 		"rfm_bpf_sample_rate",
 		"rfm_ipfix_connected",
@@ -842,6 +843,110 @@ func TestCollectRollupSeriesStartAtZero(t *testing.T) {
 				t.Fatalf("scrape %d: %s = %v (present %v), want %v", i+1, name, got, ok, v)
 			}
 		}
+	}
+}
+
+// asnPerSource gives every source address an asn of its own, so every flow
+// from a new source opens a new label tuple
+type asnPerSource struct{}
+
+func (asnPerSource) Enrich(src, dst netip.Addr) (collector.Labels, collector.Labels) {
+	b := src.As16()
+	return collector.Labels{ASN: 64512 + uint32(b[15])}, collector.Labels{}
+}
+
+// seriesID names a series by its labels
+func seriesID(m *dto.Metric) string {
+	var b strings.Builder
+	for _, l := range m.GetLabel() {
+		b.WriteString(l.GetName() + "=" + l.GetValue() + ",")
+	}
+	return b.String()
+}
+
+func TestRollupSumsStayExactAcrossTheCap(t *testing.T) {
+	// flows and label tuples are both capped at four
+	c := collector.New(time.Minute, asnPerSource{}, 4)
+	c.SetSampleRate(10, 0)
+	mc := New(nil, c)
+	reg := prometheus.NewRegistry()
+	reg.MustRegister(mc)
+
+	// what a tsdb keeps, the last value of every series it scraped, a series
+	// that leaves the scrape keeps its last value, so the sum is what
+	// sum(increase()) adds up over all series that start at zero
+	last := map[string]float64{}
+	var folded float64
+	scrape := func() int {
+		t.Helper()
+		mfs, err := reg.Gather()
+		if err != nil {
+			t.Fatalf("gather: %v", err)
+		}
+		var series int
+		for _, mf := range mfs {
+			switch mf.GetName() {
+			case "rfm_flow_packets_total":
+				for _, m := range mf.GetMetric() {
+					last[seriesID(m)] = m.GetCounter().GetValue()
+					series++
+				}
+			case "rfm_collector_folded_flows_total":
+				folded = mf.GetMetric()[0].GetCounter().GetValue()
+			}
+		}
+		return series
+	}
+	sum := func() float64 {
+		var s float64
+		for _, v := range last {
+			s += v
+		}
+		return s
+	}
+
+	t0 := time.Now()
+	var total float64
+	send := func(src byte, at time.Time) {
+		c.Record(collector.FlowEvent{
+			Ifindex: 2, Dir: 0, Proto: 17, SrcPort: 5000, DstPort: 53,
+			SrcAddr: netip.AddrFrom4([4]byte{10, 1, 0, src}),
+			DstAddr: netip.MustParseAddr("10.0.0.1"),
+			Len:     100,
+		}, at)
+		total += 10
+	}
+
+	// four tuples fill the cap, the fifth finds no tuple a scrape has fully
+	// shown to give up and its flow counts under empty labels
+	for src := byte(1); src <= 5; src++ {
+		send(src, t0)
+	}
+	scrape()
+	scrape()
+	if got := sum(); got != total {
+		t.Fatalf("sum over all series = %v, want %v", got, total)
+	}
+	if folded != 1 {
+		t.Fatalf("folded flows = %v, want 1", folded)
+	}
+
+	// the first tuple lost its flow to the fifth and two scrapes showed all
+	// of it, a new tuple takes its place, its series keeps what it counted
+	// and none of it moves to the overflow series
+	send(6, t0.Add(time.Second))
+	send(3, t0.Add(time.Second))
+	send(5, t0.Add(time.Second))
+	for range 2 {
+		if n := scrape(); n > 5 {
+			t.Fatalf("series = %d, want at most four tuples and the overflow", n)
+		}
+	}
+	if got := sum(); got != total {
+		t.Fatalf("sum over all series = %v, want %v", got, total)
+	}
+	if folded != 1 {
+		t.Fatalf("folded flows = %v, want 1", folded)
 	}
 }
 
