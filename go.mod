@@ -10,16 +10,16 @@ require (
 	github.com/BurntSushi/toml v1.6.0
 	github.com/charmbracelet/log v1.0.0
 	github.com/cilium/ebpf v0.22.0
-	github.com/gaissmai/bart v0.29.0
-	github.com/oschwald/maxminddb-golang/v2 v2.5.0
+	github.com/gaissmai/bart v0.30.0
+	github.com/oschwald/maxminddb-golang/v2 v2.7.0
 	github.com/osrg/gobgp/v3 v3.37.0
 	github.com/prometheus/client_golang v1.24.1
 	github.com/prometheus/client_model v0.6.3
 	github.com/spf13/cobra v1.10.2
 	github.com/vishvananda/netlink v1.3.1
 	github.com/vishvananda/netns v0.0.5
-	github.com/vmware/go-ipfix v0.17.0
-	golang.org/x/sys v0.47.0
+	github.com/vmware/go-ipfix v0.18.0
+	golang.org/x/sys v0.48.0
 )
 
 require (
@@ -37,14 +37,14 @@ require (
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/lucasb-eyer/go-colorful v1.4.1 // indirect
 	github.com/mattn/go-isatty v0.0.24 // indirect
-	github.com/mattn/go-runewidth v0.0.29 // indirect
+	github.com/mattn/go-runewidth v0.0.30 // indirect
 	github.com/muesli/termenv v0.16.0 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
-	github.com/prometheus/common v0.71.0 // indirect
+	github.com/prometheus/common v0.72.0 // indirect
 	github.com/prometheus/procfs v0.22.0 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/spf13/pflag v1.0.10 // indirect
-	github.com/xo/terminfo v1.0.0 // indirect
-	golang.org/x/exp v0.0.0-20260824195058-e88cd73687aa // indirect
+	github.com/xo/terminfo v1.2.0 // indirect
+	golang.org/x/exp v0.0.0-20260908205506-85c1c2202aba // indirect
 	google.golang.org/protobuf v1.36.12 // indirect
 )
