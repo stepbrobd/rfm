@@ -30,14 +30,16 @@ in
                   Network interfaces to monitor. Each entry is a Go regular
                   expression matched against system interface names with
                   implicit full-string anchoring. Use `[".*"]` for all
-                  interfaces, `["ranet.*"]` for the ranet prefix, or list
+                  interfaces, `["enp.*"]` for the enp prefix, or list
                   exact names like `["eth0"]`. Overlapping patterns are
                   deduplicated by interface index, so `["eth0", "eth.*"]`
-                  attaches each interface at most once.
+                  attaches each interface at most once. Links without an
+                  Ethernet header, such as WireGuard, tun or xfrm
+                  interfaces, are not attached.
                 '';
                 example = [
                   "eth0"
-                  "ranet.*"
+                  "enp.*"
                 ];
               };
 

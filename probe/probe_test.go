@@ -86,6 +86,72 @@ func TestAttach(t *testing.T) {
 	}
 }
 
+// addTun creates a tun device, whose frames carry no ethernet header
+func addTun(t *testing.T, name string) netlink.Link {
+	t.Helper()
+
+	tun := &netlink.Tuntap{
+		LinkAttrs: netlink.LinkAttrs{Name: name},
+		Mode:      netlink.TUNTAP_MODE_TUN,
+		Flags:     netlink.TUNTAP_NO_PI,
+	}
+	if err := netlink.LinkAdd(tun); err != nil {
+		t.Fatalf("add tun device: %v", err)
+	}
+	// the device is persistent and outlives its queue descriptors
+	for _, f := range tun.Fds {
+		f.Close()
+	}
+	l, err := netlink.LinkByName(name)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := netlink.LinkSetUp(l); err != nil {
+		t.Fatal(err)
+	}
+	return l
+}
+
+func TestAttachLinkTypes(t *testing.T) {
+	testutil.RequireRoot(t)
+
+	testutil.NewNS(t)
+
+	p, err := Load(Config{})
+	if err != nil {
+		skipIfUnsupported(t, err)
+		t.Fatal(err)
+	}
+	defer p.Close()
+
+	// loopback frames carry an ethernet header like veth frames
+	lo, err := netlink.LinkByName("lo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := p.Attach(lo.Attrs().Index); err != nil {
+		skipIfUnsupported(t, err)
+		t.Fatalf("attach loopback: %v", err)
+	}
+
+	// the programs would read the IP header of a tun frame as ethernet
+	tun := addTun(t, "rfmtun0")
+	err = p.Attach(tun.Attrs().Index)
+	if !errors.Is(err, ErrUnsupportedLink) {
+		t.Fatalf("attach tun = %v, want %v", err, ErrUnsupportedLink)
+	}
+	for _, ifindex := range p.Attached() {
+		if ifindex == tun.Attrs().Index {
+			t.Fatal("tun device attached")
+		}
+	}
+
+	// a link that is gone reports ENODEV
+	if err := p.Attach(1 << 30); !errors.Is(err, unix.ENODEV) {
+		t.Fatalf("attach missing link = %v, want ENODEV", err)
+	}
+}
+
 func TestIfaceCounters(t *testing.T) {
 	testutil.RequireRoot(t)
 
@@ -1238,6 +1304,33 @@ func TestWatchFollowsInterfaces(t *testing.T) {
 	}
 	if got := len(p.Attached()); got != 2 {
 		t.Fatalf("attached count = %d, want 2", got)
+	}
+
+	// a matching link without an ethernet header is skipped, its events
+	// would come before the ones of the veth pair created after it
+	tun := addTun(t, "rfmwtun0")
+	veth2 := &netlink.Veth{LinkAttrs: netlink.LinkAttrs{Name: "rfmw2"}, PeerName: "rfmw3"}
+	if err := netlink.LinkAdd(veth2); err != nil {
+		t.Fatal(err)
+	}
+	attached = map[string]bool{}
+	for range 2 {
+		ev := next()
+		if !ev.Attached || ev.Ifindex == tun.Attrs().Index {
+			t.Fatalf("unexpected event %+v", ev)
+		}
+		attached[ev.Name] = true
+	}
+	if !attached["rfmw2"] || !attached["rfmw3"] {
+		t.Fatalf("attached = %v, want rfmw2 and rfmw3", attached)
+	}
+	if err := netlink.LinkDel(veth2); err != nil {
+		t.Fatal(err)
+	}
+	for range 2 {
+		if ev := next(); ev.Attached {
+			t.Fatalf("unexpected attach event %+v", ev)
+		}
 	}
 
 	// an interface outside the pattern is ignored

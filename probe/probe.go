@@ -12,6 +12,8 @@ import (
 	"github.com/charmbracelet/log"
 	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/link"
+	"github.com/vishvananda/netlink"
+	"golang.org/x/sys/unix"
 )
 
 // ifaceLinks are the two tcx links of one attached interface
@@ -25,6 +27,9 @@ type Probe struct {
 
 	mu    sync.Mutex
 	links map[int]ifaceLinks
+	// skipped holds the matching links Watch left alone because of their
+	// link type, so their warning is logged once
+	skipped map[int]bool
 }
 
 func Load(cfg Config) (*Probe, error) {
@@ -88,7 +93,7 @@ func Load(cfg Config) (*Probe, error) {
 		return nil, fmt.Errorf("write config: %w", err)
 	}
 
-	return &Probe{objs: &objs, links: make(map[int]ifaceLinks)}, nil
+	return &Probe{objs: &objs, links: make(map[int]ifaceLinks), skipped: make(map[int]bool)}, nil
 }
 
 func pinPathFor(dir string) string {
@@ -247,9 +252,31 @@ func (p *Probe) FlowDrops() *ebpf.Map {
 // before another program can drop or redirect it and every frame that is
 // about to leave after other programs had their say, which is what the NIC
 // counters measure as well
+// a link without an ethernet header is refused with ErrUnsupportedLink and a
+// link that does not exist with an error matching unix.ENODEV
 func (p *Probe) Attach(ifindex int) error {
-	_, err := p.attach(ifindex)
+	l, err := netlink.LinkByIndex(ifindex)
+	if errors.As(err, new(netlink.LinkNotFoundError)) {
+		return fmt.Errorf("look up link %d: %w", ifindex, unix.ENODEV)
+	}
+	if err != nil {
+		return fmt.Errorf("look up link %d: %w", ifindex, err)
+	}
+	if err := checkLinkType(l.Attrs()); err != nil {
+		return err
+	}
+	_, err = p.attach(ifindex)
 	return err
+}
+
+// checkLinkType refuses a link whose frames do not start with an ethernet
+// header at the tc hooks, loopback frames carry one as well
+func checkLinkType(attrs *netlink.LinkAttrs) error {
+	switch attrs.EncapType {
+	case "ether", "loopback":
+		return nil
+	}
+	return fmt.Errorf("link type %s: %w", attrs.EncapType, ErrUnsupportedLink)
 }
 
 // attach is Attach reporting whether the interface was newly attached

@@ -75,6 +75,10 @@ func (p *Probe) handleLink(update netlink.LinkUpdate, match func(string) bool, n
 		if !match(attrs.Name) {
 			return
 		}
+		if err := checkLinkType(attrs); err != nil {
+			p.skip(attrs.Name, attrs.Index, err)
+			return
+		}
 		attached, err := p.attach(attrs.Index)
 		if err != nil {
 			log.Error("attach interface", "interface", attrs.Name, "err", err)
@@ -84,6 +88,7 @@ func (p *Probe) handleLink(update netlink.LinkUpdate, match func(string) bool, n
 			notify(LinkEvent{Name: attrs.Name, Ifindex: attrs.Index, Attached: true})
 		}
 	case unix.RTM_DELLINK:
+		p.unskip(attrs.Index)
 		detached, err := p.detach(attrs.Index)
 		if err != nil {
 			log.Error("detach interface", "interface", attrs.Name, "err", err)
@@ -92,4 +97,22 @@ func (p *Probe) handleLink(update netlink.LinkUpdate, match func(string) bool, n
 			notify(LinkEvent{Name: attrs.Name, Ifindex: attrs.Index, Attached: false})
 		}
 	}
+}
+
+// skip logs once that a matching link is left alone
+func (p *Probe) skip(name string, ifindex int, reason error) {
+	p.mu.Lock()
+	seen := p.skipped[ifindex]
+	p.skipped[ifindex] = true
+	p.mu.Unlock()
+	if !seen {
+		log.Warn("interface skipped", "interface", name, "err", reason)
+	}
+}
+
+// unskip forgets a skipped link once it is gone, its index may come back
+func (p *Probe) unskip(ifindex int) {
+	p.mu.Lock()
+	delete(p.skipped, ifindex)
+	p.mu.Unlock()
 }
