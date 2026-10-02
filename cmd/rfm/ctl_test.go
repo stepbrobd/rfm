@@ -63,9 +63,11 @@ func (f *fakeControl) RIBSummary() (ctl.RIB, error) {
 	return ctl.RIB{Listen: "[::1]:11019", PrefixesV4: 12, PrefixesV6: 3, Routes: 15, Peers: 1}, nil
 }
 
+// SetSampleRate refuses rates above 1000 with an error of its own, the
+// limit of the real agent is tested against the real handler
 func (f *fakeControl) SetSampleRate(rate uint32) error {
 	if rate > 1000 {
-		return errors.New("rate above max_sample_rate")
+		return errors.New("refused by the fake agent")
 	}
 	f.rate = rate
 	return nil
@@ -79,6 +81,10 @@ func (f *fakeControl) ReloadMMDB() error { return nil }
 // what it printed
 func runCLI(t *testing.T, sock string, args ...string) (string, error) {
 	t.Helper()
+
+	// a flag keeps what an earlier run set, every run starts from the
+	// defaults
+	ctlJSON, flowsTopBy = false, "bytes"
 
 	var out bytes.Buffer
 	root.SetOut(&out)
@@ -192,8 +198,8 @@ func TestCLISetSampleRate(t *testing.T) {
 	if _, err := runCLI(t, sock, "set", "sample-rate", "0"); err == nil {
 		t.Fatal("rate 0 must be rejected before reaching the agent")
 	}
-	if _, err := runCLI(t, sock, "set", "sample-rate", "5000"); err == nil || !strings.Contains(err.Error(), "above max_sample_rate") {
-		t.Fatalf("agent error must surface: %v", err)
+	if _, err := runCLI(t, sock, "set", "sample-rate", "5000"); err == nil || err.Error() != "refused by the fake agent" {
+		t.Fatalf("set sample-rate 5000 = %v, want the agent's error as it sent it", err)
 	}
 }
 

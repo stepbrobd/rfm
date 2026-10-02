@@ -10,6 +10,7 @@ import (
 	"os/signal"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -29,20 +30,75 @@ import (
 var agentCmd = &cobra.Command{
 	Use:   "agent",
 	Short: "Start the RFM agent daemon",
-	RunE:  runAgent,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		// SIGINT and SIGTERM stop the agent
+		ctx, stop := signal.NotifyContext(cmd.Context(), syscall.SIGINT, syscall.SIGTERM)
+		defer stop()
+		return runAgent(ctx, cfgFile, kernelDeps)
+	},
 }
 
 func init() {
 	root.AddCommand(agentCmd)
 }
 
-func runAgent(cmd *cobra.Command, args []string) error {
+// agentProbe is what the agent uses of the loaded BPF programs, tests run
+// the agent on a fake that needs no privileges
+type agentProbe interface {
+	Close() error
+	Attach(ifindex int) error
+	Attached() []int
+	SetSampleRate(n uint32) error
+	Watch(ctx context.Context, match func(string) bool, notify func(probe.LinkEvent)) error
+	WatchState() probe.WatchState
+	// Stats reads the interface counters and the sample rate for a scrape
+	Stats() export.IfaceStatsSource
+	// Events opens the reader of the sampled flow events
+	Events() (collector.Reader, error)
+}
+
+// agentDeps is what the agent needs privileges or a fixed address for
+type agentDeps struct {
+	loadProbe func(probe.Config) (agentProbe, error)
+	// listen opens the metrics listener
+	listen func(network, addr string) (net.Listener, error)
+}
+
+// kernelDeps load the programs into the kernel and listen where the
+// configuration says
+var kernelDeps = agentDeps{loadProbe: loadProbe, listen: net.Listen}
+
+// kernelProbe is the agentProbe of the programs in the kernel
+type kernelProbe struct {
+	*probe.Probe
+}
+
+func loadProbe(cfg probe.Config) (agentProbe, error) {
+	p, err := probe.Load(cfg)
+	if err != nil {
+		return nil, err
+	}
+	return kernelProbe{p}, nil
+}
+
+// Stats also reports the counter updates the interface stats map refused,
+// as bpf_map errors
+func (p kernelProbe) Stats() export.IfaceStatsSource {
+	return &export.ProbeSource{Probe: p.Probe}
+}
+
+func (p kernelProbe) Events() (collector.Reader, error) {
+	return collector.NewReader(p.FlowEvents(), p.FlowDrops())
+}
+
+// runAgent runs the agent the file at path configures until ctx is done
+func runAgent(ctx context.Context, path string, deps agentDeps) error {
 	started := time.Now()
-	cfg, err := config.Load(cfgFile)
+	cfg, err := config.Load(path)
 	if err != nil {
 		return err
 	}
-	cfgText, err := os.ReadFile(cfgFile)
+	cfgText, err := os.ReadFile(path)
 	if err != nil {
 		return fmt.Errorf("reading config: %w", err)
 	}
@@ -67,7 +123,7 @@ func runAgent(cmd *cobra.Command, args []string) error {
 		enricher = backends.Enricher
 	}
 
-	p, err := probe.Load(probeConfig(cfg))
+	p, err := deps.loadProbe(probeConfig(cfg))
 	if err != nil {
 		return fmt.Errorf("load probe: %w", err)
 	}
@@ -92,7 +148,7 @@ func runAgent(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	rd, err := collector.NewReader(p.FlowEvents(), p.FlowDrops())
+	rd, err := p.Events()
 	if err != nil {
 		return fmt.Errorf("open reader: %w", err)
 	}
@@ -124,9 +180,7 @@ func runAgent(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	// the probe source also reports the counter updates the interface stats
-	// map refused, as bpf_map errors
-	mc := export.New(&export.ProbeSource{Probe: p}, c)
+	mc := export.New(p.Stats(), c)
 	if ipfixExp != nil {
 		mc.SetIPFIX(ipfixExp.Stats)
 	}
@@ -155,23 +209,13 @@ func runAgent(cmd *cobra.Command, args []string) error {
 	srv := newMetricsServer(reg, metricsTimeout)
 
 	// start listener and fail immediately if bind fails
-	ln, err := net.Listen("tcp", addr)
+	ln, err := deps.listen("tcp", addr)
 	if err != nil {
 		return fmt.Errorf("listen %s: %w", addr, err)
 	}
-	log.Info("metrics server", "addr", addr)
+	log.Info("metrics server", "addr", ln.Addr().String())
 
-	ctx, cancel := signal.NotifyContext(cmd.Context(),
-		syscall.SIGINT, syscall.SIGTERM)
-	defer cancel()
-
-	go func() {
-		if err := srv.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			log.Error("http server died, shutting down", "err", err)
-			cancel()
-		}
-	}()
-
+	var ctlSrv *ctl.Server
 	if cfg.Agent.Control.Socket != "" {
 		handler := &controlHandler{
 			started:  started,
@@ -182,20 +226,37 @@ func runAgent(cmd *cobra.Command, args []string) error {
 			ipfix:    ipfixExp,
 			backends: backends,
 		}
-		ctlSrv, err := ctl.Listen(cfg.Agent.Control.Socket, handler)
+		ctlSrv, err = ctl.Listen(cfg.Agent.Control.Socket, handler)
 		if err != nil {
+			ln.Close()
 			return err
 		}
 		log.Info("control socket", "path", cfg.Agent.Control.Socket)
-		go func() {
+	}
+
+	// the goroutines are done before the probe and the reader close
+	ctx, cancel := context.WithCancel(ctx)
+	var wg sync.WaitGroup
+	defer wg.Wait()
+	defer cancel()
+
+	wg.Go(func() {
+		if err := srv.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			log.Error("http server died, shutting down", "err", err)
+			cancel()
+		}
+	})
+
+	if ctlSrv != nil {
+		wg.Go(func() {
 			if err := ctlSrv.Serve(ctx); err != nil && ctx.Err() == nil {
 				log.Error("control socket stopped", "err", err)
 			}
-		}()
+		})
 	}
 
 	// follow interfaces that appear or vanish while the agent runs
-	go func() {
+	wg.Go(func() {
 		err := p.Watch(ctx, matcher, func(ev probe.LinkEvent) {
 			if ev.Attached {
 				log.Info("attached", "interface", ev.Name)
@@ -206,7 +267,7 @@ func runAgent(cmd *cobra.Command, args []string) error {
 		if err != nil && ctx.Err() == nil {
 			log.Error("interface watch stopped", "err", err)
 		}
-	}()
+	})
 
 	runErr := c.Run(ctx, rd)
 	if ipfixExp != nil {
