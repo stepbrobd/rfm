@@ -178,13 +178,15 @@ static __always_inline int rfm_tc(struct __sk_buff *skb, __u8 dir)
 	void *data = (void *)(long)skb->data;
 	void *end = (void *)(long)skb->data_end;
 
-	if (data + sizeof(struct ethhdr) > end)
-		return TCX_NEXT;
-
-	struct ethhdr *eth = data;
-	__u16 eth_proto = bpf_ntohs(eth->h_proto);
+	// a frame whose L2 header runs past the linear data is still counted,
+	// as family other with eth_proto 0
+	__u16 eth_proto = 0;
 	__u8 iface_proto = 0;
 	void *l3 = data + sizeof(struct ethhdr);
+	if (l3 <= end) {
+		struct ethhdr *eth = data;
+		eth_proto = bpf_ntohs(eth->h_proto);
+	}
 
 // todo:
 // - handle PPPoE session frames carrying IPv4 or IPv6
@@ -194,8 +196,10 @@ static __always_inline int rfm_tc(struct __sk_buff *skb, __u8 dir)
 		if (eth_proto != ETH_P_8021Q && eth_proto != ETH_P_8021AD)
 			break;
 
-		if (l3 + sizeof(struct rfm_vlan_hdr) > end)
-			return TCX_NEXT;
+		if (l3 + sizeof(struct rfm_vlan_hdr) > end) {
+			eth_proto = 0;
+			break;
+		}
 
 		struct rfm_vlan_hdr *vlan = l3;
 		eth_proto = bpf_ntohs(vlan->encap_proto);
@@ -236,6 +240,13 @@ static __always_inline int rfm_tc(struct __sk_buff *skb, __u8 dir)
 		else
 			len += (segs - 1) * hdr_len;
 	}
+
+	// the kernel holds the outer VLAN tag of a received frame in the skb
+	// from before the ingress hook, and a VLAN device hands its frames to
+	// the egress hook of the lower device with the tag in the skb, either
+	// way every wire packet carries the 4 tag bytes outside skb->len
+	if (skb->vlan_present)
+		len += segs * sizeof(struct rfm_vlan_hdr);
 
 	// iface stats are always updated, not gated by sampling
 	struct rfm_iface_key ikey = {

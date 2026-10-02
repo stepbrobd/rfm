@@ -162,6 +162,8 @@ func TestIfaceCountersVLAN(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// the kernel moves the tag of a received frame into the skb before the
+	// ingress hook, the 4 tag bytes were on the wire all the same
 	pkt := testutil.EthVLANIPv4TCP(
 		net.IPv4(10, 0, 1, 1),
 		net.IPv4(10, 0, 1, 2),
@@ -174,24 +176,119 @@ func TestIfaceCountersVLAN(t *testing.T) {
 		Dir:     0,
 		Proto:   4,
 	}
+	wantIfaceStats(t, p, key, 1, uint64(len(pkt)))
+}
 
-	testutil.Eventually(t, time.Second, 10*time.Millisecond, func() error {
-		var vals []rfmRfmIfaceValue
-		if err := p.IfaceStats().Lookup(key, &vals); err != nil {
-			return err
-		}
+func TestIfaceCountersVLANEgress(t *testing.T) {
+	testutil.RequireRoot(t)
 
-		var packets uint64
-		for _, v := range vals {
-			packets += v.Packets
-		}
+	ns := testutil.NewNS(t)
 
-		if packets == 0 {
-			return fmt.Errorf("expected vlan packets > 0")
-		}
+	p, err := Load(Config{})
+	if err != nil {
+		skipIfUnsupported(t, err)
+		t.Fatal(err)
+	}
+	defer p.Close()
 
-		return nil
-	})
+	if err := p.Attach(ns.Ifindex()); err != nil {
+		skipIfUnsupported(t, err)
+		t.Fatal(err)
+	}
+
+	// a vlan device hands its frames to the lower device with the tag held
+	// in the skb, the tag goes into the frame after the egress hook ran
+	vlan := addVLAN(t, ns, 42)
+	pkt := testutil.EthIPv4TCP(net.IPv4(10, 0, 1, 3), net.IPv4(10, 0, 1, 4), 12001, 443)
+	ns.SendRawOn(t, vlan, pkt)
+
+	key := rfmRfmIfaceKey{
+		Ifindex: uint32(ns.Ifindex()),
+		Dir:     1,
+		Proto:   4,
+	}
+	wantIfaceStats(t, p, key, 1, uint64(len(pkt)+testutil.VLANHdrLen))
+}
+
+func TestIfaceCountersVLANEgressGSO(t *testing.T) {
+	testutil.RequireRoot(t)
+
+	ns := testutil.NewNS(t)
+
+	p, err := Load(Config{})
+	if err != nil {
+		skipIfUnsupported(t, err)
+		t.Fatal(err)
+	}
+	defer p.Close()
+
+	if err := p.Attach(ns.Ifindex()); err != nil {
+		skipIfUnsupported(t, err)
+		t.Fatal(err)
+	}
+
+	// every wire packet of the gso skb gets the tag
+	vlan := addVLAN(t, ns, 43)
+	ns.SendGSO(t, vlan, gsoFrame(4400), gsoHdrLen, gsoSize)
+
+	key := rfmRfmIfaceKey{
+		Ifindex: uint32(ns.Ifindex()),
+		Dir:     1,
+		Proto:   4,
+	}
+	wantIfaceStats(t, p, key, gsoSegs, gsoWire+gsoSegs*testutil.VLANHdrLen)
+}
+
+// addVLAN creates a vlan device with id on the monitored interface and
+// returns its name
+func addVLAN(t *testing.T, ns *testutil.NS, id int) string {
+	t.Helper()
+
+	vlan := &netlink.Vlan{
+		LinkAttrs: netlink.LinkAttrs{Name: fmt.Sprintf("%s.%d", ns.Name(), id), ParentIndex: ns.Ifindex()},
+		VlanId:    id,
+	}
+	if err := netlink.LinkAdd(vlan); err != nil {
+		t.Fatalf("add vlan device: %v", err)
+	}
+	if err := netlink.LinkSetUp(vlan); err != nil {
+		t.Fatal(err)
+	}
+	return vlan.Name
+}
+
+func TestIfaceCountersTruncatedVLANTag(t *testing.T) {
+	testutil.RequireRoot(t)
+
+	testutil.NewNS(t)
+
+	p, err := Load(Config{})
+	if err != nil {
+		skipIfUnsupported(t, err)
+		t.Fatal(err)
+	}
+	defer p.Close()
+
+	// the frame ends where its VLAN tag should start, the program cannot
+	// parse it but must count it, as family other on the device of the
+	// test run, which is loopback
+	frame := testutil.Eth(
+		net.HardwareAddr{0xde, 0xad, 0xbe, 0xef, 0x00, 0x01},
+		net.HardwareAddr{0xde, 0xad, 0xbe, 0xef, 0x00, 0x02},
+		testutil.EthP8021Q,
+		nil,
+	)
+	if _, err := p.objs.RfmTcIngress.Run(&ebpf.RunOptions{Data: frame}); err != nil {
+		skipIfUnsupported(t, err)
+		t.Fatal(err)
+	}
+
+	lo, err := netlink.LinkByName("lo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	key := rfmRfmIfaceKey{Ifindex: uint32(lo.Attrs().Index), Dir: 0, Proto: 0}
+	wantIfaceStats(t, p, key, 1, uint64(len(frame)))
 }
 
 // readFlowEvent sets up a probe with sampling, attaches it, sends a packet
@@ -571,6 +668,23 @@ func ifaceStats(t *testing.T, p *Probe, key rfmRfmIfaceKey) (packets, bytes uint
 		bytes += v.Bytes
 	}
 	return packets, bytes
+}
+
+// wantIfaceStats waits for the counters of key to reach packets and then
+// requires bytes
+func wantIfaceStats(t *testing.T, p *Probe, key rfmRfmIfaceKey, packets, bytes uint64) {
+	t.Helper()
+
+	testutil.Eventually(t, time.Second, 10*time.Millisecond, func() error {
+		if got, _ := ifaceStats(t, p, key); got < packets {
+			return fmt.Errorf("packets = %d, want %d", got, packets)
+		}
+		return nil
+	})
+	gotPackets, gotBytes := ifaceStats(t, p, key)
+	if gotPackets != packets || gotBytes != bytes {
+		t.Fatalf("counters = %d packets %d bytes, want %d packets %d bytes", gotPackets, gotBytes, packets, bytes)
+	}
 }
 
 // gsoFrame is a 5000 byte TCP payload split into 1000 byte segments
