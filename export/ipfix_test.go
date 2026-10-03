@@ -84,7 +84,7 @@ func TestIPFIXExportsEvictedFlowsOverUDP(t *testing.T) {
 			conn := startIPFIXListener(t)
 			addr := conn.LocalAddr().(*net.UDPAddr)
 
-			exp, err := NewIPFIX(testIPFIXConfig(addr.IP.String(), addr.Port), 100)
+			exp, err := NewIPFIX(testIPFIXConfig(addr.IP.String(), addr.Port))
 			if err != nil {
 				t.Fatalf("NewIPFIX: %v", err)
 			}
@@ -157,7 +157,7 @@ func TestIPFIXOctetDeltaCountCarriesIPBytes(t *testing.T) {
 	conn := startIPFIXListener(t)
 	addr := conn.LocalAddr().(*net.UDPAddr)
 
-	exp, err := NewIPFIX(testIPFIXConfig(addr.IP.String(), addr.Port), 1)
+	exp, err := NewIPFIX(testIPFIXConfig(addr.IP.String(), addr.Port))
 	if err != nil {
 		t.Fatalf("NewIPFIX: %v", err)
 	}
@@ -210,7 +210,7 @@ func TestIPFIXUsesConfiguredObservationDomainID(t *testing.T) {
 
 	cfg := testIPFIXConfig(addr.IP.String(), addr.Port)
 	cfg.ObservationDomainID = 4242
-	exp, err := NewIPFIX(cfg, 1)
+	exp, err := NewIPFIX(cfg)
 	if err != nil {
 		t.Fatalf("NewIPFIX: %v", err)
 	}
@@ -225,7 +225,7 @@ func TestIPFIXUsesConfiguredObservationDomainID(t *testing.T) {
 			SrcPort: 1234, DstPort: 80,
 		},
 		collector.FlowEntry{
-			FirstSeen: now, LastSeen: now, Packets: 1, IPBytes: 100,
+			FirstSeen: now, LastSeen: now, Packets: 1, IPBytes: 100, EstPackets: 1,
 		},
 		collector.FlowEndReasonIdleTimeout,
 	)
@@ -246,7 +246,7 @@ func TestIPFIXSkipsCollectorTraffic(t *testing.T) {
 	conn := startIPFIXListener(t)
 	addr := conn.LocalAddr().(*net.UDPAddr)
 
-	exp, err := NewIPFIX(testIPFIXConfig(addr.IP.String(), addr.Port), 1)
+	exp, err := NewIPFIX(testIPFIXConfig(addr.IP.String(), addr.Port))
 	if err != nil {
 		t.Fatalf("NewIPFIX: %v", err)
 	}
@@ -263,10 +263,11 @@ func TestIPFIXSkipsCollectorTraffic(t *testing.T) {
 			DstPort: exp.collectorPort,
 		},
 		collector.FlowEntry{
-			FirstSeen: time.Unix(1_700_000_000, 0).UTC(),
-			LastSeen:  time.Unix(1_700_000_000, 0).UTC(),
-			Packets:   1,
-			IPBytes:   128,
+			FirstSeen:  time.Unix(1_700_000_000, 0).UTC(),
+			LastSeen:   time.Unix(1_700_000_000, 0).UTC(),
+			Packets:    1,
+			IPBytes:    128,
+			EstPackets: 1,
 		},
 		collector.FlowEndReasonEndOfFlow,
 	)
@@ -286,7 +287,7 @@ func TestIPFIXExportsTrafficToCollectorDestinationFromOtherSocket(t *testing.T) 
 	conn := startIPFIXListener(t)
 	addr := conn.LocalAddr().(*net.UDPAddr)
 
-	exp, err := NewIPFIX(testIPFIXConfig(addr.IP.String(), addr.Port), 1)
+	exp, err := NewIPFIX(testIPFIXConfig(addr.IP.String(), addr.Port))
 	if err != nil {
 		t.Fatalf("NewIPFIX: %v", err)
 	}
@@ -308,10 +309,11 @@ func TestIPFIXExportsTrafficToCollectorDestinationFromOtherSocket(t *testing.T) 
 			DstPort: exp.collectorPort,
 		},
 		collector.FlowEntry{
-			FirstSeen: time.Unix(1_700_000_000, 0).UTC(),
-			LastSeen:  time.Unix(1_700_000_000, 0).UTC(),
-			Packets:   3,
-			IPBytes:   384,
+			FirstSeen:  time.Unix(1_700_000_000, 0).UTC(),
+			LastSeen:   time.Unix(1_700_000_000, 0).UTC(),
+			Packets:    3,
+			IPBytes:    384,
+			EstPackets: 3,
 		},
 		collector.FlowEndReasonEndOfFlow,
 	)
@@ -342,7 +344,7 @@ func TestIPFIXUsesConfiguredBindHost(t *testing.T) {
 
 	cfg := testIPFIXConfig(addr.IP.String(), addr.Port)
 	cfg.Bind = config.IPFIXBindConfig{Host: "127.0.0.1"}
-	exp, err := NewIPFIX(cfg, 1)
+	exp, err := NewIPFIX(cfg)
 	if err != nil {
 		t.Fatalf("NewIPFIX: %v", err)
 	}
@@ -626,7 +628,7 @@ func TestIPFIXTemplateSuppressedWithinRefreshWindow(t *testing.T) {
 	addr := conn.LocalAddr().(*net.UDPAddr)
 
 	now := time.Unix(1_700_000_000, 0).UTC()
-	exp, err := NewIPFIX(testIPFIXConfig(addr.IP.String(), addr.Port), 1)
+	exp, err := NewIPFIX(testIPFIXConfig(addr.IP.String(), addr.Port))
 	if err != nil {
 		t.Fatalf("NewIPFIX: %v", err)
 	}
@@ -641,7 +643,7 @@ func TestIPFIXTemplateSuppressedWithinRefreshWindow(t *testing.T) {
 			SrcPort: 1234, DstPort: 80,
 		},
 		collector.FlowEntry{
-			FirstSeen: now, LastSeen: now, Packets: 1, IPBytes: 100,
+			FirstSeen: now, LastSeen: now, Packets: 1, IPBytes: 100, EstPackets: 1,
 		},
 		collector.FlowEndReasonIdleTimeout,
 	)
@@ -682,7 +684,7 @@ func TestIPFIXTemplateResendAfterRefreshTimeout(t *testing.T) {
 	addr := conn.LocalAddr().(*net.UDPAddr)
 
 	now := time.Unix(1_700_000_000, 0).UTC()
-	exp, err := NewIPFIX(testIPFIXConfig(addr.IP.String(), addr.Port), 1)
+	exp, err := NewIPFIX(testIPFIXConfig(addr.IP.String(), addr.Port))
 	if err != nil {
 		t.Fatalf("NewIPFIX: %v", err)
 	}
@@ -697,7 +699,7 @@ func TestIPFIXTemplateResendAfterRefreshTimeout(t *testing.T) {
 			SrcPort: 1234, DstPort: 80,
 		},
 		collector.FlowEntry{
-			FirstSeen: now, LastSeen: now, Packets: 1, IPBytes: 100,
+			FirstSeen: now, LastSeen: now, Packets: 1, IPBytes: 100, EstPackets: 1,
 		},
 		collector.FlowEndReasonIdleTimeout,
 	)
@@ -735,7 +737,7 @@ func TestIPFIXSendsTemplatesFirstOnANewSocket(t *testing.T) {
 	addr := conn.LocalAddr().(*net.UDPAddr)
 
 	now := time.Unix(1_700_000_000, 0).UTC()
-	exp, err := NewIPFIX(testIPFIXConfig(addr.IP.String(), addr.Port), 1)
+	exp, err := NewIPFIX(testIPFIXConfig(addr.IP.String(), addr.Port))
 	if err != nil {
 		t.Fatalf("NewIPFIX: %v", err)
 	}
@@ -807,7 +809,7 @@ func testFlow(src, dst string, port uint16, now time.Time) collector.ExportedFlo
 			SrcPort: port, DstPort: 443,
 		},
 		collector.FlowEntry{
-			FirstSeen: now, LastSeen: now, Packets: 2, IPBytes: 300,
+			FirstSeen: now, LastSeen: now, Packets: 2, IPBytes: 300, EstPackets: 2,
 		},
 		collector.FlowEndReasonIdleTimeout,
 	)
@@ -819,7 +821,7 @@ func TestIPFIXPacksRecordsIntoOneMessage(t *testing.T) {
 	conn := startIPFIXListener(t)
 	addr := conn.LocalAddr().(*net.UDPAddr)
 
-	exp, err := NewIPFIX(testIPFIXConfig(addr.IP.String(), addr.Port), 1)
+	exp, err := NewIPFIX(testIPFIXConfig(addr.IP.String(), addr.Port))
 	if err != nil {
 		t.Fatalf("NewIPFIX: %v", err)
 	}
@@ -892,7 +894,7 @@ func TestIPFIXSplitsMessagesAtMaxSize(t *testing.T) {
 	cfg := testIPFIXConfig(addr.IP.String(), addr.Port)
 	// room for the template and one record, then two records per message
 	cfg.MaxMessageSize = 200
-	exp, err := NewIPFIX(cfg, 1)
+	exp, err := NewIPFIX(cfg)
 	if err != nil {
 		t.Fatalf("NewIPFIX: %v", err)
 	}
@@ -937,7 +939,7 @@ func TestIPFIXQueueFullDropsRecords(t *testing.T) {
 
 	cfg := testIPFIXConfig(addr.IP.String(), addr.Port)
 	cfg.QueueSize = 2
-	exp, err := NewIPFIX(cfg, 1)
+	exp, err := NewIPFIX(cfg)
 	if err != nil {
 		t.Fatalf("NewIPFIX: %v", err)
 	}
@@ -996,13 +998,43 @@ func TestIPFIXQueueFullDropsRecords(t *testing.T) {
 	}
 }
 
+func TestIPFIXRefusesRecordsWithoutAnEstimate(t *testing.T) {
+	loadIPFIXRegistry.Do(registry.LoadRegistry)
+
+	conn := startIPFIXListener(t)
+	addr := conn.LocalAddr().(*net.UDPAddr)
+
+	exp, err := NewIPFIX(testIPFIXConfig(addr.IP.String(), addr.Port))
+	if err != nil {
+		t.Fatalf("NewIPFIX: %v", err)
+	}
+	defer exp.Close()
+
+	// the sampling probability of a record is its packets over its
+	// estimate, which counts every sampled packet at least once
+	for _, tc := range []struct{ packets, estimate uint64 }{{2, 0}, {2, 1}, {0, 0}} {
+		flow := testFlow("::ffff:10.0.0.1", "::ffff:10.0.0.2", 1, time.Now())
+		flow.Packets, flow.EstPackets = tc.packets, tc.estimate
+		if err := exp.ExportFlow(flow); err == nil {
+			t.Fatalf("record of %d packets with an estimate of %d queued, want it refused", tc.packets, tc.estimate)
+		}
+	}
+	if err := exp.Flush(); err != nil {
+		t.Fatalf("Flush: %v", err)
+	}
+	assertNoIPFIXDatagram(t, conn)
+	if got := exp.Stats().EncodeErrors; got != 3 {
+		t.Fatalf("encode errors = %d, want the 3 refused records", got)
+	}
+}
+
 func TestIPFIXRefusesRecordsOnceClosed(t *testing.T) {
 	loadIPFIXRegistry.Do(registry.LoadRegistry)
 
 	conn := startIPFIXListener(t)
 	addr := conn.LocalAddr().(*net.UDPAddr)
 
-	exp, err := NewIPFIX(testIPFIXConfig(addr.IP.String(), addr.Port), 1)
+	exp, err := NewIPFIX(testIPFIXConfig(addr.IP.String(), addr.Port))
 	if err != nil {
 		t.Fatalf("NewIPFIX: %v", err)
 	}
@@ -1028,7 +1060,7 @@ func TestIPFIXCountsRecordsLostWithFailedMessages(t *testing.T) {
 	conn := startIPFIXListener(t)
 	addr := conn.LocalAddr().(*net.UDPAddr)
 
-	exp, err := NewIPFIX(testIPFIXConfig(addr.IP.String(), addr.Port), 1)
+	exp, err := NewIPFIX(testIPFIXConfig(addr.IP.String(), addr.Port))
 	if err != nil {
 		t.Fatalf("NewIPFIX: %v", err)
 	}
@@ -1076,7 +1108,7 @@ func TestIPFIXCountsSendErrorsByErrno(t *testing.T) {
 	conn := startIPFIXListener(t)
 	addr := conn.LocalAddr().(*net.UDPAddr)
 
-	exp, err := NewIPFIX(testIPFIXConfig(addr.IP.String(), addr.Port), 1)
+	exp, err := NewIPFIX(testIPFIXConfig(addr.IP.String(), addr.Port))
 	if err != nil {
 		t.Fatalf("NewIPFIX: %v", err)
 	}
@@ -1117,7 +1149,7 @@ func TestIPFIXDialsLazily(t *testing.T) {
 	// a bind address this host does not have, like a tunnel address
 	// that shows up after boot
 	cfg.Bind = config.IPFIXBindConfig{Host: "192.0.2.123"}
-	exp, err := NewIPFIX(cfg, 1)
+	exp, err := NewIPFIX(cfg)
 	if err != nil {
 		t.Fatalf("NewIPFIX must not fail on an absent bind address: %v", err)
 	}

@@ -175,7 +175,7 @@ func runAgent(ctx context.Context, path string, deps agentDeps) error {
 
 	var ipfixExp *export.IPFIXExporter
 	if cfg.Agent.IPFIX.Enabled() {
-		ipfixExp, err = export.NewIPFIX(cfg.Agent.IPFIX, cfg.Agent.BPF.SampleRate)
+		ipfixExp, err = export.NewIPFIX(cfg.Agent.IPFIX)
 		if err != nil {
 			return fmt.Errorf("init ipfix exporter: %w", err)
 		}

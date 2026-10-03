@@ -131,7 +131,6 @@ type IPFIXExporter struct {
 
 	// sender state, touched by the sender goroutine only
 	observationDomainID    uint32
-	samplingProb           float64
 	seqNumber              uint32
 	templateRefreshTimeout time.Duration
 	flushInterval          time.Duration
@@ -153,11 +152,7 @@ type ipfixTemplate struct {
 }
 
 // NewIPFIX creates an IPFIX exporter for a single configured collector
-func NewIPFIX(cfg config.IPFIXConfig, sampleRate uint32) (*IPFIXExporter, error) {
-	if sampleRate == 0 {
-		return nil, fmt.Errorf("sample rate must be > 0")
-	}
-
+func NewIPFIX(cfg config.IPFIXConfig) (*IPFIXExporter, error) {
 	cfg = cfg.WithDefaults()
 	if !cfg.Enabled() {
 		return nil, fmt.Errorf("ipfix exporter requires a collector host or port")
@@ -204,7 +199,6 @@ func NewIPFIX(cfg config.IPFIXConfig, sampleRate uint32) (*IPFIXExporter, error)
 			return net.DialUDP("udp", local, remote)
 		},
 		observationDomainID:    cfg.ObservationDomainID,
-		samplingProb:           1 / float64(sampleRate),
 		templateRefreshTimeout: cfg.TemplateRefresh,
 		flushInterval:          cfg.FlushInterval,
 		maxMessageSize:         cfg.MaxMessageSize,
@@ -297,8 +291,9 @@ func (e *IPFIXExporter) Flush() error {
 }
 
 // ExportFlow queues a completed flow for export
-// it returns an error when the queue is full or the exporter is closed, the
-// record is then lost and counted
+// it returns an error when the queue is full, the exporter is closed or the
+// record has no packets or an estimate below them, the record is then lost
+// and counted
 func (e *IPFIXExporter) ExportFlow(flow collector.ExportedFlow) error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
@@ -306,6 +301,12 @@ func (e *IPFIXExporter) ExportFlow(flow collector.ExportedFlow) error {
 	if e.closed {
 		e.stats.Unsent++
 		return errors.New("ipfix exporter closed")
+	}
+	// the sampling probability of a record is its packets over its estimate,
+	// and the collector scales every sampled packet by a rate of at least 1
+	if flow.Packets == 0 || flow.EstPackets < flow.Packets {
+		e.stats.EncodeErrors++
+		return fmt.Errorf("ipfix record of %d packets with an estimate of %d", flow.Packets, flow.EstPackets)
 	}
 	if e.isOwnExportFlowLocked(flow) {
 		return nil
@@ -784,13 +785,8 @@ func (e *IPFIXExporter) dataElements(flow collector.ExportedFlow, isIPv6 bool) [
 			elements = append(elements, entities.NewUnsigned8InfoElement(ie, flow.EndReason))
 		case "samplingProbability":
 			// records carry the share of wire packets they stand for, which
-			// tracks runtime rate changes, an empty estimate falls back to
-			// the configured rate
-			prob := e.samplingProb
-			if flow.EstPackets > 0 {
-				prob = flow.SamplingProbability()
-			}
-			elements = append(elements, entities.NewFloat64InfoElement(ie, prob))
+			// tracks runtime rate changes
+			elements = append(elements, entities.NewFloat64InfoElement(ie, flow.SamplingProbability()))
 		}
 	}
 	return elements
