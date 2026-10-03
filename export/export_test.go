@@ -763,6 +763,11 @@ func TestCollectErrorsTotalOnSampleRateLookupError(t *testing.T) {
 
 	var found bool
 	for _, m := range metrics {
+		// a rate the scrape could not read is left out, a stand in of 1
+		// would claim the programs sample every packet
+		if extractName(m.Desc()) == "rfm_bpf_sample_rate" {
+			t.Errorf("rfm_bpf_sample_rate = %g after a failed read, want it left out", metricValue(t, m))
+		}
 		if extractName(m.Desc()) != "rfm_errors_total" {
 			continue
 		}
