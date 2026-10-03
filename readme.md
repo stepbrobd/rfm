@@ -666,17 +666,17 @@ is.
 
 ## Scope
 
-RFM is a lightweight flow telemetry agent, not a full traffic analysis platform.
-A few deliberate choices follow from that:
+RFM is a flow telemetry agent, not a full traffic analysis platform. A few
+deliberate choices follow from that:
 
 The BPF programs capture only the fields needed for basic flow identification:
 IP addresses, L4 ports, protocol number, interface, direction, and the wire
 packet and byte counts. They do not extract TCP flags, ToS/DSCP, TTL, IPv6 flow
 labels, or ICMP type/code. Adding these fields would widen the per-event wire
 struct, increase ring buffer pressure, and expand the IPFIX template surface for
-information that most lightweight deployments never query. Operators who need
-TCP flag analysis, QoS-aware accounting, or deep header inspection should
-consider ntopng or pmacct (or other solutions) instead.
+information that most small deployments never query. Operators who need TCP flag
+analysis, QoS-aware accounting, or deep header inspection should consider ntopng
+or pmacct (or other solutions) instead.
 
 Prometheus flow gauges only includes (intentionally) enrichment labels
 (interface, direction, protocol, ASN, city). Source and destination ports are
@@ -708,10 +708,13 @@ approach, it captures packets directly in the kernel via eBPF TC programs.
 | [ntopng](https://github.com/ntop/ntopng)                   | Packet capture + DPI       | Redis + optional DB           | None                          | GPLv3 / commercial   |
 | [pmacct](https://github.com/pmacct/pmacct)                 | Multi-daemon suite         | Kafka, PG, MySQL              | BGP + BMP + RPKI              | GPLv2+               |
 
-The main goal of RFM is to be a extremely lightweight and easily configurable
-flow analytics tool. There are no external dependencies at runtime (unlike other
+The main goal of RFM is to be a single binary flow analytics tool that is easy
+to configure. There are no external dependencies at runtime (unlike other
 solutions, it does not require a separate database, message queue, Redis, web
-server beyond the built-in Prometheus endpoint). Typical RSS is around 10 MB.
+server beyond the built-in Prometheus endpoint). On a 16 node fleet running
+2026.902.2 with GeoLite2 ASN and city enrichment, the agent's RSS measured 54 to
+147 MiB, with peaks up to 235 MiB on the busiest node, which held about 9,500
+label tuples. The RSS includes the pages of the mapped MMDB files.
 
 Most alternatives require significant supporting infrastructure:
 
@@ -756,16 +759,16 @@ logs require Calico) or target broader Kubernetes observability (Microsoft
 Retina is CNI agnostic but is a larger platform).
 
 RFM is CNI agnostic and does not require any particular network plugin. It
-attaches TC programs to whatever interfaces are available in its network
-namespace. This makes it usable as:
+attaches TC programs to the matching interfaces of its network namespace. This
+makes it usable as:
 
 - a **DaemonSet** on each node (with host networking), attaching to container
   veth interfaces on the host side
 - a **sidecar** inside a pod, monitoring that pod's network interfaces directly
 
 The DaemonSet pattern is standard for eBPF-based monitoring (used by Hubble,
-Retina, and Calico), but RFM's small footprint also makes the sidecar model
-practical where per-pod isolation is needed.
+Retina, and Calico). RFM runs as one process with no service behind it, which
+also makes the sidecar model practical where per-pod isolation is needed.
 
 ## Sponsorship disclaimer
 
