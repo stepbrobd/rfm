@@ -41,22 +41,22 @@ var (
 
 	descFlowBytes = prometheus.NewDesc(
 		"rfm_flow_bytes",
-		"Estimated byte count for an active flow, scaled by the packet sample rate.",
+		"Estimated bytes of the live flows of a label tuple, scaled by the sample rate in force.",
 		[]string{"ifname", "direction", "proto", "src_asn", "dst_asn", "src_city", "dst_city"}, nil,
 	)
 	descFlowPackets = prometheus.NewDesc(
 		"rfm_flow_packets",
-		"Estimated packet count for an active flow, scaled by the packet sample rate.",
+		"Estimated packets of the live flows of a label tuple, scaled by the sample rate in force.",
 		[]string{"ifname", "direction", "proto", "src_asn", "dst_asn", "src_city", "dst_city"}, nil,
 	)
 	descFlowSampledBytes = prometheus.NewDesc(
 		"rfm_flow_sampled_bytes",
-		"Observed byte count for sampled packets in an active flow.",
+		"Sampled bytes of the live flows of a label tuple.",
 		[]string{"ifname", "direction", "proto", "src_asn", "dst_asn", "src_city", "dst_city"}, nil,
 	)
 	descFlowSampledPackets = prometheus.NewDesc(
 		"rfm_flow_sampled_packets",
-		"Observed packet count for sampled packets in an active flow.",
+		"Sampled packets of the live flows of a label tuple.",
 		[]string{"ifname", "direction", "proto", "src_asn", "dst_asn", "src_city", "dst_city"}, nil,
 	)
 
