@@ -380,7 +380,7 @@ func (mc *MetricsCollector) collectIfaceStats(ch chan<- prometheus.Metric) {
 		if last[statKey{e.Ifindex, e.Dir, e.Proto}] != i {
 			continue
 		}
-		ifname := mc.ifname(e.Ifindex)
+		ifname := validLabel(mc.ifname(e.Ifindex))
 		family := familyString(e.Proto)
 
 		if e.Dir == 0 { // ingress / rx

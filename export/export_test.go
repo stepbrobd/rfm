@@ -317,6 +317,51 @@ func TestCollectIfaceStatsSkipsKeysSeenTwice(t *testing.T) {
 	t.Fatal("rfm_interface_rx_bytes_total missing")
 }
 
+func TestScrapeSurvivesAnInterfaceNameThatIsNotUTF8(t *testing.T) {
+	// a link name is any bytes to the kernel, the registry refuses the whole
+	// scrape over one label that is not utf-8
+	src := &mockIfaceStats{
+		entries: []IfaceStatsEntry{{Ifindex: 7, Dir: 0, Proto: 4, Packets: 1, Bytes: 60}},
+	}
+	c := collector.New(time.Minute, nil, 16)
+	c.Record(collector.FlowEvent{
+		Ifindex: 7, Proto: 17, SrcPort: 5000, DstPort: 53,
+		SrcAddr: netip.MustParseAddr("10.0.0.1"),
+		DstAddr: netip.MustParseAddr("10.0.0.2"),
+		Segs:    1,
+		Len:     60,
+	}, time.Now())
+	mc := New(src, c)
+	mc.resolveIfname = func(uint32) string { return "d\xff" }
+	reg := prometheus.NewRegistry()
+	reg.MustRegister(mc)
+
+	mfs, err := reg.Gather()
+	if err != nil {
+		t.Fatalf("gather: %v", err)
+	}
+	// the interface counters and the flow series name the link alike
+	seen := map[string]bool{}
+	for _, mf := range mfs {
+		for _, m := range mf.GetMetric() {
+			for _, l := range m.GetLabel() {
+				if l.GetName() != "ifname" {
+					continue
+				}
+				if l.GetValue() != "d\uFFFD" {
+					t.Fatalf("%s ifname = %q, want the invalid byte replaced", mf.GetName(), l.GetValue())
+				}
+				seen[mf.GetName()] = true
+			}
+		}
+	}
+	for _, name := range []string{"rfm_interface_rx_packets_total", "rfm_flow_packets_total"} {
+		if !seen[name] {
+			t.Fatalf("%s missing", name)
+		}
+	}
+}
+
 func TestCollectCachesIfnames(t *testing.T) {
 	src := &mockIfaceStats{
 		entries: []IfaceStatsEntry{
