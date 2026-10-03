@@ -86,16 +86,18 @@ there without reloading the programs.
    `(ifindex, direction, protocol,
    src/dst address, src/dst port)`.
    Enrichment labels are resolved once when a flow is created and ride along
-   with it.
+   with it. An event that fails to decode is counted as a `ring_buffer` error
+   and skipped.
 3. Flows are evicted after a configurable idle timeout. Under high load, when
    the flow table is full, the flow with the oldest last-seen timestamp is
    forcibly evicted. A flow that keeps going is exported as an interval record
    every `active_timeout` while it stays in the table.
-4. At scrape time, Prometheus exporter reads the BPF interface counters map
-   directly, iterates the flow table for the gauges, and emits monotonic
-   counters per interface, direction, protocol, and enrichment labels (ASN,
-   city) that never reset when flows are evicted. With no enrichment configured,
-   those labels stay empty and the agent still runs normally.
+4. At scrape time, the Prometheus exporter reads the BPF interface counter map
+   directly and copies the label tuples the collector keeps current, without
+   walking the flow table. A tuple gives gauges summed over its live flows and
+   monotonic counters per interface, direction, protocol, and enrichment labels
+   (ASN, city) that never reset when flows are evicted. With no enrichment
+   configured, those labels stay empty and the agent still runs normally.
 5. When IPFIX is enabled, flow records are queued for a sender that packs them
    into messages no larger than `max_message_size`, refreshes templates, and
    sends. Every record carries the sampled packets and their IP bytes since the
@@ -357,7 +359,8 @@ These counters can read above the statistics of a guest NIC. virtio_net counts a
 TSO frame it sends, or a GSO frame the host hands up, as one packet, and macb
 and ena leave the ethernet header out of their received bytes.
 
-Flow gauges over the live flow table (rolled up by enrichment labels):
+Flow gauges over the live flow table (rolled up by enrichment labels), which a
+label tuple without live flows leaves out:
 
 - `rfm_flow_bytes{ifname, direction, proto, src_asn, dst_asn, src_city, dst_city}`
 - `rfm_flow_packets{ifname, direction, proto, src_asn, dst_asn, src_city, dst_city}`
@@ -383,22 +386,54 @@ sum(increase(rfm_flow_bytes_total{direction="ingress"}[1h]))
   / sum(increase(rfm_interface_rx_bytes_total{family!="other"}[1h]))
 ```
 
-A label tuple that saw no traffic for ten eviction timeouts leaves the scrape.
+A label tuple shows up at zero in its first scrape and carries its counts from
+the next scrape on, which lets `rate()` and `increase()` count the traffic that
+created it. A tuple without live flows leaves the scrape once it saw no traffic
+for ten eviction timeouts. A new tuple with enrichment labels finds room while
+fewer than `max_flows` tuples exist, those with empty labels included, which
+need no room themselves. Without room it takes the place of the one idle longest
+once a scrape has shown all of that tuple's counts, and otherwise its flow
+counts under the tuple of its interface, direction and protocol with empty
+labels. `rfm_collector_folded_flows_total` counts those flows, and the ASN and
+city rankings of the bundled dashboard leave them out.
 
 Sampling:
 
-- `rfm_bpf_sample_rate`
+- `rfm_bpf_sample_rate`, left out of a scrape that cannot read the rate, which
+  counts as a `bpf_map` error
 
 Collector health:
 
 - `rfm_collector_active_flows`
 - `rfm_collector_dropped_events_total`
 - `rfm_collector_forced_evictions_total`
+- `rfm_collector_folded_flows_total`
 - `rfm_errors_total{subsystem}`
 
-`rfm_errors_total{subsystem}` currently uses `bpf_map`, `ring_buffer`, and
-`ipfix`. The `ipfix` value sums the records lost for every reason of
-`rfm_ipfix_dropped_records_total`.
+`rfm_errors_total{subsystem}` counts, by subsystem:
+
+- `bpf_map`: BPF map reads that failed during a scrape or a poll of the ring
+  drop counter, counter updates the full interface counter map refused, sample
+  rates from adaptive sampling that the probe refused, and failed tries after a
+  link dump to delete the pinned counters of every interface the agent neither
+  attached nor keeps retrying, while a failed delete of the counters of a link
+  that goes away is only logged
+- `ring_buffer`: flow events that failed to decode, and a failed ring buffer
+  read, which also stops the agent
+- `ipfix`: IPFIX records lost, the sum of `rfm_ipfix_dropped_records_total` over
+  its reasons, 0 without IPFIX export
+- `netlink`: link messages the interface watcher dropped, and link subscriptions
+  that failed and were opened again
+- `attach`: failed attaches of matching interfaces, every retry included, apart
+  from an attach that finds the interface already gone
+- `gso_header`: GSO skbs whose headers the programs could not parse, an ingress
+  one is counted without the header bytes of its extra segments and one without
+  a segment count as a single packet
+- `bmp`, with BMP configured: BMP messages that did not parse in full, updates
+  dropped because their peer's capabilities are unknown, sessions closed past
+  the session cap, routes the RIB dropped past its route or view cap, and
+  lookups or updates that found the RIB contradicting itself, which is a bug in
+  RFM
 
 IPFIX exporter, with IPFIX export enabled:
 
