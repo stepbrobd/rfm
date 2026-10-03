@@ -98,10 +98,11 @@ there without reloading the programs.
    those labels stay empty and the agent still runs normally.
 5. When IPFIX is enabled, flow records are queued for a sender that packs them
    into messages no larger than `max_message_size`, refreshes templates, and
-   sends. Every record carries the packets and bytes since the previous record
-   of the same flow. The socket is dialed lazily and re-dialed with backoff, so
-   the agent starts before its bind address exists. The exporter excludes only
-   its own socket tuple from recursive self-export.
+   sends. Every record carries the sampled packets and their IP bytes since the
+   previous record of the same flow, with the sampling probability that scales
+   them. A failed dial is not fatal and is retried with backoff, so the agent
+   starts before its bind address exists. The exporter excludes only its own
+   socket tuple from recursive self-export.
 6. When a control socket is configured, `rfm status`, `rfm flows`, `rfm rib`,
    `rfm set`, `rfm config` and `rfm reload` talk to the running agent.
 
@@ -237,16 +238,18 @@ disabled.
 field is set, the other defaults to `::1` or `4739`.
 
 `bind.host` (string, default ""): Local source address for the exporter UDP
-socket. When unset, the kernel picks the source address from routing.
+socket. When unset, the kernel picks the source address from routing. A bind
+address is rejected unless `host` or `port` of the collector is set.
 
 `bind.port` (int, default 0): Local source port for the exporter UDP socket. `0`
-keeps the current behavior and uses an ephemeral port chosen by the kernel.
+uses an ephemeral port chosen by the kernel.
 
 `template_refresh` (string, default "60s"): How often UDP IPFIX templates are
-re-sent. Accepts any Go duration string. Minimum 1s. RFC 7011 requires UDP
+re-sent. Accepts any Go duration string. Minimum 1s. The templates also go out
+before the first data record on every new socket. RFC 7011 requires UDP
 exporters to re-send templates regularly because the transport is lossy. The
-default of 60s lets a collector that loses or restarts during a packet recover
-within one refresh window.
+default of 60s lets a collector that lost a template or restarted recover within
+one refresh window.
 
 `observation_domain_id` (uint32, default 1): IPFIX observation domain id placed
 in exported message headers. Must be > 0. Set distinct values when multiple RFM
@@ -264,11 +267,26 @@ before a partial message goes out. Minimum 10ms.
 128 and 65535. Keep it under the path MTU, including any tunnel the exporter
 traffic crosses, so messages never fragment.
 
-The exporter dials the collector lazily and retries with backoff (1s to 30s), so
-the agent starts and keeps counting while the collector or the local bind
-address is unavailable. Send errors are counted by errno in
-`rfm_ipfix_send_errors_total`. A full host conntrack table shows up there as
-`EPERM`, add a `notrack` rule for the exporter tuple when that happens.
+The exporter dials the collector at start and, when that fails, again with
+backoff (1s to 30s), so the agent starts and keeps counting while the collector
+or the local bind address is unavailable. A send error that leaves the socket
+unusable, such as `ENETUNREACH`, closes it for a new dial, while an ICMP error
+such as `ECONNREFUSED` or a firewall verdict such as `EPERM` keeps it. Send
+errors are counted by errno in `rfm_ipfix_send_errors_total`. A full host
+conntrack table shows up there as `EPERM`, add a `notrack` rule for the exporter
+tuple when that happens.
+
+Each record carries the addresses, ports and protocol, the interface index as
+`ingressInterface` or `egressInterface` with `flowDirection`, the times of its
+first and last event as `flowStartMilliseconds` and `flowEndMilliseconds`,
+`flowEndReason`, `packetDeltaCount`, `octetDeltaCount` and
+`samplingProbability`. The counts are the sampled wire packets since the
+previous record of the flow and their IP bytes, header and payload without the
+L2 header, as RFC 7012 defines `octetDeltaCount`. `samplingProbability` is the
+share of wire packets the record saw, and a collector divides the counts by it.
+`flowEndReason` is 0x01 for an idle timeout, 0x02 for an interval record, 0x04
+for the flows still in the table when the agent stops, and 0x05 for a flow
+evicted from a full table.
 
 ### `agent.prometheus`
 
@@ -379,18 +397,20 @@ Collector health:
 - `rfm_errors_total{subsystem}`
 
 `rfm_errors_total{subsystem}` currently uses `bpf_map`, `ring_buffer`, and
-`ipfix`. The `ipfix` value sums queue refusals, unsent records, dial errors and
-send errors.
+`ipfix`. The `ipfix` value sums the records lost for every reason of
+`rfm_ipfix_dropped_records_total`.
 
-IPFIX exporter:
+IPFIX exporter, with IPFIX export enabled:
 
 - `rfm_ipfix_connected`
 - `rfm_ipfix_dials_total`
 - `rfm_ipfix_dial_errors_total`
 - `rfm_ipfix_messages_total`
 - `rfm_ipfix_records_total`
-- `rfm_ipfix_dropped_records_total{reason}` with `queue_full`, `unconnected`,
-  `encode`
+- `rfm_ipfix_dropped_records_total{reason}` with `queue_full` (the queue was
+  full), `unconnected` (no socket was open, or the exporter had closed),
+  `encode` (the record could not be encoded) and `send` (the record was in a
+  message whose send failed)
 - `rfm_ipfix_send_errors_total{errno}`
 
 Go process and runtime metrics (`process_*`, `go_*`) are exported too.
