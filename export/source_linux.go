@@ -33,15 +33,10 @@ type ProbeSource struct {
 
 // IfaceStats reads the BPF iface stats map, summing per-CPU values
 func (s *ProbeSource) IfaceStats() ([]IfaceStatsEntry, error) {
-	m := s.Probe.IfaceStats()
-	if m == nil {
-		return nil, nil
-	}
-
 	var entries []IfaceStatsEntry
 	var key ifaceKey
 	var vals []ifaceValue
-	iter := m.Iterate()
+	iter := s.Probe.IfaceStats().Iterate()
 	for iter.Next(&key, &vals) {
 		var packets, bytes uint64
 		for _, v := range vals {
