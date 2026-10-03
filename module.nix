@@ -99,9 +99,9 @@ in
                 type = std.types.submodule {
                   options = {
                     max_flows = std.mkOption {
-                      type = std.types.ints.unsigned;
+                      type = std.types.ints.positive;
                       default = 65536;
-                      description = "Maximum number of active flows, 0 means no limit. It also caps the label tuples with enrichment labels in the flow metrics, at 65536 when 0, and a flow whose tuple finds no room counts under empty labels.";
+                      description = "Maximum number of active flows. It also limits the label tuples of the flow metrics, a new tuple with enrichment labels finds room while fewer than max_flows tuples exist or takes the place of the longest idle one a scrape has shown, and otherwise its flow counts under empty labels.";
                     };
 
                     eviction_timeout = std.mkOption {
@@ -169,7 +169,7 @@ in
                     queue_size = std.mkOption {
                       type = std.types.ints.unsigned;
                       default = 0;
-                      description = "Records that may wait for the IPFIX sender before new ones are dropped, 0 means max_flows or 4096, whichever is larger, and 65536 when max_flows is 0.";
+                      description = "Records that may wait for the IPFIX sender before new ones are dropped, 0 means max_flows or 4096, whichever is larger.";
                     };
 
                     flush_interval = std.mkOption {

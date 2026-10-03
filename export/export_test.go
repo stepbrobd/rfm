@@ -13,6 +13,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	dto "github.com/prometheus/client_model/go"
 	"ysun.co/rfm/collector"
+	"ysun.co/rfm/config"
 )
 
 // --- mock types ---
@@ -244,7 +245,7 @@ func TestDescribe(t *testing.T) {
 }
 
 func TestCollectHealth(t *testing.T) {
-	c := collector.New(time.Minute, nil, 0)
+	c := collector.New(time.Minute, nil, config.DefaultMaxFlows)
 	c.Record(collector.FlowEvent{
 		Ifindex: 1,
 		Dir:     0,
@@ -370,7 +371,7 @@ func TestCollectCachesIfnames(t *testing.T) {
 		},
 	}
 
-	c := collector.New(time.Minute, nil, 0)
+	c := collector.New(time.Minute, nil, config.DefaultMaxFlows)
 	now := time.Now()
 	c.Record(collector.FlowEvent{
 		Ifindex: 7,
@@ -415,7 +416,7 @@ func TestCollectCachesIfnames(t *testing.T) {
 }
 
 func TestCollectFlowsNoEnricher(t *testing.T) {
-	c := collector.New(time.Minute, nil, 0)
+	c := collector.New(time.Minute, nil, config.DefaultMaxFlows)
 	c.Record(collector.FlowEvent{
 		Ifindex: 2,
 		Dir:     0,
@@ -461,7 +462,7 @@ func TestCollectFlowsWithEnricher(t *testing.T) {
 		srcASN: 64512, srcCity: "Berlin",
 		dstASN: 13335, dstCity: "London",
 	}
-	c := collector.New(time.Minute, e, 0)
+	c := collector.New(time.Minute, e, config.DefaultMaxFlows)
 	c.Record(collector.FlowEvent{
 		Ifindex: 3,
 		Dir:     1,
@@ -515,7 +516,7 @@ func TestCollectFlowsWithEnricher(t *testing.T) {
 func TestCollectFlowsScalesBySampleRate(t *testing.T) {
 	src := &mockIfaceStats{rate: 10}
 
-	c := collector.New(time.Minute, nil, 0)
+	c := collector.New(time.Minute, nil, config.DefaultMaxFlows)
 	c.SetSampleRate(10, 0)
 	c.Record(collector.FlowEvent{
 		Ifindex: 2,
@@ -550,7 +551,7 @@ func TestCollectNilSources(t *testing.T) {
 func TestCollectFlowsAggregatesDuplicateLabels(t *testing.T) {
 	// two flows with different ports but same exported labels
 	// must produce one aggregated metric, not duplicate series
-	c := collector.New(time.Minute, nil, 0)
+	c := collector.New(time.Minute, nil, config.DefaultMaxFlows)
 	now := time.Now()
 	c.Record(collector.FlowEvent{
 		Ifindex: 1, Dir: 0, Proto: 6,
@@ -676,7 +677,7 @@ func TestCollectErrorsSubsystemLabels(t *testing.T) {
 	// exercise both subsystem labels via a collector that has
 	// accumulated ring_buffer and bpf_map errors through Run
 	// the drop counter is polled by the eviction ticker, so keep it short
-	c := collector.New(200*time.Millisecond, nil, 0)
+	c := collector.New(200*time.Millisecond, nil, config.DefaultMaxFlows)
 
 	mr := &exportMockReader{
 		events:  [][]byte{{0xde, 0xad}}, // garbage -> decode error -> ring_buffer
@@ -744,7 +745,7 @@ func TestCollectErrorsTotalOnSampleRateLookupError(t *testing.T) {
 		rateErr: fmt.Errorf("config map broken"),
 	}
 
-	c := collector.New(time.Minute, nil, 0)
+	c := collector.New(time.Minute, nil, config.DefaultMaxFlows)
 	c.Record(collector.FlowEvent{
 		Ifindex: 2,
 		Dir:     0,
@@ -856,7 +857,7 @@ func TestCollectErrorsCountUnparsedGSOHeaders(t *testing.T) {
 }
 
 func TestCollectErrorsOfOtherSubsystems(t *testing.T) {
-	mc := New(nil, collector.New(time.Minute, nil, 0))
+	mc := New(nil, collector.New(time.Minute, nil, config.DefaultMaxFlows))
 	var parse, dropped uint64 = 3, 2
 	mc.AddErrors("bmp", func() uint64 { return parse })
 	mc.AddErrors("netlink", func() uint64 { return dropped })
@@ -882,7 +883,7 @@ func TestCollectErrorsOfOtherSubsystems(t *testing.T) {
 }
 
 func TestCollectIPFIXStats(t *testing.T) {
-	c := collector.New(30*time.Second, nil, 0)
+	c := collector.New(30*time.Second, nil, config.DefaultMaxFlows)
 	mc := New(nil, c)
 	mc.SetIPFIX(func() IPFIXStats {
 		return IPFIXStats{
@@ -944,7 +945,7 @@ func TestCollectIPFIXStats(t *testing.T) {
 
 func TestCollectRollupCountersSurviveEviction(t *testing.T) {
 	e := &staticEnricher{srcASN: 64500, dstASN: 64501, srcCity: "Oslo", dstCity: "Lima"}
-	c := collector.New(time.Second, e, 0)
+	c := collector.New(time.Second, e, config.DefaultMaxFlows)
 	c.SetSampleRate(10, 0)
 
 	t0 := time.Now()
@@ -1008,7 +1009,7 @@ func TestCollectRollupCountersSurviveEviction(t *testing.T) {
 }
 
 func TestCollectRollupSeriesStartAtZero(t *testing.T) {
-	c := collector.New(time.Minute, nil, 0)
+	c := collector.New(time.Minute, nil, config.DefaultMaxFlows)
 	c.SetSampleRate(10, 0)
 	ev := collector.FlowEvent{
 		Ifindex: 2, Dir: 1, Proto: 6,
@@ -1145,7 +1146,7 @@ func TestCollectIPFIXErrorsCountLossOnce(t *testing.T) {
 	// the collector refuses a record when the queue is full and the exporter
 	// counts the same drop, the subsystem counter must show it once
 	exp := &recordingExporter{err: errors.New("ipfix queue full")}
-	c := collector.New(30*time.Second, nil, 0)
+	c := collector.New(30*time.Second, nil, config.DefaultMaxFlows)
 	c.SetFlowExporter(exp)
 	t0 := time.Now()
 	c.Record(collector.FlowEvent{

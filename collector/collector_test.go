@@ -15,7 +15,7 @@ import (
 )
 
 func TestRecord(t *testing.T) {
-	c := New(30*time.Second, nil, 0)
+	c := New(30*time.Second, nil, config.DefaultMaxFlows)
 
 	ev := FlowEvent{
 		Ifindex: 1,
@@ -48,7 +48,7 @@ func TestRecord(t *testing.T) {
 }
 
 func TestRecordCountsSegments(t *testing.T) {
-	c := New(30*time.Second, nil, 0)
+	c := New(30*time.Second, nil, config.DefaultMaxFlows)
 	now := time.Now()
 
 	// a GRO or GSO skb carries several wire packets in one event
@@ -78,7 +78,7 @@ func TestRecordCountsSegments(t *testing.T) {
 }
 
 func TestRecordDistinctFlows(t *testing.T) {
-	c := New(30*time.Second, nil, 0)
+	c := New(30*time.Second, nil, config.DefaultMaxFlows)
 	now := time.Now()
 
 	ev1 := FlowEvent{
@@ -106,7 +106,7 @@ func TestRecordDistinctFlows(t *testing.T) {
 }
 
 func TestEvict(t *testing.T) {
-	c := New(10*time.Second, nil, 0)
+	c := New(10*time.Second, nil, config.DefaultMaxFlows)
 
 	ev := FlowEvent{
 		Proto: 6, SrcPort: 1000, DstPort: 80,
@@ -133,7 +133,7 @@ func TestEvict(t *testing.T) {
 }
 
 func TestEvictKeepsFresh(t *testing.T) {
-	c := New(10*time.Second, nil, 0)
+	c := New(10*time.Second, nil, config.DefaultMaxFlows)
 
 	stale := FlowEvent{
 		Proto: 6, SrcPort: 1000, DstPort: 80,
@@ -167,7 +167,7 @@ func TestEvictKeepsFresh(t *testing.T) {
 }
 
 func TestEvictUpdatedFlowKeepsFresh(t *testing.T) {
-	c := New(10*time.Second, nil, 0)
+	c := New(10*time.Second, nil, config.DefaultMaxFlows)
 
 	stale := FlowEvent{
 		Proto: 6, SrcPort: 1000, DstPort: 80,
@@ -240,7 +240,7 @@ func TestRun(t *testing.T) {
 	raw := encodeWireEvent(ev)
 	mr := &mockReader{events: [][]byte{raw, raw, raw}}
 
-	c := New(30*time.Second, nil, 0)
+	c := New(30*time.Second, nil, config.DefaultMaxFlows)
 	ctx, cancel := context.WithCancel(context.Background())
 
 	errCh := make(chan error, 1)
@@ -270,7 +270,7 @@ func TestRunDroppedEvents(t *testing.T) {
 	mr := &mockReader{drops: 42}
 
 	// drops are polled by the eviction ticker, so keep its period short
-	c := New(200*time.Millisecond, nil, 0)
+	c := New(200*time.Millisecond, nil, config.DefaultMaxFlows)
 	ctx, cancel := context.WithCancel(context.Background())
 
 	errCh := make(chan error, 1)
@@ -316,7 +316,7 @@ func TestRunDroppedEventsUnderLoad(t *testing.T) {
 	mr := &sustainedReader{event: encodeWireEvent(ev), drops: 99}
 
 	// short timeout so the eviction ticker fires fast
-	c := New(200*time.Millisecond, nil, 0)
+	c := New(200*time.Millisecond, nil, config.DefaultMaxFlows)
 	ctx, cancel := context.WithCancel(context.Background())
 
 	errCh := make(chan error, 1)
@@ -341,7 +341,7 @@ func TestRunDroppedEventsUnderLoad(t *testing.T) {
 
 func TestRunContextCancel(t *testing.T) {
 	mr := &mockReader{}
-	c := New(30*time.Second, nil, 0)
+	c := New(30*time.Second, nil, config.DefaultMaxFlows)
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel() // cancel immediately
 
@@ -352,7 +352,7 @@ func TestRunContextCancel(t *testing.T) {
 }
 
 func TestStats(t *testing.T) {
-	c := New(30*time.Second, nil, 0)
+	c := New(30*time.Second, nil, config.DefaultMaxFlows)
 	now := time.Now()
 
 	ev := FlowEvent{
@@ -504,7 +504,7 @@ func (r *errorReader) DroppedEvents() (uint64, error) { return 0, nil }
 func (r *errorReader) Close() error                   { return nil }
 
 func TestRunZeroTimeoutReturnsError(t *testing.T) {
-	c := New(0, nil, 0)
+	c := New(0, nil, config.DefaultMaxFlows)
 	mr := &mockReader{}
 	err := c.Run(context.Background(), mr)
 	if err == nil {
@@ -512,8 +512,17 @@ func TestRunZeroTimeoutReturnsError(t *testing.T) {
 	}
 }
 
+func TestRunWithoutRoomForAFlowReturnsError(t *testing.T) {
+	c := New(30*time.Second, nil, 0)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	if err := c.Run(ctx, &mockReader{}); err == nil || errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("Run with max flows 0 returned %v, want it refused", err)
+	}
+}
+
 func TestRunNegativeTimeoutReturnsError(t *testing.T) {
-	c := New(-time.Second, nil, 0)
+	c := New(-time.Second, nil, config.DefaultMaxFlows)
 	mr := &mockReader{}
 	err := c.Run(context.Background(), mr)
 	if err == nil {
@@ -523,7 +532,7 @@ func TestRunNegativeTimeoutReturnsError(t *testing.T) {
 
 func TestRunReaderErrorCleansUp(t *testing.T) {
 	mr := &errorReader{err: errors.New("device removed")}
-	c := New(time.Second, nil, 0)
+	c := New(time.Second, nil, config.DefaultMaxFlows)
 
 	err := c.Run(context.Background(), mr)
 	if err == nil {
@@ -542,7 +551,7 @@ func TestRunRingBufErrors(t *testing.T) {
 	}
 	mr := &mockReader{events: [][]byte{{0x00, 0x01, 0x02}, encodeWireEvent(malformed)}}
 
-	c := New(30*time.Second, nil, 0)
+	c := New(30*time.Second, nil, config.DefaultMaxFlows)
 	ctx, cancel := context.WithCancel(context.Background())
 
 	errCh := make(chan error, 1)
@@ -561,26 +570,6 @@ func TestRunRingBufErrors(t *testing.T) {
 
 	if s := c.Stats(); s.RingBufErrors != 2 || s.ActiveFlows != 0 {
 		t.Fatalf("decode errors = %d with %d flows, want 2 and none recorded", s.RingBufErrors, s.ActiveFlows)
-	}
-}
-
-func TestMaxFlowsZeroMeansUnlimited(t *testing.T) {
-	c := New(30*time.Second, nil, 0)
-
-	now := time.Now()
-	for i := range 100 {
-		ev := FlowEvent{
-			Proto: 6, SrcPort: uint16(i), DstPort: 80,
-			SrcAddr: netip.MustParseAddr("::ffff:10.0.0.1"),
-			DstAddr: netip.MustParseAddr("::ffff:10.0.0.2"),
-			Segs:    1,
-			Len:     100,
-		}
-		c.Record(ev, now)
-	}
-
-	if len(c.Flows()) != 100 {
-		t.Fatalf("flow count=%d want 100", len(c.Flows()))
 	}
 }
 
@@ -619,7 +608,7 @@ func lastSeen(f ExportedFlow) time.Time {
 
 func TestEvictExportsExpiredFlow(t *testing.T) {
 	exp := &mockFlowExporter{}
-	c := New(10*time.Second, nil, 0)
+	c := New(10*time.Second, nil, config.DefaultMaxFlows)
 	c.SetFlowExporter(exp)
 
 	t0 := time.Now()
@@ -696,7 +685,7 @@ func TestRecordForcedEvictionExportsOldestFlow(t *testing.T) {
 
 func TestFlushExportsRemainingFlows(t *testing.T) {
 	exp := &mockFlowExporter{}
-	c := New(30*time.Second, nil, 0)
+	c := New(30*time.Second, nil, config.DefaultMaxFlows)
 	c.SetFlowExporter(exp)
 
 	t0 := time.Now()
@@ -723,7 +712,7 @@ func TestFlushExportsRemainingFlows(t *testing.T) {
 }
 
 func TestExportErrorIncrementsStats(t *testing.T) {
-	c := New(10*time.Second, nil, 0)
+	c := New(10*time.Second, nil, config.DefaultMaxFlows)
 	c.SetFlowExporter(&mockFlowExporter{err: errors.New("write failed")})
 
 	t0 := time.Now()
@@ -744,7 +733,7 @@ func TestExportErrorIncrementsStats(t *testing.T) {
 }
 
 func TestEvictOrderFollowsLastSeen(t *testing.T) {
-	c := New(10*time.Second, nil, 0)
+	c := New(10*time.Second, nil, config.DefaultMaxFlows)
 	t0 := time.Now()
 
 	mk := func(port uint16) FlowEvent {
@@ -780,7 +769,7 @@ func TestEvictOrderFollowsLastSeen(t *testing.T) {
 }
 
 func TestRecordBatchCountsEveryEvent(t *testing.T) {
-	c := New(30*time.Second, nil, 0)
+	c := New(30*time.Second, nil, config.DefaultMaxFlows)
 	t0 := time.Now()
 
 	a := FlowEvent{
@@ -858,7 +847,7 @@ func TestRunRecordsBurstInOneBatch(t *testing.T) {
 	}
 	mr := &mockReader{events: events}
 
-	c := New(30*time.Second, nil, 0)
+	c := New(30*time.Second, nil, config.DefaultMaxFlows)
 	ctx, cancel := context.WithCancel(context.Background())
 
 	errCh := make(chan error, 1)
@@ -881,7 +870,7 @@ func TestRunRecordsBurstInOneBatch(t *testing.T) {
 
 func TestActiveTimeoutExportsIntervalRecords(t *testing.T) {
 	exp := &mockFlowExporter{}
-	c := New(30*time.Second, nil, 0)
+	c := New(30*time.Second, nil, config.DefaultMaxFlows)
 	c.SetFlowExporter(exp)
 	c.SetActiveTimeout(10 * time.Second)
 
@@ -951,7 +940,7 @@ func TestActiveTimeoutExportsIntervalRecords(t *testing.T) {
 
 func TestIntervalRecordsSpanTheirEvents(t *testing.T) {
 	exp := &mockFlowExporter{}
-	c := New(30*time.Second, nil, 0)
+	c := New(30*time.Second, nil, config.DefaultMaxFlows)
 	c.SetFlowExporter(exp)
 	c.SetActiveTimeout(60 * time.Second)
 
@@ -1010,7 +999,7 @@ func TestSweepSendsIntervalRecordsAtTheSweepNearestTheirActiveTimeout(t *testing
 	b.SrcPort = 2000
 	newCollector := func() (*Collector, *mockFlowExporter) {
 		exp := &mockFlowExporter{}
-		c := New(30*time.Second, nil, 0)
+		c := New(30*time.Second, nil, config.DefaultMaxFlows)
 		c.SetFlowExporter(exp)
 		c.SetActiveTimeout(period)
 		return c, exp
@@ -1117,7 +1106,7 @@ func (s *sweepCounter) ExportFlow(flow ExportedFlow) error {
 func TestRunHonorsActiveTimeoutBelowHalfTheEvictionTimeout(t *testing.T) {
 	sc := &sweepCounter{records: make(chan uint64, 16)}
 	// half the eviction timeout is 5s, the active timeout is far shorter
-	c := New(10*time.Second, nil, 0)
+	c := New(10*time.Second, nil, config.DefaultMaxFlows)
 	c.SetFlowExporter(sc)
 	c.SetActiveTimeout(50 * time.Millisecond)
 
@@ -1190,7 +1179,7 @@ func TestRunWaitsForItsSweep(t *testing.T) {
 	release := func() { releaseOnce.Do(func() { close(exp.release) }) }
 	defer release()
 
-	c := New(20*time.Millisecond, nil, 0)
+	c := New(20*time.Millisecond, nil, config.DefaultMaxFlows)
 	c.SetFlowExporter(exp)
 	// idle already, the first sweep exports it
 	c.Record(FlowEvent{
@@ -1248,7 +1237,7 @@ func TestSlowEnricherDoesNotStallTheCollector(t *testing.T) {
 	release := func() { releaseOnce.Do(func() { close(e.release) }) }
 	defer release()
 
-	c := New(30*time.Second, e, 0)
+	c := New(30*time.Second, e, config.DefaultMaxFlows)
 	now := time.Now()
 	known := FlowEvent{
 		Proto: 6, SrcPort: 1000, DstPort: 80,
@@ -1328,7 +1317,7 @@ func TestRecordBatchEnrichesFlowsForcedOutWithinTheBatch(t *testing.T) {
 
 func TestEvictSkipsFullyExportedFlow(t *testing.T) {
 	exp := &mockFlowExporter{}
-	c := New(30*time.Second, nil, 0)
+	c := New(30*time.Second, nil, config.DefaultMaxFlows)
 	c.SetFlowExporter(exp)
 	c.SetActiveTimeout(10 * time.Second)
 
@@ -1350,7 +1339,7 @@ func TestEvictSkipsFullyExportedFlow(t *testing.T) {
 }
 
 func TestSampleRateScalesEstimatesAtRecordTime(t *testing.T) {
-	c := New(30*time.Second, nil, 0)
+	c := New(30*time.Second, nil, config.DefaultMaxFlows)
 	c.SetSampleRate(10, 0)
 	now := time.Now()
 
@@ -1391,7 +1380,7 @@ func TestSampleRateScalesEstimatesAtRecordTime(t *testing.T) {
 
 func TestExportedRecordCarriesEstimateDelta(t *testing.T) {
 	exp := &mockFlowExporter{}
-	c := New(30*time.Second, nil, 0)
+	c := New(30*time.Second, nil, config.DefaultMaxFlows)
 	c.SetFlowExporter(exp)
 	c.SetSampleRate(100, 0)
 
@@ -1428,7 +1417,7 @@ func TestAdaptiveSamplingAppliesRateOnDrops(t *testing.T) {
 	}
 	mr := &sustainedReader{event: encodeWireEvent(ev), drops: 5}
 
-	c := New(100*time.Millisecond, nil, 0)
+	c := New(100*time.Millisecond, nil, config.DefaultMaxFlows)
 	c.SetSampleRate(10, 0)
 	var applied atomic.Uint32
 	c.SetRateController(10, 40, func(n uint32) error {
@@ -1470,7 +1459,7 @@ func rollupCounters(c *Collector) map[RollupKey]RollupCounters {
 }
 
 func TestRollupsOutliveTheirFlows(t *testing.T) {
-	c := New(30*time.Second, nil, 0)
+	c := New(30*time.Second, nil, config.DefaultMaxFlows)
 	t0 := time.Now()
 	ev := FlowEvent{
 		Ifindex: 3, Proto: 17, SrcPort: 5000, DstPort: 53,
@@ -1499,7 +1488,7 @@ func TestRollupsOutliveTheirFlows(t *testing.T) {
 }
 
 func TestScrapeShowsANewRollupAtZeroFirst(t *testing.T) {
-	c := New(30*time.Second, nil, 0)
+	c := New(30*time.Second, nil, config.DefaultMaxFlows)
 	c.SetSampleRate(10, 0)
 	t0 := time.Now()
 	ev := FlowEvent{
@@ -1558,7 +1547,7 @@ func (r *rateRecorder) last() uint32 {
 }
 
 func TestManualRateResetsTheController(t *testing.T) {
-	c := New(30*time.Second, nil, 0)
+	c := New(30*time.Second, nil, config.DefaultMaxFlows)
 	c.SetSampleRate(10, 0)
 	probe := &rateRecorder{}
 	c.SetRateController(10, 1000, probe.apply)
@@ -1588,7 +1577,7 @@ func TestManualRateResetsTheController(t *testing.T) {
 }
 
 func TestManualRateWaitsForAnAdaptiveStep(t *testing.T) {
-	c := New(30*time.Second, nil, 0)
+	c := New(30*time.Second, nil, config.DefaultMaxFlows)
 	c.SetSampleRate(10, 0)
 	probe := &rateRecorder{}
 	entered := make(chan struct{})
@@ -1630,7 +1619,7 @@ func TestManualRateWaitsForAnAdaptiveStep(t *testing.T) {
 }
 
 func TestFailedRateChangesKeepTheRateInForce(t *testing.T) {
-	c := New(30*time.Second, nil, 0)
+	c := New(30*time.Second, nil, config.DefaultMaxFlows)
 	c.SetSampleRate(10, 0)
 	probe := &rateRecorder{fail: errors.New("map update failed")}
 	c.SetRateController(10, 1000, probe.apply)
@@ -1702,15 +1691,8 @@ func TestRollupsAreCappedAtMaxFlows(t *testing.T) {
 	}
 }
 
-func TestUnlimitedFlowsCapRollupsAtTheDefault(t *testing.T) {
-	c := New(30*time.Second, asnPerSource{}, 0)
-	if c.maxRollups != config.DefaultMaxFlows {
-		t.Fatalf("rollup cap = %d, want %d with max_flows 0", c.maxRollups, config.DefaultMaxFlows)
-	}
-}
-
 func TestRollupsAccumulateAcrossFlows(t *testing.T) {
-	c := New(30*time.Second, nil, 0)
+	c := New(30*time.Second, nil, config.DefaultMaxFlows)
 	c.SetSampleRate(4, 0)
 	t0 := time.Now()
 

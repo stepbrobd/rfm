@@ -1,7 +1,6 @@
 package config
 
 import (
-	"cmp"
 	"fmt"
 	"net"
 	"os"
@@ -73,8 +72,7 @@ type IPFIXConfig struct {
 	// QueueSize bounds the records waiting for the sender goroutine, an
 	// eviction sweep can hand the exporter every flow in the table at once,
 	// so the default is max_flows or DefaultIPFIXQueueSize, whichever is
-	// larger, an unlimited table (max_flows 0) gets DefaultMaxFlows, and a
-	// sweep beyond that needs queue_size set to the expected table size
+	// larger
 	QueueSize int
 	// FlushInterval is how long the sender gathers records before a message
 	// goes out when fewer than a full message are waiting
@@ -291,7 +289,7 @@ func Load(path string) (*Config, error) {
 	raw.Agent.Enrich.RIB.BMP = raw.Agent.Enrich.RIB.BMP.WithDefaults()
 	queueSize := raw.Agent.IPFIX.QueueSize
 	if queueSize == 0 {
-		queueSize = max(DefaultIPFIXQueueSize, cmp.Or(raw.Agent.Collector.MaxFlows, DefaultMaxFlows))
+		queueSize = max(DefaultIPFIXQueueSize, raw.Agent.Collector.MaxFlows)
 	}
 	ipfixCfg := IPFIXConfig{
 		Host:                raw.Agent.IPFIX.Host,
@@ -424,8 +422,8 @@ func validate(cfg *Config) error {
 	if a.BPF.MaxSampleRate < a.BPF.SampleRate {
 		return fmt.Errorf("agent.bpf.max_sample_rate must be >= sample_rate, got %d < %d", a.BPF.MaxSampleRate, a.BPF.SampleRate)
 	}
-	if a.Collector.MaxFlows < 0 {
-		return fmt.Errorf("agent.collector.max_flows must be >= 0")
+	if a.Collector.MaxFlows < 1 {
+		return fmt.Errorf("agent.collector.max_flows must be > 0, got %d, the flow table has no unlimited size", a.Collector.MaxFlows)
 	}
 	if a.Collector.EvictionTimeout < time.Second {
 		return fmt.Errorf("agent.collector.eviction_timeout must be >= 1s, got %v", a.Collector.EvictionTimeout)

@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/charmbracelet/log"
-	"ysun.co/rfm/config"
 )
 
 // Collector aggregates flow events into an in-memory flow table
@@ -31,12 +30,13 @@ type Collector struct {
 	activeQueue *list.List
 	// rollups accumulate per label tuple and outlive the flows behind
 	// them, an idle tuple is dropped after RollupRetention eviction timeouts
-	// at most maxRollups tuples carry enrichment labels, a new flow whose
-	// tuple finds no room counts under the tuple of its interface, direction
-	// and protocol with empty labels, which never needs room of its own
-	rollups    map[RollupKey]*rollupState
-	maxRollups int
-	rollupIDs  uint64
+	// a new tuple with enrichment labels needs room, fewer than maxFlows
+	// tuples of any kind or an idle one a scrape has shown in full to take
+	// the place of, otherwise its flow counts under the tuple of its
+	// interface, direction and protocol with empty labels, which never needs
+	// room of its own, so only tuples with empty labels grow it past maxFlows
+	rollups   map[RollupKey]*rollupState
+	rollupIDs uint64
 	// idleRollups lists the tuples no live flow counts under, longest idle
 	// at the front, the ones retention or a new tuple may drop
 	idleRollups *list.List
@@ -71,20 +71,14 @@ type Collector struct {
 
 // New creates a collector that evicts flows older than timeout
 // enricher may be nil
-// maxFlows <= 0 means unlimited
-// the label tuples with enrichment labels are capped at maxFlows, or at
-// config.DefaultMaxFlows when the flow table is unlimited
+// maxFlows caps the flow table and the room for new label tuples with
+// enrichment labels, Run refuses a cap below 1
 func New(timeout time.Duration, enricher Enricher, maxFlows int) *Collector {
-	maxRollups := maxFlows
-	if maxRollups <= 0 {
-		maxRollups = config.DefaultMaxFlows
-	}
 	return &Collector{
 		flows:       make(map[FlowKey]*flowState),
 		lru:         list.New(),
 		activeQueue: list.New(),
 		rollups:     make(map[RollupKey]*rollupState),
-		maxRollups:  maxRollups,
 		idleRollups: list.New(),
 		timeout:     timeout,
 		enricher:    enricher,
@@ -379,7 +373,7 @@ func (c *Collector) recordLocked(ev FlowEvent, now time.Time, labels map[addrPai
 	}
 	src, dst := lp.src, lp.dst
 
-	if c.maxFlows > 0 && len(c.flows) >= c.maxFlows {
+	if len(c.flows) >= c.maxFlows {
 		ended, evicted = c.evictOldestLocked(FlowEndReasonLackOfResources)
 	}
 
@@ -422,7 +416,7 @@ func (c *Collector) rollupLocked(rk RollupKey) *rollupState {
 		return r
 	}
 	labeled := rk.Src != (Labels{}) || rk.Dst != (Labels{})
-	if labeled && len(c.rollups) >= c.maxRollups {
+	if labeled && len(c.rollups) >= c.maxFlows {
 		front := c.idleRollups.Front()
 		if front != nil && front.Value.(*rollupState).shown {
 			c.dropRollupLocked(front.Value.(*rollupState))
@@ -714,6 +708,9 @@ func sweepPeriod(timeout, active time.Duration) time.Duration {
 func (c *Collector) Run(ctx context.Context, rd Reader) error {
 	if c.timeout <= 0 {
 		return fmt.Errorf("eviction timeout must be positive, got %v", c.timeout)
+	}
+	if c.maxFlows < 1 {
+		return fmt.Errorf("max flows must be positive, got %d", c.maxFlows)
 	}
 
 	c.mu.RLock()

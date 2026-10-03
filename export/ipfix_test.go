@@ -90,7 +90,7 @@ func TestIPFIXExportsEvictedFlowsOverUDP(t *testing.T) {
 			}
 			defer exp.Close()
 
-			c := collector.New(10*time.Second, nil, 0)
+			c := collector.New(10*time.Second, nil, config.DefaultMaxFlows)
 			c.SetFlowExporter(exp)
 			c.SetSampleRate(100, 0)
 
@@ -163,7 +163,7 @@ func TestIPFIXOctetDeltaCountCarriesIPBytes(t *testing.T) {
 	}
 	defer exp.Close()
 
-	c := collector.New(10*time.Second, nil, 0)
+	c := collector.New(10*time.Second, nil, config.DefaultMaxFlows)
 	c.SetFlowExporter(exp)
 
 	t0 := time.Unix(1_700_000_000, 0).UTC()

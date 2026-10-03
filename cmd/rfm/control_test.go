@@ -18,7 +18,7 @@ import (
 
 func testHandler(t *testing.T) (*controlHandler, *collector.Collector) {
 	t.Helper()
-	c := collector.New(30*time.Second, nil, 0)
+	c := collector.New(30*time.Second, nil, config.DefaultMaxFlows)
 	c.SetSampleRate(10, 0)
 	cfg := &config.Config{}
 	cfg.Agent.BPF.SampleRate = 10

@@ -14,6 +14,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	dto "github.com/prometheus/client_model/go"
 	"ysun.co/rfm/collector"
+	"ysun.co/rfm/config"
 )
 
 // tupleEnricher gives every source address a label tuple of its own
@@ -40,7 +41,7 @@ func tupleEvent(tuple, port int) collector.FlowEvent {
 // tuples of which 2675 carry 50000 live flows, about 50700 flow series
 func fleetCollector(tb testing.TB) *collector.Collector {
 	tb.Helper()
-	c := collector.New(30*time.Second, tupleEnricher{}, 0)
+	c := collector.New(30*time.Second, tupleEnricher{}, config.DefaultMaxFlows)
 	c.SetSampleRate(10, 0)
 
 	t0 := time.Now()
@@ -78,7 +79,7 @@ func scrapeOnce(tb testing.TB, h http.Handler) {
 // smallFleetCollector is fleetCollector at a tenth of the size
 func smallFleetCollector(tb testing.TB) *collector.Collector {
 	tb.Helper()
-	c := collector.New(30*time.Second, tupleEnricher{}, 0)
+	c := collector.New(30*time.Second, tupleEnricher{}, config.DefaultMaxFlows)
 	c.SetSampleRate(10, 0)
 
 	t0 := time.Now()
@@ -190,7 +191,7 @@ func TestScrapeSeriesMatchFlowsAndRollups(t *testing.T) {
 }
 
 func TestScrapeFollowsInterfaceRenames(t *testing.T) {
-	c := collector.New(time.Minute, tupleEnricher{}, 0)
+	c := collector.New(time.Minute, tupleEnricher{}, config.DefaultMaxFlows)
 	c.Record(tupleEvent(1, 1), time.Now())
 	mc := New(nil, c)
 
@@ -239,7 +240,7 @@ func TestFlowLabelNamesMatchEveryFlowFamily(t *testing.T) {
 }
 
 func TestScrapeSurvivesLabelsThatAreNotUTF8(t *testing.T) {
-	c := collector.New(time.Minute, &staticEnricher{srcCity: "M\xfcnchen"}, 0)
+	c := collector.New(time.Minute, &staticEnricher{srcCity: "M\xfcnchen"}, config.DefaultMaxFlows)
 	c.Record(tupleEvent(1, 1), time.Now())
 	reg := prometheus.NewRegistry()
 	reg.MustRegister(New(nil, c))

@@ -738,25 +738,20 @@ host = "127.0.0.1"
 	}
 }
 
-func TestLoadIPFIXQueueUnlimitedTable(t *testing.T) {
-	path := writeTOML(t, `
+func TestLoadMaxFlowsMustBePositive(t *testing.T) {
+	// the flow table, the label tuples and the ipfix queue are all sized by
+	// max_flows, none of them has an unlimited size
+	for _, n := range []int{0, -1} {
+		path := writeTOML(t, `
 [agent]
 interfaces = ["eth0"]
 
 [agent.collector]
-max_flows = 0
-
-[agent.ipfix]
-host = "127.0.0.1"
+max_flows = `+strconv.Itoa(n)+`
 `)
-
-	cfg, err := Load(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	// an unlimited table sweeps at least as many flows as a default one
-	if cfg.Agent.IPFIX.QueueSize != 65536 {
-		t.Fatalf("queue_size = %d, want the default max_flows 65536", cfg.Agent.IPFIX.QueueSize)
+		if _, err := Load(path); err == nil || !strings.Contains(err.Error(), "max_flows must be > 0") {
+			t.Fatalf("max_flows = %d: %v, want it refused", n, err)
+		}
 	}
 }
 
