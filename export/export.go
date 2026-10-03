@@ -261,12 +261,9 @@ func (mc *MetricsCollector) Collect(ch chan<- prometheus.Metric) {
 	mc.mu.Unlock()
 
 	// the ipfix subsystem error counter is every record the exporter lost,
-	// the sum of the dropped records over their reasons, the collector's own
-	// tally of refused records repeats the exporter's refusals and only
-	// stands in when no exporter stats are wired
+	// the sum of the dropped records over their reasons, and 0 without one
 	var ipfixErrs uint64
-	haveIPFIX := ipfix != nil
-	if haveIPFIX {
+	if ipfix != nil {
 		s := ipfix()
 		ipfixErrs = s.Failures()
 		var connected float64
@@ -300,9 +297,6 @@ func (mc *MetricsCollector) Collect(ch chan<- prometheus.Metric) {
 		ch <- prometheus.MustNewConstMetric(descFoldedFlows, prometheus.CounterValue, float64(stats.FoldedFlows))
 		errs["bpf_map"] += stats.BPFMapErrors
 		errs["ring_buffer"] = stats.RingBufErrors
-		if !haveIPFIX {
-			ipfixErrs = stats.IPFIXErrors
-		}
 		errs["ipfix"] = ipfixErrs
 	}
 	for _, s := range sources {

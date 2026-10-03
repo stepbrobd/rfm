@@ -1142,9 +1142,9 @@ func TestRollupSumsStayExactAcrossTheCap(t *testing.T) {
 	}
 }
 
-func TestCollectIPFIXErrorsCountLossOnce(t *testing.T) {
-	// the collector refuses a record when the queue is full and the exporter
-	// counts the same drop, the subsystem counter must show it once
+func TestCollectIPFIXErrorsComeFromTheExporter(t *testing.T) {
+	// the exporter refuses a record when its queue is full and counts the
+	// loss itself, the subsystem counter shows its count and nothing else
 	exp := &recordingExporter{err: errors.New("ipfix queue full")}
 	c := collector.New(30*time.Second, nil, config.DefaultMaxFlows)
 	c.SetFlowExporter(exp)
@@ -1157,11 +1157,11 @@ func TestCollectIPFIXErrorsCountLossOnce(t *testing.T) {
 		Len:     100,
 	}, t0)
 	c.Evict(t0.Add(time.Minute))
-	if c.Stats().IPFIXErrors != 1 {
-		t.Fatalf("collector ipfix errors = %d, want 1", c.Stats().IPFIXErrors)
-	}
 
 	mc := New(nil, c)
+	if got := errorsBySubsystem(t, mc)["ipfix"]; got != 0 {
+		t.Fatalf("ipfix errors = %v without exporter stats, want 0", got)
+	}
 	mc.SetIPFIX(func() IPFIXStats { return IPFIXStats{QueueDropped: 1, SendErrors: map[string]uint64{}} })
 	vals := collectAll(t, mc)
 	if got := vals["rfm_errors_total"]; got != 1 {

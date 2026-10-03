@@ -711,9 +711,12 @@ func TestFlushExportsRemainingFlows(t *testing.T) {
 	}
 }
 
-func TestExportErrorIncrementsStats(t *testing.T) {
+func TestExportErrorKeepsTheBatchGoing(t *testing.T) {
+	// the exporter counts what it refuses, the collector hands it every
+	// record of the sweep all the same
+	exp := &mockFlowExporter{err: errors.New("write failed")}
 	c := New(10*time.Second, nil, config.DefaultMaxFlows)
-	c.SetFlowExporter(&mockFlowExporter{err: errors.New("write failed")})
+	c.SetFlowExporter(exp)
 
 	t0 := time.Now()
 	ev := FlowEvent{
@@ -725,10 +728,12 @@ func TestExportErrorIncrementsStats(t *testing.T) {
 	}
 
 	c.Record(ev, t0)
+	ev.SrcPort = 1001
+	c.Record(ev, t0)
 	c.Evict(t0.Add(11 * time.Second))
 
-	if s := c.Stats(); s.IPFIXErrors != 1 {
-		t.Fatalf("ipfix errors = %d, want 1", s.IPFIXErrors)
+	if len(exp.flows) != 2 {
+		t.Fatalf("records handed over = %d, want both despite the failures", len(exp.flows))
 	}
 }
 

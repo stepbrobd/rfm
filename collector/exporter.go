@@ -50,6 +50,7 @@ func (f ExportedFlow) SamplingProbability() float64 {
 }
 
 // FlowExporter consumes completed flows
+// it counts the flows it refuses, the collector only logs the errors
 type FlowExporter interface {
 	ExportFlow(flow ExportedFlow) error
 }

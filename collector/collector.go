@@ -66,7 +66,6 @@ type Collector struct {
 	folded      atomic.Uint64
 	ringBufErrs atomic.Uint64
 	bpfMapErrs  atomic.Uint64
-	ipfixErrs   atomic.Uint64
 }
 
 // New creates a collector that evicts flows older than timeout
@@ -618,7 +617,6 @@ func (c *Collector) Stats() Stats {
 		FoldedFlows:     c.folded.Load(),
 		RingBufErrors:   c.ringBufErrs.Load(),
 		BPFMapErrors:    c.bpfMapErrs.Load(),
-		IPFIXErrors:     c.ipfixErrs.Load(),
 	}
 }
 
@@ -659,13 +657,9 @@ func (c *Collector) exportFlows(exp FlowExporter, flows []ExportedFlow) {
 			}
 		}
 	}
-	if failed == 0 {
-		return
-	}
 	if failed > 1 {
 		log.Error("export flow batch", "failed", failed, "total", len(flows))
 	}
-	c.ipfixErrs.Add(uint64(failed))
 }
 
 func (c *Collector) pollDrops(rd Reader) {

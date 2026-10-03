@@ -159,7 +159,6 @@ type Stats struct {
 	ForcedEvictions uint64
 	RingBufErrors   uint64
 	BPFMapErrors    uint64
-	IPFIXErrors     uint64
 	// FoldedFlows counts the flows whose label tuple found no room under the
 	// rollup cap and that count under empty enrichment labels instead
 	FoldedFlows uint64
