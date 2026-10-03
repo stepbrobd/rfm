@@ -14,7 +14,7 @@ Prometheus and IPFIX.
 Requirements:
 
 - Linux 6.12 or newer ([integration tested](integration/versions.nix))
-- Go 1.25+
+- Go 1.26.3+
 - Root or `CAP_BPF` + `CAP_NET_ADMIN` + `CAP_PERFMON`
 
 Current scope:
