@@ -269,9 +269,11 @@ func TestPrintStatus(t *testing.T) {
 		Flows:      ctl.Flows{Active: 12, Max: 65536, Folded: 4},
 		IPFIX:      &ctl.IPFIX{Collector: "[::1]:4739", Connected: true, Messages: 3, Records: 40, SendFailed: 6, SendErrors: map[string]uint64{"EPERM": 2}},
 		MMDB:       &ctl.MMDB{ASNBuildEpoch: 1_700_000_000},
+		// a peer whose pre and post policy views both hold routes
+		RIB: &ctl.RIB{Listen: "[::1]:11019", PrefixesV4: 5, Routes: 10, Peers: 2},
 	})
 	out := b.String()
-	for _, want := range []string{"1 in 20 (adaptive, base 10, max 1000)", "12 active of 65536", "4 folded under empty labels", "[::1]:4739 connected", "6 lost in failed sends", "EPERM=2", "asn 2023-11-14, city none"} {
+	for _, want := range []string{"1 in 20 (adaptive, base 10, max 1000)", "12 active of 65536", "4 folded under empty labels", "[::1]:4739 connected", "6 lost in failed sends", "EPERM=2", "asn 2023-11-14, city none", "10 routes in 2 views"} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("status output missing %q:\n%s", want, out)
 		}

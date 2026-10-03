@@ -179,7 +179,8 @@ type Summary struct {
 	PrefixesV4 int
 	PrefixesV6 int
 	Routes     int
-	Peers      int
+	// Peers counts the views with at least one route, see Peer
+	Peers int
 }
 
 // Table is a longest-prefix-match routing table
@@ -338,7 +339,8 @@ func (t *Table) labels(addr netip.Addr) collector.Labels {
 	return collector.Labels{ASN: best.originASN}
 }
 
-// Summary counts the prefixes, routes and peers in the table
+// Summary counts the prefixes and routes in the table and the views that
+// hold them
 func (t *Table) Summary() Summary {
 	t.mu.RLock()
 	defer t.mu.RUnlock()

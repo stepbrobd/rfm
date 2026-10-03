@@ -95,7 +95,9 @@ type RIB struct {
 	PrefixesV4 int    `json:"prefixes_v4"`
 	PrefixesV6 int    `json:"prefixes_v6"`
 	Routes     int    `json:"routes"`
-	Peers      int    `json:"peers"`
+	// Peers counts the views that hold routes, the pre and the post policy
+	// table of a peer are two views
+	Peers int `json:"peers"`
 }
 
 // FlowRow is one live flow as shown by `rfm flows top`

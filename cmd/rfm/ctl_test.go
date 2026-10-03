@@ -207,7 +207,7 @@ func TestCLIRIB(t *testing.T) {
 	}
 
 	out, err = runCLI(t, sock, "rib", "summary")
-	if err != nil || !strings.Contains(out, "12 ipv4 and 3 ipv6 prefixes, 15 routes from 1 peers") {
+	if err != nil || !strings.Contains(out, "12 ipv4 and 3 ipv6 prefixes, 15 routes in 1 views") {
 		t.Fatalf("rib summary = %q err=%v", out, err)
 	}
 }

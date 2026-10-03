@@ -89,7 +89,7 @@ func printStatus(w io.Writer, st ctl.Status) {
 		fmt.Fprintf(tw, "mmdb\tasn %s, city %s\n", epoch(st.MMDB.ASNBuildEpoch), epoch(st.MMDB.CityBuildEpoch))
 	}
 	if st.RIB != nil {
-		fmt.Fprintf(tw, "rib\t%s, %d ipv4 and %d ipv6 prefixes, %d routes from %d peers\n",
+		fmt.Fprintf(tw, "rib\t%s, %d ipv4 and %d ipv6 prefixes, %d routes in %d views\n",
 			st.RIB.Listen, st.RIB.PrefixesV4, st.RIB.PrefixesV6, st.RIB.Routes, st.RIB.Peers)
 	}
 	tw.Flush()
@@ -237,7 +237,7 @@ func joinASNs(path []uint32) string {
 
 var ribSummaryCmd = &cobra.Command{
 	Use:   "summary",
-	Short: "Count prefixes, routes and peers",
+	Short: "Count prefixes, routes and the views that hold them",
 	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		s, err := ctlClient().RIBSummary()
@@ -247,7 +247,7 @@ var ribSummaryCmd = &cobra.Command{
 		if emit(cmd, s) {
 			return nil
 		}
-		fmt.Fprintf(cmd.OutOrStdout(), "%s: %d ipv4 and %d ipv6 prefixes, %d routes from %d peers\n",
+		fmt.Fprintf(cmd.OutOrStdout(), "%s: %d ipv4 and %d ipv6 prefixes, %d routes in %d views\n",
 			s.Listen, s.PrefixesV4, s.PrefixesV6, s.Routes, s.Peers)
 		return nil
 	},
