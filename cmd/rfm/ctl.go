@@ -78,8 +78,8 @@ func printStatus(w io.Writer, st ctl.Status) {
 		for errno, n := range st.IPFIX.SendErrors {
 			errs = append(errs, fmt.Sprintf("%s=%d", errno, n))
 		}
-		line := fmt.Sprintf("%s %s, %d messages, %d records, %d queue drops, %d unsent, %d lost in failed sends",
-			st.IPFIX.Collector, state, st.IPFIX.Messages, st.IPFIX.Records, st.IPFIX.QueueDropped, st.IPFIX.Unsent, st.IPFIX.SendFailed)
+		line := fmt.Sprintf("%s %s, %d messages, %d records, %d queue drops, %d unsent, %d failed to encode, %d lost in failed sends",
+			st.IPFIX.Collector, state, st.IPFIX.Messages, st.IPFIX.Records, st.IPFIX.QueueDropped, st.IPFIX.Unsent, st.IPFIX.EncodeErrors, st.IPFIX.SendFailed)
 		if len(errs) > 0 {
 			line += ", send errors " + strings.Join(errs, " ")
 		}

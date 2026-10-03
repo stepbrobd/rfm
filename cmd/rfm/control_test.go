@@ -244,7 +244,7 @@ func TestControlStatusCountsFoldedFlowsAndFailedSends(t *testing.T) {
 		}, now)
 	}
 	h.ipfix = func() export.IPFIXStats {
-		return export.IPFIXStats{Connected: true, Messages: 3, Records: 40, Unsent: 2, SendFailed: 5}
+		return export.IPFIXStats{Connected: true, Messages: 3, Records: 40, Unsent: 2, EncodeErrors: 7, SendFailed: 5}
 	}
 
 	st, err := h.Status()
@@ -254,8 +254,8 @@ func TestControlStatusCountsFoldedFlowsAndFailedSends(t *testing.T) {
 	if folded := c.Stats().FoldedFlows; folded != 1 || st.Flows.Folded != folded {
 		t.Fatalf("status folded = %d, collector folded %d, want both 1", st.Flows.Folded, folded)
 	}
-	if st.IPFIX == nil || st.IPFIX.SendFailed != 5 || st.IPFIX.Unsent != 2 || st.IPFIX.Records != 40 {
-		t.Fatalf("status ipfix = %+v, want the records lost in failed sends next to the others", st.IPFIX)
+	if st.IPFIX == nil || st.IPFIX.SendFailed != 5 || st.IPFIX.EncodeErrors != 7 || st.IPFIX.Unsent != 2 || st.IPFIX.Records != 40 {
+		t.Fatalf("status ipfix = %+v, want every reason a record was lost next to the others", st.IPFIX)
 	}
 }
 
@@ -267,13 +267,13 @@ func TestPrintStatus(t *testing.T) {
 		Interfaces: []ctl.Interface{{Name: "eth0", Ifindex: 2}},
 		Sampling:   ctl.Sampling{Rate: 20, Base: 10, Max: 1000, Adaptive: true},
 		Flows:      ctl.Flows{Active: 12, Max: 65536, Folded: 4},
-		IPFIX:      &ctl.IPFIX{Collector: "[::1]:4739", Connected: true, Messages: 3, Records: 40, SendFailed: 6, SendErrors: map[string]uint64{"EPERM": 2}},
+		IPFIX:      &ctl.IPFIX{Collector: "[::1]:4739", Connected: true, Messages: 3, Records: 40, EncodeErrors: 1, SendFailed: 6, SendErrors: map[string]uint64{"EPERM": 2}},
 		MMDB:       &ctl.MMDB{ASNBuildEpoch: 1_700_000_000},
 		// a peer whose pre and post policy views both hold routes
 		RIB: &ctl.RIB{Listen: "[::1]:11019", PrefixesV4: 5, Routes: 10, Peers: 2},
 	})
 	out := b.String()
-	for _, want := range []string{"1 in 20 (adaptive, base 10, max 1000)", "12 active of 65536", "4 folded under empty labels", "[::1]:4739 connected", "6 lost in failed sends", "EPERM=2", "asn 2023-11-14, city none", "10 routes in 2 views"} {
+	for _, want := range []string{"1 in 20 (adaptive, base 10, max 1000)", "12 active of 65536", "4 folded under empty labels", "[::1]:4739 connected", "1 failed to encode", "6 lost in failed sends", "EPERM=2", "asn 2023-11-14, city none", "10 routes in 2 views"} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("status output missing %q:\n%s", want, out)
 		}

@@ -103,6 +103,7 @@ func (h *controlHandler) Status() (ctl.Status, error) {
 			Records:      s.Records,
 			QueueDropped: s.QueueDropped,
 			Unsent:       s.Unsent,
+			EncodeErrors: s.EncodeErrors,
 			SendFailed:   s.SendFailed,
 			SendErrors:   s.SendErrors,
 		}

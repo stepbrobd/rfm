@@ -79,6 +79,8 @@ type IPFIX struct {
 	QueueDropped uint64            `json:"queue_dropped"`
 	Unsent       uint64            `json:"unsent"`
 	SendErrors   map[string]uint64 `json:"send_errors,omitempty"`
+	// EncodeErrors counts the records that could not be encoded
+	EncodeErrors uint64 `json:"encode_errors"`
 	// SendFailed counts the records lost with messages that failed to send
 	SendFailed uint64 `json:"send_failed"`
 }
