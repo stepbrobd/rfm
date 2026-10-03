@@ -311,37 +311,78 @@ module sets `/run/rfm/rfm.sock`.
 All enrichment backends are optional. If `agent.enrich` is omitted, the agent
 still starts and `src_asn`, `dst_asn`, `src_city`, and `dst_city` stay empty.
 
-`mmdb.asn_db` (string, default ""): Path to an ASN MMDB database. Startup fails
-early if the configured path is missing or unreadable.
+`mmdb.asn_db` (string, default ""): Path to an ASN MMDB database in the
+GeoLite2-ASN layout that MaxMind and DB-IP ship, which keeps the ASN in
+`autonomous_system_number`. Startup fails early if the configured path is
+missing or unreadable.
 
-`mmdb.city_db` (string, default ""): Path to a city MMDB database. Startup fails
-early if the configured path is missing or unreadable.
+`mmdb.city_db` (string, default ""): Path to a city MMDB database in the
+GeoLite2-City layout, which keeps the English city name in `city.names.en`.
+Startup fails early if the configured path is missing or unreadable.
+
+An `asn_db` record without `autonomous_system_number` fails its lookup, as does
+a `city_db` record whose `city` or `city.names` is not a map, and the agent logs
+the first failed lookup of every file it opens as an `mmdb lookup` error. Any
+other `city_db` record without `city.names.en`, such as every record of a
+GeoLite2-Country or GeoLite2-ASN database, gives no city and logs nothing.
 
 `rib.bmp.host` (string, default ""): BMP listen host for live route updates. If
 `rib.bmp.host` and `rib.bmp.port` are both unset, the BMP listener stays
 disabled.
 
 `rib.bmp.port` (int, default 0): BMP listen port for live route updates. If only
-one BMP field is set, the other defaults to `::1` or `11019`.
+one BMP field is set, the other defaults to `::1` or `11019`. Startup fails when
+the listener cannot bind its address.
 
-If configured with no BMP peer connected yet, the agent still runs and ASN
-labels stay empty until routes arrive.
+If configured with no BMP peer connected yet, the agent still runs and the RIB
+labels nothing until routes arrive.
 
 When both backends are enabled, ASN lookup uses the RIB first and MMDB as a
-fallback. City lookup comes from MMDB. Labels are resolved once when a flow is
-created.
+fallback. The RIB labels no address that only a default route covers, because
+the origin of a default route is the upstream that carries the traffic, and MMDB
+answers for it instead. City lookup comes from MMDB. Labels are resolved once
+when a flow is created.
 
 MMDB files are polled once a minute and re-opened when their size or mtime
 changed, so an updater that replaces the file (geoipupdate) takes effect without
-a restart. `rfm reload mmdb` forces the check.
+a restart. `rfm reload mmdb` forces the check. Replace a database by renaming
+the new file over the old one, as geoipupdate does. The agent maps the file into
+memory, and a file rewritten in place shows lookups a half written database, or
+kills the agent with SIGBUS when a lookup reads past its new end. A file that
+fails to re-open leaves the previous one in service.
 
-The RIB keeps every route per BMP peer, serves the best one per prefix (post
-policy over pre policy, then the lowest peer address), withdraws a peer's routes
-on Peer Down, and replaces them when a new session announces the peer again with
-Peer Up, since the speaker dumps the peer's table right after. Routes survive
-the end of a session, so a speaker restart keeps enrichment in place until the
-next dump. A route whose AS path ends in an AS_SET has no single origin and
+The RIB reads BMP version 3 (RFC 7854), and a message of another version or of a
+length no message can have ends the session. It keeps every route per BMP peer
+and policy view, serves the best one per prefix (post policy over pre policy,
+then the lowest peer address), withdraws both views of a peer on Peer Down, and
+replaces them when Peer Up announces the peer again, since the speaker dumps the
+peer's table right after. Routes survive the end of a session, so a speaker
+restart keeps enrichment in place until the next dump. A view of an ended
+session is withdrawn after 5 minutes in which a session of the same speaker, one
+already open or a later one, stayed open and no session announced the view
+again. The RIB checks once a minute, and a speaker without an open session keeps
+its views. A route whose AS path ends in an AS_SET has no single origin and
 reports ASN 0.
+
+The RIB keeps IPv4 and IPv6 unicast routes and skips VPN, multicast and other
+families. It decodes ADD-PATH updates with the capabilities the Peer Up shows
+and serves the lowest path id of each view, merges AS4_PATH into the path of a
+route from a 2-byte speaker as RFC 6793 describes, and handles a malformed
+attribute as RFC 7606 says, by discarding the attribute or treating the update
+as a withdraw. An update of a peer whose Peer Up did not parse is dropped,
+because its path ids would read as prefixes. A session tracks up to 1024 peers
+with ADD-PATH or unknown capabilities, and once the Peer Up of one more such
+peer arrives, it drops the updates of every peer it does not track for the rest
+of the session, peers without ADD-PATH included.
+
+The listener serves 16 BMP sessions at once and closes further ones right after
+accept, and the RIB holds up to 8,388,608 routes and 1024 views and drops the
+routes past either. These drops, the dropped updates and every message that did
+not parse in full count as `bmp` errors. A route keeps the first 32 ASNs of its
+path and its first 32 communities and large communities, and `rfm rib lookup`
+marks a route cut that way as truncated, while the origin ASN that labels flows
+is kept whole. A listener that stops on an accept error that is not temporary
+stops the agent with exit status 1.
 
 ## Prometheus metrics
 
@@ -486,8 +527,11 @@ or JSON with `--json`:
   IPFIX, MMDB and RIB state
 - `rfm flows top [N] [--by bytes|packets]`: the busiest live flows
 - `rfm flows count`: live flow count
-- `rfm rib lookup <address>`: best route with AS path, communities and peer
-- `rfm rib summary`: prefixes, routes and peers in the RIB
+- `rfm rib lookup <address>`: best route with AS path, communities and peer, and
+  a `truncated` row when the RIB kept only the first 32 values of the path or of
+  the communities
+- `rfm rib summary`: prefixes and routes in the RIB, and the views that hold
+  them, one per peer and policy
 - `rfm set sample-rate <N>`: sample 1 in N skbs from now on, without a restart,
   estimates stay consistent because every event is scaled by the rate that
   sampled it
