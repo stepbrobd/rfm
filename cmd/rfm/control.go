@@ -238,6 +238,7 @@ func ctlRoute(r rib.Route) ctl.Route {
 		PeerASN:     r.PeerASN,
 		PeerAddress: r.PeerAddress,
 		PostPolicy:  r.PostPolicy,
+		Truncated:   r.Truncated,
 	}
 	for _, c := range r.Communities {
 		out.Communities = append(out.Communities, fmt.Sprintf("%d:%d", c>>16, c&0xffff))

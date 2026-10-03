@@ -130,6 +130,10 @@ type Route struct {
 	PeerASN          uint32       `json:"peer_asn"`
 	PeerAddress      netip.Addr   `json:"peer_address"`
 	PostPolicy       bool         `json:"post_policy"`
+	// Truncated marks a route whose AS path, communities or large
+	// communities were longer than the RIB keeps, they hold only their
+	// leading values
+	Truncated bool `json:"truncated,omitempty"`
 }
 
 // Handler answers control requests on behalf of the agent

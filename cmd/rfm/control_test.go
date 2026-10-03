@@ -13,6 +13,7 @@ import (
 	"ysun.co/rfm/collector"
 	"ysun.co/rfm/config"
 	"ysun.co/rfm/ctl"
+	"ysun.co/rfm/enrich/rib"
 	"ysun.co/rfm/export"
 )
 
@@ -274,5 +275,14 @@ func TestPrintStatus(t *testing.T) {
 		if !strings.Contains(out, want) {
 			t.Fatalf("status output missing %q:\n%s", want, out)
 		}
+	}
+}
+
+func TestControlRouteKeepsTheTruncation(t *testing.T) {
+	// the rib keeps the leading values of a longer path or longer
+	// communities, the route says so to whoever reads them
+	r := ctlRoute(rib.Route{Prefix: netip.MustParsePrefix("198.51.100.0/24"), ASPath: []uint32{64501}, Truncated: true})
+	if !r.Truncated {
+		t.Fatalf("route = %+v, want it marked truncated", r)
 	}
 }

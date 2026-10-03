@@ -214,6 +214,9 @@ var ribLookupCmd = &cobra.Command{
 		if len(route.LargeCommunities) > 0 {
 			fmt.Fprintf(tw, "large communities\t%s\n", strings.Join(route.LargeCommunities, " "))
 		}
+		if route.Truncated {
+			fmt.Fprintf(tw, "truncated\tas path and communities show only the leading values rfm keeps\n")
+		}
 		view := "pre policy"
 		if route.PostPolicy {
 			view = "post policy"

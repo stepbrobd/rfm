@@ -45,10 +45,7 @@ func (f *fakeControl) FlowsTop(n int, by string) ([]ctl.FlowRow, error) {
 func (f *fakeControl) FlowsCount() uint64 { return 2 }
 
 func (f *fakeControl) RIBLookup(addr netip.Addr) (ctl.Route, bool, error) {
-	if addr != netip.MustParseAddr("203.0.113.9") {
-		return ctl.Route{}, false, nil
-	}
-	return ctl.Route{
+	route := ctl.Route{
 		Prefix:      netip.MustParsePrefix("203.0.113.0/24"),
 		OriginASN:   64496,
 		ASPath:      []uint32{64501, 64496},
@@ -56,7 +53,16 @@ func (f *fakeControl) RIBLookup(addr netip.Addr) (ctl.Route, bool, error) {
 		PeerASN:     64501,
 		PeerAddress: netip.MustParseAddr("192.0.2.2"),
 		PostPolicy:  true,
-	}, true, nil
+	}
+	switch addr {
+	case netip.MustParseAddr("203.0.113.9"):
+		return route, true, nil
+	case netip.MustParseAddr("198.51.100.9"):
+		// a route whose path or communities were longer than the rib keeps
+		route.Prefix, route.Truncated = netip.MustParsePrefix("198.51.100.0/24"), true
+		return route, true, nil
+	}
+	return ctl.Route{}, false, nil
 }
 
 func (f *fakeControl) RIBSummary() (ctl.RIB, error) {
@@ -174,6 +180,24 @@ func TestCLIRIB(t *testing.T) {
 		if !strings.Contains(out, want) {
 			t.Fatalf("rib lookup output missing %q:\n%s", want, out)
 		}
+	}
+	if strings.Contains(out, "truncated") {
+		t.Fatalf("rib lookup marks a complete route as truncated:\n%s", out)
+	}
+
+	// a route the rib holds only the leading values of says so, the path and
+	// communities it shows are not the whole of them
+	out, err = runCLI(t, sock, "rib", "lookup", "198.51.100.9")
+	if err != nil || !strings.Contains(out, "truncated    as path and communities show only the leading values rfm keeps") {
+		t.Fatalf("rib lookup of a truncated route = %q, %v, want it marked", out, err)
+	}
+	out, err = runCLI(t, sock, "rib", "lookup", "198.51.100.9", "--json")
+	if err != nil || !strings.Contains(out, `"truncated": true`) {
+		t.Fatalf("rib lookup --json of a truncated route = %q, %v, want it marked", out, err)
+	}
+	out, err = runCLI(t, sock, "rib", "lookup", "203.0.113.9", "--json")
+	if err != nil || strings.Contains(out, "truncated") {
+		t.Fatalf("rib lookup --json of a complete route = %q, %v, want no mark", out, err)
 	}
 	if _, err := runCLI(t, sock, "rib", "lookup", "192.0.2.1"); err == nil || !strings.Contains(err.Error(), "no route") {
 		t.Fatalf("missing route error = %v", err)
