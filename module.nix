@@ -179,7 +179,7 @@ in
                     };
 
                     max_message_size = std.mkOption {
-                      type = std.types.ints.between 128 65535;
+                      type = std.types.ints.between 171 65535;
                       default = 1200;
                       description = "Largest IPFIX message in bytes, keep it under the path MTU.";
                     };

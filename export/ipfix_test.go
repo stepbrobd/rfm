@@ -931,6 +931,50 @@ func TestIPFIXSplitsMessagesAtMaxSize(t *testing.T) {
 	}
 }
 
+func TestIPFIXKeepsToTheSmallestMaxMessageSize(t *testing.T) {
+	loadIPFIXRegistry.Do(registry.LoadRegistry)
+
+	conn := startIPFIXListener(t)
+	addr := conn.LocalAddr().(*net.UDPAddr)
+
+	// a message carries at least one record, the largest such message is
+	// an ipv6 record with its template, and it fills the smallest limit the
+	// configuration takes
+	cfg := testIPFIXConfig(addr.IP.String(), addr.Port)
+	cfg.MaxMessageSize = config.MinIPFIXMaxMessageSize
+	exp, err := NewIPFIX(cfg)
+	if err != nil {
+		t.Fatalf("NewIPFIX: %v", err)
+	}
+	defer exp.Close()
+
+	now := time.Unix(1_700_000_000, 0).UTC()
+	for _, flow := range []collector.ExportedFlow{
+		testFlow("::ffff:10.0.0.1", "::ffff:10.0.0.2", 1, now),
+		testFlow("2001:db8::1", "2001:db8::2", 1, now),
+	} {
+		if err := exp.ExportFlow(flow); err != nil {
+			t.Fatalf("ExportFlow: %v", err)
+		}
+	}
+	if err := exp.Flush(); err != nil {
+		t.Fatalf("Flush: %v", err)
+	}
+
+	var largest int
+	for i := range 2 {
+		msg := mustReadIPFIXDatagram(t, conn)
+		if int(msg.Length) > cfg.MaxMessageSize {
+			t.Fatalf("message %d is %d bytes, want <= %d", i, msg.Length, cfg.MaxMessageSize)
+		}
+		largest = max(largest, int(msg.Length))
+	}
+	assertNoIPFIXDatagram(t, conn)
+	if largest != cfg.MaxMessageSize {
+		t.Fatalf("largest message = %d bytes, want the smallest limit %d", largest, cfg.MaxMessageSize)
+	}
+}
+
 func TestIPFIXQueueFullDropsRecords(t *testing.T) {
 	loadIPFIXRegistry.Do(registry.LoadRegistry)
 

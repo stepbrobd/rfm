@@ -89,6 +89,12 @@ const (
 	DefaultIPFIXMaxMessageSize = 1200
 )
 
+// MinIPFIXMaxMessageSize is the smallest max_message_size the sender keeps
+// to, a message carries at least one record and the template of its family
+// when that is due, and the largest of those is the message header, the
+// ipv6 template set and one ipv6 record
+const MinIPFIXMaxMessageSize = 171
+
 // IPFIXBindConfig controls the local UDP bind used by the IPFIX exporter
 type IPFIXBindConfig struct {
 	Host string `toml:"host"`
@@ -452,8 +458,8 @@ func validate(cfg *Config) error {
 	if a.IPFIX.FlushInterval < 10*time.Millisecond {
 		return fmt.Errorf("agent.ipfix.flush_interval must be >= 10ms, got %v", a.IPFIX.FlushInterval)
 	}
-	if a.IPFIX.MaxMessageSize < 128 || a.IPFIX.MaxMessageSize > 65535 {
-		return fmt.Errorf("agent.ipfix.max_message_size must be between 128 and 65535, got %d", a.IPFIX.MaxMessageSize)
+	if a.IPFIX.MaxMessageSize < MinIPFIXMaxMessageSize || a.IPFIX.MaxMessageSize > 65535 {
+		return fmt.Errorf("agent.ipfix.max_message_size must be between %d and 65535, got %d", MinIPFIXMaxMessageSize, a.IPFIX.MaxMessageSize)
 	}
 	if a.Prometheus.Port < 1 || a.Prometheus.Port > 65535 {
 		return fmt.Errorf("agent.prometheus.port must be between 1 and 65535, got %d", a.Prometheus.Port)

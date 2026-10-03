@@ -803,6 +803,24 @@ host = "127.0.0.1"
 	}
 }
 
+func TestLoadIPFIXMaxMessageSizeFloor(t *testing.T) {
+	// the sender puts at least one record in a message, with the template
+	// of its family when that is due, so a smaller limit cannot hold
+	for size, ok := range map[int]bool{MinIPFIXMaxMessageSize - 1: false, MinIPFIXMaxMessageSize: true} {
+		path := writeTOML(t, `
+[agent]
+interfaces = ["eth0"]
+
+[agent.ipfix]
+host = "127.0.0.1"
+max_message_size = `+strconv.Itoa(size)+`
+`)
+		if _, err := Load(path); (err == nil) != ok {
+			t.Fatalf("max_message_size = %d: %v, want accepted %v", size, err, ok)
+		}
+	}
+}
+
 func TestLoadBadIPFIXTemplateRefresh(t *testing.T) {
 	path := writeTOML(t, `
 [agent]
