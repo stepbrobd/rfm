@@ -7,8 +7,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var cfgFile string
-
 // main prints a failed command's error once, cobra would print it a second
 // time and the usage with it, which a runtime error does not call for
 var root = &cobra.Command{
@@ -20,8 +18,6 @@ var root = &cobra.Command{
 
 func init() {
 	root.PersistentFlags().BoolP("help", "h", false, "Print help and exit")
-	root.PersistentFlags().StringVarP(&cfgFile, "config", "c",
-		"/etc/rfm/rfm.toml", "RFM configuration file path")
 }
 
 // cobra generates the help and completion commands during Execute

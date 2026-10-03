@@ -250,3 +250,23 @@ func TestCLIWithoutAgent(t *testing.T) {
 		t.Fatalf("the command printed %q next to the error main prints", out)
 	}
 }
+
+func TestCLIConfigFileIsTheAgents(t *testing.T) {
+	// rfm agent reads the configuration file, the other commands talk to the
+	// agent over --socket and refuse the flag rather than ignore it
+	if agentCmd.LocalNonPersistentFlags().Lookup("config") == nil {
+		t.Fatal("rfm agent takes no --config")
+	}
+	sock, _ := startFakeAgent(t)
+	for _, tc := range []struct {
+		args    []string
+		refusal string
+	}{
+		{[]string{"status", "-c", "other.toml"}, "unknown shorthand flag"},
+		{[]string{"rib", "summary", "--config", "other.toml"}, "unknown flag"},
+	} {
+		if _, err := runCLI(t, sock, tc.args...); err == nil || !strings.Contains(err.Error(), tc.refusal) {
+			t.Fatalf("%v: %v, want %q", tc.args, err, tc.refusal)
+		}
+	}
+}

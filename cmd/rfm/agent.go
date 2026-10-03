@@ -27,6 +27,8 @@ import (
 	"ysun.co/rfm/probe"
 )
 
+var cfgFile string
+
 var agentCmd = &cobra.Command{
 	Use:   "agent",
 	Short: "Start the RFM agent daemon",
@@ -39,6 +41,10 @@ var agentCmd = &cobra.Command{
 }
 
 func init() {
+	// the agent alone reads the file, the other commands reach it over
+	// --socket
+	agentCmd.Flags().StringVarP(&cfgFile, "config", "c",
+		"/etc/rfm/rfm.toml", "RFM configuration file path")
 	root.AddCommand(agentCmd)
 }
 
