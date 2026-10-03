@@ -323,7 +323,7 @@ var reloadMMDBCmd = &cobra.Command{
 func init() {
 	for _, c := range []*cobra.Command{statusCmd, flowsCmd, ribCmd, setCmd, configCmd, reloadCmd} {
 		c.PersistentFlags().StringVar(&ctlSocket, "socket", ctl.DefaultSocket, "Control socket of the agent")
-		c.PersistentFlags().BoolVar(&ctlJSON, "json", false, "Print the raw response as JSON")
+		c.PersistentFlags().BoolVar(&ctlJSON, "json", false, "Print the result as JSON")
 		root.AddCommand(c)
 	}
 	flowsTopCmd.Flags().StringVar(&flowsTopBy, "by", "bytes", "Order by bytes or packets")
