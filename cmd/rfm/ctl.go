@@ -260,7 +260,7 @@ var setCmd = &cobra.Command{
 
 var setSampleRateCmd = &cobra.Command{
 	Use:   "sample-rate <N>",
-	Short: "Sample 1 in N packets from now on",
+	Short: "Sample 1 in N skbs from now on",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		rate, err := strconv.ParseUint(args[0], 10, 32)

@@ -50,7 +50,7 @@ in
                     sample_rate = std.mkOption {
                       type = std.types.ints.positive;
                       default = 100;
-                      description = "Sample 1 in N packets for flow events.";
+                      description = "Sample 1 in N skbs for flow events, an event carries every wire packet of its skb.";
                     };
 
                     ring_buf_size = std.mkOption {
@@ -62,7 +62,7 @@ in
                     wakeup_batch = std.mkOption {
                       type = std.types.ints.positive;
                       default = 64;
-                      description = "Send a ring buffer wakeup every N submitted flow events.";
+                      description = "Force a ring buffer wakeup every N flow events a CPU submits.";
                     };
 
                     iface_stats_size = std.mkOption {

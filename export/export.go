@@ -35,7 +35,7 @@ var (
 
 	descSampleRate = prometheus.NewDesc(
 		"rfm_bpf_sample_rate",
-		"Packets sampled 1-in-N by the BPF programs right now.",
+		"Sample rate N of the BPF programs right now, one skb in N becomes a flow event.",
 		nil, nil,
 	)
 

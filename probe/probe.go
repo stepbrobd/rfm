@@ -251,7 +251,7 @@ func (p *Probe) SampleRate() (uint32, error) {
 }
 
 // SetSampleRate changes the 1-in-N sampling of the running programs
-// the config map is read per packet, so the change applies at once without
+// the config map is read per skb, so the change applies at once without
 // detaching or reloading anything
 func (p *Probe) SetSampleRate(n uint32) error {
 	if n == 0 {
