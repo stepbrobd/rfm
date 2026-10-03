@@ -72,6 +72,8 @@ func TestDecodeFlowEventRefusesEventsTheProbeCannotEmit(t *testing.T) {
 		name string
 		ev   FlowEvent
 	}{
+		// every skb stands for at least one wire packet
+		{"no wire packets", FlowEvent{Len: 100}},
 		// the probe counts the l2 header of every wire packet in len
 		{"l2 headers past the wire bytes", FlowEvent{Segs: 2, Len: 20, L2Len: 14}},
 	} {

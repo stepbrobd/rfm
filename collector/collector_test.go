@@ -25,6 +25,7 @@ func TestRecord(t *testing.T) {
 		DstAddr: netip.MustParseAddr("::ffff:10.0.0.2"),
 		SrcPort: 12345,
 		DstPort: 80,
+		Segs:    1,
 		Len:     100,
 	}
 
@@ -60,8 +61,7 @@ func TestRecordCountsSegments(t *testing.T) {
 	}
 	c.Record(ev, now)
 
-	// an event from a probe without segment accounting still counts as one
-	ev.Segs = 0
+	ev.Segs = 1
 	ev.Len = 100
 	c.Record(ev, now)
 
@@ -85,12 +85,14 @@ func TestRecordDistinctFlows(t *testing.T) {
 		Proto: 6, SrcPort: 1000, DstPort: 80,
 		SrcAddr: netip.MustParseAddr("::ffff:10.0.0.1"),
 		DstAddr: netip.MustParseAddr("::ffff:10.0.0.2"),
+		Segs:    1,
 		Len:     100,
 	}
 	ev2 := FlowEvent{
 		Proto: 6, SrcPort: 2000, DstPort: 80,
 		SrcAddr: netip.MustParseAddr("::ffff:10.0.0.1"),
 		DstAddr: netip.MustParseAddr("::ffff:10.0.0.2"),
+		Segs:    1,
 		Len:     200,
 	}
 
@@ -110,6 +112,7 @@ func TestEvict(t *testing.T) {
 		Proto: 6, SrcPort: 1000, DstPort: 80,
 		SrcAddr: netip.MustParseAddr("::ffff:10.0.0.1"),
 		DstAddr: netip.MustParseAddr("::ffff:10.0.0.2"),
+		Segs:    1,
 		Len:     100,
 	}
 
@@ -136,12 +139,14 @@ func TestEvictKeepsFresh(t *testing.T) {
 		Proto: 6, SrcPort: 1000, DstPort: 80,
 		SrcAddr: netip.MustParseAddr("::ffff:10.0.0.1"),
 		DstAddr: netip.MustParseAddr("::ffff:10.0.0.2"),
+		Segs:    1,
 		Len:     100,
 	}
 	fresh := FlowEvent{
 		Proto: 17, SrcPort: 5000, DstPort: 53,
 		SrcAddr: netip.MustParseAddr("::ffff:10.0.0.1"),
 		DstAddr: netip.MustParseAddr("::ffff:10.0.0.2"),
+		Segs:    1,
 		Len:     50,
 	}
 
@@ -168,12 +173,14 @@ func TestEvictUpdatedFlowKeepsFresh(t *testing.T) {
 		Proto: 6, SrcPort: 1000, DstPort: 80,
 		SrcAddr: netip.MustParseAddr("::ffff:10.0.0.1"),
 		DstAddr: netip.MustParseAddr("::ffff:10.0.0.2"),
+		Segs:    1,
 		Len:     100,
 	}
 	fresh := FlowEvent{
 		Proto: 17, SrcPort: 5000, DstPort: 53,
 		SrcAddr: netip.MustParseAddr("::ffff:10.0.0.3"),
 		DstAddr: netip.MustParseAddr("::ffff:10.0.0.4"),
+		Segs:    1,
 		Len:     50,
 	}
 
@@ -226,6 +233,7 @@ func TestRun(t *testing.T) {
 		DstAddr: netip.MustParseAddr("::ffff:10.0.0.2"),
 		SrcPort: 12345,
 		DstPort: 80,
+		Segs:    1,
 		Len:     100,
 	}
 
@@ -301,6 +309,7 @@ func TestRunDroppedEventsUnderLoad(t *testing.T) {
 		Ifindex: 1, Proto: 6, SrcPort: 1000, DstPort: 80,
 		SrcAddr: netip.MustParseAddr("::ffff:10.0.0.1"),
 		DstAddr: netip.MustParseAddr("::ffff:10.0.0.2"),
+		Segs:    1,
 		Len:     100,
 	}
 	// reader never hits deadline, events flow continuously
@@ -350,6 +359,7 @@ func TestStats(t *testing.T) {
 		Proto: 6, SrcPort: 1000, DstPort: 80,
 		SrcAddr: netip.MustParseAddr("::ffff:10.0.0.1"),
 		DstAddr: netip.MustParseAddr("::ffff:10.0.0.2"),
+		Segs:    1,
 		Len:     100,
 	}
 
@@ -369,18 +379,21 @@ func TestMaxFlows(t *testing.T) {
 		Proto: 6, SrcPort: 1000, DstPort: 80,
 		SrcAddr: netip.MustParseAddr("::ffff:10.0.0.1"),
 		DstAddr: netip.MustParseAddr("::ffff:10.0.0.2"),
+		Segs:    1,
 		Len:     100,
 	}
 	ev2 := FlowEvent{
 		Proto: 6, SrcPort: 2000, DstPort: 80,
 		SrcAddr: netip.MustParseAddr("::ffff:10.0.0.1"),
 		DstAddr: netip.MustParseAddr("::ffff:10.0.0.2"),
+		Segs:    1,
 		Len:     200,
 	}
 	ev3 := FlowEvent{
 		Proto: 17, SrcPort: 3000, DstPort: 53,
 		SrcAddr: netip.MustParseAddr("::ffff:10.0.0.1"),
 		DstAddr: netip.MustParseAddr("::ffff:10.0.0.2"),
+		Segs:    1,
 		Len:     50,
 	}
 
@@ -413,12 +426,14 @@ func TestMaxFlowsForcedEvictionStats(t *testing.T) {
 		Proto: 6, SrcPort: 1000, DstPort: 80,
 		SrcAddr: netip.MustParseAddr("::ffff:10.0.0.1"),
 		DstAddr: netip.MustParseAddr("::ffff:10.0.0.2"),
+		Segs:    1,
 		Len:     100,
 	}
 	ev2 := FlowEvent{
 		Proto: 17, SrcPort: 2000, DstPort: 53,
 		SrcAddr: netip.MustParseAddr("::ffff:10.0.0.1"),
 		DstAddr: netip.MustParseAddr("::ffff:10.0.0.2"),
+		Segs:    1,
 		Len:     200,
 	}
 
@@ -439,18 +454,21 @@ func TestMaxFlowsUpdatedFlowStaysResident(t *testing.T) {
 		Proto: 6, SrcPort: 1000, DstPort: 80,
 		SrcAddr: netip.MustParseAddr("::ffff:10.0.0.1"),
 		DstAddr: netip.MustParseAddr("::ffff:10.0.0.2"),
+		Segs:    1,
 		Len:     100,
 	}
 	ev2 := FlowEvent{
 		Proto: 6, SrcPort: 2000, DstPort: 80,
 		SrcAddr: netip.MustParseAddr("::ffff:10.0.0.3"),
 		DstAddr: netip.MustParseAddr("::ffff:10.0.0.4"),
+		Segs:    1,
 		Len:     200,
 	}
 	ev3 := FlowEvent{
 		Proto: 17, SrcPort: 3000, DstPort: 53,
 		SrcAddr: netip.MustParseAddr("::ffff:10.0.0.5"),
 		DstAddr: netip.MustParseAddr("::ffff:10.0.0.6"),
+		Segs:    1,
 		Len:     50,
 	}
 
@@ -555,6 +573,7 @@ func TestMaxFlowsZeroMeansUnlimited(t *testing.T) {
 			Proto: 6, SrcPort: uint16(i), DstPort: 80,
 			SrcAddr: netip.MustParseAddr("::ffff:10.0.0.1"),
 			DstAddr: netip.MustParseAddr("::ffff:10.0.0.2"),
+			Segs:    1,
 			Len:     100,
 		}
 		c.Record(ev, now)
@@ -612,6 +631,7 @@ func TestEvictExportsExpiredFlow(t *testing.T) {
 		DstAddr: netip.MustParseAddr("::ffff:10.0.0.2"),
 		SrcPort: 12345,
 		DstPort: 80,
+		Segs:    1,
 		Len:     100,
 	}
 
@@ -646,12 +666,14 @@ func TestRecordForcedEvictionExportsOldestFlow(t *testing.T) {
 		Proto: 6, SrcPort: 1000, DstPort: 80,
 		SrcAddr: netip.MustParseAddr("::ffff:10.0.0.1"),
 		DstAddr: netip.MustParseAddr("::ffff:10.0.0.2"),
+		Segs:    1,
 		Len:     100,
 	}
 	ev2 := FlowEvent{
 		Proto: 17, SrcPort: 2000, DstPort: 53,
 		SrcAddr: netip.MustParseAddr("::ffff:10.0.0.3"),
 		DstAddr: netip.MustParseAddr("::ffff:10.0.0.4"),
+		Segs:    1,
 		Len:     50,
 	}
 
@@ -682,6 +704,7 @@ func TestFlushExportsRemainingFlows(t *testing.T) {
 		Proto: 6, SrcPort: 1000, DstPort: 80,
 		SrcAddr: netip.MustParseAddr("::ffff:10.0.0.1"),
 		DstAddr: netip.MustParseAddr("::ffff:10.0.0.2"),
+		Segs:    1,
 		Len:     100,
 	}
 
@@ -708,6 +731,7 @@ func TestExportErrorIncrementsStats(t *testing.T) {
 		Proto: 6, SrcPort: 1000, DstPort: 80,
 		SrcAddr: netip.MustParseAddr("::ffff:10.0.0.1"),
 		DstAddr: netip.MustParseAddr("::ffff:10.0.0.2"),
+		Segs:    1,
 		Len:     100,
 	}
 
@@ -728,6 +752,7 @@ func TestEvictOrderFollowsLastSeen(t *testing.T) {
 			Proto: 6, SrcPort: port, DstPort: 80,
 			SrcAddr: netip.MustParseAddr("::ffff:10.0.0.1"),
 			DstAddr: netip.MustParseAddr("::ffff:10.0.0.2"),
+			Segs:    1,
 			Len:     100,
 		}
 	}
@@ -762,6 +787,7 @@ func TestRecordBatchCountsEveryEvent(t *testing.T) {
 		Proto: 6, SrcPort: 1000, DstPort: 80,
 		SrcAddr: netip.MustParseAddr("::ffff:10.0.0.1"),
 		DstAddr: netip.MustParseAddr("::ffff:10.0.0.2"),
+		Segs:    1,
 		Len:     100,
 	}
 	b := a
@@ -797,6 +823,7 @@ func TestRecordBatchForcedEvictionExports(t *testing.T) {
 		Proto: 6, SrcPort: 1000, DstPort: 80,
 		SrcAddr: netip.MustParseAddr("::ffff:10.0.0.1"),
 		DstAddr: netip.MustParseAddr("::ffff:10.0.0.2"),
+		Segs:    1,
 		Len:     100,
 	}
 	b := a
@@ -821,6 +848,7 @@ func TestRunRecordsBurstInOneBatch(t *testing.T) {
 		Ifindex: 1, Proto: 6, SrcPort: 1000, DstPort: 80,
 		SrcAddr: netip.MustParseAddr("::ffff:10.0.0.1"),
 		DstAddr: netip.MustParseAddr("::ffff:10.0.0.2"),
+		Segs:    1,
 		Len:     100,
 	}
 	raw := encodeWireEvent(ev)
@@ -862,6 +890,7 @@ func TestActiveTimeoutExportsIntervalRecords(t *testing.T) {
 		Proto: 6, SrcPort: 1000, DstPort: 80,
 		SrcAddr: netip.MustParseAddr("::ffff:10.0.0.1"),
 		DstAddr: netip.MustParseAddr("::ffff:10.0.0.2"),
+		Segs:    1,
 		Len:     100,
 	}
 	c.Record(ev, t0)
@@ -931,6 +960,7 @@ func TestIntervalRecordsSpanTheirEvents(t *testing.T) {
 		Proto: 6, SrcPort: 1000, DstPort: 80,
 		SrcAddr: netip.MustParseAddr("::ffff:10.0.0.1"),
 		DstAddr: netip.MustParseAddr("::ffff:10.0.0.2"),
+		Segs:    1,
 		Len:     100,
 	}
 	// events from different cpus reach the collector slightly out of order
@@ -973,6 +1003,7 @@ func TestSweepSendsIntervalRecordsAtTheSweepNearestTheirActiveTimeout(t *testing
 		Proto: 6, SrcPort: 1000, DstPort: 80,
 		SrcAddr: netip.MustParseAddr("::ffff:10.0.0.1"),
 		DstAddr: netip.MustParseAddr("::ffff:10.0.0.2"),
+		Segs:    1,
 		Len:     100,
 	}
 	b := a
@@ -1094,6 +1125,7 @@ func TestRunHonorsActiveTimeoutBelowHalfTheEvictionTimeout(t *testing.T) {
 		Proto: 6, SrcPort: 1000, DstPort: 80,
 		SrcAddr: netip.MustParseAddr("::ffff:10.0.0.1"),
 		DstAddr: netip.MustParseAddr("::ffff:10.0.0.2"),
+		Segs:    1,
 		Len:     100,
 	}
 	c.Record(ev, time.Now())
@@ -1165,6 +1197,7 @@ func TestRunWaitsForItsSweep(t *testing.T) {
 		Proto: 6, SrcPort: 1000, DstPort: 80,
 		SrcAddr: netip.MustParseAddr("::ffff:10.0.0.1"),
 		DstAddr: netip.MustParseAddr("::ffff:10.0.0.2"),
+		Segs:    1,
 		Len:     100,
 	}, time.Now().Add(-time.Second))
 
@@ -1221,6 +1254,7 @@ func TestSlowEnricherDoesNotStallTheCollector(t *testing.T) {
 		Proto: 6, SrcPort: 1000, DstPort: 80,
 		SrcAddr: netip.MustParseAddr("::ffff:10.0.0.1"),
 		DstAddr: netip.MustParseAddr("::ffff:10.0.0.2"),
+		Segs:    1,
 		Len:     100,
 	}
 	c.Record(known, now)
@@ -1269,6 +1303,7 @@ func TestRecordBatchEnrichesFlowsForcedOutWithinTheBatch(t *testing.T) {
 		Proto: 6, SrcPort: 1000, DstPort: 80,
 		SrcAddr: netip.MustParseAddr("::ffff:10.0.0.1"),
 		DstAddr: netip.MustParseAddr("::ffff:10.0.0.2"),
+		Segs:    1,
 		Len:     100,
 	}
 	b := a
@@ -1302,6 +1337,7 @@ func TestEvictSkipsFullyExportedFlow(t *testing.T) {
 		Proto: 17, SrcPort: 5000, DstPort: 53,
 		SrcAddr: netip.MustParseAddr("::ffff:10.0.0.1"),
 		DstAddr: netip.MustParseAddr("::ffff:10.0.0.2"),
+		Segs:    1,
 		Len:     60,
 	}
 	c.Record(ev, t0)
@@ -1323,6 +1359,7 @@ func TestSampleRateScalesEstimatesAtRecordTime(t *testing.T) {
 		Proto:  6, SrcPort: 1000, DstPort: 80,
 		SrcAddr: netip.MustParseAddr("::ffff:10.0.0.1"),
 		DstAddr: netip.MustParseAddr("::ffff:10.0.0.2"),
+		Segs:    1,
 		Len:     100,
 	}
 	c.Record(ev, now)
@@ -1363,6 +1400,7 @@ func TestExportedRecordCarriesEstimateDelta(t *testing.T) {
 		Proto: 17, SrcPort: 5000, DstPort: 53,
 		SrcAddr: netip.MustParseAddr("::ffff:10.0.0.1"),
 		DstAddr: netip.MustParseAddr("::ffff:10.0.0.2"),
+		Segs:    1,
 		Len:     60,
 	}
 	c.Record(ev, t0)
@@ -1385,6 +1423,7 @@ func TestAdaptiveSamplingAppliesRateOnDrops(t *testing.T) {
 		Ifindex: 1, Proto: 6, SrcPort: 1000, DstPort: 80,
 		SrcAddr: netip.MustParseAddr("::ffff:10.0.0.1"),
 		DstAddr: netip.MustParseAddr("::ffff:10.0.0.2"),
+		Segs:    1,
 		Len:     100,
 	}
 	mr := &sustainedReader{event: encodeWireEvent(ev), drops: 5}
@@ -1437,6 +1476,7 @@ func TestRollupsOutliveTheirFlows(t *testing.T) {
 		Ifindex: 3, Proto: 17, SrcPort: 5000, DstPort: 53,
 		SrcAddr: netip.MustParseAddr("::ffff:10.0.0.1"),
 		DstAddr: netip.MustParseAddr("::ffff:10.0.0.2"),
+		Segs:    1,
 		Len:     60,
 	}
 	key := RollupKey{Ifindex: 3, Proto: 17}
@@ -1466,6 +1506,7 @@ func TestScrapeShowsANewRollupAtZeroFirst(t *testing.T) {
 		Ifindex: 3, Proto: 6, SrcPort: 1000, DstPort: 80,
 		SrcAddr: netip.MustParseAddr("::ffff:10.0.0.1"),
 		DstAddr: netip.MustParseAddr("::ffff:10.0.0.2"),
+		Segs:    1,
 		Len:     100,
 	}
 	c.Record(ev, t0)
@@ -1629,6 +1670,7 @@ func sourceEvent(i int) FlowEvent {
 		Ifindex: 2, Dir: 0, Proto: 17, SrcPort: 5000, DstPort: 53,
 		SrcAddr: netip.AddrFrom4([4]byte{10, 1, byte(i >> 8), byte(i)}),
 		DstAddr: netip.MustParseAddr("10.0.0.1"),
+		Segs:    1,
 		Len:     100,
 	}
 }
@@ -1677,6 +1719,7 @@ func TestRollupsAccumulateAcrossFlows(t *testing.T) {
 			Ifindex: 3, Dir: 0, Proto: proto, SrcPort: port, DstPort: 80,
 			SrcAddr: netip.MustParseAddr("::ffff:10.0.0.1"),
 			DstAddr: netip.MustParseAddr("::ffff:10.0.0.2"),
+			Segs:    1,
 			Len:     50,
 		}
 	}

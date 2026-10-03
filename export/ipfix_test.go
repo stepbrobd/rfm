@@ -103,6 +103,7 @@ func TestIPFIXExportsEvictedFlowsOverUDP(t *testing.T) {
 				DstAddr: tc.dst,
 				SrcPort: 12345,
 				DstPort: 53,
+				Segs:    1,
 				Len:     512,
 			}
 			c.Record(ev, t0)
@@ -176,7 +177,7 @@ func TestIPFIXOctetDeltaCountCarriesIPBytes(t *testing.T) {
 	}
 	// one 86 byte ip packet behind ethernet and a vlan tag
 	tagged := gro
-	tagged.Segs, tagged.Len, tagged.L2Len = 0, 104, 18
+	tagged.Segs, tagged.Len, tagged.L2Len = 1, 104, 18
 	c.Record(gro, t0)
 	c.Record(tagged, t0)
 

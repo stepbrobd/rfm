@@ -22,8 +22,8 @@ type Labels struct {
 
 // FlowEvent represents a single sampled skb observation from the BPF program
 // one skb can stand for several wire packets after GRO or before GSO, so Segs
-// carries the wire packet count and Len the wire byte count of the whole skb
-// a Segs of 0 comes from a probe without segment accounting and means 1
+// carries the wire packet count, at least 1, and Len the wire byte count of
+// the whole skb
 // L2Len is the L2 header size of each wire packet, ethernet plus VLAN tags,
 // so Len - Packets() * L2Len is the IP byte count of the skb
 type FlowEvent struct {
@@ -42,9 +42,6 @@ type FlowEvent struct {
 
 // Packets returns the number of wire packets the event stands for
 func (e FlowEvent) Packets() uint64 {
-	if e.Segs == 0 {
-		return 1
-	}
 	return uint64(e.Segs)
 }
 

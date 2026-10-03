@@ -53,6 +53,7 @@ func TestFlowEventKey(t *testing.T) {
 		DstAddr: netip.MustParseAddr("::ffff:10.0.0.2"),
 		SrcPort: 12345,
 		DstPort: 80,
+		Segs:    1,
 		Len:     100,
 	}
 
@@ -76,10 +77,10 @@ func TestFlowEventIPBytes(t *testing.T) {
 		ev   FlowEvent
 		want uint64
 	}{
-		{"one packet", FlowEvent{Len: 1514, L2Len: 14}, 1500},
-		{"vlan tagged", FlowEvent{Len: 104, L2Len: 18}, 86},
+		{"one packet", FlowEvent{Segs: 1, Len: 1514, L2Len: 14}, 1500},
+		{"vlan tagged", FlowEvent{Segs: 1, Len: 104, L2Len: 18}, 86},
 		{"gro skb", FlowEvent{Segs: 3, Len: 3 * 1514, L2Len: 14}, 4500},
-		{"no l2 header", FlowEvent{Len: 60}, 60},
+		{"no l2 header", FlowEvent{Segs: 1, Len: 60}, 60},
 	} {
 		if got := tc.ev.IPBytes(); got != tc.want {
 			t.Errorf("%s: ip bytes = %d, want %d", tc.name, got, tc.want)

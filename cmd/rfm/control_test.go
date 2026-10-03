@@ -35,6 +35,7 @@ func TestControlFlowsTopOrdersAndLimits(t *testing.T) {
 			Ifindex: 1, Proto: 6, SrcPort: port, DstPort: 443,
 			SrcAddr: netip.MustParseAddr("::ffff:10.0.0.1"),
 			DstAddr: netip.MustParseAddr("::ffff:10.0.0.2"),
+			Segs:    1,
 			Len:     size,
 		}
 		for range n {
@@ -79,6 +80,7 @@ func TestControlResolvesInterfaceNamesOncePerRequest(t *testing.T) {
 			Ifindex: ifindex, Proto: 17, SrcPort: port, DstPort: 53,
 			SrcAddr: netip.MustParseAddr("::ffff:10.0.0.1"),
 			DstAddr: netip.MustParseAddr("::ffff:10.0.0.2"),
+			Segs:    1,
 			Len:     size,
 		}, now)
 	}
@@ -236,6 +238,7 @@ func TestControlStatusCountsFoldedFlowsAndFailedSends(t *testing.T) {
 			Ifindex: 1, Proto: 6, SrcPort: 1, DstPort: 443,
 			SrcAddr: netip.MustParseAddr(src),
 			DstAddr: netip.MustParseAddr("::ffff:198.51.100.7"),
+			Segs:    1,
 			Len:     100,
 		}, now)
 	}

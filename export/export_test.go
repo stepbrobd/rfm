@@ -253,6 +253,7 @@ func TestCollectHealth(t *testing.T) {
 		DstAddr: netip.MustParseAddr("10.0.0.2"),
 		SrcPort: 12345,
 		DstPort: 80,
+		Segs:    1,
 		Len:     100,
 	}, time.Now())
 
@@ -334,6 +335,7 @@ func TestCollectCachesIfnames(t *testing.T) {
 		DstAddr: netip.MustParseAddr("10.0.0.2"),
 		SrcPort: 1000,
 		DstPort: 80,
+		Segs:    1,
 		Len:     100,
 	}, now)
 	c.Record(collector.FlowEvent{
@@ -344,6 +346,7 @@ func TestCollectCachesIfnames(t *testing.T) {
 		DstAddr: netip.MustParseAddr("10.0.0.4"),
 		SrcPort: 2000,
 		DstPort: 53,
+		Segs:    1,
 		Len:     200,
 	}, now)
 
@@ -376,6 +379,7 @@ func TestCollectFlowsNoEnricher(t *testing.T) {
 		DstAddr: netip.MustParseAddr("192.168.1.2"),
 		SrcPort: 1234,
 		DstPort: 443,
+		Segs:    1,
 		Len:     200,
 	}, time.Now())
 
@@ -421,6 +425,7 @@ func TestCollectFlowsWithEnricher(t *testing.T) {
 		DstAddr: netip.MustParseAddr("10.2.0.1"),
 		SrcPort: 5000,
 		DstPort: 53,
+		Segs:    1,
 		Len:     64,
 	}, time.Now())
 
@@ -475,6 +480,7 @@ func TestCollectFlowsScalesBySampleRate(t *testing.T) {
 		DstAddr: netip.MustParseAddr("192.168.1.2"),
 		SrcPort: 1234,
 		DstPort: 443,
+		Segs:    1,
 		Len:     200,
 	}, time.Now())
 
@@ -505,13 +511,13 @@ func TestCollectFlowsAggregatesDuplicateLabels(t *testing.T) {
 		Ifindex: 1, Dir: 0, Proto: 6,
 		SrcAddr: netip.MustParseAddr("10.0.0.1"),
 		DstAddr: netip.MustParseAddr("10.0.0.2"),
-		SrcPort: 1000, DstPort: 80, Len: 100,
+		SrcPort: 1000, DstPort: 80, Segs: 1, Len: 100,
 	}, now)
 	c.Record(collector.FlowEvent{
 		Ifindex: 1, Dir: 0, Proto: 6,
 		SrcAddr: netip.MustParseAddr("10.0.0.1"),
 		DstAddr: netip.MustParseAddr("10.0.0.2"),
-		SrcPort: 2000, DstPort: 80, Len: 200,
+		SrcPort: 2000, DstPort: 80, Segs: 1, Len: 200,
 	}, now)
 
 	mc := New(nil, c)
@@ -702,6 +708,7 @@ func TestCollectErrorsTotalOnSampleRateLookupError(t *testing.T) {
 		DstAddr: netip.MustParseAddr("192.168.1.2"),
 		SrcPort: 1234,
 		DstPort: 443,
+		Segs:    1,
 		Len:     200,
 	}, time.Now())
 
@@ -900,7 +907,7 @@ func TestCollectRollupCountersSurviveEviction(t *testing.T) {
 		Ifindex: 2, Dir: 1, Proto: 17,
 		SrcAddr: netip.MustParseAddr("192.168.1.1"),
 		DstAddr: netip.MustParseAddr("192.168.1.2"),
-		SrcPort: 1234, DstPort: 53, Len: 100,
+		SrcPort: 1234, DstPort: 53, Segs: 1, Len: 100,
 	}
 	c.Record(ev, t0)
 	other := ev
@@ -962,7 +969,7 @@ func TestCollectRollupSeriesStartAtZero(t *testing.T) {
 		Ifindex: 2, Dir: 1, Proto: 6,
 		SrcAddr: netip.MustParseAddr("192.168.1.1"),
 		DstAddr: netip.MustParseAddr("192.168.1.2"),
-		SrcPort: 1234, DstPort: 443, Len: 100,
+		SrcPort: 1234, DstPort: 443, Segs: 1, Len: 100,
 	}
 	c.Record(ev, time.Now())
 
@@ -1050,6 +1057,7 @@ func TestRollupSumsStayExactAcrossTheCap(t *testing.T) {
 			Ifindex: 2, Dir: 0, Proto: 17, SrcPort: 5000, DstPort: 53,
 			SrcAddr: netip.AddrFrom4([4]byte{10, 1, 0, src}),
 			DstAddr: netip.MustParseAddr("10.0.0.1"),
+			Segs:    1,
 			Len:     100,
 		}, at)
 		total += 10
@@ -1099,6 +1107,7 @@ func TestCollectIPFIXErrorsCountLossOnce(t *testing.T) {
 		Proto: 6, SrcPort: 1, DstPort: 80,
 		SrcAddr: netip.MustParseAddr("10.0.0.1"),
 		DstAddr: netip.MustParseAddr("10.0.0.2"),
+		Segs:    1,
 		Len:     100,
 	}, t0)
 	c.Evict(t0.Add(time.Minute))

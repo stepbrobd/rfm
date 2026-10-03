@@ -2,6 +2,7 @@ package collector
 
 import (
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"net/netip"
 	"structs"
@@ -51,7 +52,11 @@ func DecodeFlowEvent(raw []byte) (FlowEvent, error) {
 		Len:     wire.Len,
 		L2Len:   wire.L2Len,
 	}
-	// the probe counts the l2 header of every wire packet in len
+	// every skb stands for at least one wire packet, and the probe counts
+	// the l2 header of every wire packet in len
+	if ev.Segs == 0 {
+		return FlowEvent{}, errors.New("flow event without wire packets")
+	}
 	if l2 := ev.Packets() * uint64(ev.L2Len); l2 > uint64(ev.Len) {
 		return FlowEvent{}, fmt.Errorf("flow event with %d bytes of l2 headers in %d wire bytes", l2, ev.Len)
 	}

@@ -32,7 +32,7 @@ func tupleEvent(tuple, port int) collector.FlowEvent {
 		SrcAddr: netip.AddrFrom4([4]byte{10, byte(tuple >> 16), byte(tuple >> 8), byte(tuple)}),
 		DstAddr: netip.MustParseAddr("192.0.2.1"),
 		SrcPort: uint16(port), DstPort: 443,
-		Len: 1500, L2Len: 14,
+		Segs: 1, Len: 1500, L2Len: 14,
 	}
 }
 
