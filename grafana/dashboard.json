@@ -5494,7 +5494,7 @@
     {
       "type": "timeseries",
       "title": "Active Flows vs Capacity",
-      "description": "Active flow count with a threshold line at max_flows (65536 default).",
+      "description": "Active flow count with dashed threshold lines at 49152 and 65536, 75 and 100 percent of the default max_flows, fixed whatever max_flows a node runs with.",
       "datasource": {
         "type": "datasource",
         "uid": "-- Mixed --"
