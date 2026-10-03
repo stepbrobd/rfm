@@ -693,6 +693,10 @@ pin_path = %q
 		}
 		return nil
 	})
+	// the counts of errors the programs keep reach the scrape
+	if metrics := get(t, run.metricsURL(t)); !strings.Contains(metrics, `rfm_errors_total{subsystem="gso_header"}`) {
+		t.Fatalf("metrics miss the gso_header errors:\n%s", metrics)
+	}
 	if err := run.stop(t); err != nil {
 		t.Fatalf("agent stopped with %v, want nil", err)
 	}

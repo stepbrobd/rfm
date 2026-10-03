@@ -911,6 +911,54 @@ func TestIfaceCountersGROIngress(t *testing.T) {
 	}
 }
 
+// skbContext is struct __sk_buff up to gso_size, a test run takes the gso
+// fields from it and refuses a context that sets a field it does not take
+type skbContext struct {
+	_       [36]uint32 // len to data_meta
+	_       [2]uint64  // flow_keys and tstamp
+	_       uint32     // wire_len
+	GSOSegs uint32
+	_       uint64 // sk
+	GSOSize uint32
+}
+
+func TestGSOHeaderErrorsCountHeadersThatDoNotParse(t *testing.T) {
+	testutil.RequireRoot(t)
+
+	testutil.NewNS(t)
+
+	p, err := Load(Config{})
+	if err != nil {
+		skipIfUnsupported(t, err)
+		t.Fatal(err)
+	}
+	defer p.Close()
+
+	// a gso skb without a segment count, as a driver that does not verify
+	// its gso frames hands it up
+	run := func(frame []byte) {
+		t.Helper()
+		if _, err := p.objs.RfmTcIngress.Run(&ebpf.RunOptions{Data: frame, Context: skbContext{GSOSize: gsoSize}}); err != nil {
+			skipIfUnsupported(t, err)
+			t.Fatal(err)
+		}
+	}
+
+	frame := testutil.EthIPv4TCPPayload(net.IPv4(10, 0, 9, 1), net.IPv4(10, 0, 9, 2), 4700, 443, make([]byte, 2*gsoSize))
+	run(frame)
+	if n, err := p.GSOHeaderErrors(); err != nil || n != 0 {
+		t.Fatalf("gso header errors = %d, %v, want none for headers that parse", n, err)
+	}
+
+	// an ihl of 4 is shorter than any ipv4 header, the skb counts as one
+	// packet without the header bytes of the segments it stands for
+	frame[testutil.EthHdrLen] = 0x44
+	run(frame)
+	if n, err := p.GSOHeaderErrors(); err != nil || n != 1 {
+		t.Fatalf("gso header errors = %d, %v, want 1 for an ipv4 header that does not parse", n, err)
+	}
+}
+
 func TestFlowEventGSOSegments(t *testing.T) {
 	testutil.RequireRoot(t)
 

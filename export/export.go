@@ -182,9 +182,11 @@ type MetricsCollector struct {
 	bpfMapErr     uint64
 	ifnames       map[uint32]string
 	resolveIfname func(uint32) string
-	// ifaceErrs is the last count of refused interface counter updates read
-	// from the source, errorSources the subsystems wired from outside
+	// ifaceErrs and gsoErrs are the last counts of refused interface counter
+	// updates and of unparsed gso skbs read from the source, errorSources the
+	// subsystems wired from outside
 	ifaceErrs    uint64
+	gsoErrs      uint64
 	errorSources []errorSource
 
 	// rollupMu serializes the flow series part of overlapping scrapes, it
@@ -250,6 +252,7 @@ func (mc *MetricsCollector) Collect(ch chan<- prometheus.Metric) {
 	}
 
 	ifaceErrs := mc.ifaceStatsErrors()
+	gsoErrs, countsGSO := mc.gsoHeaderErrors()
 
 	mc.mu.Lock()
 	bpfErrs := mc.bpfMapErr + ifaceErrs
@@ -285,6 +288,9 @@ func (mc *MetricsCollector) Collect(ch chan<- prometheus.Metric) {
 	}
 
 	errs := map[string]uint64{"bpf_map": bpfErrs}
+	if countsGSO {
+		errs["gso_header"] = gsoErrs
+	}
 	if mc.col != nil {
 		// single Stats() call for a consistent snapshot
 		stats := mc.col.Stats()
@@ -308,23 +314,39 @@ func (mc *MetricsCollector) Collect(ch chan<- prometheus.Metric) {
 }
 
 // ifaceStatsErrors returns how many counter updates the interface stats map
-// refused, a failed read counts as a bpf_map error and returns the last
-// count, so the bpf_map errors never go back
+// refused
 func (mc *MetricsCollector) ifaceStatsErrors() uint64 {
 	src, ok := mc.source.(IfaceStatsErrorSource)
 	if !ok {
 		return 0
 	}
-	n, err := src.IfaceStatsErrors()
+	return mc.probeErrors("iface stats errors", src.IfaceStatsErrors, &mc.ifaceErrs)
+}
+
+// gsoHeaderErrors returns how many gso skbs the programs counted without
+// parsing their headers, and false for a source that does not count them
+func (mc *MetricsCollector) gsoHeaderErrors() (uint64, bool) {
+	src, ok := mc.source.(GSOHeaderErrorSource)
+	if !ok {
+		return 0, false
+	}
+	return mc.probeErrors("gso header errors", src.GSOHeaderErrors, &mc.gsoErrs), true
+}
+
+// probeErrors returns the count of errors read reports and keeps it in last,
+// a failed read counts as a bpf_map error and returns last instead, so
+// neither count goes back
+func (mc *MetricsCollector) probeErrors(what string, read func() (uint64, error), last *uint64) uint64 {
+	n, err := read()
 
 	mc.mu.Lock()
 	defer mc.mu.Unlock()
 	if err != nil {
 		mc.bpfMapErr++
-		log.Error("scrape iface stats errors", "err", err)
-		return mc.ifaceErrs
+		log.Error("scrape "+what, "err", err)
+		return *last
 	}
-	mc.ifaceErrs = n
+	*last = n
 	return n
 }
 

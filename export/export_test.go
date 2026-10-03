@@ -765,6 +765,44 @@ func TestCollectErrorsCountRefusedIfaceStatsUpdates(t *testing.T) {
 	}
 }
 
+// the probe source reports both counts of errors the programs keep
+var (
+	_ IfaceStatsErrorSource = (*ProbeSource)(nil)
+	_ GSOHeaderErrorSource  = (*ProbeSource)(nil)
+)
+
+// unparsedGSO is a probe whose programs counted gso skbs without parsing
+// their headers
+type unparsedGSO struct {
+	mockIfaceStats
+	unparsed uint64
+	err      error
+}
+
+func (m *unparsedGSO) GSOHeaderErrors() (uint64, error) {
+	return m.unparsed, m.err
+}
+
+func TestCollectErrorsCountUnparsedGSOHeaders(t *testing.T) {
+	src := &unparsedGSO{unparsed: 4}
+	mc := New(src, nil)
+	if got := errorsBySubsystem(t, mc); got["gso_header"] != 4 || got["bpf_map"] != 0 {
+		t.Fatalf("errors = %v, want the 4 unparsed gso skbs as gso_header errors", got)
+	}
+
+	// a failed read is a bpf_map error and the gso_header errors keep their
+	// last value, so neither goes back
+	src.err = errors.New("lookup failed")
+	if got := errorsBySubsystem(t, mc); got["gso_header"] != 4 || got["bpf_map"] != 1 {
+		t.Fatalf("errors = %v after a failed read, want 4 gso_header and 1 bpf_map", got)
+	}
+
+	// a source that keeps no such count has no series for it
+	if got := errorsBySubsystem(t, New(&mockIfaceStats{}, nil)); len(got) != 1 {
+		t.Fatalf("errors = %v from a source without gso header errors, want bpf_map alone", got)
+	}
+}
+
 func TestCollectErrorsOfOtherSubsystems(t *testing.T) {
 	mc := New(nil, collector.New(time.Minute, nil, 0))
 	var parse, dropped uint64 = 3, 2

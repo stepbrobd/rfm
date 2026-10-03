@@ -24,3 +24,8 @@ func (s *ProbeSource) SampleRate() (uint32, error) {
 func (s *ProbeSource) IfaceStatsErrors() (uint64, error) {
 	return 0, nil
 }
+
+// GSOHeaderErrors returns no unparsed GSO skbs on non-Linux platforms
+func (s *ProbeSource) GSOHeaderErrors() (uint64, error) {
+	return 0, nil
+}

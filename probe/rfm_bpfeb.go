@@ -38,14 +38,15 @@ type rfmRfmIfaceValue struct {
 //
 // Used for safe lookups in a Collection or CollectionSpec.
 const (
-	rfmMapRfmConfig      = "rfm_config"
-	rfmMapRfmFlowDrops   = "rfm_flow_drops"
-	rfmMapRfmFlowEvents  = "rfm_flow_events"
-	rfmMapRfmIfaceErrors = "rfm_iface_errors"
-	rfmMapRfmIfaceStats  = "rfm_iface_stats"
-	rfmMapRfmSubmitCount = "rfm_submit_count"
-	rfmProgRfmTcEgress   = "rfm_tc_egress"
-	rfmProgRfmTcIngress  = "rfm_tc_ingress"
+	rfmMapRfmConfig       = "rfm_config"
+	rfmMapRfmFlowDrops    = "rfm_flow_drops"
+	rfmMapRfmFlowEvents   = "rfm_flow_events"
+	rfmMapRfmGsoHdrErrors = "rfm_gso_hdr_errors"
+	rfmMapRfmIfaceErrors  = "rfm_iface_errors"
+	rfmMapRfmIfaceStats   = "rfm_iface_stats"
+	rfmMapRfmSubmitCount  = "rfm_submit_count"
+	rfmProgRfmTcEgress    = "rfm_tc_egress"
+	rfmProgRfmTcIngress   = "rfm_tc_ingress"
 )
 
 // loadRfm returns the embedded CollectionSpec for rfm.
@@ -98,12 +99,13 @@ type rfmProgramSpecs struct {
 //
 // It can be passed ebpf.CollectionSpec.Assign.
 type rfmMapSpecs struct {
-	RfmConfig      *ebpf.MapSpec `ebpf:"rfm_config"`
-	RfmFlowDrops   *ebpf.MapSpec `ebpf:"rfm_flow_drops"`
-	RfmFlowEvents  *ebpf.MapSpec `ebpf:"rfm_flow_events"`
-	RfmIfaceErrors *ebpf.MapSpec `ebpf:"rfm_iface_errors"`
-	RfmIfaceStats  *ebpf.MapSpec `ebpf:"rfm_iface_stats"`
-	RfmSubmitCount *ebpf.MapSpec `ebpf:"rfm_submit_count"`
+	RfmConfig       *ebpf.MapSpec `ebpf:"rfm_config"`
+	RfmFlowDrops    *ebpf.MapSpec `ebpf:"rfm_flow_drops"`
+	RfmFlowEvents   *ebpf.MapSpec `ebpf:"rfm_flow_events"`
+	RfmGsoHdrErrors *ebpf.MapSpec `ebpf:"rfm_gso_hdr_errors"`
+	RfmIfaceErrors  *ebpf.MapSpec `ebpf:"rfm_iface_errors"`
+	RfmIfaceStats   *ebpf.MapSpec `ebpf:"rfm_iface_stats"`
+	RfmSubmitCount  *ebpf.MapSpec `ebpf:"rfm_submit_count"`
 }
 
 // rfmVariableSpecs contains global variables before they are loaded into the kernel.
@@ -132,12 +134,13 @@ func (o *rfmObjects) Close() error {
 //
 // It can be passed to loadRfmObjects or ebpf.CollectionSpec.LoadAndAssign.
 type rfmMaps struct {
-	RfmConfig      *ebpf.Map `ebpf:"rfm_config"`
-	RfmFlowDrops   *ebpf.Map `ebpf:"rfm_flow_drops"`
-	RfmFlowEvents  *ebpf.Map `ebpf:"rfm_flow_events"`
-	RfmIfaceErrors *ebpf.Map `ebpf:"rfm_iface_errors"`
-	RfmIfaceStats  *ebpf.Map `ebpf:"rfm_iface_stats"`
-	RfmSubmitCount *ebpf.Map `ebpf:"rfm_submit_count"`
+	RfmConfig       *ebpf.Map `ebpf:"rfm_config"`
+	RfmFlowDrops    *ebpf.Map `ebpf:"rfm_flow_drops"`
+	RfmFlowEvents   *ebpf.Map `ebpf:"rfm_flow_events"`
+	RfmGsoHdrErrors *ebpf.Map `ebpf:"rfm_gso_hdr_errors"`
+	RfmIfaceErrors  *ebpf.Map `ebpf:"rfm_iface_errors"`
+	RfmIfaceStats   *ebpf.Map `ebpf:"rfm_iface_stats"`
+	RfmSubmitCount  *ebpf.Map `ebpf:"rfm_submit_count"`
 }
 
 func (m *rfmMaps) Close() error {
@@ -145,6 +148,7 @@ func (m *rfmMaps) Close() error {
 		m.RfmConfig,
 		m.RfmFlowDrops,
 		m.RfmFlowEvents,
+		m.RfmGsoHdrErrors,
 		m.RfmIfaceErrors,
 		m.RfmIfaceStats,
 		m.RfmSubmitCount,

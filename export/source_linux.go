@@ -82,3 +82,9 @@ func (s *ProbeSource) SampleRate() (uint32, error) {
 func (s *ProbeSource) IfaceStatsErrors() (uint64, error) {
 	return s.Probe.IfaceStatsErrors()
 }
+
+// GSOHeaderErrors reads how many GSO skbs the programs counted without
+// parsing their headers
+func (s *ProbeSource) GSOHeaderErrors() (uint64, error) {
+	return s.Probe.GSOHeaderErrors()
+}

@@ -26,3 +26,10 @@ type SampleRateSource interface {
 type IfaceStatsErrorSource interface {
 	IfaceStatsErrors() (uint64, error)
 }
+
+// GSOHeaderErrorSource provides how many GSO skbs the programs counted
+// without parsing their headers, an ingress one lacks the header bytes of its
+// extra segments and one without a segment count counts as one packet
+type GSOHeaderErrorSource interface {
+	GSOHeaderErrors() (uint64, error)
+}

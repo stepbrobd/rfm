@@ -84,7 +84,8 @@ func loadProbe(cfg probe.Config) (agentProbe, error) {
 }
 
 // Stats also reports the counter updates the interface stats map refused,
-// as bpf_map errors
+// as bpf_map errors, and the gso skbs the programs counted without parsing
+// their headers, as gso_header errors
 func (p kernelProbe) Stats() export.IfaceStatsSource {
 	return &export.ProbeSource{Probe: p.Probe}
 }
