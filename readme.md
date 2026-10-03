@@ -20,10 +20,11 @@ Requirements:
 Current scope:
 
 - Attaches TC programs for bidirectional flow observation (BPF behavior is
-  config map driven and stateless)
-- Counts wire packets and wire bytes, GRO and GSO super packets are unfolded
-  from `gso_segs` so the counters match the NIC statistics
-- Parses IPv4 and IPv6 traffic on ethernet, VLAN, and QinQ links
+  config map driven and keeps no per-flow state)
+- Counts wire packets and wire bytes, unfolding GRO and GSO skbs from `gso_segs`
+  into the packets after segmentation
+- Parses IPv4 and IPv6 traffic on ethernet, VLAN, and QinQ links, and walks IPv6
+  extension headers to the transport ports
 - Attaches interfaces as they appear and detaches them as they go, keeps the
   counters across restarts when pinned in bpffs
 - Optionally enriches flows in userspace with BMP/RIB data, MMDB data, or both,
@@ -56,22 +57,28 @@ and serves Prometheus metrics over HTTP.
 +------------------------------------+
 ```
 
-BPF programs are loaded via TCX as link-based attachments. Programs are state
-machine and reacts to the config map and reacts to the config map (e.g. sampling
-rates and feature flags live in a shared `rfm_config` map rather than compiled
-time constants).
+BPF programs are loaded via TCX as link-based attachments, the ingress program
+at the head of an interface's TCX chain and the egress program at its tail. They
+only observe: every path returns `TCX_NEXT`, which lets later TCX programs and
+the filters of a clsact or ingress qdisc run. The programs keep no per-flow
+state. The sample rate and the wakeup batch live in a shared `rfm_config` map
+rather than in compile time constants, and the agent writes a new sample rate
+there without reloading the programs.
 
 ### Data path
 
-1. TC programs classify each packet by direction, protocol family, and 5-tuple
-   after ethernet, VLAN, and QinQ parsing. Every packet updates per-CPU
-   interface counters. GRO on ingress and GSO on egress hand the hook one skb
-   that stands for several wire packets, so the program adds `gso_segs` packets
-   and the header bytes the merge removed, which keeps the counters equal to the
-   NIC statistics. Sampled packets (1-in-N) emit a flow event to a ring buffer
-   carrying the same wire packet and byte counts. IPv4 non-initial fragments
-   keep the IP protocol but export `src_port=0` and `dst_port=0` because later
-   fragments do not carry the transport header.
+1. TC programs classify each skb by direction, protocol family, and 5-tuple
+   after ethernet, VLAN, and QinQ parsing, past IPv4 options and up to six IPv6
+   extension headers. Every skb updates per-CPU interface counters. GRO on
+   ingress and GSO on egress hand the hook one skb that stands for several wire
+   packets, so the program adds `gso_segs` packets and the header bytes the
+   merge removed. The counters therefore count wire packets after segmentation,
+   and on egress before the qdisc, which may still drop them. A VLAN tag the
+   kernel holds in the skb rather than in the frame adds its 4 bytes to every
+   wire packet. Sampled IP skbs (1 in N, chosen at random) emit a flow event to
+   a ring buffer carrying the same wire packet and byte counts. Non-initial IPv4
+   and IPv6 fragments keep the IP protocol but export `src_port=0` and
+   `dst_port=0` because later fragments do not carry the transport header.
 2. The userspace collector reads events from the ring buffer in batches,
    converts `CLOCK_BOOTTIME` timestamps to wall clock, scales each event by the
    sample rate that was in force when it was sampled, and aggregates flows into
@@ -167,9 +174,11 @@ compile as a regex is rejected at config load.
 
 ### `agent.bpf`
 
-`sample_rate` (uint32, default 100): Sample 1 in every N packets for flow
-events. Must be greater than 0. A value of 1 samples every packet. Higher values
-reduce ring buffer throughput at the cost of flow granularity.
+`sample_rate` (uint32, default 100): Sample 1 in every N skbs for flow events,
+chosen at random. After GRO or before GSO one skb stands for several wire
+packets, and its event carries all of them. Must be greater than 0. A value of 1
+samples every skb. Higher values reduce ring buffer throughput at the cost of
+flow granularity.
 
 `ring_buf_size` (int, default 262144): Size of the BPF ring buffer in bytes.
 Must be greater than 0, a power of two, and a multiple of the page size. Invalid
@@ -177,10 +186,11 @@ values are rejected at config load time. Larger buffers reduce the chance of
 dropped events under burst traffic.
 
 `wakeup_batch` (uint32, default 64): The BPF program flags ring buffer submits
-with `BPF_RB_NO_WAKEUP` and forces a wakeup once every N submits. Lower values
-reduce flow event delivery latency at the cost of more userspace wakeups. Higher
-values amortize wakeups but make iterations longer (slower to react to events).
-Must be greater than 0.
+with `BPF_RB_NO_WAKEUP` and forces a wakeup once every N submits on each CPU.
+Lower values reduce flow event delivery latency at the cost of more userspace
+wakeups. Higher values amortize wakeups, and an event submitted without one
+waits for the collector's 100 millisecond read deadline at most. Must be greater
+than 0.
 
 `iface_stats_size` (int, default 0): Override the BPF iface stats hash map
 capacity. `0` means auto-compute as `max(len(interfaces) * 8, 64)`. Set
@@ -315,13 +325,19 @@ reports ASN 0.
 
 ## Prometheus metrics
 
-Interface counters (from BPF per-CPU hash map, updated in kernel). The `family`
-label is `"ipv4"`, `"ipv6"`, or `"other"` for non-IP traffic (e.g. ARP):
+Interface counters (from BPF per-CPU hash map, updated in kernel) count the wire
+packets and bytes of every skb the programs see, as the data path describes. The
+`family` label is `"ipv4"`, `"ipv6"`, or `"other"` for non-IP traffic (e.g. ARP)
+and for frames whose ethernet or VLAN header the program cannot read:
 
 - `rfm_interface_rx_bytes_total{ifname, family}`
 - `rfm_interface_tx_bytes_total{ifname, family}`
 - `rfm_interface_rx_packets_total{ifname, family}`
 - `rfm_interface_tx_packets_total{ifname, family}`
+
+These counters can read above the statistics of a guest NIC. virtio_net counts a
+TSO frame it sends, or a GSO frame the host hands up, as one packet, and macb
+and ena leave the ethernet header out of their received bytes.
 
 Flow gauges over the live flow table (rolled up by enrichment labels):
 
@@ -338,12 +354,18 @@ therefore work with `rate()` and `increase()`:
 - `rfm_flow_sampled_bytes_total`
 - `rfm_flow_sampled_packets_total`
 
-`rfm_flow_bytes` and `rfm_flow_bytes_total` are estimates, every event scaled by
-the sample rate in force when it was sampled. The `sampled` variants are the raw
-sampled values before scaling. `increase(rfm_flow_bytes_total[1h])` over
-`increase(rfm_interface_rx_bytes_total[1h])` is the sampling error in
-production. A label tuple that saw no traffic for ten eviction timeouts leaves
-the scrape.
+`rfm_flow_bytes` and `rfm_flow_bytes_total` are estimates of wire bytes, every
+event scaled by the sample rate in force when it was sampled. The `sampled`
+variants are the raw sampled values before scaling. Per direction, this ratio is
+the sampling error in production plus the events the ring buffer dropped, with
+the frames that are not IP left out because they never reach the flow series:
+
+```promql
+sum(increase(rfm_flow_bytes_total{direction="ingress"}[1h]))
+  / sum(increase(rfm_interface_rx_bytes_total{family!="other"}[1h]))
+```
+
+A label tuple that saw no traffic for ten eviction timeouts leaves the scrape.
 
 Sampling:
 
@@ -411,9 +433,9 @@ or JSON with `--json`:
 - `rfm flows count`: live flow count
 - `rfm rib lookup <address>`: best route with AS path, communities and peer
 - `rfm rib summary`: prefixes, routes and peers in the RIB
-- `rfm set sample-rate <N>`: sample 1 in N packets from now on, without a
-  restart, estimates stay consistent because every event is scaled by the rate
-  that sampled it
+- `rfm set sample-rate <N>`: sample 1 in N skbs from now on, without a restart,
+  estimates stay consistent because every event is scaled by the rate that
+  sampled it
 - `rfm config show`: the configuration file the agent loaded
 - `rfm reload mmdb`: re-open replaced MMDB files now
 
@@ -473,13 +495,13 @@ RFM is a lightweight flow telemetry agent, not a full traffic analysis platform.
 A few deliberate choices follow from that:
 
 The BPF programs capture only the fields needed for basic flow identification:
-IP addresses, L4 ports, protocol number, interface, direction, and packet
-length. They do not extract TCP flags, ToS/DSCP, TTL, IPv6 flow labels, or ICMP
-type/code. Adding these fields would widen the per-event wire struct, increase
-ring buffer pressure, and expand the IPFIX template surface for information that
-most lightweight deployments never query. Operators who need TCP flag analysis,
-QoS-aware accounting, or deep header inspection should consider ntopng or pmacct
-(or other solutions) instead.
+IP addresses, L4 ports, protocol number, interface, direction, and the wire
+packet and byte counts. They do not extract TCP flags, ToS/DSCP, TTL, IPv6 flow
+labels, or ICMP type/code. Adding these fields would widen the per-event wire
+struct, increase ring buffer pressure, and expand the IPFIX template surface for
+information that most lightweight deployments never query. Operators who need
+TCP flag analysis, QoS-aware accounting, or deep header inspection should
+consider ntopng or pmacct (or other solutions) instead.
 
 Prometheus flow gauges only includes (intentionally) enrichment labels
 (interface, direction, protocol, ASN, city). Source and destination ports are
@@ -532,11 +554,11 @@ typically feed into a downstream pipeline for storage and visualization.
 
 ### Performance
 
-RFM's eBPF TC programs run in the kernel with zero-copy delivery to userspace
-via a ring buffer. Packet sampling (configurable 1-in-N) reduces ring buffer
-throughput. Interface counters are updated on every packet regardless of
-sampling with no userspace involvement. The Prometheus exporter reads the BPF
-map directly at scrape time.
+RFM's eBPF TC programs run in the kernel and hand each sampled event, 64 bytes,
+to userspace through a BPF ring buffer that the agent maps into its memory.
+Sampling (configurable 1 in N skbs) reduces ring buffer throughput. Interface
+counters are updated on every skb regardless of sampling with no userspace
+involvement. The Prometheus exporter reads the BPF map directly at scrape time.
 
 Compared to libpcap based tools (ntopng, pmacctd), eBPF TC avoids the overhead
 of copying every packet to userspace. RFM only copies sampled flow metadata not
