@@ -160,7 +160,7 @@ host = "127.0.0.1"
 port = 4739
 template_refresh = "60s"
 observation_domain_id = 1
-queue_size = 4096
+queue_size = 0
 flush_interval = "1s"
 max_message_size = 1200
 
@@ -230,39 +230,60 @@ waits for the collector's 100 millisecond read deadline at most. Must be greater
 than 0.
 
 `iface_stats_size` (int, default 0): Override the BPF iface stats hash map
-capacity. `0` means auto-compute as `max(len(interfaces) * 8, 64)`. Set
-explicitly when running on a router with many subinterfaces or known high
-cardinality where the auto-compute is too small.
+capacity, in keys. `0` keeps the 4096 keys the program declares. An interface
+takes up to six keys, one per direction and family, which makes 4096 keys enough
+for about 680 interfaces. A counter update the full map refuses leaves that
+traffic uncounted and counts as a `bpf_map` error. Set it explicitly when
+running on a router with more subinterfaces than that. With `pin_path` set, a
+new size fails the start until the old pin is removed, see `pin_path`.
 
-`adaptive_sampling` (bool, default false): Let the collector raise the sample
-rate while the ring buffer drops events and lower it again after ten quiet
-sweeps. Every event is scaled by the rate that sampled it, and IPFIX records
-carry the effective `samplingProbability`, so estimates stay unbiased. Leave it
-off when the collector applies its own fixed sampling rate.
+`adaptive_sampling` (bool, default false): Let the collector double the sample
+rate, up to `max_sample_rate`, after every sweep that saw the ring buffer drop
+events, and halve it back toward `sample_rate` after ten quiet sweeps in a row.
+Every event is scaled by the rate that sampled it, and IPFIX records carry the
+effective `samplingProbability`, so estimates stay unbiased. A rate set with
+`rfm set sample-rate` becomes the one adaptive sampling goes on from. A sample
+rate the probe refuses counts as a `bpf_map` error. Leave it off when the IPFIX
+collector applies its own fixed sampling rate.
 
-`max_sample_rate` (uint32, default 1000): Upper bound for the adaptive rate.
-Must be at least `sample_rate`.
+`max_sample_rate` (uint32, default 1000): Upper bound for the adaptive rate and
+for a rate set with `rfm set sample-rate`. Must be at least `sample_rate`.
 
 `pin_path` (string, default ""): A bpffs directory where the interface counters
 are pinned. A restart or upgrade reuses the pinned map, so the counters stay
 monotonic across it. The NixOS module sets `/sys/fs/bpf/rfm`. Empty keeps the
-map private to the process.
+map private to the process. The agent creates the directory and holds a lock on
+it, and a second agent on the same `pin_path` refuses to start. A pinned map
+that does not match the configured one, from another `iface_stats_size` or the
+map layout of another build, fails the start with an error that names the
+difference. Remove the pin file, `rfm_iface_stats` in the directory, or reboot
+to start the counters from zero. After its first link dump the agent deletes the
+pinned counters of every interface it neither attached nor keeps retrying.
 
 ### `agent.collector`
 
 `max_flows` (int, default 65536): Maximum number of active flows held in memory.
-Must be >= 0. When the table is full, the oldest flow is forcibly evicted. A
-value of 0 means unlimited.
+Must be greater than 0. When the table is full, the flow that went longest
+without an event is forcibly evicted and, with IPFIX enabled, exported with
+flowEndReason 0x05. The same number limits the room for new label tuples with
+enrichment labels in the flow metrics, see
+[Prometheus metrics](#prometheus-metrics).
 
 `eviction_timeout` (string, default "30s"): How long a flow can be idle before
 eviction. Accepts any Go duration string (e.g. "10s", "1m", "2s"). Minimum value
-is 1s.
+is 1s. The collector sweeps the table every half eviction timeout, or more often
+when `active_timeout` asks for it, and a flow leaves within one sweep after its
+timeout. A label tuple leaves the scrape after ten eviction timeouts without
+traffic.
 
 `active_timeout` (string, default "60s"): How often a flow that keeps seeing
 traffic is exported over IPFIX as an interval record (flowEndReason 0x02) while
 it stays in the table. Each record carries the packets and bytes since the
 previous record, so a collector sums them. `"0s"` disables it, otherwise the
-minimum is 1s.
+minimum is 1s. The collector sweeps at the active timeout split into the fewest
+equal parts no longer than half the eviction timeout, so the records of a flow
+go out one active timeout apart, an active timeout of 40s with the default
+eviction timeout sweeps every 13.3 seconds.
 
 ### `agent.ipfix`
 
@@ -300,8 +321,11 @@ slow socket never stalls flow collection.
 before a partial message goes out. Minimum 10ms.
 
 `max_message_size` (int, default 1200): Largest IPFIX message in bytes, between
-128 and 65535. Keep it under the path MTU, including any tunnel the exporter
-traffic crosses, so messages never fragment.
+171 and 65535. A message carries at least one record, and 171 bytes hold an IPv6
+record with its template. The message is the UDP payload. Keep it at most the
+path MTU, including any tunnel the exporter traffic crosses, minus 28 bytes for
+the IPv4 and UDP headers or 48 bytes for the IPv6 and UDP headers, so messages
+never fragment.
 
 The exporter dials the collector at start and, when that fails, again with
 backoff (1s to 30s), so the agent starts and keeps counting while the collector
@@ -624,9 +648,14 @@ Example:
 ```
 
 The module generates a TOML config file and runs RFM as a systemd service that
-restarts 5 seconds after a failure and has no start limit, so a start that fails
-until a listen address or an MMDB file shows up is tried again until it
-succeeds. All supported knobs are available through (typed) module options.
+restarts 5 seconds after a failure and has no start limit. A start that fails
+until a listen address or an MMDB file shows up is therefore tried again until
+it succeeds. All supported knobs are available through (typed) module options,
+which refuse unknown keys and settings the hardened unit cannot honor: a
+metrics, BMP or IPFIX source port between 1 and 1023, which the unit cannot bind
+without `CAP_NET_BIND_SERVICE`, a control socket that is not a file directly in
+`/run/rfm`, and a `pin_path` that is not a directory directly under
+`/sys/fs/bpf`.
 
 The service runs as the `rfm` system user with `CAP_BPF`, `CAP_NET_ADMIN` and
 `CAP_PERFMON` as ambient capabilities and a read-only view of the system. The
