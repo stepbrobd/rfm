@@ -77,8 +77,9 @@ type IPFIXConfig struct {
 	// FlushInterval is how long the sender gathers records before a message
 	// goes out when fewer than a full message are waiting
 	FlushInterval time.Duration
-	// MaxMessageSize caps one IPFIX message in bytes, kept under the path
-	// mtu so a message never fragments
+	// MaxMessageSize caps one IPFIX message in bytes, the udp payload, kept
+	// 28 bytes under the path mtu over ipv4 and 48 over ipv6 for the ip and
+	// udp headers, so a message never fragments
 	MaxMessageSize int
 }
 

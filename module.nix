@@ -181,7 +181,7 @@ in
                     max_message_size = std.mkOption {
                       type = std.types.ints.between 171 65535;
                       default = 1200;
-                      description = "Largest IPFIX message in bytes, keep it under the path MTU.";
+                      description = "Largest IPFIX message in bytes, the UDP payload, keep it at most the path MTU minus 28 bytes for IPv4 or 48 bytes for IPv6.";
                     };
                   };
                 };
