@@ -108,6 +108,31 @@ there without reloading the programs.
 6. When a control socket is configured, `rfm status`, `rfm flows`, `rfm rib`,
    `rfm set`, `rfm config` and `rfm reload` talk to the running agent.
 
+### Startup and shutdown
+
+`rfm agent` sets up its parts in this order and exits with status 1 at the first
+one that fails: the configuration, the lock on `pin_path`, the control socket,
+the BMP listener and the MMDB files, the BPF programs with the pinned counters,
+the IPFIX exporter, and the metrics listener. A second agent on the same
+`pin_path` or control socket therefore stops before it loads anything.
+
+No interface has to match at start. The interface watcher attaches the matching
+links of its first link dump and every matching link that appears later, and the
+agent logs a warning when that dump attached nothing and for every pattern that
+matched no link. The metrics port opens once the watcher has gone through its
+first link dump, and the first scrape then shows the counters of the interfaces
+it attached. Each counter appears with the first packet of its direction and
+family, or at once when an earlier run pinned it. While a failing dump is
+retried the port stays closed, and the control socket answers meanwhile.
+
+A running agent exits with status 1 when one of its parts fails: the watcher
+cannot open its first link subscription, the control socket or the BMP listener
+stops on an accept error that is not temporary, the metrics server fails, or the
+ring buffer cannot be read. A later link subscription that fails is opened
+again. SIGINT and SIGTERM end the agent with status 0. With IPFIX enabled it
+first exports the flows still in the table with flowEndReason 0x04 and sends the
+queued records.
+
 ## Configuration
 
 RFM reads a TOML config file (default `/etc/rfm/rfm.toml`). Unknown keys are
@@ -115,7 +140,7 @@ rejected at load time. Example:
 
 ```toml
 [agent]
-interfaces = ["eth0", "tailscale0"]
+interfaces = ["eth0", "enp.*"]
 
 [agent.bpf]
 sample_rate = 100
@@ -164,16 +189,25 @@ port = 11019
 `interfaces` (required, list of strings): Network interfaces to attach BPF
 programs to. Each entry is a Go regex matched against system interface names
 with implicit full-string anchoring. Use `[".*"]` for every interface,
-`["ranet.*"]` for the ranet prefix, or list exact names like
-`["eth0", "wlan0"]`.
+`["enp.*"]` for the enp prefix, or list exact names like `["eth0", "wlan0"]`. A
+pattern that reads like a shell glob draws a warning at start, as a regex `eth*`
+matches `et`, `eth` and `ethh` but not `eth0`.
 
 Patterns may overlap. For example `["eth0", "eth.*"]` matches `eth0` once even
 though both patterns apply, and a TC program is attached at most once per
-interface. Resolution walks the system interface list once, evaluates each
-pattern against each name, and deduplicates by interface index.
+interface. The agent follows the links over netlink. It attaches every matching
+link of its first link dump and every matching link that appears later, and
+detaches a link that goes away, whose counters go with it. A matching link
+without an ethernet header, such as a WireGuard, tun (`tailscale0`) or xfrm
+interface, is skipped with a warning, because the programs would read its IP
+header as ethernet. An attach that finds the link already gone is only logged as
+a warning, as the removal of the link follows. Any other attach that fails is
+tried again after a pause that doubles from 100 milliseconds up to 30 seconds,
+and every failed try counts as an `attach` error.
 
-Startup fails when no interface matches any pattern. A pattern that fails to
-compile as a regex is rejected at config load.
+The agent starts when no interface matches yet, see
+[Startup and shutdown](#startup-and-shutdown). A pattern that fails to compile
+as a regex is rejected at config load.
 
 ### `agent.bpf`
 
@@ -299,12 +333,18 @@ IPv4 only, "::" for all interfaces, or "0.0.0.0" for all IPv4 interfaces.
 `port` (int, default 9669): TCP port for the metrics server. Must be between 1
 and 65535.
 
+The metrics port opens once the interface watcher has gone through its first
+link dump. The endpoint gathers for two scrapes at a time and answers a further
+one, and a gather that takes longer than 30 seconds, with HTTP 503.
+
 ### `agent.control`
 
 `socket` (string, default ""): Path of the unix socket the `rfm` command line
 talks to. Empty disables the control plane. The socket is created with mode 0600
-for the agent's user, so run the commands as that user or as root. The NixOS
-module sets `/run/rfm/rfm.sock`.
+for the agent's user, so run the commands as that user or as root. The agent
+does not create the directory of the socket. A socket file an earlier run left
+behind is replaced, while a path that is not a socket or that another process
+still listens on fails the start. The NixOS module sets `/run/rfm/rfm.sock`.
 
 ### `agent.enrich`
 
@@ -519,13 +559,15 @@ be derived from RFM data in Grafana.
 
 ## CLI
 
-`rfm agent` runs the daemon. The other subcommands talk to a running agent over
-its control socket (`--socket`, default `/run/rfm/rfm.sock`) and print tables,
-or JSON with `--json`:
+`rfm agent` runs the daemon and `rfm version` prints the version. The other
+subcommands talk to a running agent over its control socket (`--socket`, default
+`/run/rfm/rfm.sock`) and print tables, or JSON with `--json`:
 
-- `rfm status`: version, uptime, attached interfaces, sample rate, flow table,
-  IPFIX, MMDB and RIB state
-- `rfm flows top [N] [--by bytes|packets]`: the busiest live flows
+- `rfm status`: version, uptime, attached interfaces, sample rate, flow table
+  with ring drops, forced evictions and folded flows, IPFIX with the records
+  lost to a full queue, a missing socket and failed sends, MMDB and RIB state
+- `rfm flows top [N] [--by bytes|packets]`: the N busiest live flows by
+  estimated bytes or packets, 20 by default
 - `rfm flows count`: live flow count
 - `rfm rib lookup <address>`: best route with AS path, communities and peer, and
   a `truncated` row when the RIB kept only the first 32 values of the path or of
@@ -538,6 +580,10 @@ or JSON with `--json`:
 - `rfm config show`: the configuration file the agent loaded
 - `rfm reload mmdb`: re-open replaced MMDB files now
 
+A command that fails exits with status 1 and prints its error once, prefixed
+with `rfm:`. `rfm status` and `rfm flows top` name the interfaces from a link
+dump and fail when the agent cannot list the links.
+
 Example:
 
 ```
@@ -546,8 +592,8 @@ version     2026.902.0
 uptime      3h12m0s
 interfaces  eth0
 sampling    1 in 10
-flows       612 active of 65536, 0 ring drops, 0 forced evictions
-ipfix       162.159.65.1:2055 connected, 1843 messages, 27510 records, 0 queue drops, 0 unsent
+flows       612 active of 65536, 0 ring drops, 0 forced evictions, 0 folded under empty labels
+ipfix       162.159.65.1:2055 connected, 1843 messages, 27510 records, 0 queue drops, 0 unsent, 0 failed to encode, 0 lost in failed sends
 mmdb        asn 2026-08-29, city 2026-08-29
 ```
 
@@ -563,7 +609,7 @@ Example:
     enable = true;
 
     settings.agent = {
-      interfaces = [ "eth0" "tailscale0" ];
+      interfaces = [ "eth0" "enp.*" ];
       bpf.sample_rate = 50;
       ipfix.host = "127.0.0.1";
       ipfix.port = 4739;
@@ -577,9 +623,10 @@ Example:
 }
 ```
 
-The module generates a TOML config file and runs RFM as a systemd service with
-automatic restart on failure. All supported knobs are available through (typed)
-module options.
+The module generates a TOML config file and runs RFM as a systemd service that
+restarts 5 seconds after a failure and has no start limit, so a start that fails
+until a listen address or an MMDB file shows up is tried again until it
+succeeds. All supported knobs are available through (typed) module options.
 
 The service runs as the `rfm` system user with `CAP_BPF`, `CAP_NET_ADMIN` and
 `CAP_PERFMON` as ambient capabilities and a read-only view of the system. The
