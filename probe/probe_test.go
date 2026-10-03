@@ -14,7 +14,6 @@ import (
 	"slices"
 	"strings"
 	"structs"
-	"syscall"
 	"testing"
 	"time"
 
@@ -48,15 +47,12 @@ type rfmRfmFlowEvent struct {
 	_       [7]uint8
 }
 
+// skipIfUnsupported skips when the test lacks the privileges to load or
+// attach the programs, a kernel without a feature they need fails the test
 func skipIfUnsupported(t *testing.T, err error) {
 	t.Helper()
 
-	if errors.Is(err, ebpf.ErrNotSupported) {
-		t.Skipf("not supported: %v", err)
-	}
-	if errors.Is(err, syscall.EPERM) || errors.Is(err, syscall.EACCES) {
-		t.Skipf("requires additional linux capabilities: %v", err)
-	}
+	testutil.SkipIfUnprivileged(t, err)
 }
 
 func TestLoad(t *testing.T) {
