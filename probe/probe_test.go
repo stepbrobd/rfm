@@ -62,7 +62,7 @@ func skipIfUnsupported(t *testing.T, err error) {
 func TestLoad(t *testing.T) {
 	testutil.RequireRoot(t)
 
-	p, err := Load(Config{})
+	p, err := Load(Config{WakeupBatch: 1})
 	if err != nil {
 		skipIfUnsupported(t, err)
 		t.Fatal(err)
@@ -70,12 +70,23 @@ func TestLoad(t *testing.T) {
 	defer p.Close()
 }
 
+func TestLoadRefusesAZeroWakeupBatch(t *testing.T) {
+	// the programs would never wake the reader of the flow events
+	p, err := Load(Config{SampleRate: 1})
+	if err == nil {
+		p.Close()
+	}
+	if err == nil || !strings.Contains(err.Error(), "wakeup batch") {
+		t.Fatalf("load with a wakeup batch of 0 = %v, want it refused", err)
+	}
+}
+
 func TestAttach(t *testing.T) {
 	testutil.RequireRoot(t)
 
 	ns := testutil.NewNS(t)
 
-	p, err := Load(Config{})
+	p, err := Load(Config{WakeupBatch: 1})
 	if err != nil {
 		skipIfUnsupported(t, err)
 		t.Fatal(err)
@@ -119,7 +130,7 @@ func TestAttachLinkTypes(t *testing.T) {
 
 	testutil.NewNS(t)
 
-	p, err := Load(Config{})
+	p, err := Load(Config{WakeupBatch: 1})
 	if err != nil {
 		skipIfUnsupported(t, err)
 		t.Fatal(err)
@@ -159,7 +170,7 @@ func TestIfaceCounters(t *testing.T) {
 
 	ns := testutil.NewNS(t)
 
-	p, err := Load(Config{})
+	p, err := Load(Config{WakeupBatch: 1})
 	if err != nil {
 		skipIfUnsupported(t, err)
 		t.Fatal(err)
@@ -221,7 +232,7 @@ func TestIfaceStatsErrorsCountFullMap(t *testing.T) {
 	ns := testutil.NewNS(t)
 
 	// one slot holds one key, every other key is refused
-	p, err := Load(Config{IfaceStatsSize: 1})
+	p, err := Load(Config{WakeupBatch: 1, IfaceStatsSize: 1})
 	if err != nil {
 		skipIfUnsupported(t, err)
 		t.Fatal(err)
@@ -254,7 +265,7 @@ func TestIfaceCountersVLAN(t *testing.T) {
 
 	ns := testutil.NewNS(t)
 
-	p, err := Load(Config{})
+	p, err := Load(Config{WakeupBatch: 1})
 	if err != nil {
 		skipIfUnsupported(t, err)
 		t.Fatal(err)
@@ -288,7 +299,7 @@ func TestIfaceCountersVLANEgress(t *testing.T) {
 
 	ns := testutil.NewNS(t)
 
-	p, err := Load(Config{})
+	p, err := Load(Config{WakeupBatch: 1})
 	if err != nil {
 		skipIfUnsupported(t, err)
 		t.Fatal(err)
@@ -319,7 +330,7 @@ func TestIfaceCountersVLANEgressGSO(t *testing.T) {
 
 	ns := testutil.NewNS(t)
 
-	p, err := Load(Config{})
+	p, err := Load(Config{WakeupBatch: 1})
 	if err != nil {
 		skipIfUnsupported(t, err)
 		t.Fatal(err)
@@ -366,7 +377,7 @@ func TestIfaceCountersTruncatedVLANTag(t *testing.T) {
 
 	testutil.NewNS(t)
 
-	p, err := Load(Config{})
+	p, err := Load(Config{WakeupBatch: 1})
 	if err != nil {
 		skipIfUnsupported(t, err)
 		t.Fatal(err)
@@ -410,7 +421,7 @@ func readFlowEventFrom(t *testing.T, send func(*testutil.NS), match func(rfmRfmF
 
 	ns := testutil.NewNS(t)
 
-	p, err := Load(Config{SampleRate: 1})
+	p, err := Load(Config{SampleRate: 1, WakeupBatch: 1})
 	if err != nil {
 		skipIfUnsupported(t, err)
 		t.Fatal(err)
@@ -829,7 +840,7 @@ func TestIfaceCountersGSOEgress(t *testing.T) {
 
 	ns := testutil.NewNS(t)
 
-	p, err := Load(Config{})
+	p, err := Load(Config{WakeupBatch: 1})
 	if err != nil {
 		skipIfUnsupported(t, err)
 		t.Fatal(err)
@@ -872,7 +883,7 @@ func TestIfaceCountersGROIngress(t *testing.T) {
 
 	ns := testutil.NewNS(t)
 
-	p, err := Load(Config{})
+	p, err := Load(Config{WakeupBatch: 1})
 	if err != nil {
 		skipIfUnsupported(t, err)
 		t.Fatal(err)
@@ -927,7 +938,7 @@ func TestGSOHeaderErrorsCountHeadersThatDoNotParse(t *testing.T) {
 
 	testutil.NewNS(t)
 
-	p, err := Load(Config{})
+	p, err := Load(Config{WakeupBatch: 1})
 	if err != nil {
 		skipIfUnsupported(t, err)
 		t.Fatal(err)
@@ -1100,7 +1111,7 @@ func TestAttachOrder(t *testing.T) {
 		}
 	}
 
-	p, err := Load(Config{})
+	p, err := Load(Config{WakeupBatch: 1})
 	if err != nil {
 		skipIfUnsupported(t, err)
 		t.Fatal(err)
@@ -1215,7 +1226,7 @@ func TestDetachDropsCounters(t *testing.T) {
 
 	ns := testutil.NewNS(t)
 
-	p, err := Load(Config{})
+	p, err := Load(Config{WakeupBatch: 1})
 	if err != nil {
 		skipIfUnsupported(t, err)
 		t.Fatal(err)
@@ -1277,7 +1288,7 @@ func TestPinnedCountersSurviveReload(t *testing.T) {
 
 	ns := testutil.NewNS(t)
 
-	p, err := Load(Config{PinPath: dir})
+	p, err := Load(Config{WakeupBatch: 1, PinPath: dir})
 	if err != nil {
 		skipIfUnsupported(t, err)
 		t.Fatal(err)
@@ -1302,7 +1313,7 @@ func TestPinnedCountersSurviveReload(t *testing.T) {
 	}
 
 	// a second load under the same pin path picks the counters up
-	p2, err := Load(Config{PinPath: dir})
+	p2, err := Load(Config{WakeupBatch: 1, PinPath: dir})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1314,12 +1325,12 @@ func TestPinnedCountersSurviveReload(t *testing.T) {
 
 	// a map of another size is refused and the pin keeps its counters
 	p2.Close()
-	_, err = Load(Config{PinPath: dir, IfaceStatsSize: 128})
+	_, err = Load(Config{WakeupBatch: 1, PinPath: dir, IfaceStatsSize: 128})
 	if !errors.Is(err, ebpf.ErrMapIncompatible) || !strings.Contains(err.Error(), "MaxEntries: 4096 changed to 128") ||
 		!strings.Contains(err.Error(), "remove the pin file or reboot") {
 		t.Fatalf("load with a map of another size = %v, want the pin refused", err)
 	}
-	p3, err := Load(Config{PinPath: dir})
+	p3, err := Load(Config{WakeupBatch: 1, PinPath: dir})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1546,7 +1557,7 @@ func TestPinnedCountersRefuseIncompatibleFlags(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, err = Load(Config{PinPath: dir})
+	_, err = Load(Config{WakeupBatch: 1, PinPath: dir})
 	if !errors.Is(err, ebpf.ErrMapIncompatible) || !strings.Contains(err.Error(), "Flags") ||
 		!strings.Contains(err.Error(), "remove the pin file or reboot") {
 		t.Fatalf("load with a pin of other flags = %v, want the pin refused", err)
@@ -1567,7 +1578,7 @@ func TestWatchFollowsInterfaces(t *testing.T) {
 
 	ns := testutil.NewNS(t)
 
-	p, err := Load(Config{})
+	p, err := Load(Config{WakeupBatch: 1})
 	if err != nil {
 		skipIfUnsupported(t, err)
 		t.Fatal(err)
@@ -1627,7 +1638,7 @@ func TestWatchReconcilesExistingLinks(t *testing.T) {
 
 	ns := testutil.NewNS(t)
 
-	p, err := Load(Config{})
+	p, err := Load(Config{WakeupBatch: 1})
 	if err != nil {
 		skipIfUnsupported(t, err)
 		t.Fatal(err)
@@ -1671,7 +1682,7 @@ func TestWatchSurvivesForeignMessages(t *testing.T) {
 
 	ns := testutil.NewNS(t)
 
-	p, err := Load(Config{})
+	p, err := Load(Config{WakeupBatch: 1})
 	if err != nil {
 		skipIfUnsupported(t, err)
 		t.Fatal(err)
@@ -1723,7 +1734,7 @@ func TestWatchResubscribesOnALinkItCannotDecode(t *testing.T) {
 
 	ns := testutil.NewNS(t)
 
-	p, err := Load(Config{})
+	p, err := Load(Config{WakeupBatch: 1})
 	if err != nil {
 		skipIfUnsupported(t, err)
 		t.Fatal(err)
@@ -1814,7 +1825,7 @@ func TestWatchResubscribesAfterOverflow(t *testing.T) {
 
 	ns := testutil.NewNS(t)
 
-	p, err := Load(Config{})
+	p, err := Load(Config{WakeupBatch: 1})
 	if err != nil {
 		skipIfUnsupported(t, err)
 		t.Fatal(err)
@@ -1890,7 +1901,7 @@ func TestWatchPrunesPinnedCounters(t *testing.T) {
 	other := addVeth(t, "other0", "other1")
 
 	// an earlier run counted rfm0 and other0, this run only matches rfm0
-	p, err := Load(Config{PinPath: dir})
+	p, err := Load(Config{WakeupBatch: 1, PinPath: dir})
 	if err != nil {
 		skipIfUnsupported(t, err)
 		t.Fatal(err)
@@ -1903,7 +1914,7 @@ func TestWatchPrunesPinnedCounters(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	p, err = Load(Config{PinPath: dir})
+	p, err = Load(Config{WakeupBatch: 1, PinPath: dir})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1932,7 +1943,7 @@ func TestWatchRetriesAFailedPrune(t *testing.T) {
 	ns := testutil.NewNS(t)
 	other := addVeth(t, "other0", "other1")
 
-	p, err := Load(Config{})
+	p, err := Load(Config{WakeupBatch: 1})
 	if err != nil {
 		skipIfUnsupported(t, err)
 		t.Fatal(err)
@@ -1974,7 +1985,7 @@ func TestWatchClearsCountersOfDeletedLinks(t *testing.T) {
 
 	ns := testutil.NewNS(t)
 
-	p, err := Load(Config{})
+	p, err := Load(Config{WakeupBatch: 1})
 	if err != nil {
 		skipIfUnsupported(t, err)
 		t.Fatal(err)
@@ -2056,7 +2067,7 @@ func TestWatchRetriesAFailedAttach(t *testing.T) {
 
 	ns := testutil.NewNS(t)
 
-	p, err := Load(Config{})
+	p, err := Load(Config{WakeupBatch: 1})
 	if err != nil {
 		skipIfUnsupported(t, err)
 		t.Fatal(err)
@@ -2139,7 +2150,7 @@ func TestWatchKeepsAPortThatLeavesItsBridge(t *testing.T) {
 
 	ns := testutil.NewNS(t)
 
-	p, err := Load(Config{})
+	p, err := Load(Config{WakeupBatch: 1})
 	if err != nil {
 		skipIfUnsupported(t, err)
 		t.Fatal(err)

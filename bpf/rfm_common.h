@@ -46,7 +46,4 @@ struct rfm_flow_event {
 	__u8 _pad[7];
 };
 
-// RFM_WAKEUP_BATCH is the load-time fallback when rfm_config.wakeup_batch is 0
-#define RFM_WAKEUP_BATCH 64
-
 #endif

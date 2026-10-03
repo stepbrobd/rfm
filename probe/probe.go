@@ -45,6 +45,10 @@ type Probe struct {
 }
 
 func Load(cfg Config) (*Probe, error) {
+	if cfg.WakeupBatch == 0 {
+		return nil, errors.New("wakeup batch must be > 0")
+	}
+
 	spec, err := loadRfm()
 	if err != nil {
 		return nil, fmt.Errorf("load BPF spec: %w", err)
