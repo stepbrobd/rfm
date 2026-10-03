@@ -1,11 +1,13 @@
 package mmdb
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"net/netip"
 	"os"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/charmbracelet/log"
@@ -79,12 +81,14 @@ type Enricher struct {
 }
 
 // database is one MMDB file together with the stat it was opened from
-// an empty path means the database is not configured
+// an empty path means the database is not configured, reported is set once
+// a lookup in the open file failed and logged it
 type database struct {
-	path   string
-	kind   string
-	reader *maxminddb.Reader
-	stamp  stamp
+	path     string
+	kind     string
+	reader   *maxminddb.Reader
+	stamp    stamp
+	reported atomic.Bool
 }
 
 // stamp identifies the on-disk version of a database file
@@ -153,19 +157,25 @@ func (m *Enricher) lookup(addr netip.Addr) collector.Labels {
 
 	if m.asn.reader != nil {
 		asn, err := lookupASN(m.asn.reader, addr)
-		if err == nil {
-			labels.ASN = asn
-		}
+		m.asn.report(err)
+		labels.ASN = asn
 	}
 
 	if m.city.reader != nil {
 		city, err := lookupCity(m.city.reader, addr)
-		if err == nil {
-			labels.City = city
-		}
+		m.city.report(err)
+		labels.City = city
 	}
 
 	return labels
+}
+
+// report logs the first error of a lookup in the open file, a file in a
+// layout rfm does not read fails every lookup alike
+func (d *database) report(err error) {
+	if err != nil && !d.reported.Swap(true) {
+		log.Error("mmdb lookup", "kind", d.kind, "path", d.path, "err", err)
+	}
 }
 
 // Versions returns the build epoch of the open ASN and city databases
@@ -214,6 +224,7 @@ func (m *Enricher) reload(d *database) error {
 	old := d.reader
 	d.reader = reader
 	d.stamp = st
+	d.reported.Store(false)
 	m.mu.Unlock()
 
 	if old != nil {
@@ -262,48 +273,39 @@ func (m *Enricher) Close() error {
 	return first
 }
 
+// errASNLayout fails the lookup of a record without the ASN, every record of
+// a GeoLite2-ASN database has one
+var errASNLayout = errors.New("record without autonomous_system_number, asn_db takes the GeoLite2-ASN layout MaxMind and DB-IP use")
+
+// lookupASN reads the ASN of addr from a database in the GeoLite2-ASN layout
 func lookupASN(db *maxminddb.Reader, addr netip.Addr) (uint32, error) {
 	res := db.Lookup(addr)
-	if err := res.Err(); err != nil {
-		return 0, err
+	if !res.Found() {
+		return 0, res.Err()
 	}
-
-	paths := [][]any{
-		{"autonomous_system_number"},
-		{"asn"},
+	var asn *uint32
+	if err := res.DecodePath(&asn, "autonomous_system_number"); err != nil {
+		return 0, fmt.Errorf("read autonomous_system_number: %w", err)
 	}
-	for _, path := range paths {
-		var asn *uint32
-		if err := res.DecodePath(&asn, path...); err != nil {
-			return 0, err
-		}
-		if asn != nil {
-			return *asn, nil
-		}
+	if asn == nil {
+		return 0, errASNLayout
 	}
-
-	return 0, nil
+	return *asn, nil
 }
 
+// lookupCity reads the English city name of addr from a database in the
+// GeoLite2-City layout, a record of a country without a city has none
 func lookupCity(db *maxminddb.Reader, addr netip.Addr) (string, error) {
 	res := db.Lookup(addr)
-	if err := res.Err(); err != nil {
-		return "", err
+	if !res.Found() {
+		return "", res.Err()
 	}
-
-	paths := [][]any{
-		{"city", "names", "en"},
-		{"city", "name"},
+	var city *string
+	if err := res.DecodePath(&city, "city", "names", "en"); err != nil {
+		return "", fmt.Errorf("read city.names.en, city_db takes the GeoLite2-City layout MaxMind and DB-IP use: %w", err)
 	}
-	for _, path := range paths {
-		var city *string
-		if err := res.DecodePath(&city, path...); err != nil {
-			return "", err
-		}
-		if city != nil {
-			return *city, nil
-		}
+	if city == nil {
+		return "", nil
 	}
-
-	return "", nil
+	return *city, nil
 }
