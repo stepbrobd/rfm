@@ -796,6 +796,8 @@ network-intensive and distributed systems workloads.
 
 - BIRD Report 3:
   <https://trubka.network.cz/archives/list/bird-users@network.cz/message/XN43FORRZGU2RL3TASCE6NDKWPTZTSAC/>
+  Fix:
+  <https://github.com/CZ-NIC/bird/commit/5d5274f6d2ea16a9a93b6477f20aefbbf2c7da43>
 
 ## License
 
