@@ -2,11 +2,11 @@
 # use lib.nu *
 
 export-env {
-  $env.PG = "/proc/net/pktgen"
-  $env.GEN = ($env.GEN? | default "veth0")
-  $env.MON = ($env.MON? | default "veth1")
-  $env.NET = ($env.NET? | default "10.0.0")
-  $env.RFM = ($env.RFM? | default "rfm")
+    $env.PG = "/proc/net/pktgen"
+    $env.GEN = ($env.GEN? | default "veth0")
+    $env.MON = ($env.MON? | default "veth1")
+    $env.NET = ($env.NET? | default "10.0.0")
+    $env.RFM = ($env.RFM? | default "rfm")
 }
 
 # write one command line to a procfs control file
