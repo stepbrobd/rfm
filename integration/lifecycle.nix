@@ -167,7 +167,7 @@ in
     # seconds, and succeeds once the file exists
     machine5.wait_for_unit("multi-user.target")
     machine5.wait_until_succeeds('test "$(systemctl show -P NRestarts rfm.service)" -gt 20', timeout=timedelta(seconds=60))
-    machine5.fail("systemctl is-active rfm.service")
+    machine5.fail("curl -sf http://localhost:9669/metrics")
     machine5.succeed('install -D -m 0644 "$(cat /etc/rfm-test-asn-db)" /var/lib/rfm-test/asn.mmdb')
     machine5.wait_until_succeeds("systemctl is-active rfm.service", timeout=timedelta(seconds=60))
     machine5.wait_for_open_port(9669)

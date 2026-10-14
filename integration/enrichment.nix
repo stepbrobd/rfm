@@ -6,9 +6,6 @@ in
 {
   name = "rfm-enrichment";
 
-  # allow nodes overlay
-  node.pkgsReadOnly = false;
-
   # enableDebugHook = true;
   interactive.sshBackdoor.enable = true;
 
@@ -16,9 +13,6 @@ in
     { pkgs, ... }:
     {
       imports = [ common.machine1 ];
-
-      # TODO: remove after upstream merge the fix
-      nixpkgs.overlays = [ common.overlay ];
 
       services.bird = {
         enable = true;
@@ -73,9 +67,6 @@ in
     {
       imports = [ common.machine2 ];
 
-      # TODO: remove after upstream merge the fix
-      nixpkgs.overlays = [ common.overlay ];
-
       services.bird = {
         enable = true;
         package = pkgs.bird3;
@@ -116,9 +107,6 @@ in
     { pkgs, ... }:
     {
       imports = [ common.machine3 ];
-
-      # TODO: remove after upstream merge the fix
-      nixpkgs.overlays = [ common.overlay ];
 
       services.bird = {
         enable = true;
