@@ -25,11 +25,6 @@ func (s *ProbeSource) IfaceStats() ([]IfaceStatsEntry, error) {
 	return entries, nil
 }
 
-// SampleRate reads the rate the programs sample at
-func (s *ProbeSource) SampleRate() (uint32, error) {
-	return s.Probe.SampleRate()
-}
-
 // IfaceStatsErrors reads how many counter updates the interface stats map
 // refused
 func (s *ProbeSource) IfaceStatsErrors() (uint64, error) {

@@ -21,22 +21,10 @@ import (
 type mockIfaceStats struct {
 	entries []IfaceStatsEntry
 	err     error
-	rate    uint32
-	rateErr error
 }
 
 func (m *mockIfaceStats) IfaceStats() ([]IfaceStatsEntry, error) {
 	return m.entries, m.err
-}
-
-func (m *mockIfaceStats) SampleRate() (uint32, error) {
-	if m.rateErr != nil {
-		return 0, m.rateErr
-	}
-	if m.rate == 0 {
-		return 1, nil
-	}
-	return m.rate, nil
 }
 
 type staticEnricher struct {
@@ -513,7 +501,7 @@ func TestCollectFlowsWithEnricher(t *testing.T) {
 }
 
 func TestCollectFlowsScalesBySampleRate(t *testing.T) {
-	src := &mockIfaceStats{rate: 10}
+	src := &mockIfaceStats{}
 
 	c := collector.New(time.Minute, nil, config.DefaultMaxFlows)
 	c.SetSampleRate(10, 0)
@@ -738,49 +726,17 @@ func TestCollectErrorsTotalZeroOnSuccess(t *testing.T) {
 	assertCounter(t, vals, "rfm_errors_total", 0)
 }
 
-func TestCollectErrorsTotalOnSampleRateLookupError(t *testing.T) {
-	src := &mockIfaceStats{
-		rateErr: fmt.Errorf("config map broken"),
-	}
-
+func TestSampleRateGaugeFollowsTheCollector(t *testing.T) {
 	c := collector.New(time.Minute, nil, config.DefaultMaxFlows)
-	c.Record(collector.FlowEvent{
-		Ifindex: 2,
-		Dir:     0,
-		Proto:   6,
-		SrcAddr: netip.MustParseAddr("192.168.1.1"),
-		DstAddr: netip.MustParseAddr("192.168.1.2"),
-		SrcPort: 1234,
-		DstPort: 443,
-		Segs:    1,
-		Len:     200,
-	})
+	c.SetSampleRate(10, 0)
+	c.SetRateApplier(func(uint32) error { return nil })
+	mc := New(nil, c)
+	assertGauge(t, collectAll(t, mc), "rfm_bpf_sample_rate", 10)
 
-	mc := New(src, c)
-	metrics := collectMetrics(t, mc)
-
-	var found bool
-	for _, m := range metrics {
-		// a rate the scrape could not read is left out, a stand in of 1
-		// would claim the programs sample every packet
-		if extractName(m.Desc()) == "rfm_bpf_sample_rate" {
-			t.Errorf("rfm_bpf_sample_rate = %g after a failed read, want it left out", metricValue(t, m))
-		}
-		if extractName(m.Desc()) != "rfm_errors_total" {
-			continue
-		}
-		labels := metricLabels(t, m)
-		if labels["subsystem"] != "bpf_map" {
-			continue
-		}
-		found = true
-		if val := metricValue(t, m); val != 1 {
-			t.Errorf("bpf_map errors = %g, want 1", val)
-		}
+	if err := c.ApplySampleRate(40); err != nil {
+		t.Fatal(err)
 	}
-	if !found {
-		t.Error("missing rfm_errors_total{subsystem=\"bpf_map\"}")
-	}
+	assertGauge(t, collectAll(t, mc), "rfm_bpf_sample_rate", 40)
 }
 
 // refusingIfaceStats is a probe whose interface counter map refused updates

@@ -14,11 +14,6 @@ type IfaceStatsSource interface {
 	IfaceStats() ([]IfaceStatsEntry, error)
 }
 
-// SampleRateSource provides the current packet sample rate used by the probe
-type SampleRateSource interface {
-	SampleRate() (uint32, error)
-}
-
 // IfaceStatsErrorSource provides how many counter updates the interface
 // stats map refused, whose traffic went uncounted
 type IfaceStatsErrorSource interface {

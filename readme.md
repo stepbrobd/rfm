@@ -540,8 +540,7 @@ of a tuple that leaves.
 
 Sampling:
 
-- `rfm_bpf_sample_rate`, left out of a scrape that cannot read the rate, which
-  counts as a `bpf_map` error
+- `rfm_bpf_sample_rate`, the rate the agent last wrote to the BPF programs
 
 Collector health:
 

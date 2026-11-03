@@ -59,7 +59,7 @@ type agentProbe interface {
 	SetSampleRate(n uint32) error
 	Watch(ctx context.Context, match func(string) bool, notify func(probe.LinkEvent)) error
 	WatchState() probe.WatchState
-	// Stats reads the interface counters and the sample rate for a scrape
+	// Stats reads the interface counters for a scrape
 	Stats() export.IfaceStatsSource
 	// Events opens the reader of the sampled flow events
 	Events() (collector.Reader, error)

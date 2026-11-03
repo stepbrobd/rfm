@@ -247,9 +247,6 @@ func (mc *MetricsCollector) Collect(ch chan<- prometheus.Metric) {
 
 	mc.collectIfaceStats(ch)
 	mc.collectRollups(ch)
-	if rate, ok := mc.sampleRate(); ok {
-		ch <- prometheus.MustNewConstMetric(descSampleRate, prometheus.GaugeValue, float64(rate))
-	}
 
 	ifaceErrs := mc.ifaceStatsErrors()
 	gsoErrs, countsGSO := mc.gsoHeaderErrors()
@@ -289,6 +286,7 @@ func (mc *MetricsCollector) Collect(ch chan<- prometheus.Metric) {
 		errs["gso_header"] = gsoErrs
 	}
 	if mc.col != nil {
+		ch <- prometheus.MustNewConstMetric(descSampleRate, prometheus.GaugeValue, float64(mc.col.SampleRate()))
 		stats := mc.col.Stats()
 		ch <- prometheus.MustNewConstMetric(descActiveFlows, prometheus.GaugeValue, float64(stats.ActiveFlows))
 		ch <- prometheus.MustNewConstMetric(descDroppedEvents, prometheus.CounterValue, float64(stats.DroppedEvents))
@@ -385,26 +383,6 @@ func (mc *MetricsCollector) collectIfaceStats(ch chan<- prometheus.Metric) {
 			ch <- prometheus.MustNewConstMetric(descIfaceTxPackets, prometheus.CounterValue, float64(e.Packets), ifname, family)
 		}
 	}
-}
-
-// sampleRate returns the rate the programs sample at, and false for a source
-// without one or a failed read, which counts as a bpf_map error and leaves the
-// gauge out of the scrape rather than report a rate nothing runs at
-func (mc *MetricsCollector) sampleRate() (uint32, bool) {
-	src, ok := mc.source.(SampleRateSource)
-	if !ok {
-		return 0, false
-	}
-
-	rate, err := src.SampleRate()
-	if err != nil {
-		mc.mu.Lock()
-		mc.bpfMapErr++
-		mc.mu.Unlock()
-		log.Error("scrape sample rate", "err", err)
-		return 0, false
-	}
-	return rate, true
 }
 
 func (mc *MetricsCollector) ifname(ifindex uint32) string {

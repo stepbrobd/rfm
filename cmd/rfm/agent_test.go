@@ -180,8 +180,6 @@ func (s fakeStats) IfaceStats() ([]export.IfaceStatsEntry, error) {
 	return out, nil
 }
 
-func (s fakeStats) SampleRate() (uint32, error) { return s.f.sampleRate(), nil }
-
 // fakeReader hands out the events sent on events and otherwise waits for its
 // deadline the way the ring buffer reader does
 type fakeReader struct {

@@ -15,11 +15,6 @@ func (s *ProbeSource) IfaceStats() ([]IfaceStatsEntry, error) {
 	return nil, nil
 }
 
-// SampleRate returns the default no-sampling rate on non-Linux platforms
-func (s *ProbeSource) SampleRate() (uint32, error) {
-	return 1, nil
-}
-
 // IfaceStatsErrors returns no refused updates on non-Linux platforms
 func (s *ProbeSource) IfaceStatsErrors() (uint64, error) {
 	return 0, nil
