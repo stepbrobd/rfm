@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/netip"
 	"structs"
+	"unsafe"
 )
 
 const wireFlowEventSize = 64
@@ -27,6 +28,22 @@ type wireFlowEvent struct {
 	_       [7]uint8
 }
 
+// the field offsets of wireFlowEvent, DecodeFlowEvent reads each field at its
+// offset, binary.Decode would walk the struct by reflection on every record
+const (
+	offTstamp  = unsafe.Offsetof(wireFlowEvent{}.Tstamp)
+	offIfindex = unsafe.Offsetof(wireFlowEvent{}.Ifindex)
+	offDir     = unsafe.Offsetof(wireFlowEvent{}.Dir)
+	offProto   = unsafe.Offsetof(wireFlowEvent{}.Proto)
+	offSegs    = unsafe.Offsetof(wireFlowEvent{}.Segs)
+	offSrcAddr = unsafe.Offsetof(wireFlowEvent{}.SrcAddr)
+	offDstAddr = unsafe.Offsetof(wireFlowEvent{}.DstAddr)
+	offSrcPort = unsafe.Offsetof(wireFlowEvent{}.SrcPort)
+	offDstPort = unsafe.Offsetof(wireFlowEvent{}.DstPort)
+	offLen     = unsafe.Offsetof(wireFlowEvent{}.Len)
+	offL2Len   = unsafe.Offsetof(wireFlowEvent{}.L2Len)
+)
+
 // DecodeFlowEvent decodes one ring buffer record and refuses an event the
 // probe does not emit, so the methods of FlowEvent can rely on its fields
 func DecodeFlowEvent(raw []byte) (FlowEvent, error) {
@@ -34,23 +51,19 @@ func DecodeFlowEvent(raw []byte) (FlowEvent, error) {
 		return FlowEvent{}, fmt.Errorf("short flow event: %d < %d bytes", len(raw), wireFlowEventSize)
 	}
 
-	var wire wireFlowEvent
-	if _, err := binary.Decode(raw, binary.NativeEndian, &wire); err != nil {
-		return FlowEvent{}, fmt.Errorf("decode flow event: %w", err)
-	}
-
+	ne := binary.NativeEndian
 	ev := FlowEvent{
-		Tstamp:  wire.Tstamp,
-		Ifindex: wire.Ifindex,
-		Dir:     wire.Dir,
-		Proto:   wire.Proto,
-		SrcAddr: netip.AddrFrom16(wire.SrcAddr),
-		DstAddr: netip.AddrFrom16(wire.DstAddr),
-		SrcPort: wire.SrcPort,
-		DstPort: wire.DstPort,
-		Segs:    wire.Segs,
-		Len:     wire.Len,
-		L2Len:   wire.L2Len,
+		Tstamp:  ne.Uint64(raw[offTstamp:]),
+		Ifindex: ne.Uint32(raw[offIfindex:]),
+		Dir:     raw[offDir],
+		Proto:   raw[offProto],
+		SrcAddr: netip.AddrFrom16([16]byte(raw[offSrcAddr:])),
+		DstAddr: netip.AddrFrom16([16]byte(raw[offDstAddr:])),
+		SrcPort: ne.Uint16(raw[offSrcPort:]),
+		DstPort: ne.Uint16(raw[offDstPort:]),
+		Segs:    ne.Uint16(raw[offSegs:]),
+		Len:     ne.Uint32(raw[offLen:]),
+		L2Len:   raw[offL2Len],
 	}
 	// every skb stands for at least one wire packet, and the probe counts
 	// the l2 header of every wire packet in len
