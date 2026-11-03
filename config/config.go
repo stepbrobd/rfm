@@ -57,9 +57,9 @@ type BPFConfig struct {
 
 // CollectorConfig controls flow collection and eviction
 type CollectorConfig struct {
-	MaxFlows        int           `toml:"-"`
-	EvictionTimeout time.Duration `toml:"-"`
-	ActiveTimeout   time.Duration `toml:"-"`
+	MaxFlows        int           `toml:"max_flows"`
+	EvictionTimeout time.Duration `toml:"eviction_timeout"`
+	ActiveTimeout   time.Duration `toml:"active_timeout"`
 }
 
 // DefaultMaxFlows is the flow table size when max_flows is not set
@@ -67,23 +67,23 @@ const DefaultMaxFlows = 65536
 
 // IPFIXConfig controls export to a single IPFIX collector
 type IPFIXConfig struct {
-	Host                string
-	Port                int
-	Bind                IPFIXBindConfig
-	TemplateRefresh     time.Duration
-	ObservationDomainID uint32
+	Host                string          `toml:"host"`
+	Port                int             `toml:"port"`
+	Bind                IPFIXBindConfig `toml:"bind"`
+	TemplateRefresh     time.Duration   `toml:"template_refresh"`
+	ObservationDomainID uint32          `toml:"observation_domain_id"`
 	// QueueSize bounds the records waiting for the sender goroutine, an
 	// eviction sweep can hand the exporter every flow in the table at once,
 	// so the default is max_flows or DefaultIPFIXQueueSize, whichever is
 	// larger
-	QueueSize int
+	QueueSize int `toml:"queue_size"`
 	// FlushInterval is how long the sender gathers records before a message
 	// goes out when fewer than a full message are waiting
-	FlushInterval time.Duration
+	FlushInterval time.Duration `toml:"flush_interval"`
 	// MaxMessageSize caps one IPFIX message in bytes, the udp payload, kept
 	// 28 bytes under the path mtu over ipv4 and 48 over ipv6 for the ip and
 	// udp headers, so a message never fragments
-	MaxMessageSize int
+	MaxMessageSize int `toml:"max_message_size"`
 }
 
 // default exporter sizing
@@ -167,62 +167,21 @@ type RIBConfig struct {
 	BMP BMPConfig `toml:"bmp"`
 }
 
-// rawCollectorConfig mirrors CollectorConfig with string-typed fields for TOML decoding
-type rawCollectorConfig struct {
-	MaxFlows        int    `toml:"max_flows"`
-	EvictionTimeout string `toml:"eviction_timeout"`
-	ActiveTimeout   string `toml:"active_timeout"`
-}
-
-// rawIPFIXConfig mirrors IPFIXConfig with string-typed fields for TOML decoding
-type rawIPFIXConfig struct {
-	Host                string          `toml:"host"`
-	Port                int             `toml:"port"`
-	Bind                IPFIXBindConfig `toml:"bind"`
-	TemplateRefresh     string          `toml:"template_refresh"`
-	ObservationDomainID uint32          `toml:"observation_domain_id"`
-	QueueSize           int             `toml:"queue_size"`
-	FlushInterval       string          `toml:"flush_interval"`
-	MaxMessageSize      int             `toml:"max_message_size"`
-}
-
-// rawConfig is the wire format for TOML decoding, before duration parsing
-type rawConfig struct {
-	Agent struct {
-		Interfaces []string           `toml:"interfaces"`
-		BPF        BPFConfig          `toml:"bpf"`
-		Collector  rawCollectorConfig `toml:"collector"`
-		IPFIX      rawIPFIXConfig     `toml:"ipfix"`
-		Prometheus PrometheusConfig   `toml:"prometheus"`
-		Enrich     EnrichConfig       `toml:"enrich"`
-		Control    ControlConfig      `toml:"control"`
-	} `toml:"agent"`
-}
-
-// Load reads a TOML config file, applies defaults, parses durations, and validates
+// Load reads the TOML config file at path, fills in the defaults and
+// validates it
 func Load(path string) (*Config, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("reading config: %w", err)
 	}
 
-	// start with defaults
-	raw := rawConfig{}
-	raw.Agent.BPF.SampleRate = 100
-	raw.Agent.BPF.RingBufSize = 262144
-	raw.Agent.BPF.WakeupBatch = 64
-	raw.Agent.BPF.MaxSampleRate = 1000
-	raw.Agent.Collector.MaxFlows = DefaultMaxFlows
-	raw.Agent.Collector.EvictionTimeout = "30s"
-	raw.Agent.Collector.ActiveTimeout = "60s"
-	raw.Agent.IPFIX.TemplateRefresh = "60s"
-	raw.Agent.IPFIX.ObservationDomainID = 1
-	raw.Agent.IPFIX.FlushInterval = "1s"
-	raw.Agent.IPFIX.MaxMessageSize = DefaultIPFIXMaxMessageSize
-	raw.Agent.Prometheus.Host = "::1"
-	raw.Agent.Prometheus.Port = 9669
-
-	meta, err := toml.Decode(string(data), &raw)
+	cfg := &Config{Agent: AgentConfig{
+		BPF:        BPFConfig{SampleRate: 100, RingBufSize: 262144, WakeupBatch: 64, MaxSampleRate: 1000},
+		Collector:  CollectorConfig{MaxFlows: DefaultMaxFlows, EvictionTimeout: 30 * time.Second, ActiveTimeout: time.Minute},
+		IPFIX:      IPFIXConfig{TemplateRefresh: time.Minute, ObservationDomainID: 1, FlushInterval: time.Second, MaxMessageSize: DefaultIPFIXMaxMessageSize},
+		Prometheus: PrometheusConfig{Host: "::1", Port: 9669},
+	}}
+	meta, err := toml.Decode(string(data), cfg)
 	if err != nil {
 		return nil, fmt.Errorf("parsing config: %w", err)
 	}
@@ -230,64 +189,16 @@ func Load(path string) (*Config, error) {
 		return nil, fmt.Errorf("unknown config key: %s", undecoded[0])
 	}
 
-	// parse eviction timeout
-	evictionTimeout, err := time.ParseDuration(raw.Agent.Collector.EvictionTimeout)
-	if err != nil {
-		return nil, fmt.Errorf("parsing eviction_timeout %q: %w", raw.Agent.Collector.EvictionTimeout, err)
-	}
-
-	activeTimeout, err := time.ParseDuration(raw.Agent.Collector.ActiveTimeout)
-	if err != nil {
-		return nil, fmt.Errorf("parsing active_timeout %q: %w", raw.Agent.Collector.ActiveTimeout, err)
-	}
-
-	templateRefresh, err := time.ParseDuration(raw.Agent.IPFIX.TemplateRefresh)
-	if err != nil {
-		return nil, fmt.Errorf("parsing ipfix.template_refresh %q: %w", raw.Agent.IPFIX.TemplateRefresh, err)
-	}
-
-	flushInterval, err := time.ParseDuration(raw.Agent.IPFIX.FlushInterval)
-	if err != nil {
-		return nil, fmt.Errorf("parsing ipfix.flush_interval %q: %w", raw.Agent.IPFIX.FlushInterval, err)
-	}
-
-	defaultEndpoint(&raw.Agent.IPFIX.Host, &raw.Agent.IPFIX.Port, 4739)
-	defaultEndpoint(&raw.Agent.Enrich.RIB.BMP.Host, &raw.Agent.Enrich.RIB.BMP.Port, 11019)
-	queueSize := raw.Agent.IPFIX.QueueSize
-	if queueSize == 0 {
-		queueSize = max(DefaultIPFIXQueueSize, raw.Agent.Collector.MaxFlows)
-	}
-	ipfixCfg := IPFIXConfig{
-		Host:                raw.Agent.IPFIX.Host,
-		Port:                raw.Agent.IPFIX.Port,
-		Bind:                raw.Agent.IPFIX.Bind,
-		TemplateRefresh:     templateRefresh,
-		ObservationDomainID: raw.Agent.IPFIX.ObservationDomainID,
-		QueueSize:           queueSize,
-		FlushInterval:       flushInterval,
-		MaxMessageSize:      raw.Agent.IPFIX.MaxMessageSize,
-	}
-
-	cfg := &Config{
-		Agent: AgentConfig{
-			Interfaces: raw.Agent.Interfaces,
-			BPF:        raw.Agent.BPF,
-			Collector: CollectorConfig{
-				MaxFlows:        raw.Agent.Collector.MaxFlows,
-				EvictionTimeout: evictionTimeout,
-				ActiveTimeout:   activeTimeout,
-			},
-			IPFIX:      ipfixCfg,
-			Prometheus: raw.Agent.Prometheus,
-			Enrich:     raw.Agent.Enrich,
-			Control:    raw.Agent.Control,
-		},
+	a := &cfg.Agent
+	defaultEndpoint(&a.IPFIX.Host, &a.IPFIX.Port, 4739)
+	defaultEndpoint(&a.Enrich.RIB.BMP.Host, &a.Enrich.RIB.BMP.Port, 11019)
+	if a.IPFIX.QueueSize == 0 {
+		a.IPFIX.QueueSize = max(DefaultIPFIXQueueSize, a.Collector.MaxFlows)
 	}
 
 	if err := validate(cfg); err != nil {
 		return nil, err
 	}
-
 	return cfg, nil
 }
 
