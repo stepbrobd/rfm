@@ -55,7 +55,6 @@ const (
 	rfmMapRfmIfaceErrors       = "rfm_iface_errors"
 	rfmMapRfmIfaceSlot         = "rfm_iface_slot"
 	rfmMapRfmIfaceStats        = "rfm_iface_stats"
-	rfmMapRfmSubmitCount       = "rfm_submit_count"
 	rfmProgRfmTcEgress         = "rfm_tc_egress"
 	rfmProgRfmTcEgressSampled  = "rfm_tc_egress_sampled"
 	rfmProgRfmTcIngress        = "rfm_tc_ingress"
@@ -123,7 +122,6 @@ type rfmMapSpecs struct {
 	RfmIfaceErrors  *ebpf.MapSpec `ebpf:"rfm_iface_errors"`
 	RfmIfaceSlot    *ebpf.MapSpec `ebpf:"rfm_iface_slot"`
 	RfmIfaceStats   *ebpf.MapSpec `ebpf:"rfm_iface_stats"`
-	RfmSubmitCount  *ebpf.MapSpec `ebpf:"rfm_submit_count"`
 }
 
 // rfmVariableSpecs contains global variables before they are loaded into the kernel.
@@ -161,7 +159,6 @@ type rfmMaps struct {
 	RfmIfaceErrors  *ebpf.Map `ebpf:"rfm_iface_errors"`
 	RfmIfaceSlot    *ebpf.Map `ebpf:"rfm_iface_slot"`
 	RfmIfaceStats   *ebpf.Map `ebpf:"rfm_iface_stats"`
-	RfmSubmitCount  *ebpf.Map `ebpf:"rfm_submit_count"`
 }
 
 func (m *rfmMaps) Close() error {
@@ -174,7 +171,6 @@ func (m *rfmMaps) Close() error {
 		m.RfmIfaceErrors,
 		m.RfmIfaceSlot,
 		m.RfmIfaceStats,
-		m.RfmSubmitCount,
 	)
 }
 

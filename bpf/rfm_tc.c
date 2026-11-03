@@ -67,8 +67,7 @@ struct {
 	__type(value, struct rfm_slot_value);
 } rfm_iface_arr SEC(".maps");
 
-// rfm_cpu_draw holds the skip count and wakeup countdown of each CPU for the
-// sampled only programs, which draw before any parse, its counters stay unused
+// skip count and wakeup countdown per CPU of every draw without a slot
 struct {
 	__uint(type, BPF_MAP_TYPE_PERCPU_ARRAY);
 	__uint(max_entries, 1);
@@ -116,13 +115,6 @@ struct {
 	__type(key, __u32);
 	__type(value, __u64);
 } rfm_flow_drops SEC(".maps");
-
-struct {
-	__uint(type, BPF_MAP_TYPE_PERCPU_ARRAY);
-	__uint(max_entries, 1);
-	__type(key, __u32);
-	__type(value, __u64);
-} rfm_submit_count SEC(".maps");
 
 // the IPv4 IHL and the TCP data offset are read as nibbles of whole bytes,
 // bpfgen compiles the bpfel and the bpfeb object against one vmlinux.h, and
@@ -419,13 +411,14 @@ static __always_inline int rfm_tc(struct __sk_buff *skb, __u8 dir,
 		return TCX_NEXT;
 
 	if (!sampled_only) {
-		__u32 rate = rfm_cfg.sample_rate;
-		if (sval) {
-			if (!rfm_take(sval, rate))
+		if (!sval) {
+			__u32 key = 0;
+			sval = bpf_map_lookup_elem(&rfm_cpu_draw, &key);
+			if (!sval)
 				return TCX_NEXT;
-		} else if (bpf_get_prandom_u32() % rate != 0) {
-			return TCX_NEXT;
 		}
+		if (!rfm_take(sval, rfm_cfg.sample_rate))
+			return TCX_NEXT;
 	}
 
 	// nothing after the reservation can fail
@@ -488,18 +481,11 @@ static __always_inline int rfm_tc(struct __sk_buff *skb, __u8 dir,
 
 	// wake the reader once every wakeup_batch events, Load refuses 0
 	__u64 flags = BPF_RB_NO_WAKEUP;
-	if (sval) {
-		if (sval->wake <= 1) {
-			sval->wake = rfm_cfg.wakeup_batch;
-			flags = BPF_RB_FORCE_WAKEUP;
-		} else {
-			sval->wake--;
-		}
+	if (sval->wake <= 1) {
+		sval->wake = rfm_cfg.wakeup_batch;
+		flags = BPF_RB_FORCE_WAKEUP;
 	} else {
-		__u32 cnt_key = 0;
-		__u64 *cnt = bpf_map_lookup_elem(&rfm_submit_count, &cnt_key);
-		if (cnt && (++(*cnt) % rfm_cfg.wakeup_batch == 0))
-			flags = BPF_RB_FORCE_WAKEUP;
+		sval->wake--;
 	}
 	bpf_ringbuf_submit(ev, flags);
 

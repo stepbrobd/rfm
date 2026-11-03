@@ -2753,12 +2753,12 @@ func TestPinnedSlotSamplingRedrawsOnLoad(t *testing.T) {
 	}
 }
 
-func TestSlotWakeupCountsDownTheBatch(t *testing.T) {
+func TestWakeupCountsDownTheBatch(t *testing.T) {
 	testutil.RequireRoot(t)
 
 	testutil.NewNS(t)
 
-	// one CPU keeps the countdown in one slot entry
+	// one CPU keeps each countdown in one entry
 	pinOneCPU(t)
 
 	p, err := Load(Config{SampleRate: 1, WakeupBatch: 4})
@@ -2767,8 +2767,32 @@ func TestSlotWakeupCountsDownTheBatch(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer p.Close()
-	slotLoopback(t, p)
 
+	// the first event wakes the reader and every fourth after it
+	countDown := func(m *ebpf.Map, key uint32) {
+		t.Helper()
+		for i, want := range []uint32{4, 3, 2, 1, 4, 3} {
+			if got := loopbackSamples(t, p, 1); got != 1 {
+				t.Fatalf("event %d: samples = %d, want 1", i+1, got)
+			}
+			var vals []rfmRfmSlotValue
+			if err := m.Lookup(key, &vals); err != nil {
+				t.Fatal(err)
+			}
+			var left uint32
+			for _, v := range vals {
+				left += v.Wake
+			}
+			if left != want {
+				t.Fatalf("after event %d the entry waits %d events to wake, want %d", i+1, left, want)
+			}
+		}
+	}
+
+	// loopback without a slot counts down in the draw entry of the CPU
+	countDown(p.objs.RfmCpuDraw, 0)
+
+	slotLoopback(t, p)
 	lo, err := netlink.LinkByName("lo")
 	if err != nil {
 		t.Fatal(err)
@@ -2776,24 +2800,7 @@ func TestSlotWakeupCountsDownTheBatch(t *testing.T) {
 	p.mu.Lock()
 	slot := p.slots.held()[uint32(lo.Attrs().Index)]
 	p.mu.Unlock()
-
-	// the first event wakes the reader and every fourth after it
-	for i, want := range []uint32{4, 3, 2, 1, 4, 3} {
-		if got := loopbackSamples(t, p, 1); got != 1 {
-			t.Fatalf("event %d: samples = %d, want 1", i+1, got)
-		}
-		var vals []rfmRfmSlotValue
-		if err := p.objs.RfmIfaceArr.Lookup(slotIndex(slot, 0, slotFamily(4)), &vals); err != nil {
-			t.Fatal(err)
-		}
-		var left uint32
-		for _, v := range vals {
-			left += v.Wake
-		}
-		if left != want {
-			t.Fatalf("after event %d the slot waits %d events to wake, want %d", i+1, left, want)
-		}
-	}
+	countDown(p.objs.RfmIfaceArr, slotIndex(slot, 0, slotFamily(4)))
 }
 
 func TestFlowEventWritesEveryByte(t *testing.T) {

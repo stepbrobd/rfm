@@ -221,10 +221,10 @@ as a regex is rejected at config load.
 
 `sample_rate` (uint32, default 100): Sample 1 in N skbs on average for flow
 events. An interface with a counter slot samples after a gap drawn uniformly
-between 1 and 2N-1 skbs, one random draw per sample, and an interface without a
-slot draws for every skb. With `sampled_only` each CPU keeps one gap over all
-its skbs, non-IP included, and the IP skbs keep the same average rate. A new
-rate applies from the next skb. After GRO or before GSO one skb stands for
+between 1 and 2N-1 skbs, one random draw per sample, and the interfaces without
+a slot share one such gap per CPU. With `sampled_only` each CPU keeps one gap
+over all its skbs, non-IP included, and the IP skbs keep the same average rate.
+A new rate applies from the next skb. After GRO or before GSO one skb stands for
 several wire packets, and its event carries all of them. Must be greater than 0.
 A value of 1 samples every skb. Higher values reduce ring buffer throughput at
 the cost of flow granularity.
