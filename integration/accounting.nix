@@ -7,7 +7,7 @@ in
   name = "rfm-accounting";
 
   # enableDebugHook = true;
-  interactive.sshBackdoor.enable = true;
+  inherit (common) interactive;
 
   nodes = { inherit (common) machine3 machine4; };
 

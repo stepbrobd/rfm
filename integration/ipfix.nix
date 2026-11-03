@@ -7,7 +7,7 @@ in
   name = "rfm-ipfix";
 
   # enableDebugHook = true;
-  interactive.sshBackdoor.enable = true;
+  inherit (common) interactive;
 
   nodes = { inherit (common) machine1 machine2; };
 

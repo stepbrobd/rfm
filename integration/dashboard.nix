@@ -7,7 +7,7 @@ in
   name = "rfm-dashboard";
 
   # enableDebugHook = true;
-  interactive.sshBackdoor.enable = true;
+  inherit (common) interactive;
 
   nodes = {
     inherit (common) machine2;

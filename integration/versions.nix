@@ -38,7 +38,7 @@ in
   name = "rfm-versions";
 
   # enableDebugHook = true;
-  interactive.sshBackdoor.enable = true;
+  inherit (common) interactive;
 
   nodes = std.listToAttrs (
     std.map (attr: {

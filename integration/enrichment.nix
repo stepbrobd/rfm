@@ -7,7 +7,7 @@ in
   name = "rfm-enrichment";
 
   # enableDebugHook = true;
-  interactive.sshBackdoor.enable = true;
+  inherit (common) interactive;
 
   nodes.machine1 =
     { pkgs, ... }:

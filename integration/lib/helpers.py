@@ -25,7 +25,6 @@ def require_metric(metrics: str, name: str, **labels: str) -> list[float]:
   raise AssertionError(
     f"missing {name} with labels {labels}, candidates: {lines}"
   )
-  return vals
 
 def require_positive(metrics: str, name: str, **labels: str) -> list[float]:
   vals = require_metric(metrics, name, **labels)
