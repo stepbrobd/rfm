@@ -218,16 +218,14 @@ func (c *Collector) Record(ev FlowEvent) {
 	c.RecordBatch([]FlowEvent{ev})
 }
 
-// RecordBatch records evs under one lock, the labels of new flows are looked up before it
+// RecordBatch records evs, the labels of new flows are looked up between two passes under the lock
 func (c *Collector) RecordBatch(evs []FlowEvent) {
-	labels := c.newFlowLabels(evs)
-
 	var expired []ExportedFlow
 	var unresolved []int
 
 	c.mu.Lock()
 	for i, ev := range evs {
-		ended, evicted, ok := c.recordLocked(ev, labels)
+		ended, evicted, ok := c.recordLocked(ev, nil)
 		if !ok {
 			unresolved = append(unresolved, i)
 		} else if evicted {
@@ -242,7 +240,7 @@ func (c *Collector) RecordBatch(evs []FlowEvent) {
 		for j, i := range unresolved {
 			pairs[j] = addrPair{evs[i].SrcAddr, evs[i].DstAddr}
 		}
-		labels = c.enrich(pairs, labels)
+		labels := c.enrich(pairs)
 
 		c.mu.Lock()
 		for _, i := range unresolved {
@@ -267,38 +265,14 @@ type labelPair struct {
 	src, dst Labels
 }
 
-// newFlowLabels resolves the labels of the events whose flow is not in the
-// table yet, the lookups run without the lock
-func (c *Collector) newFlowLabels(evs []FlowEvent) map[addrPair]labelPair {
-	if c.enricher == nil {
-		return nil
-	}
-	var pairs []addrPair
-	c.mu.RLock()
-	for _, ev := range evs {
-		if _, ok := c.flows[ev.Key()]; !ok {
-			pairs = append(pairs, addrPair{ev.SrcAddr, ev.DstAddr})
-		}
-	}
-	c.mu.RUnlock()
-	return c.enrich(pairs, nil)
-}
-
-// enrich adds the labels of every pair not in labels yet and returns the map
-// it must be called without mu held
-func (c *Collector) enrich(pairs []addrPair, labels map[addrPair]labelPair) map[addrPair]labelPair {
-	if c.enricher == nil {
-		return labels
-	}
+// enrich looks up the labels of pairs, it must be called without mu held
+func (c *Collector) enrich(pairs []addrPair) map[addrPair]labelPair {
+	labels := make(map[addrPair]labelPair, len(pairs))
 	for _, p := range pairs {
-		if _, ok := labels[p]; ok {
-			continue
+		if _, ok := labels[p]; !ok {
+			src, dst := c.enricher.Enrich(p.src, p.dst)
+			labels[p] = labelPair{src, dst}
 		}
-		if labels == nil {
-			labels = make(map[addrPair]labelPair, len(pairs))
-		}
-		src, dst := c.enricher.Enrich(p.src, p.dst)
-		labels[p] = labelPair{src, dst}
 	}
 	return labels
 }
