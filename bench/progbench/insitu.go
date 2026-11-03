@@ -3,6 +3,7 @@
 package main
 
 import (
+	"encoding/binary"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -296,8 +297,6 @@ func phyCounters(iface string) (phy, error) {
 	return w, nil
 }
 
-type cntValue struct{ Packets, Bytes, Skip uint64 }
-
 type hashKey struct {
 	Ifindex uint32
 	Dir     uint8
@@ -316,13 +315,17 @@ func ingressCounters(coll *ebpf.Collection, ifindex int) (uint64, uint64) {
 	}
 	var pkts, bytes uint64
 	if m, ok := coll.Maps["rfm_iface_arr"]; ok {
+		// every build leads its value with the two counters, the fields
+		// after them differ, so each CPU's value is read up to its stride
+		stride := (int(m.ValueSize()) + 7) &^ 7
 		for idx := range uint32(3) {
-			var per []cntValue
-			if err := m.Lookup(idx, &per); err == nil {
-				for _, v := range per {
-					pkts += v.Packets
-					bytes += v.Bytes
-				}
+			buf, err := m.LookupBytes(idx)
+			if err != nil {
+				continue
+			}
+			for off := 0; off+16 <= len(buf); off += stride {
+				pkts += binary.NativeEndian.Uint64(buf[off:])
+				bytes += binary.NativeEndian.Uint64(buf[off+8:])
 			}
 		}
 	}
