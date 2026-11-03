@@ -1,5 +1,8 @@
 # RFM Benchmark Run 2026-06-21 (Grid'5000 Grenoble, dahu, routed KaVLAN)
 
+The head-to-head figures of netobserv and hsflowd below are inflated by orphaned
+libpcap captures, [2026-06-24](../2026-06-24/readme.md) has the corrected ones.
+
 Produced by bench/workload/*.nu on the nodes below. See *.json files in this
 directory.
 
