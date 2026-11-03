@@ -326,9 +326,11 @@ in
         ];
         NoNewPrivileges = true;
 
-        # the tree is read only except the runtime directory, the pin
-        # directory lives under /sys which strict mode leaves writable
         ProtectSystem = "strict";
+        ProtectKernelTunables = true;
+        ReadWritePaths = std.optionals (cfg.settings.agent.bpf.pin_path != "") [
+          "-${cfg.settings.agent.bpf.pin_path}"
+        ];
         ProtectHome = true;
         PrivateTmp = true;
         ProtectControlGroups = true;

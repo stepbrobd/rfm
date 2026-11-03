@@ -685,11 +685,12 @@ without `CAP_NET_BIND_SERVICE`, a control socket that is not a file directly in
 `/sys/fs/bpf`.
 
 The service runs as the `rfm` system user with `CAP_BPF`, `CAP_NET_ADMIN` and
-`CAP_PERFMON` as ambient capabilities and a read-only view of the system. The
-module sets the control socket to `/run/rfm/rfm.sock` and pins the interface
-counters under `/sys/fs/bpf/rfm`, which it creates for that user. MMDB files
-must be readable by the `rfm` user, the geoipupdate module's database directory
-is.
+`CAP_PERFMON` as ambient capabilities. Its mount namespace makes the file system
+and the kernel tunables read-only, except for the runtime directory, the pin
+directory, `/dev` and a private `/tmp`. The module sets the control socket to
+`/run/rfm/rfm.sock` and pins the interface counters under `/sys/fs/bpf/rfm`,
+which it creates for that user. MMDB files must be readable by the `rfm` user,
+as the geoipupdate module's database directory is.
 
 ## Scope
 
