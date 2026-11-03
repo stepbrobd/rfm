@@ -46,13 +46,14 @@ func TestRateControllerDoublesOnDropsAndRelaxes(t *testing.T) {
 }
 
 func TestRateControllerNeverGoesBelowBase(t *testing.T) {
-	r := newRateController(10, 10)
-	for range 3 * quietTicks {
-		if got, changed := r.step(0); got != 10 || changed {
-			t.Fatalf("rate=%d changed=%v, want 10 unchanged", got, changed)
-		}
+	// 150 doubles to 300, then two quiet streaks halve it to 150 and to the base 100, not to 75
+	r := newRateController(100, 1000)
+	r.reset(150)
+	r.step(1)
+	for range 2 * quietTicks {
+		r.step(0)
 	}
-	if got, changed := r.step(9); got != 10 || changed {
-		t.Fatalf("rate with max == base = %d changed=%v, want 10 unchanged", got, changed)
+	if r.rate != 100 {
+		t.Fatalf("rate after two quiet streaks = %d, want the base 100", r.rate)
 	}
 }

@@ -1294,11 +1294,11 @@ func TestRecordBatchEnrichesFlowsForcedOutWithinTheBatch(t *testing.T) {
 		Len:     100,
 	}
 	b := a
+	b.SrcAddr = netip.MustParseAddr("::ffff:10.0.0.3")
 	b.SrcPort = 2000
 	c.Record(at(a, t0))
 
-	// b forces a out of a table of one, then a comes back as a new flow in
-	// the same batch and still needs its labels
+	// b forces a out of a table of one, a comes back in the same batch with labels nobody looked up
 	c.RecordBatch([]FlowEvent{at(b, t0+time.Millisecond), at(a, t0+2*time.Millisecond)})
 
 	flows := c.Flows()
