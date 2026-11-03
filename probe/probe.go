@@ -3,13 +3,11 @@
 package probe
 
 import (
-	"cmp"
 	"errors"
 	"fmt"
 	"math/rand/v2"
 	"os"
 	"path/filepath"
-	"slices"
 	"sync"
 
 	"github.com/charmbracelet/log"
@@ -531,35 +529,24 @@ func (p *Probe) Counters() ([]IfaceCounter, error) {
 			out = append(out, c)
 		}
 	}
-	slices.SortFunc(out, func(a, b IfaceCounter) int {
-		return cmp.Or(cmp.Compare(a.Ifindex, b.Ifindex), cmp.Compare(a.Dir, b.Dir), cmp.Compare(a.Proto, b.Proto))
-	})
 	return out, nil
 }
 
-// IfaceStatsErrors returns how many counter updates the programs could not
-// store in the interface counter map, a full map is the usual cause, the
-// traffic of a refused key goes uncounted
+// IfaceStatsErrors counts the counter updates rfm_iface_stats refused
 func (p *Probe) IfaceStatsErrors() (uint64, error) {
-	var vals []uint64
-	if err := p.objs.RfmIfaceErrors.Lookup(uint32(0), &vals); err != nil {
-		return 0, fmt.Errorf("read iface stats errors: %w", err)
-	}
-	var total uint64
-	for _, v := range vals {
-		total += v
-	}
-	return total, nil
+	return sumCPUs(p.objs.RfmIfaceErrors)
 }
 
-// GSOHeaderErrors returns how many GSO skbs the programs counted without
-// the header size they needed, an ingress one lacks the header bytes of its
-// extra segments in the byte counters, and one without a segment count counts
-// as a single packet
+// GSOHeaderErrors counts the gso skbs counted without the header size they needed
 func (p *Probe) GSOHeaderErrors() (uint64, error) {
+	return sumCPUs(p.objs.RfmGsoHdrErrors)
+}
+
+// sumCPUs sums the per-CPU values of the one entry of m
+func sumCPUs(m *ebpf.Map) (uint64, error) {
 	var vals []uint64
-	if err := p.objs.RfmGsoHdrErrors.Lookup(uint32(0), &vals); err != nil {
-		return 0, fmt.Errorf("read gso header errors: %w", err)
+	if err := m.Lookup(uint32(0), &vals); err != nil {
+		return 0, err
 	}
 	var total uint64
 	for _, v := range vals {
