@@ -73,8 +73,9 @@ func (s *flowState) mark(now time.Duration) {
 
 // rollupState is one label tuple with the counters a scrape exposes
 type rollupState struct {
-	RollupCounters
-	key RollupKey
+	Counts
+	lastSeen time.Duration
+	key      RollupKey
 	// id tells this life of the tuple apart from any other
 	id uint64
 	// live sums the counts of the live flows under the tuple, kept current
@@ -96,6 +97,6 @@ type rollupState struct {
 func (r *rollupState) add(d Counts, t time.Duration) {
 	r.Counts.add(d)
 	r.live.add(d)
-	r.LastSeen = max(r.LastSeen, t)
+	r.lastSeen = max(r.lastSeen, t)
 	r.shown = false
 }

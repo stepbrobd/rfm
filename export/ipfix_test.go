@@ -271,7 +271,7 @@ func TestIPFIXSkipsCollectorTraffic(t *testing.T) {
 			IPBytes:    128,
 			EstPackets: 1,
 		},
-		collector.FlowEndReasonEndOfFlow,
+		collector.FlowEndReasonIdleTimeout,
 	)
 
 	if err := exp.ExportFlow(collectorFlow); err != nil {
@@ -1061,36 +1061,6 @@ func TestIPFIXCloseSendsTheQueuedRecords(t *testing.T) {
 	}
 	if got := exp.Stats().Records; got != 1+queued {
 		t.Fatalf("records sent = %d, want the flushed one and the %d Close found queued", got, queued)
-	}
-}
-
-func TestIPFIXRefusesRecordsWithoutAnEstimate(t *testing.T) {
-	loadIPFIXRegistry.Do(registry.LoadRegistry)
-
-	conn := startIPFIXListener(t)
-	addr := conn.LocalAddr().(*net.UDPAddr)
-
-	exp, err := NewIPFIX(testIPFIXConfig(addr.IP.String(), addr.Port))
-	if err != nil {
-		t.Fatalf("NewIPFIX: %v", err)
-	}
-	defer exp.Close()
-
-	// the sampling probability of a record is its packets over its
-	// estimate, which counts every sampled packet at least once
-	for _, tc := range []struct{ packets, estimate uint64 }{{2, 0}, {2, 1}, {0, 0}} {
-		flow := testFlow("::ffff:10.0.0.1", "::ffff:10.0.0.2", 1)
-		flow.Packets, flow.EstPackets = tc.packets, tc.estimate
-		if err := exp.ExportFlow(flow); err == nil {
-			t.Fatalf("record of %d packets with an estimate of %d queued, want it refused", tc.packets, tc.estimate)
-		}
-	}
-	if err := exp.Flush(); err != nil {
-		t.Fatalf("Flush: %v", err)
-	}
-	assertNoIPFIXDatagram(t, conn)
-	if got := exp.Stats().EncodeErrors; got != 3 {
-		t.Fatalf("encode errors = %d, want the 3 refused records", got)
 	}
 }
 

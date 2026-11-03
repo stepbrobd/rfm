@@ -141,23 +141,6 @@ func (e FlowEntry) counts() Counts {
 	return Counts{Packets: e.Packets, Bytes: e.Bytes, EstPackets: e.EstPackets, EstBytes: e.EstBytes}
 }
 
-// RollupCounters accumulate every event recorded under one RollupKey
-// unlike FlowEntry they never reset when flows are evicted, so they export
-// as monotonic counters that rate() and increase() can consume
-type RollupCounters struct {
-	Counts
-	LastSeen time.Duration
-}
-
-// SamplingProbability is the share of wire packets this entry saw, 1 when
-// nothing was sampled
-func (e FlowEntry) SamplingProbability() float64 {
-	if e.EstPackets == 0 {
-		return 1
-	}
-	return float64(e.Packets) / float64(e.EstPackets)
-}
-
 // Stats holds collector-level statistics
 type Stats struct {
 	ActiveFlows     uint64

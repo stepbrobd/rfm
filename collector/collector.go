@@ -206,11 +206,6 @@ func (c *Collector) SetActiveTimeout(d time.Duration) {
 	c.mu.Unlock()
 }
 
-// Enricher returns the enricher passed to New
-func (c *Collector) Enricher() Enricher {
-	return c.enricher
-}
-
 // SetFlowExporter sets the exporter for completed flows
 func (c *Collector) SetFlowExporter(exp FlowExporter) {
 	c.mu.Lock()
@@ -482,7 +477,7 @@ func (c *Collector) sweep(now, period time.Duration) {
 	stale := now - RollupRetention*c.timeout
 	for front := c.idleRollups.Front(); front != nil; front = c.idleRollups.Front() {
 		r := front.Value.(*rollupState)
-		if r.LastSeen >= stale || !r.shown {
+		if r.lastSeen >= stale || !r.shown {
 			break
 		}
 		c.dropRollupLocked(r)

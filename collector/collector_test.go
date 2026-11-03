@@ -1370,9 +1370,6 @@ func TestSampleRateScalesEstimatesAtRecordTime(t *testing.T) {
 	if entry.EstPackets != 40 || entry.EstBytes != 4000 {
 		t.Fatalf("estimated = %d packets %d bytes, want 40 and 4000", entry.EstPackets, entry.EstBytes)
 	}
-	if got := entry.SamplingProbability(); got < 0.074 || got > 0.076 {
-		t.Fatalf("sampling probability = %v, want 3/40", got)
-	}
 }
 
 func TestExportedRecordCarriesEstimateDelta(t *testing.T) {
@@ -1444,13 +1441,13 @@ func TestAdaptiveSamplingAppliesRateOnDrops(t *testing.T) {
 }
 
 // rollupCounters returns a snapshot of the per label counters
-func rollupCounters(c *Collector) map[RollupKey]RollupCounters {
+func rollupCounters(c *Collector) map[RollupKey]Counts {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
-	snap := make(map[RollupKey]RollupCounters, len(c.rollups))
+	snap := make(map[RollupKey]Counts, len(c.rollups))
 	for k, r := range c.rollups {
-		snap[k] = r.RollupCounters
+		snap[k] = r.Counts
 	}
 	return snap
 }

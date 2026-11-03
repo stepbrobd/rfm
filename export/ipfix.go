@@ -290,10 +290,7 @@ func (e *IPFIXExporter) Flush() error {
 	}
 }
 
-// ExportFlow queues a completed flow for export
-// it returns an error when the queue is full, the exporter is closed or the
-// record has no packets or an estimate below them, the record is then lost
-// and counted
+// ExportFlow queues flow, a refused record is counted and returned as an error
 func (e *IPFIXExporter) ExportFlow(flow collector.ExportedFlow) error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
@@ -301,12 +298,6 @@ func (e *IPFIXExporter) ExportFlow(flow collector.ExportedFlow) error {
 	if e.closed {
 		e.stats.Unsent++
 		return errors.New("ipfix exporter closed")
-	}
-	// the sampling probability of a record is its packets over its estimate,
-	// and the collector scales every sampled packet by a rate of at least 1
-	if flow.Packets == 0 || flow.EstPackets < flow.Packets {
-		e.stats.EncodeErrors++
-		return fmt.Errorf("ipfix record of %d packets with an estimate of %d", flow.Packets, flow.EstPackets)
 	}
 	if e.isOwnExportFlowLocked(flow) {
 		return nil
@@ -561,10 +552,6 @@ func (e *IPFIXExporter) write(now time.Time, sets []entities.Set, dataRecords ui
 		set.UpdateLenInHeader()
 		msgLen += set.GetSetLength()
 	}
-	if msgLen > entities.MaxSocketMsgSize {
-		return fmt.Errorf("message size %d exceeds max socket buffer size", msgLen)
-	}
-
 	msg := entities.NewMessage(false)
 	msg.SetVersion(10)
 	msg.SetObsDomainID(e.observationDomainID)

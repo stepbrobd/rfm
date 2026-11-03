@@ -2,15 +2,10 @@ package collector
 
 import "time"
 
-// IPFIX flowEndReason values from the IANA registry (information element 136)
-// idle timeout marks a flow that went quiet, active timeout marks an interval
-// record for a flow that keeps going, end of flow is reserved for a protocol
-// level end such as TCP FIN, forced end covers agent shutdown, and lack of
-// resources covers eviction because the flow table is full
+// IPFIX flowEndReason values, IANA IE 136
 const (
 	FlowEndReasonIdleTimeout     uint8 = 0x01
 	FlowEndReasonActiveTimeout   uint8 = 0x02
-	FlowEndReasonEndOfFlow       uint8 = 0x03
 	FlowEndReasonForcedEnd       uint8 = 0x04
 	FlowEndReasonLackOfResources uint8 = 0x05
 )
