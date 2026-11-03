@@ -83,6 +83,12 @@ in
                       description = "Upper bound for the adaptive sample rate and for any rate set with `rfm set sample-rate`.";
                     };
 
+                    sampled_only = std.mkOption {
+                      type = std.types.bool;
+                      default = false;
+                      description = "Keep no exact interface counters, a packet the sampling draw passes over then costs only the draw. The interface metrics go away, the flow metrics stay.";
+                    };
+
                     # the unit opens the mount root to its user and creates
                     # the pin directory in it, nothing deeper
                     pin_path = std.mkOption {

@@ -981,6 +981,11 @@ func TestProbeConfigKeepsTheMapSizeAcrossStarts(t *testing.T) {
 	if got := probeConfig(cfg).IfaceStatsSize; got != 8192 {
 		t.Fatalf("iface stats size = %d, want the configured 8192", got)
 	}
+
+	cfg.Agent.BPF.SampledOnly = true
+	if !probeConfig(cfg).SampledOnly {
+		t.Fatal("sampled only dropped on the way to the probe")
+	}
 }
 
 func TestRunAgentBadConfig(t *testing.T) {

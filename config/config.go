@@ -50,6 +50,9 @@ type BPFConfig struct {
 	// PinPath is a bpffs directory that keeps the interface counters across
 	// restarts, empty keeps them private to the process
 	PinPath string `toml:"pin_path"`
+	// SampledOnly keeps no exact interface counters, a packet the sampling
+	// draw passes over then costs only the draw
+	SampledOnly bool `toml:"sampled_only"`
 }
 
 // CollectorConfig controls flow collection and eviction

@@ -445,6 +445,34 @@ pin_path = "/sys/fs/bpf/rfm"
 	}
 }
 
+func TestLoadSampledOnly(t *testing.T) {
+	path := writeTOML(t, `
+[agent]
+interfaces = ["eth0"]
+`)
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Agent.BPF.SampledOnly {
+		t.Fatal("sampled_only = true, want false by default")
+	}
+
+	path = writeTOML(t, `
+[agent]
+interfaces = ["eth0"]
+
+[agent.bpf]
+sampled_only = true
+`)
+	if cfg, err = Load(path); err != nil {
+		t.Fatal(err)
+	}
+	if !cfg.Agent.BPF.SampledOnly {
+		t.Fatal("sampled_only = false, want true")
+	}
+}
+
 func TestLoadAdaptiveSamplingDefaults(t *testing.T) {
 	path := writeTOML(t, `
 [agent]

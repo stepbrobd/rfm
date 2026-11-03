@@ -431,5 +431,6 @@ func probeConfig(cfg *config.Config) probe.Config {
 		WakeupBatch:    cfg.Agent.BPF.WakeupBatch,
 		IfaceStatsSize: cfg.Agent.BPF.IfaceStatsSize,
 		PinPath:        cfg.Agent.BPF.PinPath,
+		SampledOnly:    cfg.Agent.BPF.SampledOnly,
 	}
 }
