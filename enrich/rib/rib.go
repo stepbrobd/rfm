@@ -22,37 +22,6 @@ import (
 	"ysun.co/rfm/config"
 )
 
-const (
-	// bmpScannerMaxBuf caps BMP message size, very big and prob not necessary (just in case)
-	bmpScannerMaxBuf = 1 << 20
-	// removeChunk is how many routes removePeer withdraws per hold of mu, the
-	// collector's read loop waits for labels meanwhile
-	removeChunk = 1024
-	// maxSessions bounds the BMP sessions open at once, a router runs one
-	// or a few and every session holds a goroutine and its read buffer
-	maxSessions = 16
-	// maxPathLen and maxCommunities bound what a route keeps of its
-	// attributes, labels need only the origin, which the route keeps apart,
-	// and a lookup shows the leading part of a longer list on a route
-	// marked truncated, a route whose attributes no other route shares then
-	// holds under 2 KiB of heap however long they are
-	maxPathLen     = 32
-	maxCommunities = 32
-	// maxRoutes bounds the routes the RIB keeps, six views of a full table
-	// of about 1.25M prefixes fit, and maxViews bounds the views
-	maxRoutes = 1 << 23
-	maxViews  = 1024
-	// staleGrace is how long an open session of the same speaker, a later
-	// one or one already open, has to announce a view again before the
-	// routes an ended session left in it go, counted from when the view went
-	// stale or the session opened, whichever is later, over twice the 120 s
-	// ConnectRetryTime RFC 4271 suggests, so a peer that the restarted
-	// speaker connects to again is back in time, and staleSweep is how often
-	// the server looks
-	staleGrace = 5 * time.Minute
-	staleSweep = time.Minute
-)
-
 // LargeCommunity is a decoded RFC 8092 large community
 type LargeCommunity struct {
 	GlobalAdmin uint32
@@ -643,7 +612,7 @@ func (s *Server) accept() {
 			}
 			// a listener out of file descriptors fails every accept at
 			// once, so wait between tries as net/http does
-			delay = min(max(2*delay, 5*time.Millisecond), time.Second)
+			delay = min(max(2*delay, acceptBackoffMin), acceptBackoffMax)
 			log.Warn("bmp accept", "err", err, "retry_in", delay)
 			select {
 			case <-s.done:
@@ -871,7 +840,7 @@ func (s *Server) trackConn(conn net.Conn) bool {
 	if len(s.conns) >= s.maxSessions {
 		rejected := s.sessionsRejected.Add(1)
 		_ = conn.Close()
-		if every(&s.limitLogged, time.Minute) {
+		if every(&s.limitLogged, limitLogInterval) {
 			log.Warn("bmp session limit reached, closing new sessions", "remote", conn.RemoteAddr(), "limit", s.maxSessions, "rejected", rejected)
 		}
 		return false
@@ -1100,7 +1069,7 @@ func (t *table) admit(newView bool) bool {
 		return true
 	}
 	rejected := t.rejected.Add(1)
-	if every(&t.limitLogged, time.Minute) {
+	if every(&t.limitLogged, limitLogInterval) {
 		log.Warn("rib limit reached, dropping routes", "limit", limit, "routes", t.routes, "views", len(t.views), "rejected", rejected)
 	}
 	return false

@@ -17,17 +17,6 @@ import (
 	"github.com/charmbracelet/log"
 )
 
-// requestTimeout bounds one connection so a stuck client cannot pin a
-// server goroutine
-const requestTimeout = 5 * time.Second
-
-// maxRequestSize bounds one request, real ones are a few hundred bytes
-const maxRequestSize = 64 << 10
-
-// maxConns bounds the connections served at once, further clients wait in
-// the listen backlog
-const maxConns = 16
-
 // Server answers requests on a unix socket
 type Server struct {
 	handler  Handler
@@ -141,7 +130,7 @@ func (s *Server) Serve(ctx context.Context) error {
 			if !errors.As(err, &te) || !te.Temporary() {
 				return fmt.Errorf("accept control connection: %w", err)
 			}
-			delay = min(max(2*delay, 5*time.Millisecond), time.Second)
+			delay = min(max(2*delay, acceptBackoffMin), acceptBackoffMax)
 			log.Error("accept control connection", "err", err, "retry_in", delay)
 			select {
 			case <-time.After(delay):
@@ -197,7 +186,7 @@ func (s *Server) handle(req Request) (any, error) {
 	case CmdStatus:
 		return s.handler.Status()
 	case CmdFlowsTop:
-		n := 20
+		n := defaultTopFlows
 		if v := req.Args["n"]; v != "" {
 			parsed, err := strconv.Atoi(v)
 			if err != nil || parsed < 1 {

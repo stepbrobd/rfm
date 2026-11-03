@@ -304,7 +304,7 @@ func runAgent(ctx context.Context, path string, deps agentDeps) error {
 			log.Error("close ipfix exporter", "err", err)
 		}
 	}
-	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), shutdownTimeout)
 	defer shutdownCancel()
 	srv.Shutdown(shutdownCtx)
 	return stopped(ctx, run)
@@ -373,16 +373,6 @@ func reportInterfaces(ctx context.Context, p agentProbe, patterns []string) {
 	}
 }
 
-// a scrape gathers and encodes every series, tens of MiB at the fleet's
-// series count, which the endpoint must not let clients multiply
-const (
-	// metricsInFlight lets a scraper and an operator's curl gather at the
-	// same time, further scrapes are refused with 503 until one is done
-	metricsInFlight = 2
-	// metricsTimeout bounds a gather, past it the scrape gets a 503
-	metricsTimeout = 30 * time.Second
-)
-
 // newMetricsServer serves reg on /metrics, gathers that run longer than
 // timeout are answered with 503
 // with a timeout the handler encodes into a buffer and gives up its slot
@@ -399,9 +389,9 @@ func newMetricsServer(reg prometheus.Gatherer, timeout time.Duration) *http.Serv
 	// beyond loopback
 	return &http.Server{
 		Handler:           mux,
-		ReadHeaderTimeout: 10 * time.Second,
-		WriteTimeout:      timeout + 30*time.Second,
-		IdleTimeout:       2 * time.Minute,
+		ReadHeaderTimeout: metricsReadHeaderTimeout,
+		WriteTimeout:      timeout + metricsWriteSlack,
+		IdleTimeout:       metricsIdleTimeout,
 	}
 }
 

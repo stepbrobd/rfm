@@ -62,9 +62,6 @@ type CollectorConfig struct {
 	ActiveTimeout   time.Duration `toml:"active_timeout"`
 }
 
-// DefaultMaxFlows is the flow table size when max_flows is not set
-const DefaultMaxFlows = 65536
-
 // IPFIXConfig controls export to a single IPFIX collector
 type IPFIXConfig struct {
 	Host                string          `toml:"host"`
@@ -81,18 +78,6 @@ type IPFIXConfig struct {
 	// udp headers, so a message never fragments
 	MaxMessageSize int `toml:"max_message_size"`
 }
-
-// default exporter sizing
-const (
-	DefaultIPFIXQueueSize      = 4096
-	DefaultIPFIXMaxMessageSize = 1200
-)
-
-// MinIPFIXMaxMessageSize is the smallest max_message_size the sender keeps
-// to, a message carries at least one record and the template of its family
-// when that is due, and the largest of those is the message header, the
-// ipv6 template set and one ipv6 record
-const MinIPFIXMaxMessageSize = 171
 
 // IPFIXBindConfig controls the local UDP bind used by the IPFIX exporter
 type IPFIXBindConfig struct {
@@ -165,10 +150,10 @@ type RIBConfig struct {
 // Parse decodes a TOML config, fills in the defaults and validates it
 func Parse(data []byte) (*Config, error) {
 	cfg := &Config{Agent: AgentConfig{
-		BPF:        BPFConfig{SampleRate: 100, RingBufSize: 262144, WakeupBatch: 64, MaxSampleRate: 1000},
-		Collector:  CollectorConfig{MaxFlows: DefaultMaxFlows, EvictionTimeout: 30 * time.Second, ActiveTimeout: time.Minute},
-		IPFIX:      IPFIXConfig{TemplateRefresh: time.Minute, ObservationDomainID: 1, MaxMessageSize: DefaultIPFIXMaxMessageSize},
-		Prometheus: PrometheusConfig{Host: "::1", Port: 9669},
+		BPF:        BPFConfig{SampleRate: defaultSampleRate, RingBufSize: defaultRingBufSize, WakeupBatch: defaultWakeupBatch, MaxSampleRate: defaultMaxSampleRate},
+		Collector:  CollectorConfig{MaxFlows: DefaultMaxFlows, EvictionTimeout: defaultEvictionTimeout, ActiveTimeout: defaultActiveTimeout},
+		IPFIX:      IPFIXConfig{TemplateRefresh: defaultTemplateRefresh, ObservationDomainID: defaultObservationDomainID, MaxMessageSize: DefaultIPFIXMaxMessageSize},
+		Prometheus: PrometheusConfig{Host: defaultHost, Port: defaultPrometheusPort},
 	}}
 	meta, err := toml.Decode(string(data), cfg)
 	if err != nil {
@@ -179,8 +164,8 @@ func Parse(data []byte) (*Config, error) {
 	}
 
 	a := &cfg.Agent
-	defaultEndpoint(&a.IPFIX.Host, &a.IPFIX.Port, 4739)
-	defaultEndpoint(&a.Enrich.RIB.BMP.Host, &a.Enrich.RIB.BMP.Port, 11019)
+	defaultEndpoint(&a.IPFIX.Host, &a.IPFIX.Port, defaultIPFIXPort)
+	defaultEndpoint(&a.Enrich.RIB.BMP.Host, &a.Enrich.RIB.BMP.Port, defaultBMPPort)
 	a.IPFIX.QueueSize = max(DefaultIPFIXQueueSize, a.Collector.MaxFlows)
 
 	if err := validate(cfg); err != nil {
@@ -196,7 +181,7 @@ func defaultEndpoint(host *string, port *int, defaultPort int) {
 		return
 	}
 	if *host == "" {
-		*host = "::1"
+		*host = defaultHost
 	}
 	if *port == 0 {
 		*port = defaultPort

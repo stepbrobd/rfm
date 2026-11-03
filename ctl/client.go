@@ -10,9 +10,6 @@ import (
 	"time"
 )
 
-// DefaultSocket is where the NixOS module puts the control socket
-const DefaultSocket = "/run/rfm/rfm.sock"
-
 // Client talks to one agent over its control socket
 type Client struct {
 	Socket string
