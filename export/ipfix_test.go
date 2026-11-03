@@ -802,6 +802,38 @@ func testFlow(src, dst string, port uint16) collector.ExportedFlow {
 	)
 }
 
+func TestIPFIXEncodesAFlowWithOneMappedAddressUnderTheIPv6Template(t *testing.T) {
+	loadIPFIXRegistry.Do(registry.LoadRegistry)
+
+	conn := startIPFIXListener(t)
+	addr := conn.LocalAddr().(*net.UDPAddr)
+
+	exp, err := NewIPFIX(testIPFIXConfig(addr.IP.String(), addr.Port))
+	if err != nil {
+		t.Fatalf("NewIPFIX: %v", err)
+	}
+	defer exp.Close()
+
+	if err := exp.ExportFlow(testFlow("::ffff:198.51.100.1", "2001:db8::1", 1)); err != nil {
+		t.Fatalf("ExportFlow: %v", err)
+	}
+	if err := exp.Flush(); err != nil {
+		t.Fatalf("Flush: %v", err)
+	}
+
+	msg := mustReadIPFIXDatagram(t, conn)
+	if got := len(msg.Sets); got != 2 || msg.Sets[1].ID != ipfixIPv6TemplateID {
+		t.Fatalf("sets = %+v, want the ipv6 template and its data set", msg.Sets)
+	}
+	_, fields := parseTemplateSet(t, msg.Sets[0])
+	record := parseDataRecord(t, msg.Sets[1], fields)
+	assertIPFIXDataIP(t, record, "sourceIPv6Address", net.ParseIP("::ffff:198.51.100.1"))
+	assertIPFIXDataIP(t, record, "destinationIPv6Address", net.ParseIP("2001:db8::1"))
+	if got := exp.Stats().EncodeErrors; got != 0 {
+		t.Fatalf("encode errors = %d, want 0", got)
+	}
+}
+
 func TestIPFIXPacksRecordsIntoOneMessage(t *testing.T) {
 	loadIPFIXRegistry.Do(registry.LoadRegistry)
 

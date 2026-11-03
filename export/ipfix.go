@@ -406,14 +406,7 @@ func (e *IPFIXExporter) sendAll(pending []collector.ExportedFlow) {
 
 	var msg ipfixMessage
 	for i, flow := range pending {
-		isIPv6, err := flowIsIPv6(flow)
-		if err != nil {
-			e.mu.Lock()
-			e.stats.EncodeErrors++
-			e.mu.Unlock()
-			continue
-		}
-
+		isIPv6 := flowIsIPv6(flow)
 		if e.messageLen(msg, isIPv6, ipv4Due, ipv6Due) > e.maxMessageSize && e.messageRecords(msg) > 0 {
 			sent4, sent6 := e.send(msg, now, epoch, ipv4Due, ipv6Due)
 			ipv4Due = ipv4Due && !sent4
@@ -727,8 +720,10 @@ func (e *IPFIXExporter) dataElements(flow collector.ExportedFlow, isIPv6 bool, e
 		t = &e.ipv6
 	}
 
-	srcAddr := netip.AddrFrom16(flow.SrcAddr).Unmap()
-	dstAddr := netip.AddrFrom16(flow.DstAddr).Unmap()
+	srcAddr, dstAddr := netip.AddrFrom16(flow.SrcAddr), netip.AddrFrom16(flow.DstAddr)
+	if !isIPv6 {
+		srcAddr, dstAddr = srcAddr.Unmap(), dstAddr.Unmap()
+	}
 
 	var ingressIf uint32
 	var egressIf uint32
@@ -779,13 +774,9 @@ func (e *IPFIXExporter) dataElements(flow collector.ExportedFlow, isIPv6 bool, e
 	return elements
 }
 
-func flowIsIPv6(flow collector.ExportedFlow) (bool, error) {
-	src := netip.AddrFrom16(flow.SrcAddr).Unmap()
-	dst := netip.AddrFrom16(flow.DstAddr).Unmap()
-	if src.Is4() != dst.Is4() {
-		return false, fmt.Errorf("flow address families do not match")
-	}
-	return src.Is6(), nil
+// flowIsIPv6 reports whether flow goes under the ipv6 template, the ipv4 one takes two v4-mapped addresses
+func flowIsIPv6(flow collector.ExportedFlow) bool {
+	return !netip.AddrFrom16(flow.SrcAddr).Is4In6() || !netip.AddrFrom16(flow.DstAddr).Is4In6()
 }
 
 // isOwnExportFlowLocked reports whether flow is this exporter's own udp
