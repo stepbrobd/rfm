@@ -538,6 +538,98 @@ socket = %q
 	}
 }
 
+func TestRunAgentExportsItsFlowsOnStop(t *testing.T) {
+	lo := testutil.LoopbackName(t)
+	loIndex := mustInterface(t, lo).Index
+	sock := filepath.Join(t.TempDir(), "rfm.sock")
+	ipfix, err := net.ListenUDP("udp4", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ipfix.Close()
+	cfgPath := writeTestConfig(t, fmt.Sprintf(`
+[agent]
+interfaces = [%q]
+
+[agent.ipfix]
+host = "127.0.0.1"
+port = %d
+
+[agent.control]
+socket = %q
+`, lo, ipfix.LocalAddr().(*net.UDPAddr).Port, sock))
+
+	f := newFakeProbe()
+	run := startAgent(t, cfgPath, agentDeps{loadProbe: f.load})
+	waitAttached(t, sock, lo)
+	f.events <- rawTCPEvent(t, loIndex, "::ffff:192.0.2.1", "::ffff:198.51.100.7", 40000, 443, 1500)
+	testutil.Eventually(t, 5*time.Second, 20*time.Millisecond, func() error {
+		if out, err := runCLI(t, sock, "flows", "count"); err != nil || strings.TrimSpace(out) != "1" {
+			return fmt.Errorf("flows count = %q, %v", out, err)
+		}
+		return nil
+	})
+
+	// the flow is far from its timeouts, the stop alone exports it
+	if err := run.stop(t); err != nil {
+		t.Fatalf("agent stopped with %v, want nil", err)
+	}
+	if got := ipfixEndReasons(t, ipfix); !slices.Equal(got, []uint8{collector.FlowEndReasonForcedEnd}) {
+		t.Fatalf("flow end reasons = %v, want one forced end", got)
+	}
+}
+
+// ipfixEndReasons returns the flowEndReason of every data record the
+// collector at conn received, the messages of an exporter that has closed
+func ipfixEndReasons(t *testing.T, conn *net.UDPConn) []uint8 {
+	t.Helper()
+
+	const flowEndReason = 136
+	type field struct{ ie, size uint16 }
+	templates := make(map[uint16][]field)
+	var reasons []uint8
+	buf := make([]byte, 65535)
+	for {
+		_ = conn.SetReadDeadline(time.Now().Add(100 * time.Millisecond))
+		n, err := conn.Read(buf)
+		if errors.Is(err, os.ErrDeadlineExceeded) {
+			return reasons
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+		for sets := buf[16:n]; len(sets) >= 4; {
+			id, size := binary.BigEndian.Uint16(sets), binary.BigEndian.Uint16(sets[2:])
+			set := sets[4:size]
+			sets = sets[size:]
+			if id == 2 {
+				for len(set) >= 4 {
+					tid, count := binary.BigEndian.Uint16(set), int(binary.BigEndian.Uint16(set[2:]))
+					fields := make([]field, count)
+					for i := range fields {
+						fields[i] = field{binary.BigEndian.Uint16(set[4+4*i:]), binary.BigEndian.Uint16(set[6+4*i:])}
+					}
+					templates[tid] = fields
+					set = set[4+4*count:]
+				}
+				continue
+			}
+			fields, ok := templates[id]
+			if !ok {
+				t.Fatalf("data set %d before its template", id)
+			}
+			for len(set) > 0 {
+				for _, f := range fields {
+					if f.ie == flowEndReason {
+						reasons = append(reasons, set[0])
+					}
+					set = set[f.size:]
+				}
+			}
+		}
+	}
+}
+
 func TestRunAgentRefusesASecondAgent(t *testing.T) {
 	lo := testutil.LoopbackName(t)
 	dir := t.TempDir()
