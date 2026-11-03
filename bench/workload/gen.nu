@@ -26,8 +26,9 @@ def main [
     ^modprobe pktgen
     let spmin = 10000
     let spmax = ($spmin + $flows - 1)
+    # start runs every thread with a device, so clear the ones above --threads left by an earlier run
+    glob $"($env.PG)/kpktgend_*" | each {|t| pg $t "rem_device_all" } | ignore
     0..($threads - 1) | each {|i|
-    pg $"($env.PG)/kpktgend_($i)" "rem_device_all"
     pg $"($env.PG)/kpktgend_($i)" $"add_device ($iface)@($i)"
     let d = $"($env.PG)/($iface)@($i)"
     pg $d $"count ($count)"
