@@ -9,6 +9,7 @@ import (
 	"github.com/charmbracelet/log"
 	"github.com/prometheus/client_golang/prometheus"
 	"ysun.co/rfm/collector"
+	"ysun.co/rfm/probe"
 )
 
 var (
@@ -172,19 +173,23 @@ var (
 	}
 )
 
-// MetricsCollector implements prometheus.Collector, reading BPF iface
-// stats and the collector's label tuples at scrape time
+// Probe is what a scrape reads of the loaded programs
+type Probe interface {
+	Counters() ([]probe.IfaceCounter, error)
+	IfaceStatsErrors() (uint64, error)
+	GSOHeaderErrors() (uint64, error)
+}
+
+// MetricsCollector reads the probe's counters and the collector's label tuples at scrape time
 type MetricsCollector struct {
-	source        IfaceStatsSource
+	probe         Probe
 	col           *collector.Collector
 	ipfix         func() IPFIXStats
 	mu            sync.Mutex
 	bpfMapErr     uint64
 	ifnames       map[uint32]string
 	resolveIfname func(uint32) string
-	// ifaceErrs and gsoErrs are the last counts of refused interface counter
-	// updates and of unparsed gso skbs read from the source, errorSources the
-	// subsystems wired from outside
+	// ifaceErrs and gsoErrs are the last error counts the probe reported
 	ifaceErrs    uint64
 	gsoErrs      uint64
 	errorSources []errorSource
@@ -218,11 +223,10 @@ func (mc *MetricsCollector) AddErrors(subsystem string, count func() uint64) {
 	mc.mu.Unlock()
 }
 
-// New creates a MetricsCollector
-// both source and c may be nil
-func New(source IfaceStatsSource, c *collector.Collector) *MetricsCollector {
+// New creates a MetricsCollector, p and c may be nil
+func New(p Probe, c *collector.Collector) *MetricsCollector {
 	return &MetricsCollector{
-		source:        source,
+		probe:         p,
 		col:           c,
 		ifnames:       make(map[uint32]string),
 		resolveIfname: ifnameFromIndex,
@@ -248,8 +252,11 @@ func (mc *MetricsCollector) Collect(ch chan<- prometheus.Metric) {
 	mc.collectIfaceStats(ch)
 	mc.collectRollups(ch)
 
-	ifaceErrs := mc.ifaceStatsErrors()
-	gsoErrs, countsGSO := mc.gsoHeaderErrors()
+	var ifaceErrs, gsoErrs uint64
+	if mc.probe != nil {
+		ifaceErrs = mc.probeErrors("iface stats errors", mc.probe.IfaceStatsErrors, &mc.ifaceErrs)
+		gsoErrs = mc.probeErrors("gso header errors", mc.probe.GSOHeaderErrors, &mc.gsoErrs)
+	}
 
 	mc.mu.Lock()
 	bpfErrs := mc.bpfMapErr + ifaceErrs
@@ -282,7 +289,7 @@ func (mc *MetricsCollector) Collect(ch chan<- prometheus.Metric) {
 	}
 
 	errs := map[string]uint64{"bpf_map": bpfErrs}
-	if countsGSO {
+	if mc.probe != nil {
 		errs["gso_header"] = gsoErrs
 	}
 	if mc.col != nil {
@@ -304,27 +311,6 @@ func (mc *MetricsCollector) Collect(ch chan<- prometheus.Metric) {
 	}
 }
 
-// ifaceStatsErrors returns how many counter updates the interface stats map
-// refused
-func (mc *MetricsCollector) ifaceStatsErrors() uint64 {
-	src, ok := mc.source.(IfaceStatsErrorSource)
-	if !ok {
-		return 0
-	}
-	return mc.probeErrors("iface stats errors", src.IfaceStatsErrors, &mc.ifaceErrs)
-}
-
-// gsoHeaderErrors returns how many gso skbs the programs counted without
-// the header size they needed, and false for a source that does not count
-// them
-func (mc *MetricsCollector) gsoHeaderErrors() (uint64, bool) {
-	src, ok := mc.source.(GSOHeaderErrorSource)
-	if !ok {
-		return 0, false
-	}
-	return mc.probeErrors("gso header errors", src.GSOHeaderErrors, &mc.gsoErrs), true
-}
-
 // probeErrors returns the count of errors read reports and keeps it in last,
 // a failed read counts as a bpf_map error and returns last instead, so
 // neither count goes back
@@ -343,11 +329,11 @@ func (mc *MetricsCollector) probeErrors(what string, read func() (uint64, error)
 }
 
 func (mc *MetricsCollector) collectIfaceStats(ch chan<- prometheus.Metric) {
-	if mc.source == nil {
+	if mc.probe == nil {
 		return
 	}
 
-	entries, err := mc.source.IfaceStats()
+	counters, err := mc.probe.Counters()
 	if err != nil {
 		mc.mu.Lock()
 		mc.bpfMapErr++
@@ -356,7 +342,7 @@ func (mc *MetricsCollector) collectIfaceStats(ch chan<- prometheus.Metric) {
 		return
 	}
 
-	for _, e := range entries {
+	for _, e := range counters {
 		ifname := validLabel(mc.ifname(e.Ifindex))
 		family := familyString(e.Proto)
 

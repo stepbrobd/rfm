@@ -51,6 +51,7 @@ func init() {
 // agentProbe is what the agent uses of the loaded BPF programs, tests run
 // the agent on a fake that needs no privileges
 type agentProbe interface {
+	export.Probe
 	Close() error
 	Attached() []int
 	// Pending lists the matching links whose attach failed, the watcher
@@ -59,8 +60,6 @@ type agentProbe interface {
 	SetSampleRate(n uint32) error
 	Watch(ctx context.Context, match func(string) bool, notify func(probe.LinkEvent)) error
 	WatchState() probe.WatchState
-	// Stats reads the interface counters for a scrape
-	Stats() export.IfaceStatsSource
 	// Events opens the reader of the sampled flow events
 	Events() (collector.Reader, error)
 }
@@ -87,13 +86,6 @@ func loadProbe(cfg probe.Config) (agentProbe, error) {
 		return nil, err
 	}
 	return kernelProbe{p}, nil
-}
-
-// Stats also reports the counter updates the interface stats map refused,
-// as bpf_map errors, and the gso skbs the programs counted without parsing
-// their headers, as gso_header errors
-func (p kernelProbe) Stats() export.IfaceStatsSource {
-	return &export.ProbeSource{Probe: p.Probe}
 }
 
 func (p kernelProbe) Events() (collector.Reader, error) {
@@ -193,7 +185,7 @@ func runAgent(ctx context.Context, path string, deps agentDeps) error {
 		}
 	}
 
-	mc := export.New(p.Stats(), c)
+	mc := export.New(p, c)
 	if ipfixExp != nil {
 		mc.SetIPFIX(ipfixExp.Stats)
 	}

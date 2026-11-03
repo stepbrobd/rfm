@@ -27,7 +27,6 @@ import (
 	"ysun.co/rfm/collector"
 	"ysun.co/rfm/config"
 	"ysun.co/rfm/ctl"
-	"ysun.co/rfm/export"
 	"ysun.co/rfm/probe"
 	"ysun.co/rfm/testutil"
 )
@@ -163,22 +162,21 @@ func (f *fakeProbe) WatchState() probe.WatchState {
 	return st
 }
 
-func (f *fakeProbe) Stats() export.IfaceStatsSource { return fakeStats{f} }
-
 func (f *fakeProbe) Events() (collector.Reader, error) {
 	return &fakeReader{events: f.events, err: f.readErr}, nil
 }
 
-// fakeStats reports one received ipv4 packet on every attached interface
-type fakeStats struct{ f *fakeProbe }
-
-func (s fakeStats) IfaceStats() ([]export.IfaceStatsEntry, error) {
-	var out []export.IfaceStatsEntry
-	for _, ifindex := range s.f.Attached() {
-		out = append(out, export.IfaceStatsEntry{Ifindex: uint32(ifindex), Proto: 4, Packets: 1, Bytes: 100})
+// Counters reports one received ipv4 packet on every attached interface
+func (f *fakeProbe) Counters() ([]probe.IfaceCounter, error) {
+	var out []probe.IfaceCounter
+	for _, ifindex := range f.Attached() {
+		out = append(out, probe.IfaceCounter{Ifindex: uint32(ifindex), Proto: 4, Packets: 1, Bytes: 100})
 	}
 	return out, nil
 }
+
+func (f *fakeProbe) IfaceStatsErrors() (uint64, error) { return 0, nil }
+func (f *fakeProbe) GSOHeaderErrors() (uint64, error)  { return 0, nil }
 
 // fakeReader hands out the events sent on events and otherwise waits for its
 // deadline the way the ring buffer reader does

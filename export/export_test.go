@@ -14,18 +14,24 @@ import (
 	dto "github.com/prometheus/client_model/go"
 	"ysun.co/rfm/collector"
 	"ysun.co/rfm/config"
+	"ysun.co/rfm/probe"
 )
 
 // --- mock types ---
 
-type mockIfaceStats struct {
-	entries []IfaceStatsEntry
-	err     error
+// mockProbe counts refused counter updates in refused and gso skbs without a header size in unparsed
+type mockProbe struct {
+	counters    []probe.IfaceCounter
+	err         error
+	refused     uint64
+	refusedErr  error
+	unparsed    uint64
+	unparsedErr error
 }
 
-func (m *mockIfaceStats) IfaceStats() ([]IfaceStatsEntry, error) {
-	return m.entries, m.err
-}
+func (m *mockProbe) Counters() ([]probe.IfaceCounter, error) { return m.counters, m.err }
+func (m *mockProbe) IfaceStatsErrors() (uint64, error)       { return m.refused, m.refusedErr }
+func (m *mockProbe) GSOHeaderErrors() (uint64, error)        { return m.unparsed, m.unparsedErr }
 
 type staticEnricher struct {
 	srcASN  uint32
@@ -255,8 +261,8 @@ func TestCollectHealth(t *testing.T) {
 }
 
 func TestCollectIfaceStats(t *testing.T) {
-	src := &mockIfaceStats{
-		entries: []IfaceStatsEntry{
+	src := &mockProbe{
+		counters: []probe.IfaceCounter{
 			{Ifindex: 1, Dir: 0, Proto: 4, Packets: 10, Bytes: 1000}, // rx ipv4
 			{Ifindex: 1, Dir: 1, Proto: 4, Packets: 5, Bytes: 500},   // tx ipv4
 			{Ifindex: 1, Dir: 0, Proto: 6, Packets: 3, Bytes: 300},   // rx ipv6
@@ -275,8 +281,8 @@ func TestCollectIfaceStats(t *testing.T) {
 func TestScrapeSurvivesAnInterfaceNameThatIsNotUTF8(t *testing.T) {
 	// a link name is any bytes to the kernel, the registry refuses the whole
 	// scrape over one label that is not utf-8
-	src := &mockIfaceStats{
-		entries: []IfaceStatsEntry{{Ifindex: 7, Dir: 0, Proto: 4, Packets: 1, Bytes: 60}},
+	src := &mockProbe{
+		counters: []probe.IfaceCounter{{Ifindex: 7, Dir: 0, Proto: 4, Packets: 1, Bytes: 60}},
 	}
 	c := collector.New(time.Minute, nil, 16)
 	c.Record(collector.FlowEvent{
@@ -318,8 +324,8 @@ func TestScrapeSurvivesAnInterfaceNameThatIsNotUTF8(t *testing.T) {
 }
 
 func TestCollectCachesIfnames(t *testing.T) {
-	src := &mockIfaceStats{
-		entries: []IfaceStatsEntry{
+	src := &mockProbe{
+		counters: []probe.IfaceCounter{
 			{Ifindex: 7, Dir: 0, Proto: 4, Packets: 10, Bytes: 1000},
 			{Ifindex: 7, Dir: 1, Proto: 6, Packets: 5, Bytes: 500},
 		},
@@ -467,7 +473,7 @@ func TestCollectFlowsWithEnricher(t *testing.T) {
 }
 
 func TestCollectFlowsScalesBySampleRate(t *testing.T) {
-	src := &mockIfaceStats{}
+	src := &mockProbe{}
 
 	c := collector.New(time.Minute, nil, config.DefaultMaxFlows)
 	c.SetSampleRate(10, 0)
@@ -545,8 +551,8 @@ func TestCollectFlowsAggregatesDuplicateLabels(t *testing.T) {
 }
 
 func TestCollectIfaceStatsError(t *testing.T) {
-	src := &mockIfaceStats{
-		entries: []IfaceStatsEntry{
+	src := &mockProbe{
+		counters: []probe.IfaceCounter{
 			{Ifindex: 1, Dir: 0, Proto: 4, Packets: 10, Bytes: 1000},
 		},
 		err: fmt.Errorf("map iteration failed"),
@@ -567,8 +573,8 @@ func TestCollectIfaceStatsError(t *testing.T) {
 func TestCollectIfaceStatsFamily(t *testing.T) {
 	// iface stats proto=4 is IPv4, proto=6 is IPv6
 	// the label should be "family" with values "ipv4" / "ipv6"
-	src := &mockIfaceStats{
-		entries: []IfaceStatsEntry{
+	src := &mockProbe{
+		counters: []probe.IfaceCounter{
 			{Ifindex: 1, Dir: 0, Proto: 4, Packets: 10, Bytes: 1000},
 			{Ifindex: 1, Dir: 0, Proto: 6, Packets: 5, Bytes: 500},
 		},
@@ -596,32 +602,9 @@ func TestCollectIfaceStatsFamily(t *testing.T) {
 }
 
 func TestCollectErrorsTotal(t *testing.T) {
-	src := &mockIfaceStats{
-		entries: nil,
-		err:     fmt.Errorf("map broken"),
-	}
-
-	mc := New(src, nil)
-	metrics := collectMetrics(t, mc)
-
-	var found bool
-	for _, m := range metrics {
-		name := extractName(m.Desc())
-		if name != "rfm_errors_total" {
-			continue
-		}
-		found = true
-		labels := metricLabels(t, m)
-		if labels["subsystem"] != "bpf_map" {
-			t.Errorf("subsystem = %q, want bpf_map", labels["subsystem"])
-		}
-		val := metricValue(t, m)
-		if val != 1 {
-			t.Errorf("errors_total = %g, want 1", val)
-		}
-	}
-	if !found {
-		t.Error("rfm_errors_total not found")
+	mc := New(&mockProbe{err: fmt.Errorf("map broken")}, nil)
+	if got := errorsBySubsystem(t, mc); got["bpf_map"] != 1 {
+		t.Errorf("errors = %v, want the failed counter read as one bpf_map error", got)
 	}
 }
 
@@ -681,8 +664,8 @@ func TestCollectErrorsSubsystemLabels(t *testing.T) {
 }
 
 func TestCollectErrorsTotalZeroOnSuccess(t *testing.T) {
-	src := &mockIfaceStats{
-		entries: []IfaceStatsEntry{
+	src := &mockProbe{
+		counters: []probe.IfaceCounter{
 			{Ifindex: 1, Dir: 0, Proto: 4, Packets: 1, Bytes: 100},
 		},
 	}
@@ -705,17 +688,6 @@ func TestSampleRateGaugeFollowsTheCollector(t *testing.T) {
 	assertGauge(t, collectAll(t, mc), "rfm_bpf_sample_rate", 40)
 }
 
-// refusingIfaceStats is a probe whose interface counter map refused updates
-type refusingIfaceStats struct {
-	mockIfaceStats
-	refused uint64
-	err     error
-}
-
-func (m *refusingIfaceStats) IfaceStatsErrors() (uint64, error) {
-	return m.refused, m.err
-}
-
 // errorsBySubsystem returns the rfm_errors_total values of one scrape
 func errorsBySubsystem(t *testing.T, mc *MetricsCollector) map[string]float64 {
 	t.Helper()
@@ -729,7 +701,7 @@ func errorsBySubsystem(t *testing.T, mc *MetricsCollector) map[string]float64 {
 }
 
 func TestCollectErrorsCountRefusedIfaceStatsUpdates(t *testing.T) {
-	src := &refusingIfaceStats{refused: 7}
+	src := &mockProbe{refused: 7}
 	mc := New(src, nil)
 	if got := errorsBySubsystem(t, mc)["bpf_map"]; got != 7 {
 		t.Fatalf("bpf_map errors = %v, want the 7 refused counter updates", got)
@@ -737,32 +709,14 @@ func TestCollectErrorsCountRefusedIfaceStatsUpdates(t *testing.T) {
 
 	// a failed read counts as one more error and the refused updates keep
 	// their last value, so the counter never goes back
-	src.err = errors.New("lookup failed")
+	src.refusedErr = errors.New("lookup failed")
 	if got := errorsBySubsystem(t, mc)["bpf_map"]; got != 8 {
 		t.Fatalf("bpf_map errors = %v after a failed read, want 8", got)
 	}
 }
 
-// the probe source reports both counts of errors the programs keep
-var (
-	_ IfaceStatsErrorSource = (*ProbeSource)(nil)
-	_ GSOHeaderErrorSource  = (*ProbeSource)(nil)
-)
-
-// unparsedGSO is a probe whose programs counted gso skbs without parsing
-// their headers
-type unparsedGSO struct {
-	mockIfaceStats
-	unparsed uint64
-	err      error
-}
-
-func (m *unparsedGSO) GSOHeaderErrors() (uint64, error) {
-	return m.unparsed, m.err
-}
-
 func TestCollectErrorsCountUnparsedGSOHeaders(t *testing.T) {
-	src := &unparsedGSO{unparsed: 4}
+	src := &mockProbe{unparsed: 4}
 	mc := New(src, nil)
 	if got := errorsBySubsystem(t, mc); got["gso_header"] != 4 || got["bpf_map"] != 0 {
 		t.Fatalf("errors = %v, want the 4 unparsed gso skbs as gso_header errors", got)
@@ -770,14 +724,9 @@ func TestCollectErrorsCountUnparsedGSOHeaders(t *testing.T) {
 
 	// a failed read is a bpf_map error and the gso_header errors keep their
 	// last value, so neither goes back
-	src.err = errors.New("lookup failed")
+	src.unparsedErr = errors.New("lookup failed")
 	if got := errorsBySubsystem(t, mc); got["gso_header"] != 4 || got["bpf_map"] != 1 {
 		t.Fatalf("errors = %v after a failed read, want 4 gso_header and 1 bpf_map", got)
-	}
-
-	// a source that keeps no such count has no series for it
-	if got := errorsBySubsystem(t, New(&mockIfaceStats{}, nil)); len(got) != 1 {
-		t.Fatalf("errors = %v from a source without gso header errors, want bpf_map alone", got)
 	}
 }
 
