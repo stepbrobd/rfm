@@ -94,6 +94,8 @@
     ];
   };
 
+  boot.kernelPackages = pkgs.linuxPackages_latest;
+
   boot.supportedFilesystems.zfs = lib.mkForce false;
   boot.initrd.supportedFilesystems.zfs = lib.mkForce false;
 }
