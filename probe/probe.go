@@ -81,6 +81,12 @@ func Load(cfg Config) (*Probe, error) {
 	if cfg.IfaceStatsSize > 0 {
 		spec.Maps[pinStats].MaxEntries = uint32(cfg.IfaceStatsSize)
 	}
+	// sampled only keeps no counters, which also leaves no slot to assign
+	if cfg.SampledOnly {
+		for _, name := range []string{pinStats, pinSlot, pinArr} {
+			spec.Maps[name].MaxEntries = 1
+		}
+	}
 
 	// pinned counters carry over restarts, sampled only leaves them for the next exact load
 	pin := cfg.PinPath != "" && !cfg.SampledOnly

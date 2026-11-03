@@ -2766,6 +2766,15 @@ func TestSampledOnlyKeepsNoInterfaceCounters(t *testing.T) {
 		testutil.SkipIfUnprivileged(t, err)
 		t.Fatal(err)
 	}
+	if n := p.objs.RfmIfaceArr.MaxEntries(); n != 1 {
+		t.Fatalf("counter array of %d entries in sampled only mode, want 1", n)
+	}
+	p.mu.Lock()
+	held := p.slots.held()
+	p.mu.Unlock()
+	if len(held) != 0 {
+		t.Fatalf("slots in sampled only mode = %v, want none", held)
+	}
 	rd := newFlowReader(t, p)
 
 	// the packet is sampled, its event carries what the exact counters
