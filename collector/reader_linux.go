@@ -13,6 +13,8 @@ import (
 type ringReader struct {
 	rd    *ringbuf.Reader
 	drops *ebpf.Map
+	// rec is reused by every read, ReadRawEvent hands out its sample
+	rec ringbuf.Record
 }
 
 // NewReader wraps a ring buffer map and a per-CPU drop counter map
@@ -25,11 +27,10 @@ func NewReader(events, drops *ebpf.Map) (Reader, error) {
 }
 
 func (r *ringReader) ReadRawEvent() ([]byte, error) {
-	rec, err := r.rd.Read()
-	if err != nil {
+	if err := r.rd.ReadInto(&r.rec); err != nil {
 		return nil, err
 	}
-	return rec.RawSample, nil
+	return r.rec.RawSample, nil
 }
 
 func (r *ringReader) SetDeadline(t time.Time) {
