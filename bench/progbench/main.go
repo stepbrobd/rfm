@@ -161,6 +161,11 @@ func main() {
 			res := result{Label: *label, Prog: pname, Frame: fname, N: uint32(*n), Repeat: uint32(*repeat), Kernel: kernel, CPU: uint32(*cpu)}
 			for t := 0; t < *trials; t++ {
 				ns, wall, ret, drops, info, err := trial(*obj, pname, fr, uint32(*n), uint32(*repeat), uint32(*ringOrder))
+				// a signal aborts the run, the retry reloads so its ring and counters start empty
+				if errors.Is(err, unix.EINTR) {
+					t--
+					continue
+				}
 				if err != nil {
 					fail(fmt.Errorf("%s %s %s: %w", *label, pname, fname, err))
 				}

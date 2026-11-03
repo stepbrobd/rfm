@@ -42,13 +42,13 @@ func eventRings(spec *ebpf.CollectionSpec, coll *ebpf.Collection, size func(cpu 
 		ms.MaxEntries = size(cpu)
 		ring, err := ebpf.NewMap(ms)
 		if err == nil {
+			rings = append(rings, ring)
 			err = outer.Put(uint32(cpu), ring)
 		}
 		if err != nil {
 			closeRings(rings)
 			return nil, false, err
 		}
-		rings = append(rings, ring)
 	}
 	return rings, true, nil
 }
