@@ -22,10 +22,7 @@ type WatchState struct {
 	// Resubscribes counts the subscriptions that failed and were opened
 	// again, an overflowed socket (ENOBUFS) among them
 	Resubscribes uint64
-	// PruneErrors counts the prune passes that failed to delete the counters
-	// a pinned map holds for interfaces this run neither attaches nor
-	// retries, a pass stops at its first failed delete and the dump of every
-	// later subscription tries again until one succeeds
+	// PruneErrors counts failed prune passes, the next subscription's dump tries again
 	PruneErrors uint64
 	// Errors counts the link messages the watcher dropped, a dropped
 	// message ends no subscription

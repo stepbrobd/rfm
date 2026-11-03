@@ -1,12 +1,4 @@
-// bpfgen is a thin wrapper around cilium/ebpf bpf2go
-// to resolve target arch, set up vmlinux include paths for
-// multi arch build then forwards everything to bpf2go
-//
-// use --compdb to generate a compile_commands.json for clangd
-// this works even on non-linux where the actual build is skipped
-//
-// example
-// //go:generate go tool bpfgen --ident foo --output-dir testdata --pkg-config libbpf --compdb compile_commands.json source.bpf.c
+// bpfgen runs bpf2go with the probe's include paths and clang flags and can write a compile_commands.json entry
 
 package main
 
@@ -141,8 +133,7 @@ func cflags(source string, cfg config, extra []string) []string {
 	incdir := filepath.Join(filepath.Dir(source), "include")
 	flags := []string{
 		"-O2",
-		// bpf2go passes -mcpu=v1 first, a later -mcpu wins, v3 gives 32 bit
-		// ALU ops and jumps that every kernel with tcx (6.6) supports
+		// bpf2go passes -mcpu=v1 first and a later -mcpu wins, every supported kernel runs v3
 		"-mcpu=v3",
 		"-g",
 		"-Wall",

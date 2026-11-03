@@ -196,13 +196,7 @@ const (
 	pinArr   = "rfm_iface_arr"
 )
 
-// loadPins returns the counter maps pinned under dir by name, without the
-// ones not pinned yet
-// a pin the loader would refuse is an error that names the difference, the
-// pin stays with its counters until it is removed or the host reboots
-// the slot map and the counter array only make sense together, one pinned
-// without the other is left from a start that stopped between the two pins,
-// and both start from zero
+// loadPins returns the counter maps pinned under dir, dropping a slot map or counter array pinned alone
 func loadPins(dir string, spec *ebpf.CollectionSpec) (map[string]*ebpf.Map, error) {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return nil, fmt.Errorf("create pin directory %q: %w", dir, err)
@@ -249,9 +243,7 @@ func loadPins(dir string, spec *ebpf.CollectionSpec) (map[string]*ebpf.Map, erro
 	return pins, nil
 }
 
-// restoreSlots reads back the slots an earlier run assigned from the pinned
-// slot map, an entry the allocator refuses is cleared and its interface
-// counts from zero in a new slot or the hash
+// restoreSlots reads back the pinned slots and clears those the allocator refuses
 func (p *Probe) restoreSlots() error {
 	var ifindex, slot uint32
 	var stale []uint32
@@ -275,9 +267,7 @@ func (p *Probe) restoreSlots() error {
 	return nil
 }
 
-// assignSlot gives ifindex a counter slot, a fresh one with its counters
-// zeroed before the programs can see it, and leaves it on the hash when no
-// slot is free or ifindex is out of range
+// assignSlot publishes a zeroed slot for ifindex, none when full or out of range
 func (p *Probe) assignSlot(ifindex int) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -436,8 +426,6 @@ func (p *Probe) SampleRate() (uint32, error) {
 }
 
 // SetSampleRate changes the 1-in-N sampling of the running programs
-// the config is read per skb, so the change applies at once without
-// detaching or reloading anything
 func (p *Probe) SetSampleRate(n uint32) error {
 	if n == 0 {
 		return fmt.Errorf("sample rate must be > 0")

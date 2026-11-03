@@ -32,40 +32,16 @@ const (
 	attachRetryMax = 30 * time.Second
 )
 
-// Watch attaches the interfaces whose name match accepts and follows link
-// changes until ctx is done
-// every subscription dumps the links on its own socket, so no change between
-// the dump and the next message is lost, and once the dump is through every
-// attached interface that is gone is detached, which catches up with links
-// that came or went before Watch ran or while a subscription was down
-// a matching link whose attach fails for another reason than its removal
-// stays pending, every dump and every message about it try it again, and so
-// does a timer whose pause doubles while the tries fail
-// after the first dump the counters of every interface that is neither
-// attached nor pending are deleted, a pinned map from an earlier run may hold
-// them, and a link that goes loses its counters whether this run attached it
-// or not
-// a subscription that fails, on ENOBUFS after a burst of link messages or on
-// a link message it cannot decode, is opened again after a pause, a message
-// that is not the kernel's or an error reply outside the dump is logged and
-// counted and ends nothing, WatchState reports both and counts the failed
-// attaches and prunes
-// a link without an ethernet header is skipped with a warning
-// Watch returns the error of the first subscription when that one cannot be
-// opened, and ctx.Err() once ctx is done
-// netlink and tcx address interfaces in the calling thread's network
-// namespace, so Watch must run on a thread that lives in the namespace of
-// the interfaces it manages
-// notify, when set, is called after every attach and detach
+// Watch attaches the links match accepts and follows link changes until ctx is done
+// it must run on a thread in the network namespace of the interfaces
+// it returns the first subscription's error when that one cannot be opened
 func (p *Probe) Watch(ctx context.Context, match func(name string) bool, notify func(LinkEvent)) error {
 	if notify == nil {
 		notify = func(LinkEvent) {}
 	}
 	defer p.updateWatch(func(st *WatchState) { st.Running, st.Synced = false, false })
 
-	// once the first dump is reconciled every interface of this run is
-	// attached or pending, counters a pinned map kept for any other one are
-	// stale
+	// after the first dump, counters of links neither attached nor pending are stale
 	pruned := false
 	onSync := func() {
 		if pruned {
@@ -252,10 +228,7 @@ func (p *Probe) watch(ctx context.Context, match func(string) bool, notify func(
 	}
 }
 
-// dumpLinks asks for every link on the subscribed socket s
-// the request goes to the kernel alone, Send would address the link group
-// of s as well, which hands the request to every other link subscriber and
-// takes CAP_NET_ADMIN
+// the dump goes to the kernel alone, Send would also address the link group of s
 func dumpLinks(s *nl.NetlinkSocket) (*nl.NetlinkRequest, error) {
 	req := nl.NewNetlinkRequest(unix.RTM_GETLINK, unix.NLM_F_DUMP)
 	req.AddData(nl.NewIfInfomsg(unix.AF_UNSPEC))
@@ -360,10 +333,7 @@ func (p *Probe) reconcile(seen map[int]bool, notify func(LinkEvent)) {
 	}
 }
 
-// forget detaches an interface that is gone and drops its counters, which a
-// pinned map from an earlier run can hold even when this run never attached
-// the interface, and forgets that the link was pending or skipped, its index
-// may come back with another link
+// forget detaches a link that went or left the patterns and drops its counters and pending or skipped state
 func (p *Probe) forget(ifindex int, notify func(LinkEvent)) {
 	p.mu.Lock()
 	delete(p.pending, ifindex)

@@ -8,9 +8,7 @@ type Config struct {
 	// CPU, 0 keeps the 256 KiB of the object
 	RingBufSize    int
 	IfaceStatsSize int
-	// SampledOnly keeps no interface counters, the programs draw before
-	// anything else and a packet they pass over costs only the draw, and
-	// the pins under PinPath stay as they are for the next exact load
+	// SampledOnly loads the programs that keep no interface counters and leaves the pins alone
 	SampledOnly bool
 	// PinPath is a bpffs directory where the interface counters are pinned
 	// so they survive a restart, empty keeps them private to the process
