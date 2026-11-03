@@ -23,6 +23,13 @@ struct rfm_iface_value {
 	__u64 packets, bytes;
 };
 
+// an interface whose ifindex is below RFM_SLOT_IFINDEX_MAX can hold one of
+// RFM_SLOTS counter slots, each with an entry per direction and family
+// (non-IP, IPv4, IPv6), the rest count in the rfm_iface_stats hash
+#define RFM_SLOTS 256
+#define RFM_SLOT_IFINDEX_MAX 16384
+#define RFM_FAMILIES 3
+
 // len is the on-wire byte count and segs the on-wire packet count of the
 // sampled skb, GRO on ingress and GSO on egress coalesce several wire packets
 // into one skb, so both are reconstructed from gso_segs and the header size

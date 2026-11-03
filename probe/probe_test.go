@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"path/filepath"
 	"runtime"
 	"slices"
 	"strings"
@@ -198,17 +199,7 @@ func TestIfaceCounters(t *testing.T) {
 
 	var packets, bytes uint64
 	testutil.Eventually(t, time.Second, 10*time.Millisecond, func() error {
-		var vals []rfmRfmIfaceValue
-		if err := p.IfaceStats().Lookup(key, &vals); err != nil {
-			return err
-		}
-
-		packets, bytes = 0, 0
-		for _, v := range vals {
-			packets += v.Packets
-			bytes += v.Bytes
-		}
-
+		packets, bytes = ifaceStats(t, p, key)
 		if packets == 0 {
 			return fmt.Errorf("expected packets > 0")
 		}
@@ -227,13 +218,15 @@ func TestIfaceStatsErrorsCountFullMap(t *testing.T) {
 
 	ns := testutil.NewNS(t)
 
-	// one slot holds one key, every other key is refused
+	// one entry holds one key, every other key is refused, and no counter
+	// slot is free so the interface counts in the hash
 	p, err := Load(Config{WakeupBatch: 1, IfaceStatsSize: 1})
 	if err != nil {
 		skipIfUnsupported(t, err)
 		t.Fatal(err)
 	}
 	defer p.Close()
+	p.slots.limit = 0
 
 	if err := p.Attach(ns.Ifindex()); err != nil {
 		skipIfUnsupported(t, err)
@@ -780,19 +773,35 @@ func TestFlowEventGROIngressIPv6ExtensionHeader(t *testing.T) {
 	}
 }
 
-// ifaceStats sums the per-CPU iface stats for key
+// ifaceStats returns the counters Counters reports for key, over the slot
+// and the hash
 func ifaceStats(t *testing.T, p *Probe, key rfmRfmIfaceKey) (packets, bytes uint64) {
+	t.Helper()
+
+	counters, err := p.Counters()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range counters {
+		if c.Ifindex == key.Ifindex && c.Dir == key.Dir && c.Proto == key.Proto {
+			return c.Packets, c.Bytes
+		}
+	}
+	return 0, 0
+}
+
+// hashStats sums the per-CPU hash entry of key alone
+func hashStats(t *testing.T, p *Probe, key rfmRfmIfaceKey) (packets uint64) {
 	t.Helper()
 
 	var vals []rfmRfmIfaceValue
 	if err := p.IfaceStats().Lookup(key, &vals); err != nil {
-		return 0, 0
+		return 0
 	}
 	for _, v := range vals {
 		packets += v.Packets
-		bytes += v.Bytes
 	}
-	return packets, bytes
+	return packets
 }
 
 // wantIfaceStats waits for the counters of key to reach packets and then
@@ -1549,7 +1558,7 @@ func TestPinnedCountersRefuseIncompatibleFlags(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer m.Close()
-	if err := m.Pin(pinPathFor(dir)); err != nil {
+	if err := m.Pin(filepath.Join(dir, pinStats)); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1559,7 +1568,7 @@ func TestPinnedCountersRefuseIncompatibleFlags(t *testing.T) {
 		t.Fatalf("load with a pin of other flags = %v, want the pin refused", err)
 	}
 	// the pin stays for the operator to remove
-	pinned, err := ebpf.LoadPinnedMap(pinPathFor(dir), nil)
+	pinned, err := ebpf.LoadPinnedMap(filepath.Join(dir, pinStats), nil)
 	if err != nil {
 		t.Fatalf("pin after the refused load: %v", err)
 	}
@@ -2189,4 +2198,181 @@ func TestWatchKeepsAPortThatLeavesItsBridge(t *testing.T) {
 	if packets, _ := ifaceStats(t, p, key); packets != 1000 {
 		t.Fatalf("counters of the port after it left its bridge = %d packets, want the 1000 it had", packets)
 	}
+}
+
+func TestIfaceCountersUseSlot(t *testing.T) {
+	testutil.RequireRoot(t)
+
+	ns := testutil.NewNS(t)
+
+	p, err := Load(Config{WakeupBatch: 1})
+	if err != nil {
+		skipIfUnsupported(t, err)
+		t.Fatal(err)
+	}
+	defer p.Close()
+
+	if err := p.Attach(ns.Ifindex()); err != nil {
+		skipIfUnsupported(t, err)
+		t.Fatal(err)
+	}
+	pkt := testutil.EthIPv4UDP(net.IPv4(10, 0, 9, 1), net.IPv4(10, 0, 9, 2), 9000, 53)
+	ns.SendRaw(t, pkt)
+
+	key := rfmRfmIfaceKey{Ifindex: uint32(ns.Ifindex()), Dir: 0, Proto: 4}
+	wantIfaceStats(t, p, key, 1, uint64(len(pkt)))
+	// a slotted interface leaves the hash alone
+	if packets := hashStats(t, p, key); packets != 0 {
+		t.Fatalf("hash entry of a slotted interface = %d packets, want none", packets)
+	}
+}
+
+func TestIfaceCountersFallBackToHash(t *testing.T) {
+	testutil.RequireRoot(t)
+
+	ns := testutil.NewNS(t)
+
+	p, err := Load(Config{WakeupBatch: 1})
+	if err != nil {
+		skipIfUnsupported(t, err)
+		t.Fatal(err)
+	}
+	defer p.Close()
+
+	// every slot taken, the interface counts in the hash as before the slots
+	p.slots.limit = 0
+	if err := p.Attach(ns.Ifindex()); err != nil {
+		skipIfUnsupported(t, err)
+		t.Fatal(err)
+	}
+	pkt := testutil.EthIPv4UDP(net.IPv4(10, 0, 9, 1), net.IPv4(10, 0, 9, 2), 9001, 53)
+	ns.SendRaw(t, pkt)
+
+	key := rfmRfmIfaceKey{Ifindex: uint32(ns.Ifindex()), Dir: 0, Proto: 4}
+	wantIfaceStats(t, p, key, 1, uint64(len(pkt)))
+	if packets := hashStats(t, p, key); packets != 1 {
+		t.Fatalf("hash entry of an interface without a slot = %d packets, want 1", packets)
+	}
+}
+
+func TestIfaceCountersDetachZeroesSlot(t *testing.T) {
+	testutil.RequireRoot(t)
+
+	ns := testutil.NewNS(t)
+
+	p, err := Load(Config{WakeupBatch: 1})
+	if err != nil {
+		skipIfUnsupported(t, err)
+		t.Fatal(err)
+	}
+	defer p.Close()
+
+	key := rfmRfmIfaceKey{Ifindex: uint32(ns.Ifindex()), Dir: 0, Proto: 4}
+	pkt := testutil.EthIPv4UDP(net.IPv4(10, 0, 9, 1), net.IPv4(10, 0, 9, 2), 9002, 53)
+	for range 2 {
+		// the slot a detach frees comes back zeroed on the next attach
+		if err := p.Attach(ns.Ifindex()); err != nil {
+			skipIfUnsupported(t, err)
+			t.Fatal(err)
+		}
+		ns.SendRaw(t, pkt)
+		wantIfaceStats(t, p, key, 1, uint64(len(pkt)))
+		if err := p.Detach(ns.Ifindex()); err != nil {
+			t.Fatal(err)
+		}
+		if packets, _ := ifaceStats(t, p, key); packets != 0 {
+			t.Fatalf("counters after detach = %d packets, want none", packets)
+		}
+	}
+}
+
+func TestPinnedCountersUpgradeFromHash(t *testing.T) {
+	testutil.RequireRoot(t)
+
+	dir := pinDir(t)
+	ns := testutil.NewNS(t)
+
+	// a build without slots left its counters in the pinned hash alone
+	p, err := Load(Config{WakeupBatch: 1, PinPath: dir})
+	if err != nil {
+		skipIfUnsupported(t, err)
+		t.Fatal(err)
+	}
+	key := rfmRfmIfaceKey{Ifindex: uint32(ns.Ifindex()), Dir: 0, Proto: 4}
+	putIfaceStats(t, p, key, 7)
+	if err := p.Close(); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{pinSlot, pinArr} {
+		if err := os.Remove(filepath.Join(dir, name)); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// the upgrade counts new traffic in a slot and reports both
+	p, err = Load(Config{WakeupBatch: 1, PinPath: dir})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer p.Close()
+	if err := p.Attach(ns.Ifindex()); err != nil {
+		skipIfUnsupported(t, err)
+		t.Fatal(err)
+	}
+	pkt := testutil.EthIPv4UDP(net.IPv4(10, 0, 9, 1), net.IPv4(10, 0, 9, 2), 9003, 53)
+	ns.SendRaw(t, pkt)
+	wantIfaceStats(t, p, key, 8, 700+uint64(len(pkt)))
+	if packets := hashStats(t, p, key); packets != 7 {
+		t.Fatalf("hash entry after the upgrade = %d packets, want the 7 pinned", packets)
+	}
+}
+
+func TestPinnedCountersDropALoneSlotPin(t *testing.T) {
+	testutil.RequireRoot(t)
+
+	dir := pinDir(t)
+	ns := testutil.NewNS(t)
+
+	p, err := Load(Config{WakeupBatch: 1, PinPath: dir})
+	if err != nil {
+		skipIfUnsupported(t, err)
+		t.Fatal(err)
+	}
+	if err := p.Attach(ns.Ifindex()); err != nil {
+		skipIfUnsupported(t, err)
+		p.Close()
+		t.Fatal(err)
+	}
+	pkt := testutil.EthIPv4UDP(net.IPv4(10, 0, 9, 1), net.IPv4(10, 0, 9, 2), 9004, 53)
+	ns.SendRaw(t, pkt)
+	key := rfmRfmIfaceKey{Ifindex: uint32(ns.Ifindex()), Dir: 0, Proto: 4}
+	wantIfaceStats(t, p, key, 1, uint64(len(pkt)))
+	if err := p.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	// a start that stopped between the two pins leaves the slot map alone,
+	// it names slots of a counter array that is gone
+	if err := os.Remove(filepath.Join(dir, pinArr)); err != nil {
+		t.Fatal(err)
+	}
+	p, err = Load(Config{WakeupBatch: 1, PinPath: dir})
+	if err != nil {
+		t.Fatalf("load with a lone slot pin: %v", err)
+	}
+	defer p.Close()
+	if packets, _ := ifaceStats(t, p, key); packets != 0 {
+		t.Fatalf("counters after the lone pin was dropped = %d packets, want none", packets)
+	}
+	for _, name := range []string{pinSlot, pinArr} {
+		if _, err := os.Stat(filepath.Join(dir, name)); err != nil {
+			t.Fatalf("pin %s after the load: %v", name, err)
+		}
+	}
+
+	if err := p.Attach(ns.Ifindex()); err != nil {
+		t.Fatal(err)
+	}
+	ns.SendRaw(t, pkt)
+	wantIfaceStats(t, p, key, 1, uint64(len(pkt)))
 }

@@ -29,6 +29,10 @@ func (p *Probe) IfaceStats() *ebpf.Map {
 	return nil
 }
 
+func (p *Probe) Counters() ([]IfaceCounter, error) {
+	return nil, errUnsupported
+}
+
 func (p *Probe) IfaceStatsErrors() (uint64, error) {
 	return 0, errUnsupported
 }

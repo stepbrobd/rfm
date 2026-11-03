@@ -3,12 +3,15 @@
 package probe
 
 import (
+	"cmp"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"sync"
 
+	"github.com/charmbracelet/log"
 	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/link"
 	"github.com/vishvananda/netlink"
@@ -35,6 +38,9 @@ type Probe struct {
 	pending map[int]string
 
 	watchState WatchState
+
+	// slots assigns the counter slots of rfm_iface_arr, guarded by mu
+	slots *slotAlloc
 
 	// rcvbuf overrides the receive buffer of the link subscription when
 	// set, tests shrink it to make the socket overflow
@@ -66,35 +72,41 @@ func Load(cfg Config) (*Probe, error) {
 		}
 	}
 
-	// a pinned counter map from a previous run is reused, so a restart or
+	// pinned counter maps from a previous run are reused, so a restart or
 	// upgrade keeps the counters monotonic, and one of another shape, size
 	// or flags fails the load
 	var opts ebpf.CollectionOptions
-	var pinned *ebpf.Map
+	var pinned map[string]*ebpf.Map
 	if cfg.PinPath != "" {
-		pinned, err = loadPinnedIfaceStats(cfg.PinPath, spec.Maps["rfm_iface_stats"])
+		pinned, err = loadPins(cfg.PinPath, spec)
 		if err != nil {
 			return nil, err
 		}
-		if pinned != nil {
-			opts.MapReplacements = map[string]*ebpf.Map{"rfm_iface_stats": pinned}
-		}
+		opts.MapReplacements = pinned
 	}
 
 	var objs rfmObjects
-	if err := spec.LoadAndAssign(&objs, &opts); err != nil {
-		if pinned != nil {
-			pinned.Close()
-		}
+	err = spec.LoadAndAssign(&objs, &opts)
+	// the collection holds its own handles now
+	for _, m := range pinned {
+		m.Close()
+	}
+	if err != nil {
 		return nil, fmt.Errorf("load BPF: %w", err)
 	}
-	if pinned != nil {
-		// the collection holds its own handle now
-		pinned.Close()
-	} else if cfg.PinPath != "" {
-		if err := objs.RfmIfaceStats.Pin(pinPathFor(cfg.PinPath)); err != nil {
-			objs.Close()
-			return nil, fmt.Errorf("pin iface stats: %w", err)
+	if cfg.PinPath != "" {
+		for name, m := range map[string]*ebpf.Map{
+			pinStats: objs.RfmIfaceStats,
+			pinSlot:  objs.RfmIfaceSlot,
+			pinArr:   objs.RfmIfaceArr,
+		} {
+			if pinned[name] != nil {
+				continue
+			}
+			if err := m.Pin(filepath.Join(cfg.PinPath, name)); err != nil {
+				objs.Close()
+				return nil, fmt.Errorf("pin %s: %w", name, err)
+			}
 		}
 	}
 
@@ -110,37 +122,157 @@ func Load(cfg Config) (*Probe, error) {
 		return nil, fmt.Errorf("write config: %w", err)
 	}
 
-	return &Probe{objs: &objs, links: make(map[int]ifaceLinks), skipped: make(map[int]bool), pending: make(map[int]string)}, nil
+	p := &Probe{
+		objs:    &objs,
+		links:   make(map[int]ifaceLinks),
+		skipped: make(map[int]bool),
+		pending: make(map[int]string),
+		slots:   newSlotAlloc(int(spec.Maps[pinArr].MaxEntries)/(2*ifaceFamilies), spec.Maps[pinSlot].MaxEntries),
+	}
+	if pinned[pinSlot] != nil {
+		if err := p.restoreSlots(); err != nil {
+			objs.Close()
+			return nil, err
+		}
+	}
+	return p, nil
 }
 
-func pinPathFor(dir string) string {
-	return filepath.Join(dir, "rfm_iface_stats")
-}
+// the pinned counter maps, the hash and the slot map with its counter array
+const (
+	pinStats = "rfm_iface_stats"
+	pinSlot  = "rfm_iface_slot"
+	pinArr   = "rfm_iface_arr"
+)
 
-// loadPinnedIfaceStats returns the pinned counter map under dir, nil when
-// there is none yet
+// loadPins returns the counter maps pinned under dir by name, without the
+// ones not pinned yet
 // a pin the loader would refuse is an error that names the difference, the
 // pin stays with its counters until it is removed or the host reboots
-func loadPinnedIfaceStats(dir string, spec *ebpf.MapSpec) (*ebpf.Map, error) {
+// the slot map and the counter array only make sense together, one pinned
+// without the other is left from a start that stopped between the two pins,
+// and both start from zero
+func loadPins(dir string, spec *ebpf.CollectionSpec) (map[string]*ebpf.Map, error) {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return nil, fmt.Errorf("create pin directory %q: %w", dir, err)
 	}
 
-	path := pinPathFor(dir)
-	m, err := ebpf.LoadPinnedMap(path, nil)
-	if errors.Is(err, os.ErrNotExist) {
-		return nil, nil
+	pins := make(map[string]*ebpf.Map)
+	closeAll := func() {
+		for _, m := range pins {
+			m.Close()
+		}
 	}
-	if err != nil {
-		return nil, fmt.Errorf("load pinned iface stats %q: %w", path, err)
+	for _, name := range []string{pinStats, pinSlot, pinArr} {
+		path := filepath.Join(dir, name)
+		m, err := ebpf.LoadPinnedMap(path, nil)
+		if errors.Is(err, os.ErrNotExist) {
+			continue
+		}
+		if err != nil {
+			closeAll()
+			return nil, fmt.Errorf("load pinned %s %q: %w", name, path, err)
+		}
+		// the same check the loader runs on a replacement map
+		if err := spec.Maps[name].Compatible(m); err != nil {
+			m.Close()
+			closeAll()
+			return nil, fmt.Errorf("pinned %s %q do not match the configured map, remove the pin file or reboot to start the counters from zero: %w", name, path, err)
+		}
+		pins[name] = m
 	}
 
-	// the same check the loader runs on a replacement map
-	if err := spec.Compatible(m); err != nil {
-		m.Close()
-		return nil, fmt.Errorf("pinned iface stats %q do not match the configured map, remove the pin file or reboot to start the counters from zero: %w", path, err)
+	if (pins[pinSlot] == nil) != (pins[pinArr] == nil) {
+		for _, name := range []string{pinSlot, pinArr} {
+			if m := pins[name]; m != nil {
+				m.Close()
+				delete(pins, name)
+			}
+			if err := os.Remove(filepath.Join(dir, name)); err != nil && !errors.Is(err, os.ErrNotExist) {
+				closeAll()
+				return nil, fmt.Errorf("remove the lone pin %s: %w", name, err)
+			}
+		}
+		log.Warn("dropped a slot map or counter array pinned without the other, the slotted counters start from zero", "dir", dir)
 	}
-	return m, nil
+	return pins, nil
+}
+
+// restoreSlots reads back the slots an earlier run assigned from the pinned
+// slot map, an entry the allocator refuses is cleared and its interface
+// counts from zero in a new slot or the hash
+func (p *Probe) restoreSlots() error {
+	var ifindex, slot uint32
+	var stale []uint32
+	iter := p.objs.RfmIfaceSlot.Iterate()
+	for iter.Next(&ifindex, &slot) {
+		if slot == 0 {
+			continue
+		}
+		if !p.slots.restore(ifindex, int(slot)-1) {
+			stale = append(stale, ifindex)
+		}
+	}
+	if err := iter.Err(); err != nil {
+		return fmt.Errorf("read pinned slot map: %w", err)
+	}
+	for _, i := range stale {
+		if err := p.objs.RfmIfaceSlot.Put(i, uint32(0)); err != nil {
+			return fmt.Errorf("clear stale slot of %d: %w", i, err)
+		}
+	}
+	return nil
+}
+
+// assignSlot gives ifindex a counter slot, a fresh one with its counters
+// zeroed before the programs can see it, and leaves it on the hash when no
+// slot is free or ifindex is out of range
+func (p *Probe) assignSlot(ifindex int) error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	slot, fresh, ok := p.slots.assign(uint32(ifindex))
+	if !ok || !fresh {
+		return nil
+	}
+	if err := p.zeroSlot(slot); err != nil {
+		p.slots.release(uint32(ifindex))
+		return err
+	}
+	if err := p.objs.RfmIfaceSlot.Put(uint32(ifindex), uint32(slot+1)); err != nil {
+		p.slots.release(uint32(ifindex))
+		return fmt.Errorf("publish slot of %d: %w", ifindex, err)
+	}
+	return nil
+}
+
+// releaseSlot takes the slot from ifindex and zeroes its counters, the
+// caller holds mu
+func (p *Probe) releaseSlot(ifindex uint32) error {
+	slot, ok := p.slots.release(ifindex)
+	if !ok {
+		return nil
+	}
+	if err := p.objs.RfmIfaceSlot.Put(ifindex, uint32(0)); err != nil {
+		return fmt.Errorf("unpublish slot of %d: %w", ifindex, err)
+	}
+	return p.zeroSlot(slot)
+}
+
+// zeroSlot clears every CPU's counters of slot
+func (p *Probe) zeroSlot(slot int) error {
+	ncpu, err := ebpf.PossibleCPU()
+	if err != nil {
+		return fmt.Errorf("count CPUs: %w", err)
+	}
+	zero := make([]rfmRfmIfaceValue, ncpu)
+	for dir := range uint8(2) {
+		for fam := range ifaceFamilies {
+			if err := p.objs.RfmIfaceArr.Put(slotIndex(slot, dir, fam), zero); err != nil {
+				return fmt.Errorf("zero counter slot %d: %w", slot, err)
+			}
+		}
+	}
+	return nil
 }
 
 // Close detaches every interface and releases the programs and maps
@@ -199,9 +331,13 @@ func (p *Probe) detach(ifindex int) (string, bool, error) {
 	return l.name, true, err
 }
 
-// clearIfaceStats deletes every counter entry of ifindex
+// clearIfaceStats frees the counter slot of ifindex and deletes its hash
+// entries
 func (p *Probe) clearIfaceStats(ifindex int) error {
-	return p.deleteIfaceStats(func(i uint32) bool { return i == uint32(ifindex) })
+	p.mu.Lock()
+	err := p.releaseSlot(uint32(ifindex))
+	p.mu.Unlock()
+	return errors.Join(err, p.deleteIfaceStats(func(i uint32) bool { return i == uint32(ifindex) }))
 }
 
 // pruneIfaceStats deletes the counter entries of every interface that is
@@ -215,8 +351,15 @@ func (p *Probe) pruneIfaceStats() error {
 	for ifindex := range p.pending {
 		keep[uint32(ifindex)] = true
 	}
+	var errs []error
+	for ifindex := range p.slots.held() {
+		if !keep[ifindex] {
+			errs = append(errs, p.releaseSlot(ifindex))
+		}
+	}
 	p.mu.Unlock()
-	return p.deleteIfaceStats(func(i uint32) bool { return !keep[i] })
+	errs = append(errs, p.deleteIfaceStats(func(i uint32) bool { return !keep[i] }))
+	return errors.Join(errs...)
 }
 
 // deleteIfaceStats deletes the counter entries whose ifindex drop accepts
@@ -271,6 +414,68 @@ func (p *Probe) SetSampleRate(n uint32) error {
 
 func (p *Probe) IfaceStats() *ebpf.Map {
 	return p.objs.RfmIfaceStats
+}
+
+// Counters returns the traffic the programs counted per interface,
+// direction and family, summed over CPUs and over the counter slot of the
+// interface and its hash entries, which hold what it counted without a slot,
+// before an upgrade added the slots or once every slot was taken, and only
+// the entries that saw traffic
+func (p *Probe) Counters() ([]IfaceCounter, error) {
+	type key struct {
+		ifindex    uint32
+		dir, proto uint8
+	}
+	sums := make(map[key]IfaceCounter)
+
+	// deleting a key under a hash iterator restarts the walk, so a read
+	// that overlaps a detach can see a key twice, the later read wins
+	var hk rfmRfmIfaceKey
+	var vals []rfmRfmIfaceValue
+	iter := p.objs.RfmIfaceStats.Iterate()
+	for iter.Next(&hk, &vals) {
+		c := IfaceCounter{Ifindex: hk.Ifindex, Dir: hk.Dir, Proto: hk.Proto}
+		for _, v := range vals {
+			c.Packets += v.Packets
+			c.Bytes += v.Bytes
+		}
+		sums[key{hk.Ifindex, hk.Dir, hk.Proto}] = c
+	}
+	if err := iter.Err(); err != nil {
+		return nil, fmt.Errorf("iterate iface stats: %w", err)
+	}
+
+	p.mu.Lock()
+	for ifindex, slot := range p.slots.held() {
+		for dir := range uint8(2) {
+			for fam := range ifaceFamilies {
+				if err := p.objs.RfmIfaceArr.Lookup(slotIndex(slot, dir, fam), &vals); err != nil {
+					p.mu.Unlock()
+					return nil, fmt.Errorf("read counter slot %d: %w", slot, err)
+				}
+				k := key{ifindex, dir, familyProto(fam)}
+				c := sums[k]
+				c.Ifindex, c.Dir, c.Proto = k.ifindex, k.dir, k.proto
+				for _, v := range vals {
+					c.Packets += v.Packets
+					c.Bytes += v.Bytes
+				}
+				sums[k] = c
+			}
+		}
+	}
+	p.mu.Unlock()
+
+	out := make([]IfaceCounter, 0, len(sums))
+	for _, c := range sums {
+		if c.Packets != 0 || c.Bytes != 0 {
+			out = append(out, c)
+		}
+	}
+	slices.SortFunc(out, func(a, b IfaceCounter) int {
+		return cmp.Or(cmp.Compare(a.Ifindex, b.Ifindex), cmp.Compare(a.Dir, b.Dir), cmp.Compare(a.Proto, b.Proto))
+	})
+	return out, nil
 }
 
 // IfaceStatsErrors returns how many counter updates the programs could not
@@ -355,6 +560,12 @@ func (p *Probe) attach(ifindex int, name string) (bool, error) {
 	p.mu.Unlock()
 	if attached {
 		return false, nil
+	}
+
+	// the slot is in place before the first packet, a link that fails to
+	// attach keeps it until it attaches or prune finds it gone
+	if err := p.assignSlot(ifindex); err != nil {
+		return false, err
 	}
 
 	ing, err := link.AttachTCX(link.TCXOptions{

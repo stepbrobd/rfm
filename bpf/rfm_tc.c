@@ -40,6 +40,25 @@ struct {
 	__type(value, struct rfm_iface_value);
 } rfm_iface_stats SEC(".maps");
 
+// rfm_iface_slot holds 1 + the counter slot userspace assigned an ifindex,
+// 0 for none, an array lookup the verifier inlines where the hash needs a
+// helper call and a key hash on every packet
+struct {
+	__uint(type, BPF_MAP_TYPE_ARRAY);
+	__uint(max_entries, RFM_SLOT_IFINDEX_MAX);
+	__type(key, __u32);
+	__type(value, __u32);
+} rfm_iface_slot SEC(".maps");
+
+// rfm_iface_arr holds the counters of the slotted interfaces at
+// slot * 2 * RFM_FAMILIES + dir * RFM_FAMILIES + family
+struct {
+	__uint(type, BPF_MAP_TYPE_PERCPU_ARRAY);
+	__uint(max_entries, RFM_SLOTS * 2 * RFM_FAMILIES);
+	__type(key, __u32);
+	__type(value, struct rfm_iface_value);
+} rfm_iface_arr SEC(".maps");
+
 // rfm_iface_errors counts the counter updates rfm_iface_stats refused, a
 // full map is the usual cause and leaves the traffic of the new key uncounted
 struct {
@@ -278,15 +297,29 @@ static __always_inline int rfm_tc(struct __sk_buff *skb, __u8 dir)
 		len += segs * sizeof(struct rfm_vlan_hdr);
 	}
 
-	// iface stats are always updated, not gated by sampling
+	// iface stats are always updated, not gated by sampling, in the slot
+	// of the interface when it has one and in the hash otherwise
+	struct rfm_iface_value *val = NULL;
+	__u32 ifindex = skb->ifindex;
+	if (ifindex < RFM_SLOT_IFINDEX_MAX) {
+		__u32 *slot = bpf_map_lookup_elem(&rfm_iface_slot, &ifindex);
+		if (slot && *slot && *slot <= RFM_SLOTS) {
+			__u32 fam = iface_proto == 4 ? 1 :
+				    iface_proto == 6 ? 2 :
+						       0;
+			__u32 idx = (*slot - 1) * 2 * RFM_FAMILIES +
+				    dir * RFM_FAMILIES + fam;
+			val = bpf_map_lookup_elem(&rfm_iface_arr, &idx);
+		}
+	}
+
 	struct rfm_iface_key ikey = {
-		.ifindex = skb->ifindex,
+		.ifindex = ifindex,
 		.dir = dir,
 		.proto = iface_proto,
 	};
-
-	struct rfm_iface_value *val =
-		bpf_map_lookup_elem(&rfm_iface_stats, &ikey);
+	if (!val)
+		val = bpf_map_lookup_elem(&rfm_iface_stats, &ikey);
 	if (val) {
 		val->packets += segs;
 		val->bytes += len;

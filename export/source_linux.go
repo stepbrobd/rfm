@@ -3,56 +3,24 @@
 package export
 
 import (
-	"fmt"
-	"structs"
-
 	"ysun.co/rfm/probe"
 )
 
-// ifaceKey mirrors the BPF rfm_iface_key struct for decoding map entries
-type ifaceKey struct {
-	_       structs.HostLayout
-	Ifindex uint32
-	Dir     uint8
-	Proto   uint8
-	Pad     uint16
-}
-
-// ifaceValue mirrors the BPF rfm_iface_value struct for decoding map entries
-type ifaceValue struct {
-	_       structs.HostLayout
-	Packets uint64
-	Bytes   uint64
-}
-
 // ProbeSource adapts a *probe.Probe to the IfaceStatsSource interface
-// by iterating the BPF per-CPU hash map
 type ProbeSource struct {
 	Probe *probe.Probe
 }
 
-// IfaceStats reads the BPF iface stats map, summing per-CPU values
+// IfaceStats reads the probe's interface counters, summed over CPUs and over
+// the counter slots and the hash
 func (s *ProbeSource) IfaceStats() ([]IfaceStatsEntry, error) {
-	var entries []IfaceStatsEntry
-	var key ifaceKey
-	var vals []ifaceValue
-	iter := s.Probe.IfaceStats().Iterate()
-	for iter.Next(&key, &vals) {
-		var packets, bytes uint64
-		for _, v := range vals {
-			packets += v.Packets
-			bytes += v.Bytes
-		}
-		entries = append(entries, IfaceStatsEntry{
-			Ifindex: key.Ifindex,
-			Dir:     key.Dir,
-			Proto:   key.Proto,
-			Packets: packets,
-			Bytes:   bytes,
-		})
+	counters, err := s.Probe.Counters()
+	if err != nil {
+		return nil, err
 	}
-	if err := iter.Err(); err != nil {
-		return entries, fmt.Errorf("iterate iface stats: %w", err)
+	entries := make([]IfaceStatsEntry, len(counters))
+	for i, c := range counters {
+		entries[i] = IfaceStatsEntry{Ifindex: c.Ifindex, Dir: c.Dir, Proto: c.Proto, Packets: c.Packets, Bytes: c.Bytes}
 	}
 	return entries, nil
 }
