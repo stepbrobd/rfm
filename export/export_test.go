@@ -476,7 +476,7 @@ func TestCollectFlowsScalesBySampleRate(t *testing.T) {
 	src := &mockProbe{}
 
 	c := collector.New(time.Minute, nil, config.DefaultMaxFlows)
-	c.SetSampleRate(10, 0)
+	c.SetRateApplier(10, nil)
 	c.Record(collector.FlowEvent{
 		Ifindex: 2,
 		Dir:     0,
@@ -677,8 +677,7 @@ func TestCollectErrorsTotalZeroOnSuccess(t *testing.T) {
 
 func TestSampleRateGaugeFollowsTheCollector(t *testing.T) {
 	c := collector.New(time.Minute, nil, config.DefaultMaxFlows)
-	c.SetSampleRate(10, 0)
-	c.SetRateApplier(func(uint32) error { return nil })
+	c.SetRateApplier(10, func(uint32) error { return nil })
 	mc := New(nil, c)
 	assertGauge(t, collectAll(t, mc), "rfm_bpf_sample_rate", 10)
 
@@ -820,7 +819,7 @@ func TestCollectIPFIXStats(t *testing.T) {
 func TestCollectRollupCountersSurviveEviction(t *testing.T) {
 	e := &staticEnricher{srcASN: 64500, dstASN: 64501, srcCity: "Oslo", dstCity: "Lima"}
 	c := collector.New(time.Second, e, config.DefaultMaxFlows)
-	c.SetSampleRate(10, 0)
+	c.SetRateApplier(10, nil)
 
 	t0 := time.Hour
 	ev := collector.FlowEvent{
@@ -884,7 +883,7 @@ func TestCollectRollupCountersSurviveEviction(t *testing.T) {
 
 func TestCollectRollupSeriesStartAtZero(t *testing.T) {
 	c := collector.New(time.Minute, nil, config.DefaultMaxFlows)
-	c.SetSampleRate(10, 0)
+	c.SetRateApplier(10, nil)
 	ev := collector.FlowEvent{
 		Ifindex: 2, Dir: 1, Proto: 6,
 		SrcAddr: netip.MustParseAddr("192.168.1.1"),
@@ -932,7 +931,7 @@ func seriesID(m *dto.Metric) string {
 func TestRollupSumsStayExactAcrossTheCap(t *testing.T) {
 	// flows and label tuples are both capped at four
 	c := collector.New(time.Minute, asnPerSource{}, 4)
-	c.SetSampleRate(10, 0)
+	c.SetRateApplier(10, nil)
 	mc := New(nil, c)
 	reg := prometheus.NewRegistry()
 	reg.MustRegister(mc)

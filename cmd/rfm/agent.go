@@ -165,10 +165,9 @@ func runAgent(ctx context.Context, path string, deps agentDeps) error {
 		cfg.Agent.Collector.MaxFlows,
 	)
 	c.SetActiveTimeout(cfg.Agent.Collector.ActiveTimeout)
-	c.SetSampleRate(cfg.Agent.BPF.SampleRate, 0)
-	c.SetRateApplier(p.SetSampleRate)
+	c.SetRateApplier(cfg.Agent.BPF.SampleRate, p.SetSampleRate)
 	if cfg.Agent.BPF.AdaptiveSampling {
-		c.SetRateController(cfg.Agent.BPF.SampleRate, cfg.Agent.BPF.MaxSampleRate, p.SetSampleRate)
+		c.SetRateController(cfg.Agent.BPF.SampleRate, cfg.Agent.BPF.MaxSampleRate)
 	}
 
 	var ipfixExp *export.IPFIXExporter

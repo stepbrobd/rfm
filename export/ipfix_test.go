@@ -92,7 +92,7 @@ func TestIPFIXExportsEvictedFlowsOverUDP(t *testing.T) {
 
 			c := collector.New(10*time.Second, nil, config.DefaultMaxFlows)
 			c.SetFlowExporter(exp)
-			c.SetSampleRate(100, 0)
+			c.SetRateApplier(100, nil)
 
 			t0 := time.Hour
 			ev := collector.FlowEvent{

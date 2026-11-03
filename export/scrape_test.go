@@ -42,7 +42,7 @@ func tupleEvent(tuple, port int) collector.FlowEvent {
 func fleetCollector(tb testing.TB) *collector.Collector {
 	tb.Helper()
 	c := collector.New(30*time.Second, tupleEnricher{}, config.DefaultMaxFlows)
-	c.SetSampleRate(10, 0)
+	c.SetRateApplier(10, nil)
 
 	t0 := time.Hour
 	for i := range 10_000 {
@@ -80,7 +80,7 @@ func scrapeOnce(tb testing.TB, h http.Handler) {
 func smallFleetCollector(tb testing.TB) *collector.Collector {
 	tb.Helper()
 	c := collector.New(30*time.Second, tupleEnricher{}, config.DefaultMaxFlows)
-	c.SetSampleRate(10, 0)
+	c.SetRateApplier(10, nil)
 
 	t0 := time.Hour
 	for i := range 1000 {

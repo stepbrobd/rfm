@@ -1338,7 +1338,7 @@ func TestEvictSkipsFullyExportedFlow(t *testing.T) {
 
 func TestSampleRateScalesEstimatesAtRecordTime(t *testing.T) {
 	c := New(30*time.Second, nil, config.DefaultMaxFlows)
-	c.SetSampleRate(10, 0)
+	c.SetRateApplier(10, nil)
 
 	ev := FlowEvent{
 		Tstamp: 1_000,
@@ -1352,7 +1352,7 @@ func TestSampleRateScalesEstimatesAtRecordTime(t *testing.T) {
 
 	// the rate doubles from boot time 5000 on, an older event still scales
 	// by 10 and a newer one by 20
-	c.SetSampleRate(20, 5_000)
+	c.addRate(20, 5_000)
 	if got := c.SampleRate(); got != 20 {
 		t.Fatalf("current rate = %d, want 20", got)
 	}
@@ -1379,7 +1379,7 @@ func TestExportedRecordCarriesEstimateDelta(t *testing.T) {
 	exp := &mockFlowExporter{}
 	c := New(30*time.Second, nil, config.DefaultMaxFlows)
 	c.SetFlowExporter(exp)
-	c.SetSampleRate(100, 0)
+	c.SetRateApplier(100, nil)
 
 	t0 := time.Hour
 	ev := FlowEvent{
@@ -1415,12 +1415,12 @@ func TestAdaptiveSamplingAppliesRateOnDrops(t *testing.T) {
 	mr := &sustainedReader{event: encodeWireEvent(ev), drops: 5}
 
 	c := New(100*time.Millisecond, nil, config.DefaultMaxFlows)
-	c.SetSampleRate(10, 0)
 	var applied atomic.Uint32
-	c.SetRateController(10, 40, func(n uint32) error {
+	c.SetRateApplier(10, func(n uint32) error {
 		applied.Store(n)
 		return nil
 	})
+	c.SetRateController(10, 40)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	errCh := make(chan error, 1)
@@ -1516,7 +1516,7 @@ func TestRetentionKeepsAnIdleTupleUntilAScrapeShowedItsCounts(t *testing.T) {
 
 func TestScrapeShowsANewRollupAtZeroFirst(t *testing.T) {
 	c := New(30*time.Second, nil, config.DefaultMaxFlows)
-	c.SetSampleRate(10, 0)
+	c.SetRateApplier(10, nil)
 	t0 := time.Hour
 	ev := FlowEvent{
 		Ifindex: 3, Proto: 6, SrcPort: 1000, DstPort: 80,
@@ -1575,9 +1575,9 @@ func (r *rateRecorder) last() uint32 {
 
 func TestManualRateResetsTheController(t *testing.T) {
 	c := New(30*time.Second, nil, config.DefaultMaxFlows)
-	c.SetSampleRate(10, 0)
 	probe := &rateRecorder{}
-	c.SetRateController(10, 1000, probe.apply)
+	c.SetRateApplier(10, probe.apply)
+	c.SetRateController(10, 1000)
 
 	// an operator sheds load with rfm set sample-rate 200
 	if err := c.ApplySampleRate(200); err != nil {
@@ -1605,18 +1605,18 @@ func TestManualRateResetsTheController(t *testing.T) {
 
 func TestManualRateWaitsForAnAdaptiveStep(t *testing.T) {
 	c := New(30*time.Second, nil, config.DefaultMaxFlows)
-	c.SetSampleRate(10, 0)
 	probe := &rateRecorder{}
 	entered := make(chan struct{})
 	release := make(chan struct{})
 	var first sync.Once
-	c.SetRateController(10, 1000, func(n uint32) error {
+	c.SetRateApplier(10, func(n uint32) error {
 		first.Do(func() {
 			close(entered)
 			<-release
 		})
 		return probe.apply(n)
 	})
+	c.SetRateController(10, 1000)
 
 	// the adaptive step is between its probe write and its history append
 	stepped := make(chan struct{})
@@ -1647,9 +1647,9 @@ func TestManualRateWaitsForAnAdaptiveStep(t *testing.T) {
 
 func TestFailedRateChangesKeepTheRateInForce(t *testing.T) {
 	c := New(30*time.Second, nil, config.DefaultMaxFlows)
-	c.SetSampleRate(10, 0)
 	probe := &rateRecorder{fail: errors.New("map update failed")}
-	c.SetRateController(10, 1000, probe.apply)
+	c.SetRateApplier(10, probe.apply)
+	c.SetRateController(10, 1000)
 
 	if err := c.ApplySampleRate(200); err == nil {
 		t.Fatal("ApplySampleRate succeeded with a failing probe")
@@ -1720,7 +1720,7 @@ func TestRollupsAreCappedAtMaxFlows(t *testing.T) {
 
 func TestRollupsAccumulateAcrossFlows(t *testing.T) {
 	c := New(30*time.Second, nil, config.DefaultMaxFlows)
-	c.SetSampleRate(4, 0)
+	c.SetRateApplier(4, nil)
 	t0 := time.Hour
 
 	mk := func(port uint16, proto uint8) FlowEvent {

@@ -20,7 +20,7 @@ import (
 func testHandler(t *testing.T) (*controlHandler, *collector.Collector) {
 	t.Helper()
 	c := collector.New(30*time.Second, nil, config.DefaultMaxFlows)
-	c.SetSampleRate(10, 0)
+	c.SetRateApplier(10, nil)
 	cfg := &config.Config{}
 	cfg.Agent.BPF.SampleRate = 10
 	cfg.Agent.BPF.MaxSampleRate = 1000
@@ -165,10 +165,11 @@ func TestControlStatusWithoutOptionalBackends(t *testing.T) {
 func TestControlSetSampleRate(t *testing.T) {
 	h, c := testHandler(t)
 	var probe []uint32
-	c.SetRateController(10, 1000, func(n uint32) error {
+	c.SetRateApplier(10, func(n uint32) error {
 		probe = append(probe, n)
 		return nil
 	})
+	c.SetRateController(10, 1000)
 
 	if err := h.SetSampleRate(5000); err == nil || !strings.Contains(err.Error(), "above max_sample_rate") {
 		t.Fatalf("rate 5000 = %v, want it refused above max_sample_rate", err)
@@ -191,7 +192,7 @@ func TestControlSetSampleRate(t *testing.T) {
 
 func TestCLISetSampleRateAgainstTheAgent(t *testing.T) {
 	h, c := testHandler(t)
-	c.SetRateApplier(func(uint32) error { return nil })
+	c.SetRateApplier(10, func(uint32) error { return nil })
 
 	sock := filepath.Join(t.TempDir(), "rfm.sock")
 	srv, err := ctl.Listen(sock, h)

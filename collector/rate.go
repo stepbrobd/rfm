@@ -14,12 +14,6 @@ type rateController struct {
 const quietTicks = 10
 
 func newRateController(base, max uint32) *rateController {
-	if base == 0 {
-		base = 1
-	}
-	if max < base {
-		max = base
-	}
 	return &rateController{base: base, max: max, rate: base}
 }
 

@@ -55,8 +55,7 @@ type Collector struct {
 	// the probe samples at is always the last one in rates
 	// it guards the fields below and is taken before mu
 	rateMu sync.Mutex
-	// applyRate writes a new rate into the probe, controller adapts the
-	// rate to ring drops when set, SetRateController sets both
+	// applyRate writes a new rate into the probe, controller adapts the rate to ring drops when set
 	applyRate  func(uint32) error
 	controller *rateController
 	lastDrops  uint64
@@ -99,43 +98,31 @@ type rateChange struct {
 // within milliseconds so old changes are never consulted again
 const rateHistory = 64
 
-// SetSampleRate records that packets sampled from boot time since on are 1-in-rate samples, 0 covers everything seen so far
-func (c *Collector) SetSampleRate(rate uint32, since time.Duration) {
-	if rate == 0 {
-		rate = 1
-	}
+// SetRateApplier puts rate in force and makes apply how a later rate reaches the probe, it must be called before Run
+func (c *Collector) SetRateApplier(rate uint32, apply func(uint32) error) {
+	c.rateMu.Lock()
+	defer c.rateMu.Unlock()
+	c.applyRate = apply
+	c.mu.Lock()
+	c.rates = []rateChange{{rate: rate}}
+	c.mu.Unlock()
+}
 
+// SetRateController enables adaptive sampling between base and maxRate, it must be called before Run
+func (c *Collector) SetRateController(base, maxRate uint32) {
+	c.rateMu.Lock()
+	c.controller = newRateController(base, maxRate)
+	c.rateMu.Unlock()
+}
+
+// addRate records that the events sampled from boot time since on are 1 in rate samples
+func (c *Collector) addRate(rate uint32, since time.Duration) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-
-	if since == 0 {
-		c.rates = []rateChange{{rate: rate}}
-		return
-	}
 	c.rates = append(c.rates, rateChange{since: since, rate: rate})
 	if len(c.rates) > rateHistory {
 		c.rates = c.rates[len(c.rates)-rateHistory:]
 	}
-}
-
-// SetRateApplier sets how a new sample rate is installed in the probe,
-// ApplySampleRate goes through apply and the collector records a change for
-// scaling once apply succeeded
-// it must be called before Run
-func (c *Collector) SetRateApplier(apply func(uint32) error) {
-	c.rateMu.Lock()
-	c.applyRate = apply
-	c.rateMu.Unlock()
-}
-
-// SetRateController enables adaptive sampling between base and maxRate, the
-// rates it picks go through apply, which also becomes the rate applier
-// it must be called before Run
-func (c *Collector) SetRateController(base, maxRate uint32, apply func(uint32) error) {
-	c.rateMu.Lock()
-	c.controller = newRateController(base, maxRate)
-	c.applyRate = apply
-	c.rateMu.Unlock()
 }
 
 // ApplySampleRate installs rate in the probe and records it for scaling, the
@@ -155,7 +142,7 @@ func (c *Collector) ApplySampleRate(rate uint32) error {
 	if err := c.applyRate(rate); err != nil {
 		return err
 	}
-	c.SetSampleRate(rate, bootNow())
+	c.addRate(rate, bootNow())
 	if c.controller != nil {
 		c.controller.reset(rate)
 	}
@@ -188,7 +175,7 @@ func (c *Collector) adapt(drops uint64) {
 		log.Error("apply sample rate", "rate", rate, "err", err)
 		return
 	}
-	c.SetSampleRate(rate, bootNow())
+	c.addRate(rate, bootNow())
 	log.Info("sample rate adapted", "rate", rate, "drops", delta)
 }
 
