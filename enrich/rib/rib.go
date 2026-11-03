@@ -160,8 +160,7 @@ type routeMetaState struct {
 }
 
 // update is a batch of RIB changes
-// Reach routes carry their own peer, Withdraw paths are withdrawn from Peer,
-// or from every peer when Peer is the zero value
+// Reach routes carry their own peer, Withdraw paths are withdrawn from Peer
 type update struct {
 	Peer     Peer
 	Reach    []Route
@@ -225,17 +224,8 @@ func (t *table) apply(u update) {
 	defer t.mu.Unlock()
 
 	for _, w := range u.Withdraw {
-		prefix := w.Prefix.Masked()
-		if u.Peer == (Peer{}) {
-			// deleteRoute may drop the view from the map, which a range
-			// over it allows
-			for _, v := range t.views {
-				t.deleteRoute(prefix, w.PathID, v)
-			}
-			continue
-		}
 		if v := t.views[u.Peer]; v != nil {
-			t.deleteRoute(prefix, w.PathID, v)
+			t.deleteRoute(w.Prefix.Masked(), w.PathID, v)
 		}
 	}
 	for _, route := range u.Reach {
@@ -336,18 +326,6 @@ func (t *table) summary() Summary {
 		Routes:     t.routes,
 		Peers:      len(t.views),
 	}
-}
-
-// peers lists the views with at least one route
-func (t *table) peers() []Peer {
-	t.mu.RLock()
-	defer t.mu.RUnlock()
-
-	out := make([]Peer, 0, len(t.views))
-	for peer := range t.views {
-		out = append(out, peer)
-	}
-	return out
 }
 
 // holds reports whether the table holds a route of peer
@@ -559,8 +537,6 @@ func newServer(ln net.Listener) *Server {
 
 // Stats counts what the BMP listener saw since it started
 type Stats struct {
-	// Sessions is the number of BMP sessions open now
-	Sessions int
 	// SessionsRejected counts the connections closed right after accept
 	// because the most sessions rfm serves at once were open
 	SessionsRejected uint64
@@ -578,12 +554,7 @@ type Stats struct {
 
 // Stats returns the counters of the BMP listener
 func (s *Server) Stats() Stats {
-	s.connsMu.Lock()
-	sessions := len(s.conns)
-	s.connsMu.Unlock()
-
 	return Stats{
-		Sessions:         sessions,
 		SessionsRejected: s.sessionsRejected.Load(),
 		ParseErrors:      s.parseErrors.Load(),
 		RoutesRejected:   s.table.rejected.Load(),
@@ -901,8 +872,8 @@ func (s *Server) trackConn(conn net.Conn) bool {
 		return false
 	}
 	if len(s.conns) >= s.maxSessions {
-		_ = conn.Close()
 		rejected := s.sessionsRejected.Add(1)
+		_ = conn.Close()
 		if every(&s.limitLogged, time.Minute) {
 			log.Warn("bmp session limit reached, closing new sessions", "remote", conn.RemoteAddr(), "limit", s.maxSessions, "rejected", rejected)
 		}

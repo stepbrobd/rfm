@@ -139,6 +139,7 @@ func TestTableEnrichSkipsDefaultRoute(t *testing.T) {
 
 func TestTableDedupesMetadata(t *testing.T) {
 	tab := newTable()
+	peer := Peer{Address: netip.MustParseAddr("192.0.2.2"), PostPolicy: true}
 
 	tab.apply(update{
 		Reach: []Route{
@@ -168,6 +169,7 @@ func TestTableDedupesMetadata(t *testing.T) {
 	}
 
 	tab.apply(update{
+		Peer:     peer,
 		Withdraw: []withdrawal{{Prefix: netip.MustParsePrefix("203.0.113.0/24")}},
 	})
 	if got := len(tab.metas); got != 1 {
@@ -175,6 +177,7 @@ func TestTableDedupesMetadata(t *testing.T) {
 	}
 
 	tab.apply(update{
+		Peer:     peer,
 		Withdraw: []withdrawal{{Prefix: netip.MustParsePrefix("203.0.114.0/24")}},
 	})
 	if got := len(tab.metas); got != 0 {
@@ -991,12 +994,17 @@ func TestServerLimitsSessions(t *testing.T) {
 		t.Cleanup(func() { _ = conn.Close() })
 		return conn
 	}
+	sessions := func() int {
+		s.connsMu.Lock()
+		defer s.connsMu.Unlock()
+		return len(s.conns)
+	}
 	waitForSessions := func(want int) {
 		t.Helper()
 		deadline := time.Now().Add(2 * time.Second)
-		for s.Stats().Sessions != want {
+		for sessions() != want {
 			if time.Now().After(deadline) {
-				t.Fatalf("sessions = %d, want %d", s.Stats().Sessions, want)
+				t.Fatalf("sessions = %d, want %d", sessions(), want)
 			}
 			time.Sleep(5 * time.Millisecond)
 		}
@@ -1996,14 +2004,9 @@ func TestTableMatchesModel(t *testing.T) {
 				PathID:            pathID,
 			}}})
 			model.reach(peer, prefix, pathID, origin)
-		case op < 8:
+		case op < 9:
 			tab.apply(update{Peer: peer, Withdraw: []withdrawal{{Prefix: prefix, PathID: pathID}}})
 			model.withdraw(peer, prefix, pathID)
-		case op < 9:
-			tab.apply(update{Withdraw: []withdrawal{{Prefix: prefix, PathID: pathID}}})
-			for peer := range model {
-				model.withdraw(peer, prefix, pathID)
-			}
 		default:
 			tab.removePeer(peer)
 			delete(model, peer)
@@ -2173,8 +2176,8 @@ func TestRemovePeerDropsOnlyThatPeer(t *testing.T) {
 	if !ok || route.OriginASN != 3 {
 		t.Fatalf("route from the remaining peer = %+v ok=%v, want origin 3", route, ok)
 	}
-	if got := tab.peers(); len(got) != 1 || got[0] != b {
-		t.Fatalf("peers = %v, want only %v", got, b)
+	if len(tab.views) != 1 || !tab.holds(b) {
+		t.Fatalf("the table holds %d views, want only %v", len(tab.views), b)
 	}
 	if got := len(tab.metas); got != 1 {
 		t.Fatalf("metadata entries = %d, want 1", got)
@@ -2198,8 +2201,8 @@ func TestRemovePeerViewsKeepsOtherDistinguishers(t *testing.T) {
 	if !ok || route.OriginASN != 3 {
 		t.Fatalf("route = %+v ok=%v, want origin 3 from the other distinguisher", route, ok)
 	}
-	if got := tab.peers(); len(got) != 1 || got[0] != (Peer{Address: addr, Distinguisher: 7}) {
-		t.Fatalf("peers = %v, want only the view with distinguisher 7", got)
+	if len(tab.views) != 1 || !tab.holds(Peer{Address: addr, Distinguisher: 7}) {
+		t.Fatalf("the table holds %d views, want only the view with distinguisher 7", len(tab.views))
 	}
 }
 

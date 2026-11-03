@@ -15,22 +15,17 @@ const DefaultSocket = "/run/rfm/rfm.sock"
 
 // Client talks to one agent over its control socket
 type Client struct {
-	Socket  string
-	Timeout time.Duration
+	Socket string
 }
 
 // Do sends one request and decodes the data part of the response
 func (c *Client) Do(command string, args map[string]string, out any) error {
-	timeout := c.Timeout
-	if timeout == 0 {
-		timeout = requestTimeout
-	}
-	conn, err := net.DialTimeout("unix", c.Socket, timeout)
+	conn, err := net.DialTimeout("unix", c.Socket, requestTimeout)
 	if err != nil {
 		return fmt.Errorf("connect to %s: %w (is the agent running with agent.control.socket set?)", c.Socket, err)
 	}
 	defer conn.Close()
-	_ = conn.SetDeadline(time.Now().Add(timeout))
+	_ = conn.SetDeadline(time.Now().Add(requestTimeout))
 
 	if err := json.NewEncoder(conn).Encode(Request{Command: command, Args: args}); err != nil {
 		return fmt.Errorf("send request: %w", err)
@@ -50,15 +45,6 @@ func (c *Client) Do(command string, args map[string]string, out any) error {
 		return fmt.Errorf("decode response: %w", err)
 	}
 	return nil
-}
-
-// Raw sends one request and returns the response data as sent
-func (c *Client) Raw(command string, args map[string]string) (json.RawMessage, error) {
-	var raw json.RawMessage
-	if err := c.Do(command, args, &raw); err != nil {
-		return nil, err
-	}
-	return raw, nil
 }
 
 func (c *Client) Status() (Status, error) {

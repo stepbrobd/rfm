@@ -33,19 +33,18 @@ func OpenWithInterval(cfg config.MMDBConfig, interval time.Duration) (*Enricher,
 	}
 
 	m := &Enricher{
-		open: func(path string) (*maxminddb.Reader, error) { return maxminddb.Open(path) },
 		stop: make(chan struct{}),
 		done: make(chan struct{}),
 	}
 
 	if cfg.ASNDB != "" {
-		if err := m.asn.load(cfg.ASNDB, "ASN", m.open); err != nil {
+		if err := m.asn.load(cfg.ASNDB, "ASN"); err != nil {
 			return nil, err
 		}
 	}
 
 	if cfg.CityDB != "" {
-		if err := m.city.load(cfg.CityDB, "city", m.open); err != nil {
+		if err := m.city.load(cfg.CityDB, "city"); err != nil {
 			_ = m.asn.close()
 			return nil, err
 		}
@@ -66,7 +65,6 @@ type Enricher struct {
 	asn  database
 	city database
 
-	open      func(string) (*maxminddb.Reader, error)
 	stop      chan struct{}
 	done      chan struct{}
 	closeOnce sync.Once
@@ -98,12 +96,12 @@ func statStamp(path string) (stamp, error) {
 	return stamp{size: fi.Size(), mtime: fi.ModTime()}, nil
 }
 
-func (d *database) load(path, kind string, open func(string) (*maxminddb.Reader, error)) error {
+func (d *database) load(path, kind string) error {
 	st, err := statStamp(path)
 	if err != nil {
 		return err
 	}
-	reader, err := open(path)
+	reader, err := maxminddb.Open(path)
 	if err != nil {
 		return fmt.Errorf("open %s MMDB %q: %w", kind, path, err)
 	}
@@ -202,7 +200,7 @@ func (m *Enricher) reload(d *database) error {
 	}
 
 	// open outside the lock, lookups keep running on the old reader
-	reader, err := m.open(path)
+	reader, err := maxminddb.Open(path)
 	if err != nil {
 		return fmt.Errorf("reopen %s MMDB %q: %w", kind, path, err)
 	}

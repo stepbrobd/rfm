@@ -178,16 +178,16 @@ func TestRoundTrip(t *testing.T) {
 func TestBadRequests(t *testing.T) {
 	c := startServer(t, &fakeHandler{})
 
-	if _, err := c.Raw("nonsense", nil); err == nil || !strings.Contains(err.Error(), "unknown command") {
+	if err := c.Do("nonsense", nil, nil); err == nil || !strings.Contains(err.Error(), "unknown command") {
 		t.Fatalf("unknown command error = %v", err)
 	}
-	if _, err := c.Raw(CmdFlowsTop, map[string]string{"n": "0"}); err == nil {
+	if err := c.Do(CmdFlowsTop, map[string]string{"n": "0"}, nil); err == nil {
 		t.Fatal("n=0 must be rejected")
 	}
-	if _, err := c.Raw(CmdFlowsTop, map[string]string{"by": "colour"}); err == nil {
+	if err := c.Do(CmdFlowsTop, map[string]string{"by": "colour"}, nil); err == nil {
 		t.Fatal("by=colour must be rejected")
 	}
-	if _, err := c.Raw(CmdRIBLookup, map[string]string{"addr": "not-an-ip"}); err == nil {
+	if err := c.Do(CmdRIBLookup, map[string]string{"addr": "not-an-ip"}, nil); err == nil {
 		t.Fatal("bad address must be rejected")
 	}
 	if _, err := c.RIBSummary(); err == nil || !strings.Contains(err.Error(), "not configured") {
@@ -379,8 +379,17 @@ func TestServeCapsConnections(t *testing.T) {
 		idle[i] = conn
 	}
 
-	waiting := &Client{Socket: c.Socket, Timeout: 200 * time.Millisecond}
-	if _, err := waiting.Status(); err == nil {
+	waiting, err := net.Dial("unix", c.Socket)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer waiting.Close()
+	_ = waiting.SetDeadline(time.Now().Add(200 * time.Millisecond))
+	if err := json.NewEncoder(waiting).Encode(Request{Command: CmdStatus}); err != nil {
+		t.Fatal(err)
+	}
+	var resp Response
+	if err := json.NewDecoder(waiting).Decode(&resp); err == nil {
 		t.Fatalf("status answered with %d connections open, want it to wait for a slot", maxConns)
 	}
 
@@ -445,7 +454,7 @@ func TestServeClosesSocketOnAcceptError(t *testing.T) {
 }
 
 func TestClientWithoutAgent(t *testing.T) {
-	c := &Client{Socket: filepath.Join(t.TempDir(), "missing.sock"), Timeout: 200 * time.Millisecond}
+	c := &Client{Socket: filepath.Join(t.TempDir(), "missing.sock")}
 	if _, err := c.Status(); err == nil || !strings.Contains(err.Error(), "is the agent running") {
 		t.Fatalf("error = %v, want a hint that the agent is not running", err)
 	}

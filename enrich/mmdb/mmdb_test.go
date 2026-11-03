@@ -362,26 +362,18 @@ func TestReloadUnchangedFileIsNoop(t *testing.T) {
 	asn := filepath.Join(dir, "asn.mmdb")
 	writeMMDB(t, asn, 1)
 
-	opens := 0
-	m := &Enricher{
-		open: func(path string) (*maxminddb.Reader, error) {
-			opens++
-			return maxminddb.Open(path)
-		},
-		stop: make(chan struct{}),
-		done: make(chan struct{}),
-	}
-	close(m.done)
-	if err := m.asn.load(asn, "ASN", m.open); err != nil {
+	m, err := OpenWithInterval(config.MMDBConfig{ASNDB: asn}, 0)
+	if err != nil {
 		t.Fatal(err)
 	}
 	defer m.Close()
 
+	reader := m.asn.reader
 	if err := m.Reload(); err != nil {
 		t.Fatal(err)
 	}
-	if opens != 1 {
-		t.Fatalf("opens = %d, want 1 (unchanged file must not be reopened)", opens)
+	if m.asn.reader != reader {
+		t.Fatal("reload reopened the unchanged file")
 	}
 }
 

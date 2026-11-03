@@ -113,11 +113,6 @@ func (s *Server) Close() error {
 	return nil
 }
 
-// Addr returns the socket path
-func (s *Server) Addr() string {
-	return s.listener.Addr().String()
-}
-
 // Serve answers connections until ctx is done or accept fails with an error
 // that is not temporary, and closes the socket when it returns
 func (s *Server) Serve(ctx context.Context) error {
