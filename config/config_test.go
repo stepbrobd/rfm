@@ -2,6 +2,7 @@ package config
 
 import (
 	"os"
+	"reflect"
 	"slices"
 	"strconv"
 	"strings"
@@ -9,877 +10,151 @@ import (
 	"time"
 )
 
-func TestLoadFull(t *testing.T) {
-	data := []byte(`
-	[agent]
-	interfaces = ["eth0", "tailscale0"]
+// base is the smallest config Parse accepts
+const base = `[agent]
+interfaces = ["eth0"]
+`
+
+func TestParse(t *testing.T) {
+	defaults := Config{Agent: AgentConfig{
+		Interfaces: []string{"eth0"},
+		BPF:        BPFConfig{SampleRate: 100, RingBufSize: 262144, WakeupBatch: 64, MaxSampleRate: 1000},
+		Collector:  CollectorConfig{MaxFlows: 65536, EvictionTimeout: 30 * time.Second, ActiveTimeout: time.Minute},
+		// the queue holds a sweep of a full table
+		IPFIX:      IPFIXConfig{TemplateRefresh: time.Minute, ObservationDomainID: 1, QueueSize: 65536, MaxMessageSize: 1200},
+		Prometheus: PrometheusConfig{Host: "::1", Port: 9669},
+	}}
+	with := func(change func(*AgentConfig)) Config {
+		cfg := defaults
+		change(&cfg.Agent)
+		return cfg
+	}
+
+	for _, tc := range []struct {
+		name string
+		data string
+		want Config
+	}{
+		{"defaults", base, defaults},
+		{"every key", `
+[agent]
+interfaces = ["eth0", "tailscale0"]
 
 [agent.bpf]
 sample_rate = 50
 ring_buf_size = 131072
+wakeup_batch = 256
+iface_stats_size = 8192
+adaptive_sampling = true
+max_sample_rate = 640
+pin_path = "/sys/fs/bpf/rfm"
+sampled_only = true
 
 [agent.collector]
 max_flows = 1024
 eviction_timeout = "10s"
-
-	[agent.prometheus]
-	host = "127.0.0.1"
-	port = 8080
-
-	[agent.enrich.mmdb]
-	asn_db = "/tmp/asn.mmdb"
-	city_db = "/tmp/city.mmdb"
-
-	[agent.enrich.rib.bmp]
-	host = "127.0.0.1"
-	port = 11019
-	`)
-
-	cfg, err := Parse(data)
-	if err != nil {
-		t.Fatalf("Load: %v", err)
-	}
-
-	if len(cfg.Agent.Interfaces) != 2 || cfg.Agent.Interfaces[0] != "eth0" || cfg.Agent.Interfaces[1] != "tailscale0" {
-		t.Fatalf("interfaces = %v, want [eth0 tailscale0]", cfg.Agent.Interfaces)
-	}
-	if cfg.Agent.BPF.SampleRate != 50 {
-		t.Fatalf("sample_rate = %d, want 50", cfg.Agent.BPF.SampleRate)
-	}
-	if cfg.Agent.BPF.RingBufSize != 131072 {
-		t.Fatalf("ring_buf_size = %d, want 131072", cfg.Agent.BPF.RingBufSize)
-	}
-	if cfg.Agent.Collector.MaxFlows != 1024 {
-		t.Fatalf("max_flows = %d, want 1024", cfg.Agent.Collector.MaxFlows)
-	}
-	if cfg.Agent.Collector.EvictionTimeout != 10*time.Second {
-		t.Fatalf("eviction_timeout = %v, want 10s", cfg.Agent.Collector.EvictionTimeout)
-	}
-	if cfg.Agent.Prometheus.Host != "127.0.0.1" {
-		t.Fatalf("host = %q, want 127.0.0.1", cfg.Agent.Prometheus.Host)
-	}
-	if cfg.Agent.Prometheus.Port != 8080 {
-		t.Fatalf("port = %d, want 8080", cfg.Agent.Prometheus.Port)
-	}
-	if cfg.Agent.Enrich.MMDB.ASNDB != "/tmp/asn.mmdb" {
-		t.Fatalf("asn_db = %q, want /tmp/asn.mmdb", cfg.Agent.Enrich.MMDB.ASNDB)
-	}
-	if cfg.Agent.Enrich.MMDB.CityDB != "/tmp/city.mmdb" {
-		t.Fatalf("city_db = %q, want /tmp/city.mmdb", cfg.Agent.Enrich.MMDB.CityDB)
-	}
-	if cfg.Agent.Enrich.RIB.BMP.Host != "127.0.0.1" {
-		t.Fatalf("bmp.host = %q, want 127.0.0.1", cfg.Agent.Enrich.RIB.BMP.Host)
-	}
-	if cfg.Agent.Enrich.RIB.BMP.Port != 11019 {
-		t.Fatalf("bmp.port = %d, want 11019", cfg.Agent.Enrich.RIB.BMP.Port)
-	}
-}
-
-func TestLoadDefaults(t *testing.T) {
-	data := []byte(`
-[agent]
-interfaces = ["eth0"]
-`)
-
-	cfg, err := Parse(data)
-	if err != nil {
-		t.Fatalf("Load: %v", err)
-	}
-
-	if cfg.Agent.BPF.SampleRate != 100 {
-		t.Fatalf("sample_rate = %d, want 100", cfg.Agent.BPF.SampleRate)
-	}
-	if cfg.Agent.BPF.RingBufSize != 262144 {
-		t.Fatalf("ring_buf_size = %d, want 262144", cfg.Agent.BPF.RingBufSize)
-	}
-	if cfg.Agent.BPF.WakeupBatch != 64 {
-		t.Fatalf("wakeup_batch default = %d, want 64", cfg.Agent.BPF.WakeupBatch)
-	}
-	if cfg.Agent.Collector.MaxFlows != 65536 {
-		t.Fatalf("max_flows = %d, want 65536", cfg.Agent.Collector.MaxFlows)
-	}
-	if cfg.Agent.Collector.EvictionTimeout != 30*time.Second {
-		t.Fatalf("eviction_timeout = %v, want 30s", cfg.Agent.Collector.EvictionTimeout)
-	}
-	if cfg.Agent.Prometheus.Host != "::1" {
-		t.Fatalf("host = %q, want ::1", cfg.Agent.Prometheus.Host)
-	}
-	if cfg.Agent.Prometheus.Port != 9669 {
-		t.Fatalf("port = %d, want 9669", cfg.Agent.Prometheus.Port)
-	}
-	if cfg.Agent.IPFIX.Host != "" {
-		t.Fatalf("ipfix.host = %q, want empty", cfg.Agent.IPFIX.Host)
-	}
-	if cfg.Agent.IPFIX.Port != 0 {
-		t.Fatalf("ipfix.port = %d, want 0", cfg.Agent.IPFIX.Port)
-	}
-}
-
-func TestLoadRIBBMPDefaultsHost(t *testing.T) {
-	data := []byte(`
-[agent]
-interfaces = ["eth0"]
-
-[agent.enrich.rib.bmp]
-port = 11019
-`)
-
-	cfg, err := Parse(data)
-	if err != nil {
-		t.Fatalf("Load: %v", err)
-	}
-
-	if cfg.Agent.Enrich.RIB.BMP.Host != "::1" {
-		t.Fatalf("bmp.host = %q, want ::1", cfg.Agent.Enrich.RIB.BMP.Host)
-	}
-	if cfg.Agent.Enrich.RIB.BMP.Port != 11019 {
-		t.Fatalf("bmp.port = %d, want 11019", cfg.Agent.Enrich.RIB.BMP.Port)
-	}
-}
-
-func TestLoadRIBBMPDefaultsPort(t *testing.T) {
-	data := []byte(`
-[agent]
-interfaces = ["eth0"]
-
-[agent.enrich.rib.bmp]
-host = "127.0.0.1"
-`)
-
-	cfg, err := Parse(data)
-	if err != nil {
-		t.Fatalf("Load: %v", err)
-	}
-
-	if cfg.Agent.Enrich.RIB.BMP.Host != "127.0.0.1" {
-		t.Fatalf("bmp.host = %q, want 127.0.0.1", cfg.Agent.Enrich.RIB.BMP.Host)
-	}
-	if cfg.Agent.Enrich.RIB.BMP.Port != 11019 {
-		t.Fatalf("bmp.port = %d, want 11019", cfg.Agent.Enrich.RIB.BMP.Port)
-	}
-}
-
-func TestLoadIPFIXDefaultsHost(t *testing.T) {
-	data := []byte(`
-[agent]
-interfaces = ["eth0"]
-
-[agent.ipfix]
-port = 4739
-`)
-
-	cfg, err := Parse(data)
-	if err != nil {
-		t.Fatalf("Load: %v", err)
-	}
-
-	if cfg.Agent.IPFIX.Host != "::1" {
-		t.Fatalf("ipfix.host = %q, want ::1", cfg.Agent.IPFIX.Host)
-	}
-	if cfg.Agent.IPFIX.Port != 4739 {
-		t.Fatalf("ipfix.port = %d, want 4739", cfg.Agent.IPFIX.Port)
-	}
-}
-
-func TestLoadIPFIXDefaultsPort(t *testing.T) {
-	data := []byte(`
-[agent]
-interfaces = ["eth0"]
-
-[agent.ipfix]
-host = "127.0.0.1"
-`)
-
-	cfg, err := Parse(data)
-	if err != nil {
-		t.Fatalf("Load: %v", err)
-	}
-
-	if cfg.Agent.IPFIX.Host != "127.0.0.1" {
-		t.Fatalf("ipfix.host = %q, want 127.0.0.1", cfg.Agent.IPFIX.Host)
-	}
-	if cfg.Agent.IPFIX.Port != 4739 {
-		t.Fatalf("ipfix.port = %d, want 4739", cfg.Agent.IPFIX.Port)
-	}
-}
-
-func TestLoadIPFIXBind(t *testing.T) {
-	data := []byte(`
-[agent]
-interfaces = ["eth0"]
+active_timeout = "2m"
 
 [agent.ipfix]
 host = "192.0.2.10"
 port = 2055
+template_refresh = "30s"
+observation_domain_id = 42
+max_message_size = 512
 
 [agent.ipfix.bind]
 host = "192.0.2.20"
-port = 0
-`)
+port = 40000
 
-	cfg, err := Parse(data)
-	if err != nil {
-		t.Fatalf("Load: %v", err)
-	}
+[agent.prometheus]
+host = "127.0.0.1"
+port = 8080
 
-	if cfg.Agent.IPFIX.Bind.Host != "192.0.2.20" {
-		t.Fatalf("ipfix.bind.host = %q, want 192.0.2.20", cfg.Agent.IPFIX.Bind.Host)
-	}
-	if cfg.Agent.IPFIX.Bind.Port != 0 {
-		t.Fatalf("ipfix.bind.port = %d, want 0", cfg.Agent.IPFIX.Bind.Port)
-	}
-}
+[agent.enrich.mmdb]
+asn_db = "/tmp/asn.mmdb"
+city_db = "/tmp/city.mmdb"
 
-func TestLoadMissingInterfaces(t *testing.T) {
-	data := []byte(`
-[agent]
-
-[agent.bpf]
-sample_rate = 100
-`)
-
-	_, err := Parse(data)
-	if err == nil {
-		t.Fatal("expected error for missing interfaces")
-	}
-}
-
-func TestLoadEmptyInterfaces(t *testing.T) {
-	data := []byte(`
-[agent]
-interfaces = []
-`)
-
-	_, err := Parse(data)
-	if err == nil {
-		t.Fatal("expected error for empty interfaces")
-	}
-}
-
-func TestLoadBadSampleRate(t *testing.T) {
-	data := []byte(`
-[agent]
-interfaces = ["eth0"]
-
-[agent.bpf]
-sample_rate = 0
-`)
-
-	_, err := Parse(data)
-	if err == nil {
-		t.Fatal("expected error for sample_rate=0")
-	}
-}
-
-func TestLoadWakeupBatch(t *testing.T) {
-	data := []byte(`
-[agent]
-interfaces = ["eth0"]
-
-[agent.bpf]
-wakeup_batch = 256
-`)
-	cfg, err := Parse(data)
-	if err != nil {
-		t.Fatalf("Load: %v", err)
-	}
-	if cfg.Agent.BPF.WakeupBatch != 256 {
-		t.Fatalf("wakeup_batch = %d, want 256", cfg.Agent.BPF.WakeupBatch)
-	}
-}
-
-func TestLoadIfaceStatsSize(t *testing.T) {
-	data := []byte(`
-[agent]
-interfaces = ["eth0"]
-
-[agent.bpf]
-iface_stats_size = 8192
-`)
-	cfg, err := Parse(data)
-	if err != nil {
-		t.Fatalf("Load: %v", err)
-	}
-	if cfg.Agent.BPF.IfaceStatsSize != 8192 {
-		t.Fatalf("iface_stats_size = %d, want 8192", cfg.Agent.BPF.IfaceStatsSize)
-	}
-}
-
-func TestLoadIfaceStatsSizeDefault(t *testing.T) {
-	data := []byte(`
-[agent]
-interfaces = ["eth0"]
-`)
-	cfg, err := Parse(data)
-	if err != nil {
-		t.Fatalf("Load: %v", err)
-	}
-	if cfg.Agent.BPF.IfaceStatsSize != 0 {
-		t.Fatalf("iface_stats_size default = %d, want 0 (auto)", cfg.Agent.BPF.IfaceStatsSize)
-	}
-}
-
-func TestLoadNegativeIfaceStatsSize(t *testing.T) {
-	data := []byte(`
-[agent]
-interfaces = ["eth0"]
-
-[agent.bpf]
-iface_stats_size = -1
-`)
-	if _, err := Parse(data); err == nil {
-		t.Fatal("expected error for negative iface_stats_size")
-	}
-}
-
-func TestLoadZeroWakeupBatch(t *testing.T) {
-	data := []byte(`
-[agent]
-interfaces = ["eth0"]
-
-[agent.bpf]
-wakeup_batch = 0
-`)
-	if _, err := Parse(data); err == nil {
-		t.Fatal("expected error for wakeup_batch = 0")
-	}
-}
-
-func TestLoadRingBufSizeMustBePowerOfTwo(t *testing.T) {
-	data := []byte(`
-[agent]
-interfaces = ["eth0"]
-
-[agent.bpf]
-ring_buf_size = 12345
-`)
-
-	_, err := Parse(data)
-	if err == nil {
-		t.Fatal("expected error for non-power-of-two ring_buf_size")
-	}
-}
-
-func TestLoadAdaptiveSampling(t *testing.T) {
-	data := []byte(`
-[agent]
-interfaces = ["eth0"]
-
-[agent.bpf]
-sample_rate = 10
-adaptive_sampling = true
-max_sample_rate = 640
-`)
-
-	cfg, err := Parse(data)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !cfg.Agent.BPF.AdaptiveSampling {
-		t.Fatal("adaptive_sampling = false, want true")
-	}
-	if cfg.Agent.BPF.MaxSampleRate != 640 {
-		t.Fatalf("max_sample_rate = %d, want 640", cfg.Agent.BPF.MaxSampleRate)
-	}
-}
-
-func TestLoadControlSocket(t *testing.T) {
-	data := []byte(`
-[agent]
-interfaces = ["eth0"]
+[agent.enrich.rib.bmp]
+host = "127.0.0.1"
+port = 11020
 
 [agent.control]
 socket = "/run/rfm/rfm.sock"
-`)
-
-	cfg, err := Parse(data)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if cfg.Agent.Control.Socket != "/run/rfm/rfm.sock" {
-		t.Fatalf("control.socket = %q, want /run/rfm/rfm.sock", cfg.Agent.Control.Socket)
-	}
-}
-
-func TestLoadControlSocketDefaultsOff(t *testing.T) {
-	data := []byte(`
-[agent]
-interfaces = ["eth0"]
-`)
-
-	cfg, err := Parse(data)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if cfg.Agent.Control.Socket != "" {
-		t.Fatalf("control.socket = %q, want empty", cfg.Agent.Control.Socket)
-	}
-}
-
-func TestLoadPinPath(t *testing.T) {
-	data := []byte(`
-[agent]
-interfaces = ["eth0"]
-
-[agent.bpf]
-pin_path = "/sys/fs/bpf/rfm"
-`)
-
-	cfg, err := Parse(data)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if cfg.Agent.BPF.PinPath != "/sys/fs/bpf/rfm" {
-		t.Fatalf("pin_path = %q, want /sys/fs/bpf/rfm", cfg.Agent.BPF.PinPath)
+`, Config{Agent: AgentConfig{
+			Interfaces: []string{"eth0", "tailscale0"},
+			BPF:        BPFConfig{SampleRate: 50, RingBufSize: 131072, WakeupBatch: 256, IfaceStatsSize: 8192, AdaptiveSampling: true, MaxSampleRate: 640, PinPath: "/sys/fs/bpf/rfm", SampledOnly: true},
+			Collector:  CollectorConfig{MaxFlows: 1024, EvictionTimeout: 10 * time.Second, ActiveTimeout: 2 * time.Minute},
+			// a small table keeps the queue at its floor
+			IPFIX:      IPFIXConfig{Host: "192.0.2.10", Port: 2055, Bind: IPFIXBindConfig{Host: "192.0.2.20", Port: 40000}, TemplateRefresh: 30 * time.Second, ObservationDomainID: 42, QueueSize: DefaultIPFIXQueueSize, MaxMessageSize: 512},
+			Prometheus: PrometheusConfig{Host: "127.0.0.1", Port: 8080},
+			Enrich:     EnrichConfig{MMDB: MMDBConfig{ASNDB: "/tmp/asn.mmdb", CityDB: "/tmp/city.mmdb"}, RIB: RIBConfig{BMP: BMPConfig{Host: "127.0.0.1", Port: 11020}}},
+			Control:    ControlConfig{Socket: "/run/rfm/rfm.sock"},
+		}}},
+		{"bmp port alone", base + "[agent.enrich.rib.bmp]\nport = 11020\n", with(func(a *AgentConfig) { a.Enrich.RIB.BMP = BMPConfig{Host: "::1", Port: 11020} })},
+		{"bmp host alone", base + "[agent.enrich.rib.bmp]\nhost = \"127.0.0.1\"\n", with(func(a *AgentConfig) { a.Enrich.RIB.BMP = BMPConfig{Host: "127.0.0.1", Port: 11019} })},
+		{"ipfix port alone", base + "[agent.ipfix]\nport = 2055\n", with(func(a *AgentConfig) { a.IPFIX.Host, a.IPFIX.Port = "::1", 2055 })},
+		{"ipfix host alone", base + "[agent.ipfix]\nhost = \"127.0.0.1\"\n", with(func(a *AgentConfig) { a.IPFIX.Host, a.IPFIX.Port = "127.0.0.1", 4739 })},
+		{"active timeout off", base + "[agent.collector]\nactive_timeout = \"0s\"\n", with(func(a *AgentConfig) { a.Collector.ActiveTimeout = 0 })},
+		// a message holds one record and the template of its family
+		{"smallest message", base + "[agent.ipfix]\nmax_message_size = " + strconv.Itoa(MinIPFIXMaxMessageSize) + "\n", with(func(a *AgentConfig) { a.IPFIX.MaxMessageSize = MinIPFIXMaxMessageSize })},
+	} {
+		got, err := Parse([]byte(tc.data))
+		if err != nil {
+			t.Fatalf("%s: %v", tc.name, err)
+		}
+		if !reflect.DeepEqual(*got, tc.want) {
+			t.Fatalf("%s: config = %+v, want %+v", tc.name, *got, tc.want)
+		}
 	}
 }
 
-func TestLoadSampledOnly(t *testing.T) {
-	data := []byte(`
-[agent]
-interfaces = ["eth0"]
-`)
-	cfg, err := Parse(data)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if cfg.Agent.BPF.SampledOnly {
-		t.Fatal("sampled_only = true, want false by default")
-	}
-
-	data = []byte(`
-[agent]
-interfaces = ["eth0"]
-
-[agent.bpf]
-sampled_only = true
-`)
-	if cfg, err = Parse(data); err != nil {
-		t.Fatal(err)
-	}
-	if !cfg.Agent.BPF.SampledOnly {
-		t.Fatal("sampled_only = false, want true")
-	}
-}
-
-func TestLoadAdaptiveSamplingDefaults(t *testing.T) {
-	data := []byte(`
-[agent]
-interfaces = ["eth0"]
-`)
-
-	cfg, err := Parse(data)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if cfg.Agent.BPF.AdaptiveSampling {
-		t.Fatal("adaptive_sampling = true, want false by default")
-	}
-	if cfg.Agent.BPF.MaxSampleRate != 1000 {
-		t.Fatalf("max_sample_rate = %d, want 1000", cfg.Agent.BPF.MaxSampleRate)
-	}
-}
-
-func TestLoadMaxSampleRateBelowSampleRate(t *testing.T) {
-	data := []byte(`
-[agent]
-interfaces = ["eth0"]
-
-[agent.bpf]
-sample_rate = 2000
-`)
-
-	if _, err := Parse(data); err == nil {
-		t.Fatal("expected error for max_sample_rate below sample_rate")
-	}
-}
-
-func TestLoadRingBufSizeMustBePageMultiple(t *testing.T) {
+func TestParseRejects(t *testing.T) {
 	// a power of two below the page size passes the power of two check but
 	// the kernel would still refuse it
-	size := os.Getpagesize() / 2
-	data := []byte(`
-[agent]
-interfaces = ["eth0"]
+	halfPage := strconv.Itoa(os.Getpagesize() / 2)
 
-[agent.bpf]
-ring_buf_size = ` + strconv.Itoa(size) + `
-`)
-
-	_, err := Parse(data)
-	if err == nil {
-		t.Fatal("expected error for ring_buf_size below the page size")
-	}
-	if !strings.Contains(err.Error(), "page size") {
-		t.Fatalf("error = %v, want mention of the page size", err)
-	}
-}
-
-func TestLoadActiveTimeout(t *testing.T) {
-	data := []byte(`
-[agent]
-interfaces = ["eth0"]
-
-[agent.collector]
-active_timeout = "2m"
-`)
-
-	cfg, err := Parse(data)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if cfg.Agent.Collector.ActiveTimeout != 2*time.Minute {
-		t.Fatalf("active_timeout = %v, want 2m", cfg.Agent.Collector.ActiveTimeout)
-	}
-}
-
-func TestLoadActiveTimeoutDefault(t *testing.T) {
-	data := []byte(`
-[agent]
-interfaces = ["eth0"]
-`)
-
-	cfg, err := Parse(data)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if cfg.Agent.Collector.ActiveTimeout != time.Minute {
-		t.Fatalf("active_timeout = %v, want 1m", cfg.Agent.Collector.ActiveTimeout)
-	}
-}
-
-func TestLoadActiveTimeoutZeroDisables(t *testing.T) {
-	data := []byte(`
-[agent]
-interfaces = ["eth0"]
-
-[agent.collector]
-active_timeout = "0s"
-`)
-
-	cfg, err := Parse(data)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if cfg.Agent.Collector.ActiveTimeout != 0 {
-		t.Fatalf("active_timeout = %v, want 0", cfg.Agent.Collector.ActiveTimeout)
-	}
-}
-
-func TestLoadSubSecondActiveTimeout(t *testing.T) {
-	data := []byte(`
-[agent]
-interfaces = ["eth0"]
-
-[agent.collector]
-active_timeout = "500ms"
-`)
-
-	if _, err := Parse(data); err == nil {
-		t.Fatal("expected error for sub-second active_timeout")
-	}
-}
-
-func TestLoadBadEvictionTimeout(t *testing.T) {
-	data := []byte(`
-[agent]
-interfaces = ["eth0"]
-
-[agent.collector]
-eviction_timeout = "notaduration"
-`)
-
-	_, err := Parse(data)
-	if err == nil {
-		t.Fatal("expected error for unparseable eviction_timeout")
-	}
-}
-
-func TestLoadSubSecondEvictionTimeout(t *testing.T) {
-	data := []byte(`
-[agent]
-interfaces = ["eth0"]
-
-[agent.collector]
-eviction_timeout = "1ns"
-`)
-
-	_, err := Parse(data)
-	if err == nil {
-		t.Fatal("expected error for sub-second eviction_timeout")
-	}
-}
-
-func TestLoadBadPort(t *testing.T) {
-	for _, port := range []int{0, -1, 70000} {
-		data := []byte(`
-[agent]
-interfaces = ["eth0"]
-
-[agent.prometheus]
-port = ` + strconv.Itoa(port) + `
-`)
-
-		_, err := Parse(data)
-		if err == nil {
-			t.Fatalf("expected error for port=%d", port)
-		}
-	}
-}
-
-func TestLoadBadIPFIXPort(t *testing.T) {
-	for _, port := range []int{-1, 70000} {
-		data := []byte(`
-[agent]
-interfaces = ["eth0"]
-
-[agent.ipfix]
-host = "127.0.0.1"
-port = ` + strconv.Itoa(port) + `
-`)
-
-		_, err := Parse(data)
-		if err == nil {
-			t.Fatalf("expected error for ipfix port=%d", port)
-		}
-	}
-}
-
-func TestLoadBadIPFIXBindPort(t *testing.T) {
-	for _, port := range []int{-1, 70000} {
-		data := []byte(`
-[agent]
-interfaces = ["eth0"]
-
-[agent.ipfix]
-host = "127.0.0.1"
-port = 4739
-
-[agent.ipfix.bind]
-host = "127.0.0.1"
-port = ` + strconv.Itoa(port) + `
-`)
-
-		_, err := Parse(data)
-		if err == nil {
-			t.Fatalf("expected error for ipfix.bind.port=%d", port)
-		}
-	}
-}
-
-func TestLoadIPFIXTemplateRefreshAndODID(t *testing.T) {
-	data := []byte(`
-[agent]
-interfaces = ["eth0"]
-
-[agent.ipfix]
-host = "127.0.0.1"
-port = 4739
-template_refresh = "30s"
-observation_domain_id = 42
-`)
-
-	cfg, err := Parse(data)
-	if err != nil {
-		t.Fatalf("Load: %v", err)
-	}
-	if cfg.Agent.IPFIX.TemplateRefresh != 30*time.Second {
-		t.Fatalf("template_refresh = %v, want 30s", cfg.Agent.IPFIX.TemplateRefresh)
-	}
-	if cfg.Agent.IPFIX.ObservationDomainID != 42 {
-		t.Fatalf("observation_domain_id = %d, want 42", cfg.Agent.IPFIX.ObservationDomainID)
-	}
-}
-
-func TestLoadIPFIXDefaultsTemplateRefreshAndODID(t *testing.T) {
-	data := []byte(`
-[agent]
-interfaces = ["eth0"]
-`)
-
-	cfg, err := Parse(data)
-	if err != nil {
-		t.Fatalf("Load: %v", err)
-	}
-	if cfg.Agent.IPFIX.TemplateRefresh != 60*time.Second {
-		t.Fatalf("template_refresh default = %v, want 60s", cfg.Agent.IPFIX.TemplateRefresh)
-	}
-	if cfg.Agent.IPFIX.ObservationDomainID != 1 {
-		t.Fatalf("observation_domain_id default = %d, want 1", cfg.Agent.IPFIX.ObservationDomainID)
-	}
-}
-
-func TestLoadIPFIXQueueDefaults(t *testing.T) {
-	data := []byte(`
-[agent]
-interfaces = ["eth0"]
-
-[agent.ipfix]
-host = "127.0.0.1"
-`)
-
-	cfg, err := Parse(data)
-	if err != nil {
-		t.Fatal(err)
-	}
-	// the default queue holds a full table sweep
-	if cfg.Agent.IPFIX.QueueSize != 65536 {
-		t.Fatalf("queue size = %d, want max_flows 65536", cfg.Agent.IPFIX.QueueSize)
-	}
-	if cfg.Agent.IPFIX.MaxMessageSize != DefaultIPFIXMaxMessageSize {
-		t.Fatalf("max_message_size = %d, want %d", cfg.Agent.IPFIX.MaxMessageSize, DefaultIPFIXMaxMessageSize)
-	}
-}
-
-func TestLoadIPFIXQueueFloor(t *testing.T) {
-	data := []byte(`
-[agent]
-interfaces = ["eth0"]
-
-[agent.collector]
-max_flows = 100
-
-[agent.ipfix]
-host = "127.0.0.1"
-`)
-
-	cfg, err := Parse(data)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if cfg.Agent.IPFIX.QueueSize != DefaultIPFIXQueueSize {
-		t.Fatalf("queue size = %d, want the floor %d", cfg.Agent.IPFIX.QueueSize, DefaultIPFIXQueueSize)
-	}
-}
-
-func TestLoadMaxFlowsMustBePositive(t *testing.T) {
-	// the flow table, the label tuples and the ipfix queue are all sized by
-	// max_flows, none of them has an unlimited size
-	for _, n := range []int{0, -1} {
-		data := []byte(`
-[agent]
-interfaces = ["eth0"]
-
-[agent.collector]
-max_flows = ` + strconv.Itoa(n) + `
-`)
-		if _, err := Parse(data); err == nil || !strings.Contains(err.Error(), "max_flows must be > 0") {
-			t.Fatalf("max_flows = %d: %v, want it refused", n, err)
-		}
-	}
-}
-
-func TestLoadIPFIXMaxMessageSize(t *testing.T) {
-	data := []byte(`
-[agent]
-interfaces = ["eth0"]
-
-[agent.ipfix]
-host = "127.0.0.1"
-max_message_size = 512
-`)
-
-	cfg, err := Parse(data)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if cfg.Agent.IPFIX.MaxMessageSize != 512 {
-		t.Fatalf("max_message_size = %d, want 512", cfg.Agent.IPFIX.MaxMessageSize)
-	}
-}
-
-func TestLoadBadIPFIXMaxMessageSize(t *testing.T) {
-	for _, body := range []string{
-		"max_message_size = 0",
-		"max_message_size = 64",
-		"max_message_size = 70000",
+	for _, tc := range []struct{ data, err string }{
+		{"[agent]\n[agent.bpf]\nsample_rate = 100\n", "agent.interfaces must be non-empty"},
+		{"[agent]\ninterfaces = []\n", "agent.interfaces must be non-empty"},
+		{"[agent]\ninterfaces = [\"[\"]\n", "agent.interfaces: interface pattern"},
+		{base + "[agent.bpf]\nsample_rte = 1\n", "unknown config key: agent.bpf.sample_rte"},
+		{base + "[agent.bpf]\nsample_rate = 0\n", "sample_rate must be > 0"},
+		{base + "[agent.bpf]\nring_buf_size = 0\n", "ring_buf_size must be > 0"},
+		{base + "[agent.bpf]\nring_buf_size = 12345\n", "ring_buf_size must be a power of two"},
+		{base + "[agent.bpf]\nring_buf_size = " + halfPage + "\n", "ring_buf_size must be a multiple of the page size"},
+		{base + "[agent.bpf]\nwakeup_batch = 0\n", "wakeup_batch must be > 0"},
+		{base + "[agent.bpf]\niface_stats_size = -1\n", "iface_stats_size must be >= 0"},
+		{base + "[agent.bpf]\nsample_rate = 2000\n", "max_sample_rate must be >= sample_rate"},
+		{base + "[agent.bpf]\nmax_sample_rate = 0\n", "max_sample_rate must be >= sample_rate"},
+		// the flow table, the label tuples and the ipfix queue are all sized
+		// by max_flows, none of them has an unlimited size
+		{base + "[agent.collector]\nmax_flows = 0\n", "max_flows must be > 0"},
+		{base + "[agent.collector]\nmax_flows = -1\n", "max_flows must be > 0"},
+		{base + "[agent.collector]\neviction_timeout = \"notaduration\"\n", "invalid duration"},
+		{base + "[agent.collector]\neviction_timeout = \"1ns\"\n", "eviction_timeout must be >= 1s"},
+		{base + "[agent.collector]\neviction_timeout = \"0s\"\n", "eviction_timeout must be >= 1s"},
+		// a bare number is nanoseconds
+		{base + "[agent.collector]\neviction_timeout = 5\n", "eviction_timeout must be >= 1s"},
+		{base + "[agent.collector]\nactive_timeout = \"500ms\"\n", "active_timeout must be 0 or >= 1s"},
+		{base + "[agent.prometheus]\nport = 0\n", "prometheus.port must be between 1 and 65535"},
+		{base + "[agent.prometheus]\nport = -1\n", "prometheus.port must be between 1 and 65535"},
+		{base + "[agent.prometheus]\nport = 70000\n", "prometheus.port must be between 1 and 65535"},
+		{base + "[agent.ipfix]\nhost = \"127.0.0.1\"\nport = -1\n", "ipfix.port must be between 1 and 65535"},
+		{base + "[agent.ipfix]\nhost = \"127.0.0.1\"\nport = 70000\n", "ipfix.port must be between 1 and 65535"},
+		{base + "[agent.ipfix]\nport = 4739\n[agent.ipfix.bind]\nport = -1\n", "ipfix.bind.port must be between 0 and 65535"},
+		{base + "[agent.ipfix]\nport = 4739\n[agent.ipfix.bind]\nport = 70000\n", "ipfix.bind.port must be between 0 and 65535"},
+		{base + "[agent.ipfix.bind]\nhost = \"127.0.0.1\"\n", "ipfix.bind requires agent.ipfix.host or port"},
+		{base + "[agent.ipfix]\ntemplate_refresh = \"notaduration\"\n", "invalid duration"},
+		{base + "[agent.ipfix]\ntemplate_refresh = \"100ms\"\n", "template_refresh must be >= 1s"},
+		{base + "[agent.ipfix]\ntemplate_refresh = \"0s\"\n", "template_refresh must be >= 1s"},
+		{base + "[agent.ipfix]\nobservation_domain_id = 0\n", "observation_domain_id must be > 0"},
+		{base + "[agent.ipfix]\nport = 4739\nmax_message_size = 0\n", "max_message_size must be between"},
+		{base + "[agent.ipfix]\nmax_message_size = " + strconv.Itoa(MinIPFIXMaxMessageSize-1) + "\n", "max_message_size must be between"},
+		{base + "[agent.ipfix]\nmax_message_size = 70000\n", "max_message_size must be between"},
 	} {
-		data := []byte(`
-[agent]
-interfaces = ["eth0"]
-
-[agent.ipfix]
-host = "127.0.0.1"
-` + body + `
-`)
-		if _, err := Parse(data); err == nil {
-			t.Fatalf("expected error for %s", body)
+		if _, err := Parse([]byte(tc.data)); err == nil || !strings.Contains(err.Error(), tc.err) {
+			t.Fatalf("config\n%s\nerror = %v, want %q", tc.data, err, tc.err)
 		}
-	}
-}
-
-func TestLoadIPFIXMaxMessageSizeFloor(t *testing.T) {
-	// the sender puts at least one record in a message, with the template
-	// of its family when that is due, so a smaller limit cannot hold
-	for size, ok := range map[int]bool{MinIPFIXMaxMessageSize - 1: false, MinIPFIXMaxMessageSize: true} {
-		data := []byte(`
-[agent]
-interfaces = ["eth0"]
-
-[agent.ipfix]
-host = "127.0.0.1"
-max_message_size = ` + strconv.Itoa(size) + `
-`)
-		if _, err := Parse(data); (err == nil) != ok {
-			t.Fatalf("max_message_size = %d: %v, want accepted %v", size, err, ok)
-		}
-	}
-}
-
-func TestLoadBadIPFIXTemplateRefresh(t *testing.T) {
-	data := []byte(`
-[agent]
-interfaces = ["eth0"]
-
-[agent.ipfix]
-template_refresh = "notaduration"
-`)
-
-	if _, err := Parse(data); err == nil {
-		t.Fatal("expected error for unparseable template_refresh")
-	}
-}
-
-func TestLoadSubSecondIPFIXTemplateRefresh(t *testing.T) {
-	data := []byte(`
-[agent]
-interfaces = ["eth0"]
-
-[agent.ipfix]
-template_refresh = "100ms"
-`)
-
-	if _, err := Parse(data); err == nil {
-		t.Fatal("expected error for sub-second template_refresh")
-	}
-}
-
-func TestLoadZeroIPFIXObservationDomainID(t *testing.T) {
-	data := []byte(`
-[agent]
-interfaces = ["eth0"]
-
-[agent.ipfix]
-observation_domain_id = 0
-`)
-
-	if _, err := Parse(data); err == nil {
-		t.Fatal("expected error for observation_domain_id = 0")
-	}
-}
-
-func TestLoadIPFIXBindWithoutCollector(t *testing.T) {
-	data := []byte(`
-[agent]
-interfaces = ["eth0"]
-
-[agent.ipfix.bind]
-host = "127.0.0.1"
-`)
-
-	_, err := Parse(data)
-	if err == nil {
-		t.Fatal("expected error for ipfix.bind without collector")
 	}
 }
 
@@ -924,29 +199,5 @@ func TestUnmatchedPatterns(t *testing.T) {
 	want := []string{"ranet*", "wg[0-9]+", "["}
 	if got := UnmatchedPatterns(patterns, names); !slices.Equal(got, want) {
 		t.Fatalf("UnmatchedPatterns = %q, want %q", got, want)
-	}
-}
-
-func TestLoadUnknownKey(t *testing.T) {
-	data := []byte(`
-[agent]
-interfaces = ["eth0"]
-
-[agent.bpf]
-sample_rte = 1
-`)
-	_, err := Parse(data)
-	if err == nil {
-		t.Fatal("expected error for unknown key sample_rte")
-	}
-}
-
-func TestLoadInvalidInterfaceRegex(t *testing.T) {
-	data := []byte(`
-[agent]
-interfaces = ["["]
-`)
-	if _, err := Parse(data); err == nil {
-		t.Fatal("expected error for invalid interface regex")
 	}
 }

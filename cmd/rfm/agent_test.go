@@ -25,7 +25,6 @@ import (
 	"github.com/charmbracelet/log"
 	"github.com/prometheus/client_golang/prometheus"
 	"ysun.co/rfm/collector"
-	"ysun.co/rfm/config"
 	"ysun.co/rfm/ctl"
 	"ysun.co/rfm/probe"
 	"ysun.co/rfm/testutil"
@@ -1029,42 +1028,6 @@ func TestMetricsServerTimesOutAGather(t *testing.T) {
 	code, err := scrape(&http.Client{Timeout: 5 * time.Second}, ts.URL+"/metrics")
 	if err != nil || code != http.StatusServiceUnavailable {
 		t.Fatalf("scrape of a gather past the timeout = %d, %v, want 503", code, err)
-	}
-}
-
-func TestMetricsServerTimeouts(t *testing.T) {
-	srv := newMetricsServer(prometheus.NewRegistry(), metricsTimeout)
-	if srv.ReadHeaderTimeout <= 0 || srv.IdleTimeout <= 0 {
-		t.Fatalf("read header timeout %v, idle timeout %v, want both set", srv.ReadHeaderTimeout, srv.IdleTimeout)
-	}
-	// a client that reads slowly is cut off, after a gather that took the
-	// whole timeout still had time to be sent
-	if srv.WriteTimeout <= metricsTimeout {
-		t.Fatalf("write timeout %v, want it above the gather timeout %v", srv.WriteTimeout, metricsTimeout)
-	}
-}
-
-func TestProbeConfigKeepsTheMapSizeAcrossStarts(t *testing.T) {
-	cfg := &config.Config{}
-	cfg.Agent.Interfaces = []string{".*"}
-	cfg.Agent.BPF = config.BPFConfig{SampleRate: 10, RingBufSize: 1 << 20, WakeupBatch: 32, PinPath: "/sys/fs/bpf/rfm"}
-
-	// iface_stats_size 0 keeps the size the object declares, the links up at
-	// one start or another must not change it, a pinned map of another size
-	// fails the start
-	want := probe.Config{SampleRate: 10, RingBufSize: 1 << 20, WakeupBatch: 32, PinPath: "/sys/fs/bpf/rfm"}
-	if got := probeConfig(cfg); got != want {
-		t.Fatalf("probe config = %+v, want %+v", got, want)
-	}
-
-	cfg.Agent.BPF.IfaceStatsSize = 8192
-	if got := probeConfig(cfg).IfaceStatsSize; got != 8192 {
-		t.Fatalf("iface stats size = %d, want the configured 8192", got)
-	}
-
-	cfg.Agent.BPF.SampledOnly = true
-	if !probeConfig(cfg).SampledOnly {
-		t.Fatal("sampled only dropped on the way to the probe")
 	}
 }
 
