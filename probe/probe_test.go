@@ -2068,6 +2068,19 @@ func TestWatchPrunesPinnedCounters(t *testing.T) {
 	stale := rfmRfmIfaceKey{Ifindex: uint32(other.Attrs().Index), Dir: 0, Proto: 4}
 	putIfaceStats(t, p, kept, 7)
 	putIfaceStats(t, p, stale, 9)
+	// other0 also counted in a slot, which the next load restores
+	if _, err := p.attach(other.Attrs().Index, "other0"); err != nil {
+		skipIfUnsupported(t, err)
+		t.Fatal(err)
+	}
+	p.mu.Lock()
+	slot := p.slots.held()[stale.Ifindex]
+	p.mu.Unlock()
+	vals := make([]rfmRfmSlotValue, ebpf.MustPossibleCPU())
+	vals[0].Packets = 4
+	if err := p.objs.RfmIfaceArr.Put(slotIndex(slot, 0, 1), vals); err != nil {
+		t.Fatal(err)
+	}
 	if err := p.Close(); err != nil {
 		t.Fatal(err)
 	}
@@ -2092,6 +2105,12 @@ func TestWatchPrunesPinnedCounters(t *testing.T) {
 	}
 	if packets, _ := ifaceStats(t, p, stale); packets != 0 {
 		t.Fatalf("counters of an interface this run did not attach survived: %d packets", packets)
+	}
+	p.mu.Lock()
+	_, held := p.slots.held()[stale.Ifindex]
+	p.mu.Unlock()
+	if held {
+		t.Fatal("the restored slot of an interface this run did not attach is still held")
 	}
 }
 
