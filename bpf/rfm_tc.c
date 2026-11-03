@@ -371,7 +371,8 @@ static __always_inline int rfm_tc(struct __sk_buff *skb, __u8 dir,
 			skb->wire_len >= len - sizeof(struct ethhdr) +
 						 (segs - 1) * RFM_SEG_HDR_MIN;
 		__u32 hdr_len = 0;
-		if ((dir == RFM_DIR_INGRESS && !ingress_wire) || segs == 0) {
+		if ((dir == RFM_DIR_INGRESS && segs > 1 && !ingress_wire) ||
+		    segs == 0) {
 			hdr_len = rfm_hdr_len(skb, l3, end, eth_proto, l3_off);
 			if (!hdr_len) {
 				__u32 err_key = 0;

@@ -1011,28 +1011,32 @@ func TestGSOHeaderErrorsCountHeadersThatDoNotParse(t *testing.T) {
 	}
 	defer p.Close()
 
-	// a gso skb without a segment count, as a driver that does not verify
-	// its gso frames hands it up
-	run := func(frame []byte) {
+	run := func(frame []byte, ctx skbContext) {
 		t.Helper()
-		if _, err := p.objs.RfmTcIngress.Run(&ebpf.RunOptions{Data: frame, Context: skbContext{GSOSize: gsoSize}}); err != nil {
+		if _, err := p.objs.RfmTcIngress.Run(&ebpf.RunOptions{Data: frame, Context: ctx}); err != nil {
 			skipIfUnsupported(t, err)
 			t.Fatal(err)
 		}
 	}
 
+	// a gso skb without a segment count, as an unverifying driver hands it up
 	frame := testutil.EthIPv4TCPPayload(net.IPv4(10, 0, 9, 1), net.IPv4(10, 0, 9, 2), 4700, 443, make([]byte, 2*gsoSize))
-	run(frame)
+	run(frame, skbContext{GSOSize: gsoSize})
 	if n, err := p.GSOHeaderErrors(); err != nil || n != 0 {
 		t.Fatalf("gso header errors = %d, %v, want none for headers that parse", n, err)
 	}
 
-	// an ihl of 4 is shorter than any ipv4 header, the skb counts as one
-	// packet without the header bytes of the segments it stands for
+	// an ihl of 4 does not parse, the skb counts as one packet
 	frame[testutil.EthHdrLen] = 0x44
-	run(frame)
+	run(frame, skbContext{GSOSize: gsoSize})
 	if n, err := p.GSOHeaderErrors(); err != nil || n != 1 {
 		t.Fatalf("gso header errors = %d, %v, want 1 for an ipv4 header that does not parse", n, err)
+	}
+
+	// one segment adds no header bytes, its headers need no parse
+	run(frame, skbContext{GSOSegs: 1, GSOSize: gsoSize})
+	if n, err := p.GSOHeaderErrors(); err != nil || n != 1 {
+		t.Fatalf("gso header errors = %d, %v, want still 1 after an skb of one segment", n, err)
 	}
 }
 
