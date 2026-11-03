@@ -11,10 +11,7 @@ const (
 	DefaultIPFIXMaxMessageSize = 1200
 )
 
-// MinIPFIXMaxMessageSize is the smallest max_message_size the sender keeps
-// to, a message carries at least one record and the template of its family
-// when that is due, and the largest of those is the message header, the
-// ipv6 template set and one ipv6 record
+// MinIPFIXMaxMessageSize holds the message header, the ipv6 template set and one ipv6 record
 const MinIPFIXMaxMessageSize = 171
 
 // the defaults of the other settings a config leaves out, the readme documents each

@@ -8,15 +8,8 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-// lockPin holds an exclusive lock on the pin directory dir until release is
-// called, so a second agent on the same pinned counters stops before it
-// opens them, it would count the packets of an interface both attach twice
-// and delete the counters of every interface it does not attach
-// the lock is a flock on the directory, which the kernel drops when the
-// process ends however it ends, and which every path that names the
-// directory meets, from any network namespace
-// release must stay reachable while the lock is held, it keeps the
-// directory open
+// lockPin holds a flock on dir until release, a second agent on the same pins would count twice and prune the first one's counters
+// release must stay reachable while the lock is held, it keeps the directory open
 func lockPin(dir string) (release func(), err error) {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return nil, fmt.Errorf("create pin directory %q: %w", dir, err)

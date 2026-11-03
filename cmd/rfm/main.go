@@ -7,8 +7,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// main prints a failed command's error once, cobra would print it a second
-// time and the usage with it, which a runtime error does not call for
+// main prints the error, cobra would print it again with the usage
 var root = &cobra.Command{
 	Use:           "rfm",
 	Short:         "Router Flow Monitor",

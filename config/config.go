@@ -37,22 +37,14 @@ type ControlConfig struct {
 
 // BPFConfig controls the eBPF probe
 type BPFConfig struct {
-	SampleRate     uint32 `toml:"sample_rate"`
-	RingBufSize    int    `toml:"ring_buf_size"`
-	WakeupBatch    uint32 `toml:"wakeup_batch"`
-	IfaceStatsSize int    `toml:"iface_stats_size"`
-	// AdaptiveSampling lets the collector raise the sample rate while the
-	// ring buffer drops events and lower it back once the drops stop
-	AdaptiveSampling bool `toml:"adaptive_sampling"`
-	// MaxSampleRate caps the adaptive sample rate and any rate set with
-	// rfm set sample-rate
-	MaxSampleRate uint32 `toml:"max_sample_rate"`
-	// PinPath is a bpffs directory that keeps the interface counters across
-	// restarts, empty keeps them private to the process
-	PinPath string `toml:"pin_path"`
-	// SampledOnly keeps no exact interface counters, a packet the sampling
-	// draw passes over then costs only the draw
-	SampledOnly bool `toml:"sampled_only"`
+	SampleRate       uint32 `toml:"sample_rate"`
+	RingBufSize      int    `toml:"ring_buf_size"`
+	WakeupBatch      uint32 `toml:"wakeup_batch"`
+	IfaceStatsSize   int    `toml:"iface_stats_size"`
+	AdaptiveSampling bool   `toml:"adaptive_sampling"`
+	MaxSampleRate    uint32 `toml:"max_sample_rate"`
+	PinPath          string `toml:"pin_path"`
+	SampledOnly      bool   `toml:"sampled_only"`
 }
 
 // CollectorConfig controls flow collection and eviction
@@ -69,14 +61,8 @@ type IPFIXConfig struct {
 	Bind                IPFIXBindConfig `toml:"bind"`
 	TemplateRefresh     time.Duration   `toml:"template_refresh"`
 	ObservationDomainID uint32          `toml:"observation_domain_id"`
-	// QueueSize bounds the records waiting for the sender, max_flows or
-	// DefaultIPFIXQueueSize, whichever is larger, holds one sweep of a full
-	// table
-	QueueSize int `toml:"-"`
-	// MaxMessageSize caps one IPFIX message in bytes, the udp payload, kept
-	// 28 bytes under the path mtu over ipv4 and 48 over ipv6 for the ip and
-	// udp headers, so a message never fragments
-	MaxMessageSize int `toml:"max_message_size"`
+	QueueSize           int             `toml:"-"`
+	MaxMessageSize      int             `toml:"max_message_size"`
 }
 
 // IPFIXBindConfig controls the local UDP bind used by the IPFIX exporter

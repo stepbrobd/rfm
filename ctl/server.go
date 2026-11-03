@@ -53,9 +53,7 @@ func Listen(path string, handler Handler) (*Server, error) {
 	return &Server{handler: handler, listener: ln, path: path, created: created}, nil
 }
 
-// removeStale unlinks a socket at path that no process listens on and
-// refuses anything else, the file type is checked before the dial because
-// dialing a regular file fails with ECONNREFUSED as well
+// removeStale unlinks a socket no process listens on, it checks the file type before dialing, a regular file also gives ECONNREFUSED
 func removeStale(path string) error {
 	fi, err := os.Lstat(path)
 	if errors.Is(err, os.ErrNotExist) {
@@ -83,9 +81,7 @@ func removeStale(path string) error {
 	return nil
 }
 
-// close unlinks the socket file unless another process has put a different
-// file at the path since Listen, the listener closes after the unlink, which
-// means the file is gone once Serve sees the listener closed
+// close unlinks before closing, Serve then sees the listener closed with the file gone
 func (s *Server) close() {
 	s.closeOnce.Do(func() {
 		if fi, err := os.Lstat(s.path); err == nil && os.SameFile(fi, s.created) {

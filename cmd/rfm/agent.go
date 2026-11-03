@@ -190,19 +190,11 @@ func runAgent(ctx context.Context, path string, deps agentDeps) error {
 	if ipfixExp != nil {
 		mc.SetIPFIX(ipfixExp.Stats)
 	}
-	// a link subscription that failed is a netlink error like a dropped link
-	// message, every failed try to attach a matching link that is still
-	// there an attach error, and a prune pass that failed to delete the
-	// pinned counters of the links this run neither attaches nor retries a
-	// bpf_map error
 	mc.AddErrors("netlink", func() uint64 { st := p.WatchState(); return st.Errors + st.Resubscribes })
 	mc.AddErrors("attach", func() uint64 { return p.WatchState().AttachErrors })
 	mc.AddErrors("bpf_map", func() uint64 { return p.WatchState().PruneErrors })
 	if backends != nil && backends.RIB != nil {
 		bmp := backends.RIB
-		// a message that does not parse in full, a session or a route the
-		// listener refuses past its bounds and the rib contradicting itself
-		// are bmp errors
 		mc.AddErrors("bmp", func() uint64 {
 			s := bmp.Stats()
 			return s.ParseErrors + s.SessionsRejected + s.RoutesRejected + s.Inconsistencies
@@ -226,9 +218,7 @@ func runAgent(ctx context.Context, path string, deps agentDeps) error {
 		handler.ipfix = ipfixExp.Stats
 	}
 
-	// a component that fails ends the run with its error, which makes the
-	// agent exit non zero for systemd to restart it, while ctx ends it
-	// cleanly on SIGTERM or SIGINT
+	// a failed component cancels run with its error, ctx ending is a clean stop
 	// the goroutines are done before the probe and the reader close
 	run, fail := context.WithCancelCause(ctx)
 	var wg sync.WaitGroup
@@ -242,9 +232,6 @@ func runAgent(ctx context.Context, path string, deps agentDeps) error {
 			}
 		})
 	}
-	// the bmp listener retries temporary accept errors and stops on any
-	// other, which fails the run, its open sessions end when the backends
-	// close
 	if backends != nil && backends.RIB != nil {
 		bmp := backends.RIB
 		wg.Go(func() {
@@ -254,11 +241,6 @@ func runAgent(ctx context.Context, path string, deps agentDeps) error {
 		})
 	}
 
-	// the watcher attaches the matching interfaces from its link dump and
-	// follows those that appear or vanish while the agent runs, a link
-	// without an ethernet header or one already gone is a warning, a link
-	// whose attach fails is retried and counted, and the watcher fails only
-	// when its first subscription cannot be opened
 	wg.Go(func() {
 		err := p.Watch(run, matcher, func(ev probe.LinkEvent) {
 			if ev.Attached {
@@ -273,12 +255,7 @@ func runAgent(ctx context.Context, path string, deps agentDeps) error {
 	})
 	wg.Go(func() { reportInterfaces(run, p, cfg.Agent.Interfaces) })
 
-	// the metrics endpoint opens once the first link dump went through, by
-	// then the watcher attached the matching links, or queued a retry for
-	// those it could not attach, and pruned the pinned counters of the
-	// others, a failed prune counts as a bpf_map error and the next dump
-	// tries again, the port stays closed while the watcher retries a dump
-	// that fails, the control socket answers meanwhile
+	// the metrics port opens after the first link dump
 	if !waitSynced(run, p) {
 		return stopped(ctx, run)
 	}
@@ -373,11 +350,7 @@ func reportInterfaces(ctx context.Context, p agentProbe, patterns []string) {
 	}
 }
 
-// newMetricsServer serves reg on /metrics, gathers that run longer than
-// timeout are answered with 503
-// with a timeout the handler encodes into a buffer and gives up its slot
-// before the response goes out, so a client that does not read holds the
-// encoded body and no gather, and the write timeout ends its connection
+// promhttp encodes into a buffer under a timeout, the write timeout ends a client that does not read
 func newMetricsServer(reg prometheus.Gatherer, timeout time.Duration) *http.Server {
 	mux := http.NewServeMux()
 	mux.Handle("/metrics", promhttp.HandlerFor(reg, promhttp.HandlerOpts{
@@ -395,11 +368,6 @@ func newMetricsServer(reg prometheus.Gatherer, timeout time.Duration) *http.Serv
 	}
 }
 
-// probeConfig is the probe setup cfg asks for
-// iface_stats_size 0 keeps the size the object declares, 4096 counter keys,
-// rather than one sized for the links up at start, which interfaces that
-// come later would overflow, and which would change with the links up from
-// one start to the next, while a pinned map of another size fails the start
 func probeConfig(cfg *config.Config) probe.Config {
 	return probe.Config{
 		SampleRate:     cfg.Agent.BPF.SampleRate,
