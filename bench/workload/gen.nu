@@ -3,8 +3,7 @@
 # Multi-queue kernel-pktgen generator (run on the TRAFFIC node). Drives many UDP
 # flows out a real NIC across T TX queues toward a DUT. clone_skb=0 by default
 # so each packet is rebuilt and the UDP source port varies (UDPSRC_RND) -> the
-# DUT's hardware RSS spreads the flows across its RX queues. On gros that caps
-# the aggregate near 1.9 Mpps whatever the thread count, --clone resends each
+# DUT's hardware RSS spreads the flows across its RX queues. --clone resends each
 # skb that many times and --burst batches the doorbell (xmit_more) for a higher
 # rate, at the cost of runs of one source port. Reports achieved aggregate pps.
 # For a sustained flood run detached with a large --count.
@@ -37,6 +36,9 @@ def main [
     pg $d "delay 0"
     pg $d $"dst ($dst)"
     pg $d $"dst_mac ($dstmac)"
+    # each thread owns tx queue i, threads that share a queue serialize on its lock
+    pg $d $"queue_map_min ($i)"
+    pg $d $"queue_map_max ($i)"
     pg $d "udp_dst_min 9"
     pg $d "udp_dst_max 9"
     pg $d $"udp_src_min ($spmin)"
