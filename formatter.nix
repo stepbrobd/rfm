@@ -2,7 +2,7 @@
   lib,
   writeShellScriptBin,
   deno,
-  findutils,
+  git,
   go,
   go-tools,
   gomod2nix,
@@ -15,19 +15,11 @@
 }:
 
 writeShellScriptBin "formatter" ''
+  pushd "$(${lib.getExe git} rev-parse --show-toplevel)" > /dev/null
   set -eoux pipefail
   shopt -s globstar
 
-  root="$PWD"
-  while [[ ! -e "$root/.git" ]]; do
-    if [[ "$root" == "/" ]]; then
-      exit 1
-    fi
-    root="$(dirname "$root")"
-  done
-  pushd "$root" > /dev/null
-
-  ${lib.getExe deno} fmt **/*.md **/*.json
+  ${lib.getExe deno} fmt .
   ${lib.getExe nixfmt-tree} .
   ${lib.getExe nufmt} **/*.nu
   ${lib.getExe taplo} format **/*.toml
@@ -44,7 +36,7 @@ writeShellScriptBin "formatter" ''
   ${lib.getExe' go-tools "staticcheck"} ./...
   ${lib.getExe' gomod2nix "gomod2nix"}
 
-  ${lib.getExe findutils} . -regex '.*\.\(c\|h\)' -exec ${lib.getExe' llvmPackages.clang-tools "clang-format"} -i {} \;
+  ${lib.getExe' llvmPackages.clang-tools "clang-format"} -i **/*.c **/*.h
 
   popd
 ''
