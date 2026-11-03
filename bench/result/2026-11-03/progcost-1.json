@@ -1,0 +1,26 @@
+[
+  {
+    "agent": "rfm N=100",
+    "progs": 2,
+    "prog_runs": 38188758,
+    "rx_pkts": 38187049,
+    "runs_per_rx": 1.0,
+    "avg_ns_in_prog": 76.0
+  },
+  {
+    "agent": "hsflowd epcap s=100",
+    "progs": 2,
+    "prog_runs": 38078506,
+    "rx_pkts": 38078812,
+    "runs_per_rx": 1.0,
+    "avg_ns_in_prog": 61.0
+  },
+  {
+    "agent": "netobserv N=100",
+    "progs": 6,
+    "prog_runs": 38108543,
+    "rx_pkts": 38108647,
+    "runs_per_rx": 1.0,
+    "avg_ns_in_prog": 50.0
+  }
+]
