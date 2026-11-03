@@ -1,7 +1,6 @@
 package export
 
-// IfaceStatsEntry is a single entry from the BPF iface stats map,
-// already summed across CPUs
+// IfaceStatsEntry is the traffic of one interface, direction and family, summed over CPUs and over its counter slot and hash entries
 type IfaceStatsEntry struct {
 	Ifindex uint32
 	Dir     uint8
@@ -10,8 +9,7 @@ type IfaceStatsEntry struct {
 	Bytes   uint64
 }
 
-// IfaceStatsSource provides aggregated per-interface statistics
-// the probe implements this on Linux, tests use a mock
+// IfaceStatsSource provides the interface counters, ProbeSource reads them from the probe
 type IfaceStatsSource interface {
 	IfaceStats() ([]IfaceStatsEntry, error)
 }
@@ -27,9 +25,7 @@ type IfaceStatsErrorSource interface {
 	IfaceStatsErrors() (uint64, error)
 }
 
-// GSOHeaderErrorSource provides how many GSO skbs the programs counted
-// without parsing their headers, an ingress one lacks the header bytes of its
-// extra segments and one without a segment count counts as one packet
+// GSOHeaderErrorSource provides how many gso skbs the programs counted without the header size they needed
 type GSOHeaderErrorSource interface {
 	GSOHeaderErrors() (uint64, error)
 }

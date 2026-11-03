@@ -25,7 +25,7 @@ func (s *ProbeSource) IfaceStats() ([]IfaceStatsEntry, error) {
 	return entries, nil
 }
 
-// SampleRate reads the current sample rate from the probe config map
+// SampleRate reads the rate the programs sample at
 func (s *ProbeSource) SampleRate() (uint32, error) {
 	return s.Probe.SampleRate()
 }
@@ -36,8 +36,7 @@ func (s *ProbeSource) IfaceStatsErrors() (uint64, error) {
 	return s.Probe.IfaceStatsErrors()
 }
 
-// GSOHeaderErrors reads how many GSO skbs the programs counted without
-// parsing their headers
+// GSOHeaderErrors reads how many gso skbs were counted without the header size they needed
 func (s *ProbeSource) GSOHeaderErrors() (uint64, error) {
 	return s.Probe.GSOHeaderErrors()
 }

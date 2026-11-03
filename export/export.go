@@ -289,7 +289,6 @@ func (mc *MetricsCollector) Collect(ch chan<- prometheus.Metric) {
 		errs["gso_header"] = gsoErrs
 	}
 	if mc.col != nil {
-		// single Stats() call for a consistent snapshot
 		stats := mc.col.Stats()
 		ch <- prometheus.MustNewConstMetric(descActiveFlows, prometheus.GaugeValue, float64(stats.ActiveFlows))
 		ch <- prometheus.MustNewConstMetric(descDroppedEvents, prometheus.CounterValue, float64(stats.DroppedEvents))
