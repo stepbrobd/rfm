@@ -8,15 +8,16 @@
 // RFM_SAMPLED  0 exact profile, counter on every packet then the draw
 //              1 sampled profile, the draw first and no counter
 // RFM_CTR      0 PERCPU_HASH counter keyed (ifindex, dir, family), as the agent
+//                before 8c7130d
 //              1 PERCPU_ARRAY counter at a slot read from an ifindex indexed
 //                ARRAY, the hash as fallback for unknown interfaces
 //              2 no counter
-// RFM_DRAW     0 prandom % N, as the agent
+// RFM_DRAW     0 prandom % N, as the agent before 8c7130d
 //              1 prandom < threshold, threshold written by userspace
 //              2 per-CPU skip count, the gap drawn uniformly in [0, 2N-2] at
 //                each sample, kept in the counter slot under RFM_CTR 1
 // RFM_WAKE     0 wakeup every wakeup_batch submits through a per-CPU counter,
-//                as the agent
+//                as the agent before 8c7130d
 //              1 always BPF_RB_NO_WAKEUP
 // RFM_LAZY     1 egress parses the GSO header only when gso_segs is 0
 // RFM_XDP      1 ingress runs as an XDP program instead of TCX ingress, the
@@ -70,10 +71,6 @@
 #define NEXTHDR_DEST 60
 
 #define RFM_IPV6_EXTHDRS 6
-
-// slots times directions times families, family 0 other, 1 ipv4, 2 ipv6
-#define RFM_SLOTS 64
-#define RFM_SLOT_IFINDEX_MAX 4096
 
 struct rfm_vlan_hdr {
 	__u16 tci;
