@@ -64,9 +64,7 @@ func insitu(obj, label, iface string, n uint32, ringOrder uint32, warmup, window
 		if err != nil {
 			return err
 		}
-		if m, ok := spec.Maps["rfm_flow_events"]; ok {
-			m.MaxEntries = 1 << ringOrder
-		}
+		sizeRings(spec, ringOrder)
 		coll, err = ebpf.NewCollection(spec)
 		if err != nil {
 			return err
@@ -74,6 +72,13 @@ func insitu(obj, label, iface string, n uint32, ringOrder uint32, warmup, window
 		defer coll.Close()
 		if err := writeConfig(coll, n); err != nil {
 			return err
+		}
+		rings, own, err := eventRings(spec, coll, splitRing(ringOrder))
+		if err != nil {
+			return err
+		}
+		if own {
+			defer closeRings(rings)
 		}
 		if m, ok := coll.Maps["rfm_iface_slot"]; ok {
 			if err := m.Put(uint32(ifc.Index), uint32(1)); err != nil {
@@ -105,24 +110,27 @@ func insitu(obj, label, iface string, n uint32, ringOrder uint32, warmup, window
 		}
 		defer out.Close()
 
-		rd, err := ringbuf.NewReader(coll.Maps["rfm_flow_events"])
-		if err != nil {
-			return err
-		}
-		defer rd.Close()
-		go func() {
-			var rec ringbuf.Record
-			for {
-				rd.SetDeadline(time.Now().Add(50 * time.Millisecond))
-				if err := rd.ReadInto(&rec); err != nil {
-					if errors.Is(err, ringbuf.ErrClosed) {
-						return
-					}
-					continue
-				}
-				events.Add(1)
+		// a reader per ring, each drains its ring until it is closed
+		for _, ring := range rings {
+			rd, err := ringbuf.NewReader(ring)
+			if err != nil {
+				return err
 			}
-		}()
+			defer rd.Close()
+			go func() {
+				var rec ringbuf.Record
+				for {
+					rd.SetDeadline(time.Now().Add(50 * time.Millisecond))
+					if err := rd.ReadInto(&rec); err != nil {
+						if errors.Is(err, ringbuf.ErrClosed) {
+							return
+						}
+						continue
+					}
+					events.Add(1)
+				}
+			}()
+		}
 	}
 
 	time.Sleep(warmup)

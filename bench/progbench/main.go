@@ -202,9 +202,7 @@ func trial(obj, pname string, fr frame, n, repeat, ringOrder uint32) (uint32, fl
 			delete(spec.Programs, name)
 		}
 	}
-	if m, ok := spec.Maps["rfm_flow_events"]; ok {
-		m.MaxEntries = 1 << ringOrder
-	}
+	sizeRings(spec, ringOrder)
 
 	coll, err := ebpf.NewCollectionWithOptions(spec, ebpf.CollectionOptions{
 		Programs: ebpf.ProgramOptions{LogLevel: ebpf.LogLevelStats},
@@ -219,6 +217,14 @@ func trial(obj, pname string, fr frame, n, repeat, ringOrder uint32) (uint32, fl
 
 	if err := writeConfig(coll, n); err != nil {
 		return 0, 0, 0, 0, info, err
+	}
+	// the rings stay referenced by rfm_flow_rings, nothing reads them here
+	rings, own, err := eventRings(spec, coll, pinnedRing(ringOrder))
+	if err != nil {
+		return 0, 0, 0, 0, info, err
+	}
+	if own {
+		closeRings(rings)
 	}
 	// test_run hands the program the loopback device, ifindex 1, at slot 0
 	if m, ok := coll.Maps["rfm_iface_slot"]; ok {
@@ -321,7 +327,11 @@ func testRun(fd int, fr frame, repeat uint32, skbCtx bool) (uint32, uint32, erro
 	return attr.duration, attr.retval, nil
 }
 
+// pinnedCPU is the CPU pin put the calling thread on, test runs run there
+var pinnedCPU int
+
 func pin(cpu int) error {
+	pinnedCPU = cpu
 	runtime.LockOSThread()
 	var set unix.CPUSet
 	set.Zero()

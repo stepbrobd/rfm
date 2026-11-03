@@ -72,9 +72,7 @@ func accuracy(obj, label, km string, n, ringOrder uint32, kernel string) error {
 			delete(spec.Programs, name)
 		}
 	}
-	if em, ok := spec.Maps["rfm_flow_events"]; ok {
-		em.MaxEntries = 1 << ringOrder
-	}
+	sizeRings(spec, ringOrder)
 	coll, err := ebpf.NewCollection(spec)
 	if err != nil {
 		return err
@@ -82,6 +80,13 @@ func accuracy(obj, label, km string, n, ringOrder uint32, kernel string) error {
 	defer coll.Close()
 	if err := writeConfig(coll, n); err != nil {
 		return err
+	}
+	rings, own, err := eventRings(spec, coll, pinnedRing(ringOrder))
+	if err != nil {
+		return err
+	}
+	if own {
+		defer closeRings(rings)
 	}
 	if sm, ok := coll.Maps["rfm_iface_slot"]; ok {
 		if err := sm.Put(uint32(1), uint32(1)); err != nil {
@@ -118,31 +123,36 @@ func accuracy(obj, label, km string, n, ringOrder uint32, kernel string) error {
 		}
 	}
 
-	rd, err := ringbuf.NewReader(coll.Maps["rfm_flow_events"])
-	if err != nil {
-		return err
-	}
-	defer rd.Close()
-	rd.SetDeadline(time.Now())
 	counts := make([]int, k)
 	events := 0
-	var rec ringbuf.Record
-	for {
-		if err := rd.ReadInto(&rec); err != nil {
-			if errors.Is(err, os.ErrDeadlineExceeded) {
-				break
-			}
+	for _, ring := range rings {
+		rd, err := ringbuf.NewReader(ring)
+		if err != nil {
 			return err
 		}
-		if len(rec.RawSample) < srcPortOff+2 {
-			return fmt.Errorf("short event of %d bytes", len(rec.RawSample))
+		rd.SetDeadline(time.Now())
+		var rec ringbuf.Record
+		for {
+			if err := rd.ReadInto(&rec); err != nil {
+				if errors.Is(err, os.ErrDeadlineExceeded) {
+					break
+				}
+				rd.Close()
+				return err
+			}
+			if len(rec.RawSample) < srcPortOff+2 {
+				rd.Close()
+				return fmt.Errorf("short event of %d bytes", len(rec.RawSample))
+			}
+			port := int(binary.NativeEndian.Uint16(rec.RawSample[srcPortOff:])) - portBase
+			if port < 0 || port >= k {
+				rd.Close()
+				return fmt.Errorf("event for unknown source port %d", port+portBase)
+			}
+			counts[port]++
+			events++
 		}
-		port := int(binary.NativeEndian.Uint16(rec.RawSample[srcPortOff:])) - portBase
-		if port < 0 || port >= k {
-			return fmt.Errorf("event for unknown source port %d", port+portBase)
-		}
-		counts[port]++
-		events++
+		rd.Close()
 	}
 
 	order := "round_robin"
