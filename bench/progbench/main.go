@@ -217,7 +217,7 @@ func trial(obj, pname string, fr frame, n, repeat, ringOrder uint32) (uint32, fl
 	}
 	defer coll.Close()
 
-	if err := writeConfig(coll.Maps["rfm_config"], n); err != nil {
+	if err := writeConfig(coll, n); err != nil {
 		return 0, 0, 0, 0, info, err
 	}
 	// test_run hands the program the loopback device, ifindex 1, at slot 0
@@ -262,11 +262,23 @@ func trial(obj, pname string, fr frame, n, repeat, ringOrder uint32) (uint32, fl
 	return ns, wall, ret, drops, info, nil
 }
 
-// writeConfig fills the config value by its size: the agent's struct is
-// sample_rate, flags, wakeup_batch and the variants append threshold
-func writeConfig(m *ebpf.Map, n uint32) error {
+// writeConfig sets sample rate n and a wakeup batch of 64, in the rfm_cfg
+// global of an agent object that keeps its config there, otherwise in the
+// rfm_config map, whose value is sample_rate, flags, wakeup_batch and, in the
+// variants, the threshold
+func writeConfig(coll *ebpf.Collection, n uint32) error {
+	if v, ok := coll.Variables["rfm_cfg"]; ok {
+		var val []byte
+		if err := v.Get(&val); err != nil {
+			return err
+		}
+		binary.NativeEndian.PutUint32(val[0:], n)
+		binary.NativeEndian.PutUint32(val[8:], 64)
+		return v.Set(val)
+	}
+	m := coll.Maps["rfm_config"]
 	if m == nil {
-		return errors.New("no rfm_config map")
+		return errors.New("no rfm_cfg global or rfm_config map")
 	}
 	val := make([]byte, m.ValueSize())
 	binary.NativeEndian.PutUint32(val[0:], n)

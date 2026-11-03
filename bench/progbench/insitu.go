@@ -71,7 +71,7 @@ func insitu(obj, label, iface string, n uint32, ringOrder uint32, warmup, window
 			return err
 		}
 		defer coll.Close()
-		if err := writeConfig(coll.Maps["rfm_config"], n); err != nil {
+		if err := writeConfig(coll, n); err != nil {
 			return err
 		}
 		if m, ok := coll.Maps["rfm_iface_slot"]; ok {

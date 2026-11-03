@@ -80,7 +80,7 @@ func accuracy(obj, label, km string, n, ringOrder uint32, kernel string) error {
 		return err
 	}
 	defer coll.Close()
-	if err := writeConfig(coll.Maps["rfm_config"], n); err != nil {
+	if err := writeConfig(coll, n); err != nil {
 		return err
 	}
 	if sm, ok := coll.Maps["rfm_iface_slot"]; ok {
