@@ -703,7 +703,7 @@ func (s *Server) handleConn(conn net.Conn) {
 
 	for scanner.Scan() {
 		messages++
-		if adjRIBOut(scanner.Bytes()) {
+		if adjRIBOut(scanner.Bytes()) || vrfRoutes(scanner.Bytes()) {
 			continue
 		}
 
@@ -822,6 +822,11 @@ func salvage(data []byte, msg *bmp.BMPMessage, err error) (*bmp.BMPMessage, bool
 // 8671), the routes a router sends a peer rather than those it receives
 func adjRIBOut(data []byte) bool {
 	return len(data) > bmp.BMP_HEADER_SIZE+1 && data[5] == bmp.BMP_MSG_ROUTE_MONITORING && data[bmp.BMP_HEADER_SIZE+1]&bmp.BMP_PEER_FLAG_ADJ_RIB_TYP != 0
+}
+
+// vrfRoutes reports whether data is route monitoring of a peer with a distinguisher, an RD instance peer or the Loc-RIB of a VRF, whose unicast routes belong to the VRF
+func vrfRoutes(data []byte) bool {
+	return len(data) >= bmp.BMP_HEADER_SIZE+10 && data[5] == bmp.BMP_MSG_ROUTE_MONITORING && binary.BigEndian.Uint64(data[bmp.BMP_HEADER_SIZE+2:bmp.BMP_HEADER_SIZE+10]) != 0
 }
 
 // errUndecodable is the parse error of an update whose peer the session
@@ -1541,7 +1546,8 @@ func otherFamily(attr bgp.PathAttributeInterface) bool {
 
 // prefixFromNLRI returns the prefix of a unicast NLRI
 // the RIB models the global table, so VPN routes, which belong to a VRF,
-// and every other family are skipped, an ipv4 mapped ipv6 prefix stays ipv6
+// and every other family are skipped, as are the routes of a VRF peer, see
+// vrfRoutes, and an ipv4 mapped ipv6 prefix stays ipv6
 // because unmapping it would leave more prefix bits than address bits
 // multicast NLRI come in the types of unicast ones, otherFamily skips them
 func prefixFromNLRI(nlri bgp.AddrPrefixInterface) (netip.Prefix, bool) {

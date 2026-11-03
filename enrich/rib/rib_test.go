@@ -385,7 +385,7 @@ func TestOnlyViewsTheTableHoldsGoStale(t *testing.T) {
 	// an End-of-RIB marker and a withdraw of a prefix no view holds change
 	// nothing, and the table turns away the routes of views past its limit
 	for i := range 100 {
-		peer := bmp.NewBMPPeerHeader(bmp.BMP_PEER_TYPE_GLOBAL, 0, uint64(i+1), "192.0.2.3", 65003, "192.0.2.3", 0)
+		peer := bmp.NewBMPPeerHeader(bmp.BMP_PEER_TYPE_GLOBAL, 0, 0, fmt.Sprintf("192.0.3.%d", i+1), 65003, "192.0.2.3", 0)
 		write(t, first, mustRouteMonitoringWire(t, peer, bgp.NewBGPUpdateMessage(nil, nil, nil)))
 		write(t, first, withdraw(peer, "192.0.2.0/24"))
 		write(t, first, mustBMPWireFrom(t, "192.0.2.0/24", 65005, fmt.Sprintf("10.0.0.%d", i+1), 0))
@@ -684,6 +684,37 @@ func TestHandleConnIgnoresAdjRIBOut(t *testing.T) {
 	}
 	if route, ok := s.Lookup(netip.MustParseAddr("198.51.100.7")); !ok || route.OriginASN != 65003 {
 		t.Fatalf("Lookup = %+v ok=%v, want the route received from 192.0.2.2", route, ok)
+	}
+
+	_ = client.Close()
+	<-done
+}
+
+func TestHandleConnSkipsVRFPeers(t *testing.T) {
+	s := &Server{table: newTable()}
+	client, done := startSession(t, s)
+	rd := bgp.NewRouteDistinguisherTwoOctetAS(65000, 1)
+	rdValue, err := rd.Serialize()
+	if err != nil {
+		t.Fatal(err)
+	}
+	update := mustBMPMessage(t, "10.20.0.0/16", 64512).Body.(*bmp.BMPRouteMonitoring).BGPUpdate
+
+	// the unicast routes of a VRF customer and of a VRF's Loc-RIB label no
+	// flow of the global table
+	for _, peer := range []*bmp.BMPPeerHeader{
+		bmp.NewBMPPeerHeader(bmp.BMP_PEER_TYPE_L3VPN, 0, binary.BigEndian.Uint64(rdValue), "10.0.0.1", 64512, "10.0.0.1", 0),
+		bmp.NewBMPPeerHeader(bmp.BMP_PEER_TYPE_LOCAL_RIB, 0, binary.BigEndian.Uint64(rdValue), "0.0.0.0", 65000, "192.0.2.1", 0),
+	} {
+		write(t, client, mustRouteMonitoringWire(t, peer, update))
+	}
+	write(t, client, mustBMPWireFrom(t, "192.0.2.0/24", 65005, "192.0.2.5", 0))
+	waitForRoute(t, s, "192.0.2.7", true)
+	if route, ok := s.Lookup(netip.MustParseAddr("10.20.1.1")); ok {
+		t.Fatalf("Lookup = %+v, want no route from a VRF peer", route)
+	}
+	if got := s.Summary(); got != (Summary{PrefixesV4: 1, Routes: 1, Views: 1}) {
+		t.Fatalf("summary = %+v, want the global route alone", got)
 	}
 
 	_ = client.Close()

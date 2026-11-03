@@ -454,7 +454,9 @@ its views. A route whose AS path ends in an AS_SET has no single origin and
 reports ASN 0.
 
 The RIB keeps IPv4 and IPv6 unicast routes and skips VPN, multicast and other
-families, and the route monitoring of an Adj-RIB-Out (RFC 8671). It decodes
+families, the route monitoring of an Adj-RIB-Out (RFC 8671), and the route
+monitoring of a peer with a distinguisher (an RD instance peer or the Loc-RIB of
+a VRF), whose unicast routes belong to the table of that VRF. It decodes
 ADD-PATH updates with the capabilities the Peer Up shows and serves the lowest
 path id of each view, merges AS4_PATH into the path of a route from a 2-byte
 speaker as RFC 6793 describes, and handles a malformed attribute as RFC 7606
