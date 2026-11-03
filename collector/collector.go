@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/netip"
 	"os"
+	"sort"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -493,6 +494,66 @@ func (c *Collector) Flows() map[FlowKey]FlowEntry {
 		snap[k] = state.entry
 	}
 	return snap
+}
+
+// Flow is one live flow
+type Flow struct {
+	Key FlowKey
+	FlowEntry
+}
+
+// TopFlows returns the n flows with the most estimated packets or bytes, busiest first and the older of a tie first
+func (c *Collector) TopFlows(n int, byPackets bool) []Flow {
+	if n < 1 {
+		return nil
+	}
+	ahead := func(a, b *FlowEntry) bool {
+		if byPackets {
+			if a.EstPackets != b.EstPackets {
+				return a.EstPackets > b.EstPackets
+			}
+		} else if a.EstBytes != b.EstBytes {
+			return a.EstBytes > b.EstBytes
+		}
+		return a.FirstSeen < b.FirstSeen
+	}
+
+	c.mu.RLock()
+	// once full, top is a heap with the flow furthest behind at its root
+	top := make([]Flow, 0, min(n, len(c.flows)))
+	down := func(i int) {
+		for {
+			last := i
+			for _, child := range [2]int{2*i + 1, 2*i + 2} {
+				if child < len(top) && ahead(&top[last].FlowEntry, &top[child].FlowEntry) {
+					last = child
+				}
+			}
+			if last == i {
+				return
+			}
+			top[i], top[last] = top[last], top[i]
+			i = last
+		}
+	}
+	for k, state := range c.flows {
+		switch {
+		case len(top) < n:
+			top = append(top, Flow{k, state.entry})
+			if len(top) == n {
+				for i := n/2 - 1; i >= 0; i-- {
+					down(i)
+				}
+			}
+		case ahead(&state.entry, &top[0].FlowEntry):
+			top[0] = Flow{k, state.entry}
+			down(0)
+		}
+	}
+	c.mu.RUnlock()
+
+	sort.Slice(top, func(i, j int) bool { return ahead(&top[i].FlowEntry, &top[j].FlowEntry) })
+	return top
 }
 
 // RollupSample is one rollup tuple as a scrape shows it

@@ -123,30 +123,8 @@ func (h *controlHandler) Status() (ctl.Status, error) {
 	return st, nil
 }
 
-// FlowsTop orders the live flows and builds rows for the first n only, so a
-// table of tens of thousands of flows costs one sort and one link dump
 func (h *controlHandler) FlowsTop(n int, by string) ([]ctl.FlowRow, error) {
-	type flow struct {
-		key   collector.FlowKey
-		entry collector.FlowEntry
-	}
-	snapshot := h.col.Flows()
-	flows := make([]flow, 0, len(snapshot))
-	for key, entry := range snapshot {
-		flows = append(flows, flow{key, entry})
-	}
-	sort.Slice(flows, func(i, j int) bool {
-		a, b := flows[i].entry, flows[j].entry
-		if by == "packets" {
-			if a.EstPackets != b.EstPackets {
-				return a.EstPackets > b.EstPackets
-			}
-		} else if a.EstBytes != b.EstBytes {
-			return a.EstBytes > b.EstBytes
-		}
-		return a.FirstSeen < b.FirstSeen
-	})
-	flows = flows[:min(n, len(flows))]
+	flows := h.col.TopFlows(n, by == "packets")
 
 	names, err := h.linkNames()
 	if err != nil {
@@ -155,7 +133,7 @@ func (h *controlHandler) FlowsTop(n int, by string) ([]ctl.FlowRow, error) {
 	epoch := collector.BootEpoch()
 	rows := make([]ctl.FlowRow, len(flows))
 	for i, f := range flows {
-		key, entry := f.key, f.entry
+		key, entry := f.Key, f.FlowEntry
 		rows[i] = ctl.FlowRow{
 			Interface:  names.name(int(key.Ifindex)),
 			Direction:  direction(key.Dir),
