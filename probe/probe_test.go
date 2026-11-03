@@ -742,6 +742,62 @@ func TestFlowEventIPv6ExtensionHeaderChain(t *testing.T) {
 	}
 }
 
+// longDstOpts builds a 256 byte destination options header, one PadN option
+// filling it, which puts the transport header past RFM_DIRECT_OFF_MAX
+func longDstOpts(next uint8) []byte {
+	h := make([]byte, 256)
+	h[0], h[1] = next, 31
+	h[2], h[3] = 1, 252
+	return h
+}
+
+func TestFlowEventIPv6LongExtensionHeader(t *testing.T) {
+	testutil.RequireRoot(t)
+
+	// the ports are read through the helper rather than straight from the
+	// packet
+	src := "fd00:8::1"
+	payload := append(longDstOpts(17), testutil.UDP(4700, 53)...)
+	pkt := testutil.EthIPv6(net.ParseIP(src), net.ParseIP("fd00:8::2"), testutil.IPProtoDstOpts, payload)
+
+	ev := readFlowEventFromSrc(t, pkt, src)
+	if ev.Proto != 17 || ev.SrcPort != 4700 || ev.DstPort != 53 {
+		t.Fatalf("proto %d ports %d -> %d, want 17 and 4700 -> 53 behind a 256 byte header", ev.Proto, ev.SrcPort, ev.DstPort)
+	}
+}
+
+func TestIngressGSOLongExtensionHeader(t *testing.T) {
+	testutil.RequireRoot(t)
+
+	testutil.NewNS(t)
+
+	p, err := Load(Config{WakeupBatch: 1})
+	if err != nil {
+		skipIfUnsupported(t, err)
+		t.Fatal(err)
+	}
+	defer p.Close()
+
+	// the tcp data offset is read through the helper rather than straight
+	// from the packet, every wire packet repeats the 256 byte header
+	const hdrLen = testutil.EthHdrLen + testutil.IPv6HdrLen + 256 + testutil.TCPHdrLen
+	payload := append(longDstOpts(6), testutil.TCP(4800, 443)...)
+	payload = append(payload, make([]byte, 2*gsoSize)...)
+	frame := testutil.EthIPv6(net.ParseIP("fd00:9::1"), net.ParseIP("fd00:9::2"), testutil.IPProtoDstOpts, payload)
+	ctx := skbContext{GSOSegs: 2, GSOSize: gsoSize}
+	if _, err := p.objs.RfmTcIngress.Run(&ebpf.RunOptions{Data: frame, Context: ctx}); err != nil {
+		skipIfUnsupported(t, err)
+		t.Fatal(err)
+	}
+
+	lo, err := netlink.LinkByName("lo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	key := rfmRfmIfaceKey{Ifindex: uint32(lo.Attrs().Index), Dir: 0, Proto: 6}
+	wantIfaceStats(t, p, key, 2, 2*(hdrLen+gsoSize))
+}
+
 func TestFlowEventGROIngressIPv6ExtensionHeader(t *testing.T) {
 	testutil.RequireRoot(t)
 

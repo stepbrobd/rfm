@@ -25,6 +25,12 @@
 // carries, IPv4 and UDP
 #define RFM_SEG_HDR_MIN 28
 
+// RFM_DIRECT_OFF_MAX bounds the network header length up to which the
+// transport header is read straight from the linear data, the verifier then
+// checks a single bounded offset, a longer chain of extension headers or a
+// transport header outside the linear data takes bpf_skb_load_bytes
+#define RFM_DIRECT_OFF_MAX 255
+
 struct rfm_vlan_hdr {
 	__u16 tci;
 	__u16 encap_proto;
@@ -200,7 +206,11 @@ static __always_inline __u32 rfm_hdr_len(struct __sk_buff *skb, void *l3,
 
 	if (proto == IPPROTO_TCP) {
 		__u8 off_byte;
-		if (bpf_skb_load_bytes(skb, l2_len + l3_len + 12, &off_byte, 1))
+		__u8 *doff = l3 + l3_len + 12;
+		if (l3_len <= RFM_DIRECT_OFF_MAX && (void *)(doff + 1) <= end)
+			off_byte = *doff;
+		else if (bpf_skb_load_bytes(skb, l2_len + l3_len + 12,
+					    &off_byte, 1))
 			return 0;
 		return l2_len + l3_len + rfm_tcp_hdr_len(off_byte);
 	}
@@ -445,8 +455,11 @@ static __always_inline int rfm_tc(struct __sk_buff *skb, __u8 dir)
 	if (!later_frag &&
 	    (ev.proto == IPPROTO_TCP || ev.proto == IPPROTO_UDP)) {
 		__be16 ports[2];
-		if (bpf_skb_load_bytes(skb, l3_off + l4_off, ports,
-				       sizeof(ports)))
+		void *th = l3 + l4_off;
+		if (l4_off <= RFM_DIRECT_OFF_MAX && th + sizeof(ports) <= end)
+			__builtin_memcpy(ports, th, sizeof(ports));
+		else if (bpf_skb_load_bytes(skb, l3_off + l4_off, ports,
+					    sizeof(ports)))
 			return TCX_NEXT;
 		ev.src_port = bpf_ntohs(ports[0]);
 		ev.dst_port = bpf_ntohs(ports[1]);
