@@ -50,7 +50,9 @@ type insituResult struct {
 	Kernel    string `json:"kernel"`
 }
 
-func insitu(obj, label, iface string, n uint32, ringOrder uint32, warmup, window time.Duration, kernel string) error {
+// insitu attaches ingress and egress of obj, or rfm_xdp (else rfm_tc_ingress)
+// and rfm_tc_egress when they are empty
+func insitu(obj, label, iface, ingress, egress string, n uint32, ringOrder uint32, warmup, window time.Duration, kernel string) error {
 	ifc, err := net.InterfaceByName(iface)
 	if err != nil {
 		return err
@@ -92,19 +94,30 @@ func insitu(obj, label, iface string, n uint32, ringOrder uint32, warmup, window
 		}
 		defer stats.Close()
 
+		if ingress == "" {
+			ingress, egress = "rfm_tc_ingress", "rfm_tc_egress"
+			if _, ok := coll.Programs["rfm_xdp"]; ok {
+				ingress = "rfm_xdp"
+			}
+		}
+		inProg, outProg := coll.Programs[ingress], coll.Programs[egress]
+		if inProg == nil || outProg == nil {
+			return fmt.Errorf("%s has no %s or %s program", obj, ingress, egress)
+		}
+
 		// the agent anchors ingress at the head and egress at the tail
 		var in link.Link
-		if xp, ok := coll.Programs["rfm_xdp"]; ok {
+		if inProg.Type() == ebpf.XDP {
 			res.XDP = true
-			in, err = link.AttachXDP(link.XDPOptions{Program: xp, Interface: ifc.Index, Flags: link.XDPDriverMode})
+			in, err = link.AttachXDP(link.XDPOptions{Program: inProg, Interface: ifc.Index, Flags: link.XDPDriverMode})
 		} else {
-			in, err = link.AttachTCX(link.TCXOptions{Interface: ifc.Index, Program: coll.Programs["rfm_tc_ingress"], Attach: ebpf.AttachTCXIngress, Anchor: link.Head()})
+			in, err = link.AttachTCX(link.TCXOptions{Interface: ifc.Index, Program: inProg, Attach: ebpf.AttachTCXIngress, Anchor: link.Head()})
 		}
 		if err != nil {
 			return fmt.Errorf("attach ingress: %w", err)
 		}
 		defer in.Close()
-		out, err := link.AttachTCX(link.TCXOptions{Interface: ifc.Index, Program: coll.Programs["rfm_tc_egress"], Attach: ebpf.AttachTCXEgress, Anchor: link.Tail()})
+		out, err := link.AttachTCX(link.TCXOptions{Interface: ifc.Index, Program: outProg, Attach: ebpf.AttachTCXEgress, Anchor: link.Tail()})
 		if err != nil {
 			return fmt.Errorf("attach egress: %w", err)
 		}
@@ -135,11 +148,7 @@ func insitu(obj, label, iface string, n uint32, ringOrder uint32, warmup, window
 
 	time.Sleep(warmup)
 
-	inName := "rfm_tc_ingress"
-	if res.XDP {
-		inName = "rfm_xdp"
-	}
-	i0, e0 := progStats(coll, inName), progStats(coll, "rfm_tc_egress")
+	i0, e0 := progStats(coll, ingress), progStats(coll, egress)
 	w0, err := phyCounters(iface)
 	if err != nil {
 		return err
@@ -159,7 +168,7 @@ func insitu(obj, label, iface string, n uint32, ringOrder uint32, warmup, window
 
 	time.Sleep(window)
 
-	i1, e1 := progStats(coll, inName), progStats(coll, "rfm_tc_egress")
+	i1, e1 := progStats(coll, ingress), progStats(coll, egress)
 	w1, err := phyCounters(iface)
 	if err != nil {
 		return err

@@ -91,7 +91,7 @@ type result struct {
 func main() {
 	obj := flag.String("obj", "", "BPF object file")
 	label := flag.String("label", "", "label for the output lines")
-	progs := flag.String("progs", "auto", "comma separated program names, auto for every rfm entry point in the object")
+	progs := flag.String("progs", "auto", "comma separated program names, auto for every rfm entry point in the object, with -attach the ingress and egress program")
 	frames := flag.String("frames", "v4tcp,v6tcp,vlan4tcp,arp,v4tcp_gso", "comma separated frame names")
 	n := flag.Uint("n", 100, "sample rate N written to the config map")
 	repeat := flag.Uint("repeat", 2000000, "runs per trial")
@@ -131,7 +131,14 @@ func main() {
 	}
 
 	if *attach != "" {
-		if err := insitu(*obj, *label, *attach, uint32(*n), uint32(*ringOrder), *warmup, *window, kernel); err != nil {
+		var ingress, egress string
+		if *progs != "auto" {
+			var ok bool
+			if ingress, egress, ok = strings.Cut(*progs, ","); !ok {
+				fail(errors.New("-progs with -attach wants ingress,egress"))
+			}
+		}
+		if err := insitu(*obj, *label, *attach, ingress, egress, uint32(*n), uint32(*ringOrder), *warmup, *window, kernel); err != nil {
 			fail(err)
 		}
 		return

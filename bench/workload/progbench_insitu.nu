@@ -26,9 +26,12 @@ def main [
     let ls = $labels | split row " "
     for r in 1..$rounds {
         for l in ($ls | shuffle) {
-            let obj = if $l == "none" { "none" } else { $"($dir)/($l).o" }
+            # a label object@suffix attaches rfm_tc_ingress_suffix and rfm_tc_egress_suffix of object
+            let parts = $l | split row "@"
+            let obj = if $l == "none" { "none" } else { $"($dir)/($parts.0).o" }
+            let progs = if ($parts | length) > 1 { $"rfm_tc_ingress_($parts.1),rfm_tc_egress_($parts.1)" } else { "auto" }
             let line = (
-                ^$"($dir)/progbench" -obj $obj -label $l -attach $iface -n $n -warmup $warmup -window $window
+                ^$"($dir)/progbench" -obj $obj -label $l -attach $iface -progs $progs -n $n -warmup $warmup -window $window
                 | str trim
             )
             $"($line)\n" | save -a $out
