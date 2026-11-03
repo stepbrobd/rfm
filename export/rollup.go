@@ -13,10 +13,7 @@ import (
 // the order the registry expects label pairs in
 var flowLabelNames = [7]string{"direction", "dst_asn", "dst_city", "ifname", "proto", "src_asn", "src_city"}
 
-// tupleLabels are the label pairs of one rollup tuple, built once and shared
-// by the series of the tuple in every scrape, the labels of a tuple never
-// change except the name of its interface, which every scrape checks
-// one allocation holds the values, the pairs and the slice of them
+// tupleLabels are the label pairs of one tuple, rebuilt when its interface name changes
 type tupleLabels struct {
 	ifname string
 	// gen is the last scrape that saw the tuple, a tuple that left the
@@ -46,10 +43,7 @@ func newTupleLabels(ifname string, k collector.RollupKey) *tupleLabels {
 	return l
 }
 
-// counterMetric and gaugeMetric are one series of a rollup tuple in one
-// scrape, they carry the protobuf value the registry takes so writing them
-// allocates nothing, and they share the cached label pairs, which no reader
-// modifies
+// counterMetric and gaugeMetric write cached labels and a preallocated value
 type counterMetric struct {
 	desc   *prometheus.Desc
 	labels []*dto.LabelPair
@@ -84,12 +78,7 @@ func (m *gaugeMetric) Write(out *dto.Metric) error {
 	return nil
 }
 
-// collectRollups emits the flow gauges and counters of every label tuple
-// the gauges sum the live flows of a tuple and are left out while it has
-// none, the counters of a new tuple start at zero, see ScrapeRollups
-// the series of one scrape come from two allocations and take their labels
-// from the cache, so a scrape neither copies the flow table nor builds the
-// labels of every series again
+// collectRollups emits every tuple's counters and, for tuples with live flows, its gauges
 func (mc *MetricsCollector) collectRollups(ch chan<- prometheus.Metric) {
 	if mc.col == nil {
 		return
@@ -124,8 +113,6 @@ func (mc *MetricsCollector) collectRollups(ch chan<- prometheus.Metric) {
 	for i := range mc.samples {
 		s := &mc.samples[i]
 		labels := mc.tupleLabels(s)
-		// the estimates were scaled when each event was recorded, with the
-		// sample rate in force at that moment
 		if s.Flows > 0 {
 			gauge(&gauges[g], descFlowBytes, labels, s.Live.EstBytes)
 			gauge(&gauges[g+1], descFlowPackets, labels, s.Live.EstPackets)

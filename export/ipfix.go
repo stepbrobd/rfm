@@ -89,20 +89,12 @@ type IPFIXStats struct {
 	SendErrors map[string]uint64
 }
 
-// Failures counts the lost records, every reason once, so it sums the
-// dropped record counters
-// failed dials and failed messages lose nothing beyond the records counted
-// as unsent and as failed sends
+// Failures sums the lost records over their reasons
 func (s IPFIXStats) Failures() uint64 {
 	return s.QueueDropped + s.Unsent + s.EncodeErrors + s.SendFailed
 }
 
-// IPFIXExporter sends flow records to a single UDP IPFIX collector
-// ExportFlow only queues a record, a sender goroutine packs queued records
-// into messages up to the configured size, refreshes templates, and sends
-// the socket is dialed lazily and re-dialed with backoff after a failure, so
-// the agent starts and keeps counting while the collector or the local bind
-// address is unavailable, and every loss is counted in Stats
+// IPFIXExporter queues records for a sender that packs them into UDP messages and redials with backoff
 type IPFIXExporter struct {
 	queue     chan collector.ExportedFlow
 	flushReq  chan chan struct{}
@@ -690,10 +682,7 @@ func (e *IPFIXExporter) ensureConn(now time.Time) error {
 	e.nextDial = time.Time{}
 	e.mu.Unlock()
 
-	// a new socket is a new transport session, rfc 7011 scopes templates to
-	// it, so they go out again before any data set, the sender goroutine
-	// owns the template state and is the one dialing, or NewIPFIX is before
-	// it started
+	// templates are per transport session (rfc 7011), only the sender or NewIPFIX before it starts dials, sentAt needs no lock
 	e.ipv4.sentAt = time.Time{}
 	e.ipv6.sentAt = time.Time{}
 	return nil
@@ -763,14 +752,11 @@ func (e *IPFIXExporter) dataElements(flow collector.ExportedFlow, isIPv6 bool, e
 		case "packetDeltaCount":
 			elements = append(elements, entities.NewUnsigned64InfoElement(ie, flow.Packets))
 		case "octetDeltaCount":
-			// rfc 7012 counts ip header and payload here, the wire bytes
-			// with the l2 header stay with the prometheus counters
+			// rfc 7012 octetDeltaCount is ip header and payload
 			elements = append(elements, entities.NewUnsigned64InfoElement(ie, flow.Octets))
 		case "flowEndReason":
 			elements = append(elements, entities.NewUnsigned8InfoElement(ie, flow.EndReason))
 		case "samplingProbability":
-			// records carry the share of wire packets they stand for, which
-			// tracks runtime rate changes
 			elements = append(elements, entities.NewFloat64InfoElement(ie, flow.SamplingProbability()))
 		}
 	}

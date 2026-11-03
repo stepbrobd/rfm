@@ -262,8 +262,6 @@ func (mc *MetricsCollector) Collect(ch chan<- prometheus.Metric) {
 	sources := mc.errorSources
 	mc.mu.Unlock()
 
-	// the ipfix subsystem error counter is every record the exporter lost,
-	// the sum of the dropped records over their reasons, and 0 without one
 	var ipfixErrs uint64
 	if ipfix != nil {
 		s := ipfix()
