@@ -27,9 +27,10 @@ type controlHandler struct {
 	col      *collector.Collector
 	ipfix    func() export.IPFIXStats // nil without an exporter
 	backends *enrich.Backends
-	// interfaces lists the links of the host, net.Interfaces when nil
-	interfaces func() ([]net.Interface, error)
 }
+
+// interfaces lists the links of the host, the tests replace it
+var interfaces = net.Interfaces
 
 // ifnames maps interface indexes to names, an index without a link shows as
 // its number
@@ -46,11 +47,7 @@ func (n ifnames) name(ifindex int) string {
 // dumps all links over netlink, so a request lists them once instead, and
 // fails when the dump does rather than show every interface as its number
 func (h *controlHandler) linkNames() (ifnames, error) {
-	list := h.interfaces
-	if list == nil {
-		list = net.Interfaces
-	}
-	links, err := list()
+	links, err := interfaces()
 	if err != nil {
 		return nil, fmt.Errorf("list links: %w", err)
 	}
@@ -83,16 +80,14 @@ func (h *controlHandler) Status() (ctl.Status, error) {
 		},
 	}
 
-	if h.probe != nil {
-		names, err := h.linkNames()
-		if err != nil {
-			return ctl.Status{}, err
-		}
-		for _, ifindex := range h.probe.Attached() {
-			st.Interfaces = append(st.Interfaces, ctl.Interface{Name: names.name(ifindex), Ifindex: ifindex})
-		}
-		sort.Slice(st.Interfaces, func(i, j int) bool { return st.Interfaces[i].Ifindex < st.Interfaces[j].Ifindex })
+	names, err := h.linkNames()
+	if err != nil {
+		return ctl.Status{}, err
 	}
+	for _, ifindex := range h.probe.Attached() {
+		st.Interfaces = append(st.Interfaces, ctl.Interface{Name: names.name(ifindex), Ifindex: ifindex})
+	}
+	sort.Slice(st.Interfaces, func(i, j int) bool { return st.Interfaces[i].Ifindex < st.Interfaces[j].Ifindex })
 
 	if h.ipfix != nil {
 		s := h.ipfix()

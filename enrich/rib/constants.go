@@ -18,6 +18,17 @@ const (
 	// holds under 2 KiB of heap however long they are
 	maxPathLen     = 32
 	maxCommunities = 32
+	// staleSweep is how often the server looks for views past staleGrace
+	staleSweep = time.Minute
+	// acceptBackoffMin and acceptBackoffMax bound the wait between accepts that fail for want of file descriptors, as net/http does
+	acceptBackoffMin = 5 * time.Millisecond
+	acceptBackoffMax = time.Second
+	// limitLogInterval keeps the warning about a full table or session limit to one a minute
+	limitLogInterval = time.Minute
+)
+
+// the tests lower these, so they are variables
+var (
 	// maxRoutes bounds the routes the RIB keeps, six views of a full table
 	// of about 1.25M prefixes fit, and maxViews bounds the views
 	maxRoutes = 1 << 23
@@ -27,13 +38,6 @@ const (
 	// routes an ended session left in it go, counted from when the view went
 	// stale or the session opened, whichever is later, over twice the 120 s
 	// ConnectRetryTime RFC 4271 suggests, so a peer that the restarted
-	// speaker connects to again is back in time, and staleSweep is how often
-	// the server looks
+	// speaker connects to again is back in time
 	staleGrace = 5 * time.Minute
-	staleSweep = time.Minute
-	// acceptBackoffMin and acceptBackoffMax bound the wait between accepts that fail for want of file descriptors, as net/http does
-	acceptBackoffMin = 5 * time.Millisecond
-	acceptBackoffMax = time.Second
-	// limitLogInterval keeps the warning about a full table or session limit to one a minute
-	limitLogInterval = time.Minute
 )

@@ -25,7 +25,7 @@ func testHandler(t *testing.T) (*controlHandler, *collector.Collector) {
 	cfg.Agent.BPF.SampleRate = 10
 	cfg.Agent.BPF.MaxSampleRate = 1000
 	cfg.Agent.Collector.MaxFlows = 65536
-	return &controlHandler{started: time.Now(), cfg: cfg, cfgText: "[agent]\n", col: c}, c
+	return &controlHandler{started: time.Now(), cfg: cfg, cfgText: "[agent]\n", probe: attachedProbe{}, col: c}, c
 }
 
 func TestControlFlowsTopOrdersAndLimits(t *testing.T) {
@@ -62,6 +62,13 @@ func TestControlFlowsTopOrdersAndLimits(t *testing.T) {
 	}
 }
 
+// override sets *v to value for the length of the test
+func override[T any](t *testing.T, v *T, value T) {
+	old := *v
+	*v = value
+	t.Cleanup(func() { *v = old })
+}
+
 // attachedProbe stands in for the probe the status lists interfaces of
 type attachedProbe []int
 
@@ -70,10 +77,10 @@ func (a attachedProbe) Attached() []int { return a }
 func TestControlResolvesInterfaceNamesOncePerRequest(t *testing.T) {
 	h, c := testHandler(t)
 	var dumps int
-	h.interfaces = func() ([]net.Interface, error) {
+	override(t, &interfaces, func() ([]net.Interface, error) {
 		dumps++
 		return []net.Interface{{Index: 1, Name: "eth0"}, {Index: 2, Name: "eth1"}}, nil
-	}
+	})
 	flow := func(ifindex uint32, port uint16, size uint32) {
 		c.Record(collector.FlowEvent{
 			Ifindex: ifindex, Proto: 17, SrcPort: port, DstPort: 53,
@@ -119,7 +126,7 @@ func TestControlResolvesInterfaceNamesOncePerRequest(t *testing.T) {
 func TestControlFailsWithTheLinkDump(t *testing.T) {
 	h, c := testHandler(t)
 	refused := errors.New("refused by the test")
-	h.interfaces = func() ([]net.Interface, error) { return nil, refused }
+	override(t, &interfaces, func() ([]net.Interface, error) { return nil, refused })
 	h.probe = attachedProbe{2}
 	c.Record(collector.FlowEvent{
 		Ifindex: 2, Proto: 17, SrcPort: 1, DstPort: 53,

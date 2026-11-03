@@ -314,6 +314,13 @@ func (c *fakeClock) Now() time.Time {
 	return c.now
 }
 
+// override sets *v to value for the length of the test
+func override[T any](t *testing.T, v *T, value T) {
+	old := *v
+	*v = value
+	t.Cleanup(func() { *v = old })
+}
+
 func (c *fakeClock) advance(d time.Duration) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -322,7 +329,9 @@ func (c *fakeClock) advance(d time.Duration) {
 
 func TestStaleViewsAgeOut(t *testing.T) {
 	clock := &fakeClock{now: time.Unix(1_790_000_000, 0)}
-	s := &Server{table: newTable(), staleGrace: time.Minute, clock: clock.Now}
+	override(t, &staleGrace, time.Minute)
+	override(t, &timeNow, clock.Now)
+	s := &Server{table: newTable()}
 	present := func(addr string) bool {
 		_, ok := s.Lookup(netip.MustParseAddr(addr))
 		return ok
@@ -372,8 +381,10 @@ func TestStaleViewsAgeOut(t *testing.T) {
 
 func TestOnlyViewsTheTableHoldsGoStale(t *testing.T) {
 	clock := &fakeClock{now: time.Unix(1_790_000_000, 0)}
-	s := &Server{table: newTable(), staleGrace: time.Minute, clock: clock.Now}
-	s.table.maxViews = 2
+	override(t, &staleGrace, time.Minute)
+	override(t, &timeNow, clock.Now)
+	s := &Server{table: newTable()}
+	override(t, &maxViews, 2)
 	withdraw := func(peer *bmp.BMPPeerHeader, prefix string) []byte {
 		nlri := []*bgp.IPAddrPrefix{bgp.NewIPAddrPrefix(prefixBits(t, prefix), prefixAddr(t, prefix))}
 		return mustRouteMonitoringWire(t, peer, bgp.NewBGPUpdateMessage(nlri, nil, nil))
@@ -435,7 +446,9 @@ func mustRouteMonitoringWire(t *testing.T, peer *bmp.BMPPeerHeader, update *bgp.
 
 func TestStaleViewsOfALateEndedSession(t *testing.T) {
 	clock := &fakeClock{now: time.Unix(1_790_000_000, 0)}
-	s := &Server{table: newTable(), staleGrace: time.Minute, clock: clock.Now}
+	override(t, &staleGrace, time.Minute)
+	override(t, &timeNow, clock.Now)
+	s := &Server{table: newTable()}
 	present := func(addr string) bool {
 		_, ok := s.Lookup(netip.MustParseAddr(addr))
 		return ok
@@ -1011,7 +1024,6 @@ func TestServerLimitsSessions(t *testing.T) {
 		t.Fatalf("Listen: %v", err)
 	}
 	s := newServer(ln)
-	s.maxSessions = 2
 	s.wg.Add(1)
 	go s.accept()
 	defer s.Close()
@@ -1042,8 +1054,10 @@ func TestServerLimitsSessions(t *testing.T) {
 	}
 
 	first := dial()
-	dial()
-	waitForSessions(2)
+	for range maxSessions - 1 {
+		dial()
+	}
+	waitForSessions(maxSessions)
 
 	// the session over the limit is closed right away
 	extra := dial()
@@ -1057,9 +1071,9 @@ func TestServerLimitsSessions(t *testing.T) {
 
 	// a closed session makes room again
 	_ = first.Close()
-	waitForSessions(1)
+	waitForSessions(maxSessions - 1)
 	dial()
-	waitForSessions(2)
+	waitForSessions(maxSessions)
 }
 
 func TestHandleConnBoundsAddPathPeers(t *testing.T) {
@@ -1114,7 +1128,7 @@ func TestHandleConnBoundsAddPathPeers(t *testing.T) {
 
 func TestTableLimitsRoutes(t *testing.T) {
 	tab := newTable()
-	tab.maxRoutes = 2
+	override(t, &maxRoutes, 2)
 	peer := netip.MustParseAddr("192.0.2.1")
 	route := func(prefix string, origin uint32) Route {
 		return Route{Prefix: netip.MustParsePrefix(prefix), OriginASN: origin, PeerAddress: peer}
@@ -1159,7 +1173,7 @@ func TestTableLimitsRoutes(t *testing.T) {
 
 func TestTableLimitsViews(t *testing.T) {
 	tab := newTable()
-	tab.maxViews = 2
+	override(t, &maxViews, 2)
 	prefix := netip.MustParsePrefix("203.0.113.0/24")
 
 	for _, addr := range []string{"192.0.2.1", "192.0.2.2", "192.0.2.3"} {

@@ -167,7 +167,7 @@ func TestOpenAndLookup(t *testing.T) {
 	writeMMDB(t, asn, 1)
 	writeMMDB(t, city, 2)
 
-	m, err := OpenWithInterval(config.MMDBConfig{ASNDB: asn, CityDB: city}, 0)
+	m, err := Open(config.MMDBConfig{ASNDB: asn, CityDB: city})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -230,7 +230,7 @@ func TestLookupReadsTheGeoLite2Layout(t *testing.T) {
 			if err := os.WriteFile(cfg.CityDB, mmdbRecord(prefix, tc.city), 0o644); err != nil {
 				t.Fatal(err)
 			}
-			m, err := OpenWithInterval(cfg, 0)
+			m, err := Open(cfg)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -264,7 +264,7 @@ func TestFillKeepsTheASNItIsGiven(t *testing.T) {
 	if err := os.WriteFile(cfg.CityDB, mmdbRecord(prefix, map[string]any{"city": map[string]any{"names": map[string]any{"en": "Paris"}}}), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	m, err := OpenWithInterval(cfg, 0)
+	m, err := Open(cfg)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -281,7 +281,7 @@ func TestFillKeepsTheASNItIsGiven(t *testing.T) {
 
 func TestOpenMissingFile(t *testing.T) {
 	dir := t.TempDir()
-	_, err := OpenWithInterval(config.MMDBConfig{ASNDB: filepath.Join(dir, "missing.mmdb")}, 0)
+	_, err := Open(config.MMDBConfig{ASNDB: filepath.Join(dir, "missing.mmdb")})
 	if err == nil {
 		t.Fatal("expected error for missing database")
 	}
@@ -295,7 +295,10 @@ func TestReloadPicksUpReplacedFile(t *testing.T) {
 	asn := filepath.Join(dir, "asn.mmdb")
 	writeMMDB(t, asn, 1)
 
-	m, err := OpenWithInterval(config.MMDBConfig{ASNDB: asn}, 5*time.Millisecond)
+	old := reloadInterval
+	reloadInterval = 5 * time.Millisecond
+	t.Cleanup(func() { reloadInterval = old })
+	m, err := Open(config.MMDBConfig{ASNDB: asn})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -326,7 +329,7 @@ func TestReloadKeepsOldReaderOnBadFile(t *testing.T) {
 	asn := filepath.Join(dir, "asn.mmdb")
 	writeMMDB(t, asn, 1)
 
-	m, err := OpenWithInterval(config.MMDBConfig{ASNDB: asn}, 0)
+	m, err := Open(config.MMDBConfig{ASNDB: asn})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -362,7 +365,7 @@ func TestReloadUnchangedFileIsNoop(t *testing.T) {
 	asn := filepath.Join(dir, "asn.mmdb")
 	writeMMDB(t, asn, 1)
 
-	m, err := OpenWithInterval(config.MMDBConfig{ASNDB: asn}, 0)
+	m, err := Open(config.MMDBConfig{ASNDB: asn})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -382,7 +385,7 @@ func TestCloseIsIdempotent(t *testing.T) {
 	asn := filepath.Join(dir, "asn.mmdb")
 	writeMMDB(t, asn, 1)
 
-	m, err := OpenWithInterval(config.MMDBConfig{ASNDB: asn}, time.Millisecond)
+	m, err := Open(config.MMDBConfig{ASNDB: asn})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -15,19 +15,13 @@ import (
 	"ysun.co/rfm/config"
 )
 
-// DefaultReloadInterval is how often the database files are checked for a
-// replacement on disk
-const DefaultReloadInterval = time.Minute
+// reloadInterval is how often the database files are checked for a
+// replacement on disk, the tests shorten it
+var reloadInterval = time.Minute
 
 // Open opens the configured databases and reopens a file an updater renamed
 // over the old one, it returns nil, nil when none is configured
 func Open(cfg config.MMDBConfig) (*Enricher, error) {
-	return OpenWithInterval(cfg, DefaultReloadInterval)
-}
-
-// OpenWithInterval is Open with an explicit reload poll interval
-// an interval of zero or less disables reloading
-func OpenWithInterval(cfg config.MMDBConfig, interval time.Duration) (*Enricher, error) {
 	if cfg.ASNDB == "" && cfg.CityDB == "" {
 		return nil, nil
 	}
@@ -50,12 +44,7 @@ func OpenWithInterval(cfg config.MMDBConfig, interval time.Duration) (*Enricher,
 		}
 	}
 
-	if interval > 0 {
-		go m.watch(interval)
-	} else {
-		close(m.done)
-	}
-
+	go m.watch(reloadInterval)
 	return m, nil
 }
 

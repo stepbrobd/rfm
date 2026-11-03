@@ -160,23 +160,18 @@ type table struct {
 	metaKeys map[routeMetaKey]uint64
 	nextMeta uint64
 
-	// maxRoutes and maxViews bound the routes and views a speaker can make
-	// the table hold, a route past either is counted in rejected and
+	// a route past maxRoutes or maxViews is counted in rejected and
 	// dropped, limitLogged is when that was last logged
-	maxRoutes   int
-	maxViews    int
 	rejected    atomic.Uint64
 	limitLogged time.Time
 }
 
 func newTable() *table {
 	return &table{
-		views:     make(map[View]*view),
-		metas:     make(map[uint64]*routeMetaState),
-		metaKeys:  make(map[routeMetaKey]uint64),
-		nextMeta:  1,
-		maxRoutes: maxRoutes,
-		maxViews:  maxViews,
+		views:    make(map[View]*view),
+		metas:    make(map[uint64]*routeMetaState),
+		metaKeys: make(map[routeMetaKey]uint64),
+		nextMeta: 1,
 	}
 }
 
@@ -310,9 +305,8 @@ type Server struct {
 	// which failure holds
 	failed  chan struct{}
 	failure error
-	// maxSessions bounds the sessions open at once, limitLogged is when the
-	// last session over it was logged, both under connsMu
-	maxSessions      int
+	// limitLogged is when the last session over maxSessions was logged,
+	// under connsMu
 	limitLogged      time.Time
 	parseErrors      atomic.Uint64
 	sessionsRejected atomic.Uint64
@@ -327,11 +321,10 @@ type Server struct {
 	sessions map[*session]struct{}
 	owners   map[View]*session
 	stale    map[View]time.Time
-	// staleGrace overrides the default grace period and clock the time
-	// source, for tests
-	staleGrace time.Duration
-	clock      func() time.Time
 }
+
+// timeNow is the clock of the stale views, the tests turn it by hand
+var timeNow = time.Now
 
 // session is one BMP connection, its speaker is the remote address, which
 // a restarted speaker connects from again
@@ -340,23 +333,9 @@ type session struct {
 	opened  time.Time
 }
 
-func (s *Server) now() time.Time {
-	if s.clock != nil {
-		return s.clock()
-	}
-	return time.Now()
-}
-
-func (s *Server) grace() time.Duration {
-	if s.staleGrace > 0 {
-		return s.staleGrace
-	}
-	return staleGrace
-}
-
 // sessionOpened registers a session of the speaker conn connects from
 func (s *Server) sessionOpened(conn net.Conn) *session {
-	sess := &session{opened: s.now()}
+	sess := &session{opened: timeNow()}
 	if addr, ok := conn.RemoteAddr().(*net.TCPAddr); ok {
 		sess.speaker = addr.AddrPort().Addr().Unmap()
 	}
@@ -426,7 +405,7 @@ func (s *Server) peerChanged(peer View) {
 
 // sessionEnded marks the views sess announced last as stale from now
 func (s *Server) sessionEnded(sess *session) {
-	now := s.now()
+	now := timeNow()
 
 	s.viewsMu.Lock()
 	defer s.viewsMu.Unlock()
@@ -445,8 +424,7 @@ func (s *Server) sessionEnded(sess *session) {
 }
 
 func (s *Server) purgeStale() {
-	now := s.now()
-	grace := s.grace()
+	now := timeNow()
 
 	s.viewsMu.Lock()
 	defer s.viewsMu.Unlock()
@@ -457,7 +435,7 @@ func (s *Server) purgeStale() {
 			if sess.opened.After(start) {
 				start = sess.opened
 			}
-			if sess.speaker != view.Speaker || now.Before(start.Add(grace)) {
+			if sess.speaker != view.Speaker || now.Before(start.Add(staleGrace)) {
 				continue
 			}
 			s.table.removePeer(view)
@@ -487,12 +465,11 @@ func (s *Server) sweep() {
 
 func newServer(ln net.Listener) *Server {
 	return &Server{
-		listener:    ln,
-		table:       newTable(),
-		done:        make(chan struct{}),
-		failed:      make(chan struct{}),
-		conns:       make(map[net.Conn]struct{}),
-		maxSessions: maxSessions,
+		listener: ln,
+		table:    newTable(),
+		done:     make(chan struct{}),
+		failed:   make(chan struct{}),
+		conns:    make(map[net.Conn]struct{}),
 	}
 }
 
@@ -837,11 +814,11 @@ func (s *Server) trackConn(conn net.Conn) bool {
 		_ = conn.Close()
 		return false
 	}
-	if len(s.conns) >= s.maxSessions {
+	if len(s.conns) >= maxSessions {
 		rejected := s.sessionsRejected.Add(1)
 		_ = conn.Close()
 		if every(&s.limitLogged, limitLogInterval) {
-			log.Warn("bmp session limit reached, closing new sessions", "remote", conn.RemoteAddr(), "limit", s.maxSessions, "rejected", rejected)
+			log.Warn("bmp session limit reached, closing new sessions", "remote", conn.RemoteAddr(), "limit", maxSessions, "rejected", rejected)
 		}
 		return false
 	}
@@ -1061,9 +1038,9 @@ func (t *table) insertRoute(route Route) {
 func (t *table) admit(newView bool) bool {
 	var limit string
 	switch {
-	case newView && len(t.views) >= t.maxViews:
+	case newView && len(t.views) >= maxViews:
 		limit = "views"
-	case t.routes >= t.maxRoutes:
+	case t.routes >= maxRoutes:
 		limit = "routes"
 	default:
 		return true
