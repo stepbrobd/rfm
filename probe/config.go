@@ -1,8 +1,6 @@
 package probe
 
-// Config holds all BPF program configuration
-// the agent writes these values into BPF maps during startup, and the
-// config map can be updated later without reloading the programs
+// Config is what Load sets up, SetSampleRate changes the rate afterwards
 type Config struct {
 	SampleRate  uint32
 	Flags       uint32
