@@ -19,8 +19,8 @@ Requirements:
 
 Current scope:
 
-- Attaches TC programs for bidirectional flow observation (BPF behavior is
-  config map driven and keeps no per-flow state)
+- Attaches TC programs for bidirectional flow observation (the BPF programs read
+  their settings from a global and keep no per-flow state)
 - Counts wire packets and wire bytes, unfolding GRO and GSO skbs from `gso_segs`
   into the packets after segmentation
 - Parses IPv4 and IPv6 traffic on ethernet, VLAN, and QinQ links, and walks IPv6
@@ -34,8 +34,10 @@ Current scope:
 - Optionally exports flows to one UDP IPFIX collector, on eviction and as
   interval records on an active timeout, from a bounded queue that packs records
   into sized messages
-- Changes the sample rate at runtime, by hand or adaptively when the ring buffer
-  drops events
+- Changes the sample rate at runtime, by hand or adaptively when the ring
+  buffers drop events
+- Optionally keeps no interface counters. When enabled, an skb the sampling
+  passes over costs only the draw
 - Unix socket control plane with birdc style subcommands
 - NixOS module and VM tests
 
@@ -50,10 +52,10 @@ and serves Prometheus metrics over HTTP.
 +------------------------------------+
 |            kernel                  |
 |  TC ingress --+                    |
-|               +---> ring buffer -----> userspace collector
+|               +---> per CPU rings ----> userspace collector
 |  TC egress  --+                    |
 |                                    |
-|  per CPU iface stats map ------------> Prometheus /metrics
+|  per CPU iface counters --------------> Prometheus /metrics
 +------------------------------------+
 ```
 
@@ -61,29 +63,35 @@ BPF programs are loaded via TCX as link-based attachments, the ingress program
 at the head of an interface's TCX chain and the egress program at its tail. They
 only observe: every path returns `TCX_NEXT`, which lets later TCX programs and
 the filters of a clsact or ingress qdisc run. The programs keep no per-flow
-state. The sample rate and the wakeup batch live in a shared `rfm_config` map
-rather than in compile time constants, and the agent writes a new sample rate
-there without reloading the programs.
+state. The sample rate and the wakeup batch live in `rfm_cfg`, a global of the
+programs that the agent maps into its memory, and the agent writes a new sample
+rate there without reloading the programs.
 
 ### Data path
 
 1. TC programs classify each skb by direction, protocol family, and 5-tuple
    after ethernet, VLAN, and QinQ parsing, past IPv4 options and up to six IPv6
-   extension headers. Every skb updates per-CPU interface counters. GRO on
-   ingress and GSO on egress hand the hook one skb that stands for several wire
-   packets, so the program adds `gso_segs` packets and the header bytes the
-   merge removed. The counters therefore count wire packets after segmentation,
-   and on egress before the qdisc, which may still drop them. A VLAN tag the
-   kernel holds in the skb rather than in the frame adds its 4 bytes to every
-   wire packet. Sampled IP skbs (1 in N, chosen at random) emit a flow event to
-   a ring buffer carrying the same wire packet and byte counts. Non-initial IPv4
-   and IPv6 fragments keep the IP protocol but export `src_port=0` and
-   `dst_port=0` because later fragments do not carry the transport header.
-2. The userspace collector reads events from the ring buffer in batches,
-   converts `CLOCK_BOOTTIME` timestamps to wall clock, scales each event by the
-   sample rate that was in force when it was sampled, and aggregates flows into
-   an in-memory table keyed by
-   `(ifindex, direction, protocol,
+   extension headers. Every skb updates the per-CPU counters of its interface,
+   held in a counter slot or, for an interface without a slot, in a hash (see
+   `iface_stats_size`). GRO on ingress and GSO on egress hand the hook one skb
+   that stands for several wire packets, so the program adds `gso_segs` packets
+   and the header bytes the merge removed. The kernel adds those header bytes to
+   `wire_len` on egress, and on ingress from Linux 6.19. Otherwise the program
+   parses the headers to compute them. The counters therefore count wire packets
+   after segmentation, and on egress before the qdisc, which may still drop
+   them. A VLAN tag the kernel holds in the skb rather than in the frame adds
+   its 4 bytes to every wire packet. Sampled IP skbs, 1 in N on average (see
+   `sample_rate`), emit a flow event to the ring buffer of their CPU carrying
+   the same wire packet and byte counts. Non-initial IPv4 and IPv6 fragments
+   keep the IP protocol but export `src_port=0` and `dst_port=0` because later
+   fragments do not carry the transport header. With `sampled_only` the programs
+   draw the sample first, parse only the skbs it selects, and keep no interface
+   counters.
+2. The userspace collector reads the per-CPU ring buffers as one stream, taking
+   one record from each nonempty ring buffer in turn, converts `CLOCK_BOOTTIME`
+   timestamps to wall clock, scales each event by the sample rate that was in
+   force when it was sampled, and aggregates flows into an in-memory table keyed
+   by `(ifindex, direction, protocol,
    src/dst address, src/dst port)`.
    Enrichment labels are resolved once when a flow is created and ride along
    with it. An event that fails to decode is counted as a `ring_buffer` error
@@ -92,7 +100,7 @@ there without reloading the programs.
    the flow table is full, the flow with the oldest last-seen timestamp is
    forcibly evicted. A flow that keeps going is exported as an interval record
    every `active_timeout` while it stays in the table.
-4. At scrape time, the Prometheus exporter reads the BPF interface counter map
+4. At scrape time, the Prometheus exporter reads the BPF interface counters
    directly and copies the label tuples the collector keeps current, without
    walking the flow table. A tuple gives gauges summed over its live flows and
    monotonic counters per interface, direction, protocol, and enrichment labels
@@ -127,7 +135,7 @@ retried the port stays closed, and the control socket answers meanwhile.
 
 A running agent exits with status 1 when one of its parts fails: the watcher
 cannot open its first link subscription, the control socket or the BMP listener
-stops on an accept error that is not temporary, the metrics server fails, or the
+stops on an accept error that is not temporary, the metrics server fails, or a
 ring buffer cannot be read. A later link subscription that fails is opened
 again. SIGINT and SIGTERM end the agent with status 0. With IPFIX enabled it
 first exports the flows still in the table with flowEndReason 0x04 and sends the
@@ -211,34 +219,42 @@ as a regex is rejected at config load.
 
 ### `agent.bpf`
 
-`sample_rate` (uint32, default 100): Sample 1 in every N skbs for flow events,
-chosen at random. After GRO or before GSO one skb stands for several wire
-packets, and its event carries all of them. Must be greater than 0. A value of 1
-samples every skb. Higher values reduce ring buffer throughput at the cost of
-flow granularity.
+`sample_rate` (uint32, default 100): Sample 1 in N skbs on average for flow
+events. An interface with a counter slot samples after a gap drawn uniformly
+between 1 and 2N-1 skbs, one random draw per sample, and an interface without a
+slot draws for every skb. With `sampled_only` each CPU keeps one gap over all
+its skbs, non-IP included, and the IP skbs keep the same average rate. A new
+rate applies from the next skb. After GRO or before GSO one skb stands for
+several wire packets, and its event carries all of them. Must be greater than 0.
+A value of 1 samples every skb. Higher values reduce ring buffer throughput at
+the cost of flow granularity.
 
-`ring_buf_size` (int, default 262144): Size of the BPF ring buffer in bytes.
-Must be greater than 0, a power of two, and a multiple of the page size. Invalid
-values are rejected at config load time. Larger buffers reduce the chance of
-dropped events under burst traffic.
+`ring_buf_size` (int, default 262144): Size in bytes of the BPF ring buffer of
+each CPU. The agent creates one ring buffer per possible CPU, and together they
+take this size times the CPU count. Must be greater than 0, a power of two, and
+a multiple of the page size. Invalid values are rejected at config load time.
+Larger buffers reduce the chance of dropped events under burst traffic.
 
 `wakeup_batch` (uint32, default 64): The BPF program flags ring buffer submits
 with `BPF_RB_NO_WAKEUP` and forces a wakeup once every N submits on each CPU.
-Lower values reduce flow event delivery latency at the cost of more userspace
-wakeups. Higher values amortize wakeups, and an event submitted without one
-waits for the collector's 100 millisecond read deadline at most. Must be greater
-than 0.
+For an interface with a counter slot the count runs per interface, direction and
+family. The collector drains every ring buffer on any wakeup. Lower values
+reduce flow event delivery latency at the cost of more userspace wakeups. Higher
+values amortize wakeups, and an event submitted without one waits for the
+collector's 100 millisecond read deadline at most. Must be greater than 0.
 
 `iface_stats_size` (int, default 0): Override the BPF iface stats hash map
-capacity, in keys. `0` keeps the 4096 keys the program declares. An interface
-takes up to six keys, one per direction and family, which makes 4096 keys enough
-for about 680 interfaces. A counter update the full map refuses leaves that
-traffic uncounted and counts as a `bpf_map` error. Set it explicitly when
-running on a router with more subinterfaces than that. With `pin_path` set, a
-new size fails the start until the old pin is removed, see `pin_path`.
+capacity, in keys. Up to 256 attached interfaces with an ifindex below 16384
+count in counter slots of their own, and the hash counts the others. `0` keeps
+the 4096 keys the program declares. An interface takes up to six keys, one per
+direction and family, which makes 4096 keys enough for about 680 interfaces
+beyond the slots. A counter update the full map refuses leaves that traffic
+uncounted and counts as a `bpf_map` error. Set it explicitly when running on a
+router with more subinterfaces than that. With `pin_path` set, a new size fails
+the start until the old pin is removed, see `pin_path`.
 
 `adaptive_sampling` (bool, default false): Let the collector double the sample
-rate, up to `max_sample_rate`, after every sweep that saw the ring buffer drop
+rate, up to `max_sample_rate`, after every sweep that saw a ring buffer drop
 events, and halve it back toward `sample_rate` after ten quiet sweeps in a row.
 Every event is scaled by the rate that sampled it, and IPFIX records carry the
 effective `samplingProbability`, so estimates stay unbiased. A rate set with
@@ -249,16 +265,27 @@ collector applies its own fixed sampling rate.
 `max_sample_rate` (uint32, default 1000): Upper bound for the adaptive rate and
 for a rate set with `rfm set sample-rate`. Must be at least `sample_rate`.
 
+`sampled_only` (bool, default false): Drop the interface counters. The programs
+draw the sample before parsing and parse only the skbs it selects. The
+`rfm_interface_*` metrics disappear and the flow metrics stay. A change takes
+effect at the next start.
+
 `pin_path` (string, default ""): A bpffs directory where the interface counters
-are pinned. A restart or upgrade reuses the pinned map, so the counters stay
+are pinned. A restart or upgrade reuses the pinned maps, so the counters stay
 monotonic across it. The NixOS module sets `/sys/fs/bpf/rfm`. Empty keeps the
-map private to the process. The agent creates the directory and holds a lock on
+maps private to the process. The agent creates the directory and holds a lock on
 it, and a second agent on the same `pin_path` refuses to start. A pinned map
 that does not match the configured one, from another `iface_stats_size` or the
 map layout of another build, fails the start with an error that names the
-difference. Remove the pin file, `rfm_iface_stats` in the directory, or reboot
-to start the counters from zero. After its first link dump the agent deletes the
-pinned counters of every interface it neither attached nor keeps retrying.
+difference. To start the counters from zero, remove the pin files
+`rfm_iface_stats`, `rfm_iface_slot` and `rfm_iface_arr` in the directory, or
+reboot. An upgrade from a build without counter slots, which pinned
+`rfm_iface_stats` alone, keeps that pin with its counters and needs no reboot.
+`rfm_iface_slot` pinned without `rfm_iface_arr`, or the reverse, is removed with
+a warning, and the slotted counters start from zero. With `sampled_only` the
+agent leaves the pins untouched for the next start without it. After its first
+link dump the agent deletes the pinned counters of every interface it neither
+attached nor keeps retrying.
 
 ### `agent.collector`
 
@@ -450,10 +477,11 @@ stops the agent with exit status 1.
 
 ## Prometheus metrics
 
-Interface counters (from BPF per-CPU hash map, updated in kernel) count the wire
-packets and bytes of every skb the programs see, as the data path describes. The
-`family` label is `"ipv4"`, `"ipv6"`, or `"other"` for non-IP traffic (e.g. ARP)
-and for frames whose ethernet or VLAN header the program cannot read:
+Interface counters (from the BPF per-CPU counter slots and hash, updated in
+kernel) count the wire packets and bytes of every skb the programs see, as the
+data path describes, and are left out with `sampled_only`. The `family` label is
+`"ipv4"`, `"ipv6"`, or `"other"` for non-IP traffic (e.g. ARP) and for frames
+whose ethernet or VLAN header the program cannot read:
 
 - `rfm_interface_rx_bytes_total{ifname, family}`
 - `rfm_interface_tx_bytes_total{ifname, family}`
@@ -518,7 +546,7 @@ Collector health:
 `rfm_errors_total{subsystem}` counts, by subsystem:
 
 - `bpf_map`: BPF map reads that failed during a scrape or a poll of the ring
-  drop counter, counter updates the full interface counter map refused, sample
+  drop counter, counter updates the full interface counter hash refused, sample
   rates from adaptive sampling that the probe refused, and failed tries after a
   link dump to delete the pinned counters of every interface the agent neither
   attached nor keeps retrying, while a failed delete of the counters of a link
@@ -531,9 +559,11 @@ Collector health:
   that failed and were opened again
 - `attach`: failed attaches of matching interfaces, every retry included, apart
   from an attach that finds the interface already gone
-- `gso_header`: GSO skbs whose headers the programs could not parse, an ingress
-  one is counted without the header bytes of its extra segments and one without
-  a segment count as a single packet
+- `gso_header`: GSO skbs whose headers the programs could not parse where the
+  counts depend on them: ingress skbs on kernels before 6.19 or without a
+  transport header, and skbs without a segment count. An ingress one is counted
+  without the header bytes of its extra segments and one without a segment count
+  as a single packet
 - `bmp`, with BMP configured: BMP messages that did not parse in full, updates
   dropped because their peer's capabilities are unknown, sessions closed past
   the session cap, routes the RIB dropped past its route or view cap, and
@@ -733,10 +763,12 @@ typically feed into a downstream pipeline for storage and visualization.
 ### Performance
 
 RFM's eBPF TC programs run in the kernel and hand each sampled event, 64 bytes,
-to userspace through a BPF ring buffer that the agent maps into its memory.
-Sampling (configurable 1 in N skbs) reduces ring buffer throughput. Interface
-counters are updated on every skb regardless of sampling with no userspace
-involvement. The Prometheus exporter reads the BPF map directly at scrape time.
+to userspace through a BPF ring buffer per CPU that the agent maps into its
+memory. Sampling (configurable 1 in N skbs) reduces ring buffer throughput.
+Interface counters are updated on every skb regardless of sampling with no
+userspace involvement. With `sampled_only` the programs drop them and parse only
+the sampled skbs. The Prometheus exporter reads the BPF maps directly at scrape
+time.
 
 Compared to libpcap based tools (ntopng, pmacctd), eBPF TC avoids the overhead
 of copying every packet to userspace. RFM only copies sampled flow metadata not
