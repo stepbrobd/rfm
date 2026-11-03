@@ -29,8 +29,7 @@ type wireFlowEvent struct {
 	_       [7]uint8
 }
 
-// the field offsets of wireFlowEvent, DecodeFlowEvent reads each field at its
-// offset, binary.Decode would walk the struct by reflection on every record
+// binary.Decode walks the struct by reflection per record
 const (
 	offTstamp  = unsafe.Offsetof(wireFlowEvent{}.Tstamp)
 	offIfindex = unsafe.Offsetof(wireFlowEvent{}.Ifindex)

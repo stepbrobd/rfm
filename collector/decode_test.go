@@ -61,7 +61,6 @@ func TestDecodeFlowEventShort(t *testing.T) {
 		t.Fatal("expected error for short input")
 	}
 
-	// an event without the L2 length is from another build of the program
 	if _, err := DecodeFlowEvent(make([]byte, 56)); err == nil {
 		t.Fatal("expected error for an event without the l2 length")
 	}

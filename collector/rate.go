@@ -1,10 +1,6 @@
 package collector
 
-// rateController adapts the sample rate to ring buffer pressure
-// a tick with dropped events doubles the rate up to max, quietTicks ticks in
-// a row without drops halve it back down to the configured base, so a node
-// whose consumer cannot keep up degrades to coarser sampling instead of
-// losing events, and returns to the configured rate once the burst is over
+// rateController doubles the rate on drops up to max and halves it toward base after quietTicks quiet ticks
 type rateController struct {
 	base, max, rate uint32
 	quiet           int

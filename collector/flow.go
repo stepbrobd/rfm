@@ -5,11 +5,7 @@ import (
 	"time"
 )
 
-// Enricher provides optional metadata for flow addresses
-// implementations include MMDB (GeoIP) and BMP/RIB lookups
-// a nil Enricher means zero-value labels
-// the collector calls Enrich without its own lock held, so calls from
-// concurrent recorders may overlap
+// Enricher labels flow addresses, it runs without the collector lock and may run concurrently
 type Enricher interface {
 	Enrich(src, dst netip.Addr) (srcLabels, dstLabels Labels)
 }
@@ -20,12 +16,7 @@ type Labels struct {
 	City string
 }
 
-// FlowEvent represents a single sampled skb observation from the BPF program
-// one skb can stand for several wire packets after GRO or before GSO, so Segs
-// carries the wire packet count, at least 1, and Len the wire byte count of
-// the whole skb
-// L2Len is the L2 header size of each wire packet, ethernet plus VLAN tags,
-// so Len - Packets() * L2Len is the IP byte count of the skb
+// FlowEvent is one sampled skb of Segs wire packets and Len wire bytes, L2Len per packet
 type FlowEvent struct {
 	Tstamp  time.Duration // CLOCK_BOOTTIME
 	Ifindex uint32
@@ -45,9 +36,7 @@ func (e FlowEvent) Packets() uint64 {
 	return uint64(e.Segs)
 }
 
-// IPBytes returns the IP bytes, header plus payload, of the wire packets the
-// event stands for, DecodeFlowEvent refuses an event whose L2 headers do not
-// fit in Len
+// IPBytes returns the ip bytes of the event, DecodeFlowEvent ensures its l2 headers fit in Len
 func (e FlowEvent) IPBytes() uint64 {
 	return uint64(e.Len) - e.Packets()*uint64(e.L2Len)
 }
@@ -84,12 +73,7 @@ func Direction(dir uint8) string {
 	return "egress"
 }
 
-// FlowEntry holds aggregated counters for a single flow
-// Packets and Bytes count what was sampled, EstPackets and EstBytes scale
-// every event by the sample rate in force when it was sampled, so they stay
-// unbiased estimates of the wire totals across runtime rate changes
-// Bytes are wire bytes like the interface counters, IPBytes leave out the L2
-// header of every packet, which is what IPFIX octet counts carry
+// FlowEntry counts a flow, the Est fields scale each event by its rate, IPBytes leave out l2 headers
 type FlowEntry struct {
 	// FirstSeen and LastSeen are CLOCK_BOOTTIME readings, BootEpoch dates them
 	FirstSeen  time.Duration
@@ -110,9 +94,7 @@ func BootEpoch() time.Time {
 	return time.Now().Add(-bootNow())
 }
 
-// RollupKey is the label tuple the Prometheus flow series are keyed by
-// it carries no ports, and the tuples with enrichment labels are capped at
-// the flow table size, see New
+// RollupKey is the label tuple of a flow series
 type RollupKey struct {
 	Ifindex uint32
 	Dir     uint8

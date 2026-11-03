@@ -19,42 +19,24 @@ import (
 type Collector struct {
 	mu    sync.RWMutex
 	flows map[FlowKey]*flowState
-	// lru orders flows by last seen time with the oldest at the front
-	// a flow moves to the back on every packet, so idle eviction and forced
-	// eviction both pop the front in constant time
-	// events from different cpus can arrive slightly out of order, which
-	// makes the order approximate by a few microseconds, an expired flow can
-	// then survive one extra sweep behind a fresher one
+	// lru orders flows by their last event, oldest first, approximate across cpus
 	lru *list.List
-	// activeQueue orders live flows by the start of their unexported
-	// interval, front first, for the active timeout sweep
+	// activeQueue orders live flows by the start of their unexported interval, oldest first
 	activeQueue *list.List
-	// rollups accumulate per label tuple and outlive the flows behind
-	// them, an idle tuple is dropped after RollupRetention eviction timeouts
-	// a new tuple with enrichment labels needs room, fewer than maxFlows
-	// tuples of any kind or an idle one a scrape has shown in full to take
-	// the place of, otherwise its flow counts under the tuple of its
-	// interface, direction and protocol with empty labels, which never needs
-	// room of its own, so only tuples with empty labels grow it past maxFlows
+	// rollups are the label tuples of the flow series, rollupLocked caps the labeled ones
 	rollups   map[RollupKey]*rollupState
 	rollupIDs uint64
-	// idleRollups lists the tuples no live flow counts under, longest idle
-	// at the front, the ones retention or a new tuple may drop
+	// idleRollups lists the tuples without live flows, longest idle first
 	idleRollups *list.List
 	timeout     time.Duration
 	active      time.Duration
 	enricher    Enricher
 	exporter    FlowExporter
 	maxFlows    int
-	// rates lists the sample rates in force over boot time, oldest first,
-	// so an event is scaled by the rate that sampled it even after the
-	// rate changed at runtime
+	// rates lists the sample rates by the boot time they took effect, oldest first
 	rates []rateChange
 
-	// rateMu serializes every sample rate change, manual or adaptive, so a
-	// change writes the probe and appends to rates in one step and the rate
-	// the probe samples at is always the last one in rates
-	// it guards the fields below and is taken before mu
+	// rateMu orders rate changes, the probe's rate is the last in rates, taken before mu
 	rateMu sync.Mutex
 	// applyRate writes a new rate into the probe, controller adapts the rate to ring drops when set
 	applyRate  func(uint32) error
@@ -68,10 +50,7 @@ type Collector struct {
 	bpfMapErrs  atomic.Uint64
 }
 
-// New creates a collector that evicts flows older than timeout
-// enricher may be nil
-// maxFlows caps the flow table and the room for new label tuples with
-// enrichment labels, Run refuses a cap below 1
+// New creates a collector that evicts flows idle for timeout and holds at most maxFlows flows, enricher may be nil
 func New(timeout time.Duration, enricher Enricher, maxFlows int) *Collector {
 	return &Collector{
 		flows:       make(map[FlowKey]*flowState),
@@ -95,8 +74,7 @@ type rateChange struct {
 	rate  uint32
 }
 
-// rateHistory bounds how many rate changes are kept, events are consumed
-// within milliseconds so old changes are never consulted again
+// rateHistory bounds rates, an event is recorded long before its rate is 64 changes old
 const rateHistory = 64
 
 // SetRateApplier puts rate in force and makes apply how a later rate reaches the probe, it must be called before Run
@@ -126,9 +104,7 @@ func (c *Collector) addRate(rate uint32, since time.Duration) {
 	}
 }
 
-// ApplySampleRate installs rate in the probe and records it for scaling, the
-// adaptive controller, if any, continues from rate instead of the rate it
-// picked last
+// ApplySampleRate installs rate in the probe and for scaling, the adaptive controller continues from it
 func (c *Collector) ApplySampleRate(rate uint32) error {
 	if rate == 0 {
 		return errors.New("sample rate must be at least 1")
@@ -150,9 +126,7 @@ func (c *Collector) ApplySampleRate(rate uint32) error {
 	return nil
 }
 
-// adapt feeds the drop counter to the controller once per tick
-// a rate the probe refuses counts as a bpf map error, adapt has no caller to
-// return it to
+// adapt feeds the drops to the controller once per tick, a rate the probe refuses counts as a bpf map error
 func (c *Collector) adapt(drops uint64) {
 	c.rateMu.Lock()
 	defer c.rateMu.Unlock()
@@ -197,10 +171,7 @@ func (c *Collector) sampleRateAtLocked(t time.Duration) uint32 {
 	return c.rates[0].rate
 }
 
-// SetActiveTimeout makes every sweep export an interval record for flows
-// whose unexported interval is at least d old, a sweep of Run already when it
-// is less than half a period short, 0 disables the sweep
-// it must be called before Run
+// SetActiveTimeout makes the sweep export a flow's unexported interval once it is d old, 0 disables it, it must be called before Run
 func (c *Collector) SetActiveTimeout(d time.Duration) {
 	c.mu.Lock()
 	c.active = d
@@ -341,12 +312,7 @@ func (c *Collector) recordLocked(ev FlowEvent, labels map[addrPair]labelPair) (e
 	return ended, evicted, true
 }
 
-// rollupLocked returns the tuple a new flow with key rk counts under
-// when the labeled tuples fill the cap, the longest idle one makes room if a
-// scrape has shown all it counted, its series then ends at that value and
-// a sum over all series stays exact, otherwise the flow folds into the tuple
-// with empty labels, whose counts a scrape shows like any other
-// it must be called with mu held
+// rollupLocked returns the tuple of a new flow, at the cap an idle shown tuple makes room or the flow folds
 func (c *Collector) rollupLocked(rk RollupKey) *rollupState {
 	if r, ok := c.rollups[rk]; ok {
 		return r
@@ -570,12 +536,7 @@ type RollupSample struct {
 	Live  Counts
 }
 
-// ScrapeRollups appends every rollup tuple to buf for a scrape and returns it
-// a tuple no scrape has shown yet is shown with its counters at zero and its
-// counts appear from the next scrape on, so every series starts at zero and
-// rate() and increase() count the packets that created it instead of taking
-// its first value for history
-// the lock is held for the copy only, a scrape never walks the flow table
+// ScrapeRollups appends every tuple to buf, a tuple's first scrape shows its counters at zero
 func (c *Collector) ScrapeRollups(buf []RollupSample) []RollupSample {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -667,10 +628,7 @@ const readBatch = 64
 // readDeadline bounds a blocking read so the loop notices a cancelled context
 const readDeadline = 100 * time.Millisecond
 
-// sweepPeriod is how often Run sweeps, every half eviction timeout, or, as
-// the sweep also sends the interval records, the active timeout split into
-// the fewest equal parts no longer than that, so the records of a flow fall
-// on a sweep one active timeout apart
+// sweepPeriod splits the active timeout into the fewest parts no longer than half the eviction timeout
 func sweepPeriod(timeout, active time.Duration) time.Duration {
 	period := timeout / 2
 	if active <= 0 {

@@ -5,9 +5,7 @@ import (
 	"time"
 )
 
-// flowState is one live flow with its position in the lru list
-// the interval fields track what was already exported, so every record
-// carries a delta and a flow that exported everything produces no record
+// flowState is a live flow and what its earlier records carried
 type flowState struct {
 	key    FlowKey
 	entry  FlowEntry
@@ -78,9 +76,7 @@ type rollupState struct {
 	key      RollupKey
 	// id tells this life of the tuple apart from any other
 	id uint64
-	// live sums the counts of the live flows under the tuple, kept current
-	// as flows are recorded and removed so a scrape reads the gauges here
-	// instead of walking the flow table
+	// live sums the counts of the live flows under the tuple
 	live Counts
 	// flows counts the live flows that count under the tuple
 	flows int
