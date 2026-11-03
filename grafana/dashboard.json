@@ -1,14 +1,4 @@
 {
-  "__inputs": [
-    {
-      "name": "DS_PROMETHEUS",
-      "label": "Prometheus",
-      "description": "Prometheus datasource for RFM metrics",
-      "type": "datasource",
-      "pluginId": "prometheus",
-      "pluginName": "Prometheus"
-    }
-  ],
   "__requires": [
     {
       "type": "grafana",
@@ -32,12 +22,6 @@
       "type": "panel",
       "id": "stat",
       "name": "Stat",
-      "version": ""
-    },
-    {
-      "type": "panel",
-      "id": "gauge",
-      "name": "Gauge",
       "version": ""
     },
     {
@@ -135,9 +119,9 @@
           "type": "prometheus",
           "uid": "${datasource}"
         },
-        "definition": "label_values(rfm_interface_rx_bytes_total, ifname)",
+        "definition": "label_values(rfm_flow_bytes_total, ifname)",
         "query": {
-          "query": "label_values(rfm_interface_rx_bytes_total, ifname)",
+          "query": "label_values(rfm_flow_bytes_total, ifname)",
           "refId": "PrometheusVariableQueryEditor-VariableQuery"
         },
         "current": {
@@ -569,7 +553,7 @@
       },
       "gridPos": {
         "h": 4,
-        "w": 4,
+        "w": 8,
         "x": 16,
         "y": 0
       },
@@ -585,14 +569,6 @@
               {
                 "color": "green",
                 "value": null
-              },
-              {
-                "color": "yellow",
-                "value": 50000
-              },
-              {
-                "color": "red",
-                "value": 60000
               }
             ]
           },
@@ -642,96 +618,6 @@
                 "operation": "aggregate",
                 "aggregations": [
                   "sum"
-                ]
-              }
-            }
-          }
-        }
-      ]
-    },
-    {
-      "type": "gauge",
-      "title": "Flow Table Utilization",
-      "datasource": {
-        "type": "datasource",
-        "uid": "-- Mixed --"
-      },
-      "gridPos": {
-        "h": 4,
-        "w": 4,
-        "x": 20,
-        "y": 0
-      },
-      "description": "Share of the flow table in use on the fullest node, against the default max_flows of 65536.",
-      "fieldConfig": {
-        "defaults": {
-          "unit": "percentunit",
-          "min": 0,
-          "max": 1,
-          "color": {
-            "mode": "thresholds"
-          },
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "yellow",
-                "value": 0.75
-              },
-              {
-                "color": "red",
-                "value": 0.9
-              }
-            ]
-          },
-          "mappings": []
-        },
-        "overrides": []
-      },
-      "options": {
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "orientation": "auto",
-        "showThresholdLabels": false,
-        "showThresholdMarkers": true
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${datasource}"
-          },
-          "expr": "max(rfm_collector_active_flows) / 65536",
-          "legendFormat": "Flow Table Utilization",
-          "refId": "A",
-          "instant": true
-        }
-      ],
-      "transformations": [
-        {
-          "id": "seriesToRows",
-          "options": {}
-        },
-        {
-          "id": "groupBy",
-          "options": {
-            "fields": {
-              "Metric": {
-                "operation": "groupby"
-              },
-              "Value": {
-                "operation": "aggregate",
-                "aggregations": [
-                  "max"
                 ]
               }
             }
@@ -5493,8 +5379,7 @@
     },
     {
       "type": "timeseries",
-      "title": "Active Flows vs Capacity",
-      "description": "Active flow count with dashed threshold lines at 49152 and 65536, 75 and 100 percent of the default max_flows, fixed whatever max_flows a node runs with.",
+      "title": "Active Flows over Time",
       "datasource": {
         "type": "datasource",
         "uid": "-- Mixed --"
@@ -5518,9 +5403,6 @@
             "showPoints": "never",
             "scaleDistribution": {
               "type": "linear"
-            },
-            "thresholdsStyle": {
-              "mode": "dashed"
             }
           },
           "color": {
@@ -5533,14 +5415,6 @@
               {
                 "color": "green",
                 "value": null
-              },
-              {
-                "color": "yellow",
-                "value": 49152
-              },
-              {
-                "color": "red",
-                "value": 65536
               }
             ]
           }
@@ -5575,8 +5449,8 @@
     },
     {
       "type": "timeseries",
-      "title": "Sampling Efficiency",
-      "description": "Ratio of sampled bytes to estimated total bytes. Lower values indicate higher sample rates (fewer packets sampled).",
+      "title": "Sample Rate",
+      "description": "The 1 in N sample rate, which adaptive sampling raises while the ring buffers drop events.",
       "datasource": {
         "type": "datasource",
         "uid": "-- Mixed --"
@@ -5589,9 +5463,7 @@
       },
       "fieldConfig": {
         "defaults": {
-          "unit": "percentunit",
-          "min": 0,
-          "max": 1,
+          "unit": "short",
           "custom": {
             "drawStyle": "line",
             "lineInterpolation": "smooth",
@@ -5630,7 +5502,8 @@
           "displayMode": "list",
           "placement": "bottom",
           "calcs": [
-            "mean"
+            "lastNotNull",
+            "max"
           ]
         }
       },
@@ -5640,7 +5513,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum(rfm_flow_sampled_bytes) / (sum(rfm_flow_bytes) > 0)",
+          "expr": "rfm_bpf_sample_rate",
           "legendFormat": "${datasource:text}",
           "refId": "A"
         }
