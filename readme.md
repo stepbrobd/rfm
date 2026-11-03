@@ -523,14 +523,15 @@ sum(increase(rfm_flow_bytes_total{direction="ingress"}[1h]))
 
 A label tuple shows up at zero in its first scrape and carries its counts from
 the next scrape on, which lets `rate()` and `increase()` count the traffic that
-created it. A tuple without live flows leaves the scrape once it saw no traffic
-for ten eviction timeouts. A new tuple with enrichment labels finds room while
-fewer than `max_flows` tuples exist, those with empty labels included, which
-need no room themselves. Without room it takes the place of the one idle longest
-once a scrape has shown all of that tuple's counts, and otherwise its flow
-counts under the tuple of its interface, direction and protocol with empty
-labels. `rfm_collector_folded_flows_total` counts those flows, and the ASN and
-city rankings of the bundled dashboard leave them out.
+created it. A tuple without live flows leaves the scrape once it has seen no
+traffic for ten eviction timeouts and a scrape has shown its counts. A new tuple
+with enrichment labels finds room while fewer than `max_flows` tuples exist,
+those with empty labels included, which need no room themselves. Without room it
+takes the place of the one idle longest once a scrape has shown all of that
+tuple's counts, and otherwise its flow counts under the tuple of its interface,
+direction and protocol with empty labels. `rfm_collector_folded_flows_total`
+counts those flows, and the ASN and city rankings of the bundled dashboard leave
+them out.
 
 Sampling:
 

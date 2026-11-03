@@ -86,10 +86,7 @@ func New(timeout time.Duration, enricher Enricher, maxFlows int) *Collector {
 	}
 }
 
-// RollupRetention is how many eviction timeouts a rollup survives without
-// traffic before its series disappears from the scrape
-// a recreated tuple is shown at zero first, so increase() stays exact across
-// the gap, and a longer retention would only add series to every scrape
+// RollupRetention is how many eviction timeouts a shown idle tuple stays in the scrape
 const RollupRetention = 10
 
 // rateChange is one sample rate in force from a boot time onwards
@@ -515,16 +512,14 @@ func (c *Collector) sweep(now time.Time, period time.Duration) {
 		}
 	}
 
-	// idle tuples are listed in the order they lost their last flow, which
-	// follows their last packet closely, so the sweep stops at the first one
-	// still inside the retention
+	// idle tuples are in the order they lost their last flow
 	stale := now.Add(-RollupRetention * c.timeout)
-	for {
-		front := c.idleRollups.Front()
-		if front == nil || !front.Value.(*rollupState).LastSeen.Before(stale) {
+	for front := c.idleRollups.Front(); front != nil; front = c.idleRollups.Front() {
+		r := front.Value.(*rollupState)
+		if !r.LastSeen.Before(stale) || !r.shown {
 			break
 		}
-		c.dropRollupLocked(front.Value.(*rollupState))
+		c.dropRollupLocked(r)
 	}
 
 	if c.active > 0 {

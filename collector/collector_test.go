@@ -1475,6 +1475,9 @@ func TestRollupsOutliveTheirFlows(t *testing.T) {
 	}
 	key := RollupKey{Ifindex: 3, Proto: 17}
 	c.Record(ev, t0)
+	// the first scrape shows the tuple at zero, the second its counts
+	c.ScrapeRollups(nil)
+	c.ScrapeRollups(nil)
 
 	// the tuple stays in the scrape for RollupRetention eviction timeouts
 	// after its last packet
@@ -1489,6 +1492,33 @@ func TestRollupsOutliveTheirFlows(t *testing.T) {
 	c.Evict(t0.Add(RollupRetention*30*time.Second + time.Second))
 	if _, ok := rollupCounters(c)[key]; ok {
 		t.Fatal("rollup kept past the retention")
+	}
+}
+
+func TestRetentionKeepsAnIdleTupleUntilAScrapeShowedItsCounts(t *testing.T) {
+	c := New(time.Second, nil, config.DefaultMaxFlows)
+	t0 := time.Now()
+	ev := FlowEvent{
+		Ifindex: 3, Proto: 17, SrcPort: 5000, DstPort: 53,
+		SrcAddr: netip.MustParseAddr("::ffff:10.0.0.1"),
+		DstAddr: netip.MustParseAddr("::ffff:10.0.0.2"),
+		Segs:    1,
+		Len:     60,
+	}
+	// the first scrape shows the new tuple at zero, its packets wait for the next
+	c.Record(ev, t0)
+	c.ScrapeRollups(nil)
+	c.Record(ev, t0.Add(100*time.Millisecond))
+
+	c.Evict(t0.Add(2 * time.Second))
+	c.Evict(t0.Add(RollupRetention*time.Second + 3*time.Second))
+	if s := c.ScrapeRollups(nil); len(s) != 1 || s[0].Packets != 2 {
+		t.Fatalf("scrape past the retention = %+v, want the tuple with the 2 packets no scrape showed", s)
+	}
+
+	c.Evict(t0.Add(RollupRetention*time.Second + 4*time.Second))
+	if s := c.ScrapeRollups(nil); len(s) != 0 {
+		t.Fatalf("scrape after the sweep = %+v, want the shown tuple gone", s)
 	}
 }
 
