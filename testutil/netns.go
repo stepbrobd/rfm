@@ -45,7 +45,6 @@ func (h virtioNetHdr) marshal() []byte {
 
 // NS is an isolated network namespace with a veth pair
 type NS struct {
-	veth *netlink.Veth
 	Link netlink.Link
 	ns   netns.NsHandle
 }
@@ -104,7 +103,6 @@ func NewNS(t *testing.T) *NS {
 	}
 
 	return &NS{
-		veth: veth,
 		Link: link,
 		ns:   ns,
 	}
@@ -199,7 +197,7 @@ func (n *NS) SendGSO(t *testing.T, ifname string, pkt []byte, hdrLen, gsoSize ui
 		CsumStart:  hdrLen - TCPHdrLen,
 		CsumOffset: tcpChecksumOffset,
 	}
-	if binary.BigEndian.Uint16(pkt[12:14]) == EthPIPv6 {
+	if binary.BigEndian.Uint16(pkt[12:14]) == ethPIPv6 {
 		vnet.GSOType = virtioNetHdrGSOTCPv6
 	}
 	hdr := vnet.marshal()
