@@ -689,6 +689,32 @@ func TestHandleConnPeerNotificationsIgnorePolicy(t *testing.T) {
 	<-done
 }
 
+func TestHandleConnIgnoresAdjRIBOut(t *testing.T) {
+	s := &Server{table: NewTable()}
+	client, done := startSession(t, s)
+	out := func(update *bgp.BGPMessage) []byte {
+		peer := bmp.NewBMPPeerHeader(bmp.BMP_PEER_TYPE_GLOBAL, bmp.BMP_PEER_FLAG_ADJ_RIB_TYP, 0, "192.0.2.2", 65003, "192.0.2.2", 0)
+		return mustRouteMonitoringWire(t, peer, update)
+	}
+
+	// what the router sends 192.0.2.2 neither withdraws nor replaces what
+	// it receives from it
+	write(t, client, mustBMPWireFrom(t, "198.51.100.0/24", 65003, "192.0.2.2", 0))
+	write(t, client, out(bgp.NewBGPUpdateMessage([]*bgp.IPAddrPrefix{bgp.NewIPAddrPrefix(24, "198.51.100.0")}, nil, nil)))
+	write(t, client, out(mustBMPMessage(t, "203.0.113.0/24", 65004).Body.(*bmp.BMPRouteMonitoring).BGPUpdate))
+	write(t, client, mustBMPWireFrom(t, "192.0.2.0/24", 65005, "192.0.2.5", 0))
+	waitForRoute(t, s, "192.0.2.7", true)
+	if got := s.Table().Summary(); got != (Summary{PrefixesV4: 2, Routes: 2, Peers: 2}) {
+		t.Fatalf("summary = %+v, want the two received routes alone", got)
+	}
+	if route, ok := s.Lookup(netip.MustParseAddr("198.51.100.7")); !ok || route.OriginASN != 65003 {
+		t.Fatalf("Lookup = %+v ok=%v, want the route received from 192.0.2.2", route, ok)
+	}
+
+	_ = client.Close()
+	<-done
+}
+
 func TestHandleConnDecodesAddPath(t *testing.T) {
 	s := &Server{table: NewTable()}
 	client, done := startSession(t, s)

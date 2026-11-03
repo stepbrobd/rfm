@@ -776,6 +776,9 @@ func (s *Server) handleConn(conn net.Conn) {
 
 	for scanner.Scan() {
 		messages++
+		if adjRIBOut(scanner.Bytes()) {
+			continue
+		}
 
 		msg, err := bmp.ParseBMPMessageWithOptions(scanner.Bytes(), options)
 		if msg != nil && msg.Header.Type == bmp.BMP_MSG_ROUTE_MONITORING && undecodable(msg.PeerHeader) {
@@ -928,6 +931,12 @@ func salvage(data []byte, msg *bmp.BMPMessage, err error) (*bmp.BMPMessage, bool
 		return msg, true
 	}
 	return nil, false
+}
+
+// adjRIBOut reports whether data is route monitoring of an Adj-RIB-Out (RFC
+// 8671), the routes a router sends a peer rather than those it receives
+func adjRIBOut(data []byte) bool {
+	return len(data) > bmp.BMP_HEADER_SIZE+1 && data[5] == bmp.BMP_MSG_ROUTE_MONITORING && data[bmp.BMP_HEADER_SIZE+1]&bmp.BMP_PEER_FLAG_ADJ_RIB_TYP != 0
 }
 
 // errUndecodable is the parse error of an update whose peer the session

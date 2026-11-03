@@ -459,15 +459,16 @@ its views. A route whose AS path ends in an AS_SET has no single origin and
 reports ASN 0.
 
 The RIB keeps IPv4 and IPv6 unicast routes and skips VPN, multicast and other
-families. It decodes ADD-PATH updates with the capabilities the Peer Up shows
-and serves the lowest path id of each view, merges AS4_PATH into the path of a
-route from a 2-byte speaker as RFC 6793 describes, and handles a malformed
-attribute as RFC 7606 says, by discarding the attribute or treating the update
-as a withdraw. An update of a peer whose Peer Up did not parse is dropped,
-because its path ids would read as prefixes. A session tracks up to 1024 peers
-with ADD-PATH or unknown capabilities, and once the Peer Up of one more such
-peer arrives, it drops the updates of every peer it does not track for the rest
-of the session, peers without ADD-PATH included.
+families, and the route monitoring of an Adj-RIB-Out (RFC 8671). It decodes
+ADD-PATH updates with the capabilities the Peer Up shows and serves the lowest
+path id of each view, merges AS4_PATH into the path of a route from a 2-byte
+speaker as RFC 6793 describes, and handles a malformed attribute as RFC 7606
+says, by discarding the attribute or treating the update as a withdraw. An
+update of a peer whose Peer Up did not parse is dropped, because its path ids
+would read as prefixes. A session tracks up to 1024 peers with ADD-PATH or
+unknown capabilities, and once the Peer Up of one more such peer arrives, it
+drops the updates of every peer it does not track for the rest of the session,
+peers without ADD-PATH included.
 
 The listener serves 16 BMP sessions at once and closes further ones right after
 accept, and the RIB holds up to 8,388,608 routes and 1024 views and drops the
