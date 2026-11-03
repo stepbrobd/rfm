@@ -49,7 +49,7 @@ type rfmRfmSlotValue struct {
 // Used for safe lookups in a Collection or CollectionSpec.
 const (
 	rfmMapRfmFlowDrops    = "rfm_flow_drops"
-	rfmMapRfmFlowEvents   = "rfm_flow_events"
+	rfmMapRfmFlowRings    = "rfm_flow_rings"
 	rfmMapRfmGsoHdrErrors = "rfm_gso_hdr_errors"
 	rfmMapRfmIfaceArr     = "rfm_iface_arr"
 	rfmMapRfmIfaceErrors  = "rfm_iface_errors"
@@ -112,7 +112,7 @@ type rfmProgramSpecs struct {
 // It can be passed ebpf.CollectionSpec.Assign.
 type rfmMapSpecs struct {
 	RfmFlowDrops    *ebpf.MapSpec `ebpf:"rfm_flow_drops"`
-	RfmFlowEvents   *ebpf.MapSpec `ebpf:"rfm_flow_events"`
+	RfmFlowRings    *ebpf.MapSpec `ebpf:"rfm_flow_rings"`
 	RfmGsoHdrErrors *ebpf.MapSpec `ebpf:"rfm_gso_hdr_errors"`
 	RfmIfaceArr     *ebpf.MapSpec `ebpf:"rfm_iface_arr"`
 	RfmIfaceErrors  *ebpf.MapSpec `ebpf:"rfm_iface_errors"`
@@ -149,7 +149,7 @@ func (o *rfmObjects) Close() error {
 // It can be passed to loadRfmObjects or ebpf.CollectionSpec.LoadAndAssign.
 type rfmMaps struct {
 	RfmFlowDrops    *ebpf.Map `ebpf:"rfm_flow_drops"`
-	RfmFlowEvents   *ebpf.Map `ebpf:"rfm_flow_events"`
+	RfmFlowRings    *ebpf.Map `ebpf:"rfm_flow_rings"`
 	RfmGsoHdrErrors *ebpf.Map `ebpf:"rfm_gso_hdr_errors"`
 	RfmIfaceArr     *ebpf.Map `ebpf:"rfm_iface_arr"`
 	RfmIfaceErrors  *ebpf.Map `ebpf:"rfm_iface_errors"`
@@ -161,7 +161,7 @@ type rfmMaps struct {
 func (m *rfmMaps) Close() error {
 	return _RfmClose(
 		m.RfmFlowDrops,
-		m.RfmFlowEvents,
+		m.RfmFlowRings,
 		m.RfmGsoHdrErrors,
 		m.RfmIfaceArr,
 		m.RfmIfaceErrors,

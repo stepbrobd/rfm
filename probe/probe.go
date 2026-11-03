@@ -28,6 +28,8 @@ type ifaceLinks struct {
 
 type Probe struct {
 	objs *rfmObjects
+	// rings holds the event ring of every possible CPU, by CPU
+	rings []*ebpf.Map
 
 	mu    sync.Mutex
 	links map[int]ifaceLinks
@@ -61,10 +63,15 @@ func Load(cfg Config) (*Probe, error) {
 		return nil, fmt.Errorf("load BPF spec: %w", err)
 	}
 
+	// a ring per possible CPU, each of RingBufSize bytes
+	ncpu, err := ebpf.PossibleCPU()
+	if err != nil {
+		return nil, fmt.Errorf("count CPUs: %w", err)
+	}
+	ringSpec := spec.Maps["rfm_flow_rings"].InnerMap.Copy()
+	spec.Maps["rfm_flow_rings"].MaxEntries = uint32(ncpu)
 	if cfg.RingBufSize > 0 {
-		if ms, ok := spec.Maps["rfm_flow_events"]; ok {
-			ms.MaxEntries = uint32(cfg.RingBufSize)
-		}
+		ringSpec.MaxEntries = uint32(cfg.RingBufSize)
 	}
 
 	if cfg.IfaceStatsSize > 0 {
@@ -124,8 +131,23 @@ func Load(cfg Config) (*Probe, error) {
 		return nil, fmt.Errorf("write config: %w", err)
 	}
 
+	rings := make([]*ebpf.Map, 0, ncpu)
+	for cpu := range ncpu {
+		ring, err := ebpf.NewMap(ringSpec)
+		if err == nil {
+			err = objs.RfmFlowRings.Put(uint32(cpu), ring)
+		}
+		if err != nil {
+			closeMaps(rings)
+			objs.Close()
+			return nil, fmt.Errorf("event ring of cpu %d: %w", cpu, err)
+		}
+		rings = append(rings, ring)
+	}
+
 	p := &Probe{
 		objs:    &objs,
+		rings:   rings,
 		links:   make(map[int]ifaceLinks),
 		skipped: make(map[int]bool),
 		pending: make(map[int]string),
@@ -133,11 +155,18 @@ func Load(cfg Config) (*Probe, error) {
 	}
 	if pinned[pinSlot] != nil {
 		if err := p.restoreSlots(); err != nil {
+			closeMaps(rings)
 			objs.Close()
 			return nil, err
 		}
 	}
 	return p, nil
+}
+
+func closeMaps(maps []*ebpf.Map) {
+	for _, m := range maps {
+		m.Close()
+	}
 }
 
 // the pinned counter maps, the hash and the slot map with its counter array
@@ -287,6 +316,9 @@ func (p *Probe) Close() error {
 	for ifindex, l := range p.links {
 		errs = append(errs, l.ingress.Close(), l.egress.Close())
 		delete(p.links, ifindex)
+	}
+	for _, ring := range p.rings {
+		errs = append(errs, ring.Close())
 	}
 	errs = append(errs, p.objs.Close())
 	return errors.Join(errs...)
@@ -519,8 +551,9 @@ func (p *Probe) GSOHeaderErrors() (uint64, error) {
 	return total, nil
 }
 
-func (p *Probe) FlowEvents() *ebpf.Map {
-	return p.objs.RfmFlowEvents
+// FlowRings returns the event ring of every possible CPU, by CPU
+func (p *Probe) FlowRings() []*ebpf.Map {
+	return p.rings
 }
 
 func (p *Probe) FlowDrops() *ebpf.Map {

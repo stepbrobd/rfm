@@ -56,7 +56,7 @@ in
                     ring_buf_size = std.mkOption {
                       type = std.types.ints.positive;
                       default = 262144;
-                      description = "Ring buffer size in bytes.";
+                      description = "Size in bytes of the ring buffer of each CPU.";
                     };
 
                     wakeup_batch = std.mkOption {

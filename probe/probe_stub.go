@@ -41,7 +41,7 @@ func (p *Probe) GSOHeaderErrors() (uint64, error) {
 	return 0, errUnsupported
 }
 
-func (p *Probe) FlowEvents() *ebpf.Map {
+func (p *Probe) FlowRings() []*ebpf.Map {
 	return nil
 }
 

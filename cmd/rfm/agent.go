@@ -97,7 +97,7 @@ func (p kernelProbe) Stats() export.IfaceStatsSource {
 }
 
 func (p kernelProbe) Events() (collector.Reader, error) {
-	return collector.NewReader(p.FlowEvents(), p.FlowDrops())
+	return collector.NewReader(p.FlowRings(), p.FlowDrops())
 }
 
 // runAgent runs the agent the file at path configures until ctx is done

@@ -87,10 +87,19 @@ struct {
 	__type(value, __u64);
 } rfm_gso_hdr_errors SEC(".maps");
 
+// rfm_flow_rings holds a ring per CPU, Load sizes it to the possible CPUs
+// and puts the rings in, a program reserves in the ring of the CPU it runs
+// on, so the CPUs never contend for one ring's lock
 struct {
-	__uint(type, BPF_MAP_TYPE_RINGBUF);
-	__uint(max_entries, 256 * 1024);
-} rfm_flow_events SEC(".maps");
+	__uint(type, BPF_MAP_TYPE_ARRAY_OF_MAPS);
+	__uint(max_entries, 1);
+	__type(key, __u32);
+	__array(
+		values, struct {
+			__uint(type, BPF_MAP_TYPE_RINGBUF);
+			__uint(max_entries, 256 * 1024);
+		});
+} rfm_flow_rings SEC(".maps");
 
 struct {
 	__uint(type, BPF_MAP_TYPE_PERCPU_ARRAY);
@@ -432,8 +441,10 @@ static __always_inline int rfm_tc(struct __sk_buff *skb, __u8 dir)
 			return TCX_NEXT;
 	}
 
+	__u32 cpu = bpf_get_smp_processor_id();
+	void *ring = bpf_map_lookup_elem(&rfm_flow_rings, &cpu);
 	struct rfm_flow_event *ev =
-		bpf_ringbuf_reserve(&rfm_flow_events, sizeof(*ev), 0);
+		ring ? bpf_ringbuf_reserve(ring, sizeof(*ev), 0) : NULL;
 	if (!ev) {
 		__u32 drop_key = 0;
 		__u64 *drops = bpf_map_lookup_elem(&rfm_flow_drops, &drop_key);

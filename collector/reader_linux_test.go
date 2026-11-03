@@ -3,23 +3,28 @@
 package collector
 
 import (
+	"encoding/binary"
+	"errors"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/asm"
 )
 
-// ringProducer builds a program that writes one 64 byte record of zeros to
-// events per run
-func ringProducer(b *testing.B, events *ebpf.Map) *ebpf.Program {
-	b.Helper()
+// ringProducer builds a program that writes one 64 byte record to events per
+// run, mark in its first 8 bytes and zeros after
+func ringProducer(tb testing.TB, events *ebpf.Map, mark int32) *ebpf.Program {
+	tb.Helper()
 
 	insns := asm.Instructions{asm.Mov.Imm(asm.R1, 0)}
-	for off := int16(-64); off < 0; off += 8 {
+	for off := int16(-56); off < 0; off += 8 {
 		insns = append(insns, asm.StoreMem(asm.RFP, off, asm.R1, asm.DWord))
 	}
 	insns = append(insns,
+		asm.Mov.Imm(asm.R1, mark),
+		asm.StoreMem(asm.RFP, -64, asm.R1, asm.DWord),
 		asm.LoadMapPtr(asm.R1, events.FD()),
 		asm.Mov.Reg(asm.R2, asm.RFP),
 		asm.Add.Imm(asm.R2, -64),
@@ -35,9 +40,9 @@ func ringProducer(b *testing.B, events *ebpf.Map) *ebpf.Program {
 		License:      "GPL",
 	})
 	if err != nil {
-		b.Fatal(err)
+		tb.Fatal(err)
 	}
-	b.Cleanup(func() { prog.Close() })
+	tb.Cleanup(func() { prog.Close() })
 	return prog
 }
 
@@ -58,8 +63,8 @@ func BenchmarkRingReader(b *testing.B) {
 		b.Fatal(err)
 	}
 	defer drops.Close()
-	prog := ringProducer(b, events)
-	rd, err := NewReader(events, drops)
+	prog := ringProducer(b, events, 0)
+	rd, err := NewReader([]*ebpf.Map{events}, drops)
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -83,5 +88,109 @@ func BenchmarkRingReader(b *testing.B) {
 			}
 		}
 		left -= n
+	}
+}
+
+// testRings returns n rings of 64 KiB, a drop counter and a reader over them
+func testRings(t *testing.T, n int) ([]*ebpf.Map, Reader) {
+	t.Helper()
+
+	if os.Geteuid() != 0 {
+		t.Skip("requires root privileges")
+	}
+	var rings []*ebpf.Map
+	for range n {
+		ring, err := ebpf.NewMap(&ebpf.MapSpec{Type: ebpf.RingBuf, MaxEntries: 1 << 16})
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { ring.Close() })
+		rings = append(rings, ring)
+	}
+	drops, err := ebpf.NewMap(&ebpf.MapSpec{Type: ebpf.PerCPUArray, KeySize: 4, ValueSize: 8, MaxEntries: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { drops.Close() })
+	rd, err := NewReader(rings, drops)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { rd.Close() })
+	return rings, rd
+}
+
+// produce writes n records marked mark to ring
+func produce(t *testing.T, ring *ebpf.Map, mark int32, n uint32) {
+	t.Helper()
+
+	prog := ringProducer(t, ring, mark)
+	if _, err := prog.Run(&ebpf.RunOptions{Data: make([]byte, 64), Repeat: n}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestRingReaderTakesTurnsAcrossRings(t *testing.T) {
+	rings, rd := testRings(t, 3)
+	produce(t, rings[0], 1, 100)
+	produce(t, rings[2], 3, 2)
+
+	// a ring that holds many records cannot hold back the others, every
+	// ring with a record gives one before any gives a second
+	rd.SetDeadline(time.Now())
+	var marks []uint64
+	for {
+		raw, err := rd.ReadRawEvent()
+		if errors.Is(err, os.ErrDeadlineExceeded) {
+			break
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+		marks = append(marks, binary.NativeEndian.Uint64(raw))
+	}
+	if len(marks) != 102 {
+		t.Fatalf("read %d records, want the 102 written", len(marks))
+	}
+	if marks[0] != 1 || marks[1] != 3 || marks[2] != 1 || marks[3] != 3 {
+		t.Fatalf("first marks %v, want the two rings in turn", marks[:4])
+	}
+}
+
+func TestRingReaderWaitsForAnyRing(t *testing.T) {
+	rings, rd := testRings(t, 4)
+
+	// with every ring empty the read waits out its deadline
+	start := time.Now()
+	rd.SetDeadline(start.Add(50 * time.Millisecond))
+	if _, err := rd.ReadRawEvent(); !errors.Is(err, os.ErrDeadlineExceeded) {
+		t.Fatalf("read of empty rings = %v, want the deadline", err)
+	}
+	if waited := time.Since(start); waited < 50*time.Millisecond {
+		t.Fatalf("read of empty rings returned after %v, before its deadline", waited)
+	}
+
+	// a record in any ring ends the wait
+	prog := ringProducer(t, rings[3], 4)
+	produced := make(chan error, 1)
+	go func() {
+		time.Sleep(20 * time.Millisecond)
+		_, err := prog.Run(&ebpf.RunOptions{Data: make([]byte, 64)})
+		produced <- err
+	}()
+	start = time.Now()
+	rd.SetDeadline(start.Add(5 * time.Second))
+	raw, err := rd.ReadRawEvent()
+	if perr := <-produced; perr != nil {
+		t.Fatal(perr)
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+	if mark := binary.NativeEndian.Uint64(raw); mark != 4 {
+		t.Fatalf("mark = %d, want 4", mark)
+	}
+	if waited := time.Since(start); waited > time.Second {
+		t.Fatalf("read returned %v after the record was written", waited)
 	}
 }

@@ -422,24 +422,19 @@ func readFlowEventFrom(t *testing.T, send func(*testutil.NS), match func(rfmRfmF
 		t.Fatal(err)
 	}
 
-	rd, err := ringbuf.NewReader(p.FlowEvents())
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer rd.Close()
+	rd := newFlowReader(t, p)
 
 	send(ns)
 
 	deadline := time.Now().Add(time.Second)
 	for {
-		rd.SetDeadline(deadline)
-		rec, err := rd.Read()
+		raw, err := rd.read(deadline)
 		if err != nil {
 			t.Fatalf("read flow event: %v", err)
 		}
 
 		var ev rfmRfmFlowEvent
-		if err := binary.Read(bytes.NewReader(rec.RawSample), binary.NativeEndian, &ev); err != nil {
+		if err := binary.Read(bytes.NewReader(raw), binary.NativeEndian, &ev); err != nil {
 			t.Fatalf("decode event: %v", err)
 		}
 
@@ -2537,11 +2532,7 @@ func TestPinnedCountersDropALoneSlotPin(t *testing.T) {
 func loopbackSamples(t *testing.T, p *Probe, n uint32) int {
 	t.Helper()
 
-	rd, err := ringbuf.NewReader(p.FlowEvents())
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer rd.Close()
+	rd := newFlowReader(t, p)
 
 	drops := func() (sum uint64) {
 		var vals []uint64
@@ -2560,15 +2551,81 @@ func loopbackSamples(t *testing.T, p *Probe, n uint32) int {
 		t.Fatal(err)
 	}
 	samples := int(drops() - before)
-	rd.SetDeadline(time.Now())
 	for {
-		if _, err := rd.Read(); errors.Is(err, os.ErrDeadlineExceeded) {
+		if _, err := rd.read(time.Now()); errors.Is(err, os.ErrDeadlineExceeded) {
 			return samples
 		} else if err != nil {
 			t.Fatal(err)
 		}
 		samples++
 	}
+}
+
+// flowReader reads the event rings of every CPU, the ring a record lands in
+// is the one of the CPU the program ran on
+type flowReader struct {
+	rds []*ringbuf.Reader
+}
+
+func newFlowReader(t *testing.T, p *Probe) *flowReader {
+	t.Helper()
+
+	var fr flowReader
+	for _, ring := range p.FlowRings() {
+		rd, err := ringbuf.NewReader(ring)
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { rd.Close() })
+		fr.rds = append(fr.rds, rd)
+	}
+	return &fr
+}
+
+// read returns the next record of any ring, waiting for one until deadline
+func (fr *flowReader) read(deadline time.Time) ([]byte, error) {
+	for {
+		for _, rd := range fr.rds {
+			if rd.AvailableBytes() == 0 {
+				continue
+			}
+			rd.SetDeadline(time.Now())
+			rec, err := rd.Read()
+			if err == nil {
+				return rec.RawSample, nil
+			}
+			if !errors.Is(err, os.ErrDeadlineExceeded) {
+				return nil, err
+			}
+		}
+		if time.Now().After(deadline) {
+			return nil, os.ErrDeadlineExceeded
+		}
+		time.Sleep(time.Millisecond)
+	}
+}
+
+// pinOneCPU keeps the test on one CPU until it ends, test runs count and
+// write their events on the CPU they run on
+func pinOneCPU(t *testing.T) {
+	t.Helper()
+
+	runtime.LockOSThread()
+	t.Cleanup(runtime.UnlockOSThread)
+	var set, one unix.CPUSet
+	if err := unix.SchedGetaffinity(0, &set); err != nil {
+		t.Fatal(err)
+	}
+	for cpu := 0; ; cpu++ {
+		if set.IsSet(cpu) {
+			one.Set(cpu)
+			break
+		}
+	}
+	if err := unix.SchedSetaffinity(0, &one); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { unix.SchedSetaffinity(0, &set) })
 }
 
 // slotLoopback gives loopback a counter slot, as Attach gives one to an
@@ -2668,24 +2725,8 @@ func TestSlotWakeupCountsDownTheBatch(t *testing.T) {
 
 	testutil.NewNS(t)
 
-	// test runs count on the CPU they run on, one CPU keeps the countdown
-	// in one slot entry
-	runtime.LockOSThread()
-	defer runtime.UnlockOSThread()
-	var set, one unix.CPUSet
-	if err := unix.SchedGetaffinity(0, &set); err != nil {
-		t.Fatal(err)
-	}
-	for cpu := 0; ; cpu++ {
-		if set.IsSet(cpu) {
-			one.Set(cpu)
-			break
-		}
-	}
-	if err := unix.SchedSetaffinity(0, &one); err != nil {
-		t.Fatal(err)
-	}
-	defer unix.SchedSetaffinity(0, &set)
+	// one CPU keeps the countdown in one slot entry
+	pinOneCPU(t)
 
 	p, err := Load(Config{SampleRate: 1, WakeupBatch: 4})
 	if err != nil {
@@ -2727,18 +2768,16 @@ func TestFlowEventWritesEveryByte(t *testing.T) {
 
 	testutil.NewNS(t)
 
-	// a ring of one page wraps after 57 records of 72 bytes
+	// a ring of one page wraps after 57 records of 72 bytes, one CPU puts
+	// every record in its ring
+	pinOneCPU(t)
 	p, err := Load(Config{SampleRate: 1, WakeupBatch: 1, RingBufSize: 4096})
 	if err != nil {
 		skipIfUnsupported(t, err)
 		t.Fatal(err)
 	}
 	defer p.Close()
-	rd, err := ringbuf.NewReader(p.FlowEvents())
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer rd.Close()
+	rd := newFlowReader(t, p)
 
 	emit := func(frame []byte) []byte {
 		t.Helper()
@@ -2746,12 +2785,11 @@ func TestFlowEventWritesEveryByte(t *testing.T) {
 			skipIfUnsupported(t, err)
 			t.Fatal(err)
 		}
-		rd.SetDeadline(time.Now().Add(time.Second))
-		rec, err := rd.Read()
+		raw, err := rd.read(time.Now().Add(time.Second))
 		if err != nil {
 			t.Fatal(err)
 		}
-		return rec.RawSample
+		return raw
 	}
 
 	// records with every address byte set fill the whole ring, then IPv4
