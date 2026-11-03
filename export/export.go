@@ -318,7 +318,8 @@ func (mc *MetricsCollector) ifaceStatsErrors() uint64 {
 }
 
 // gsoHeaderErrors returns how many gso skbs the programs counted without
-// parsing their headers, and false for a source that does not count them
+// the header size they needed, and false for a source that does not count
+// them
 func (mc *MetricsCollector) gsoHeaderErrors() (uint64, bool) {
 	src, ok := mc.source.(GSOHeaderErrorSource)
 	if !ok {

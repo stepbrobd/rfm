@@ -67,8 +67,9 @@ struct {
 } rfm_iface_errors SEC(".maps");
 
 // rfm_gso_hdr_errors counts the GSO skbs whose headers rfm_hdr_len cannot
-// parse, an ingress one is counted without the header bytes of its extra
-// segments, and either is one packet when it carries no segment count
+// parse where the counts need them, an ingress one is counted without the
+// header bytes of its extra segments, and either is one packet when it
+// carries no segment count
 struct {
 	__uint(type, BPF_MAP_TYPE_PERCPU_ARRAY);
 	__uint(max_entries, 1);
@@ -294,15 +295,20 @@ static __always_inline int rfm_tc(struct __sk_buff *skb, __u8 dir)
 	__u32 len = skb->len;
 	__u32 segs = 1;
 	if (skb->gso_size && iface_proto) {
-		__u32 hdr_len = rfm_hdr_len(skb, l3, end, eth_proto, l3_off);
-		if (!hdr_len) {
-			__u32 err_key = 0;
-			__u64 *errs = bpf_map_lookup_elem(&rfm_gso_hdr_errors,
-							  &err_key);
-			if (errs)
-				(*errs)++;
-		}
 		segs = skb->gso_segs;
+		// egress takes its bytes from wire_len, so only ingress and an
+		// skb without a segment count need the header size
+		__u32 hdr_len = 0;
+		if (dir == RFM_DIR_INGRESS || segs == 0) {
+			hdr_len = rfm_hdr_len(skb, l3, end, eth_proto, l3_off);
+			if (!hdr_len) {
+				__u32 err_key = 0;
+				__u64 *errs = bpf_map_lookup_elem(
+					&rfm_gso_hdr_errors, &err_key);
+				if (errs)
+					(*errs)++;
+			}
+		}
 		// drivers that pass gso frames up unverified leave gso_segs 0
 		// (SKB_GSO_DODGY), derive it from the payload like the kernel
 		if (segs == 0 && hdr_len && len > hdr_len)

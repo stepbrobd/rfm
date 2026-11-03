@@ -932,7 +932,7 @@ func TestIfaceCountersGROIngress(t *testing.T) {
 type skbContext struct {
 	_       [36]uint32 // len to data_meta
 	_       [2]uint64  // flow_keys and tstamp
-	_       uint32     // wire_len
+	WireLen uint32
 	GSOSegs uint32
 	_       uint64 // sk
 	GSOSize uint32
@@ -972,6 +972,49 @@ func TestGSOHeaderErrorsCountHeadersThatDoNotParse(t *testing.T) {
 	run(frame)
 	if n, err := p.GSOHeaderErrors(); err != nil || n != 1 {
 		t.Fatalf("gso header errors = %d, %v, want 1 for an ipv4 header that does not parse", n, err)
+	}
+}
+
+func TestGSOHeaderErrorsSkipEgressWithASegmentCount(t *testing.T) {
+	testutil.RequireRoot(t)
+
+	testutil.NewNS(t)
+
+	p, err := Load(Config{WakeupBatch: 1})
+	if err != nil {
+		skipIfUnsupported(t, err)
+		t.Fatal(err)
+	}
+	defer p.Close()
+
+	run := func(frame []byte, ctx skbContext) {
+		t.Helper()
+		if _, err := p.objs.RfmTcEgress.Run(&ebpf.RunOptions{Data: frame, Context: ctx}); err != nil {
+			skipIfUnsupported(t, err)
+			t.Fatal(err)
+		}
+	}
+
+	// an ihl of 4 does not parse, but egress takes its bytes from wire_len
+	// and its packets from gso_segs, so the header size is not needed
+	frame := testutil.EthIPv4TCPPayload(net.IPv4(10, 0, 9, 1), net.IPv4(10, 0, 9, 2), 4800, 443, make([]byte, 2*gsoSize))
+	frame[testutil.EthHdrLen] = 0x44
+	wire := uint32(len(frame) + gsoHdrLen)
+	run(frame, skbContext{WireLen: wire, GSOSegs: 2, GSOSize: gsoSize})
+	if n, err := p.GSOHeaderErrors(); err != nil || n != 0 {
+		t.Fatalf("gso header errors = %d, %v, want none for an egress skb with a segment count", n, err)
+	}
+	lo, err := netlink.LinkByName("lo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	key := rfmRfmIfaceKey{Ifindex: uint32(lo.Attrs().Index), Dir: 1, Proto: 4}
+	wantIfaceStats(t, p, key, 2, uint64(wire))
+
+	// without a segment count the header size is needed for it
+	run(frame, skbContext{WireLen: wire, GSOSize: gsoSize})
+	if n, err := p.GSOHeaderErrors(); err != nil || n != 1 {
+		t.Fatalf("gso header errors = %d, %v, want 1 for an egress skb without a segment count", n, err)
 	}
 }
 

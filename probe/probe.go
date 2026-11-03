@@ -504,9 +504,9 @@ func (p *Probe) IfaceStatsErrors() (uint64, error) {
 }
 
 // GSOHeaderErrors returns how many GSO skbs the programs counted without
-// parsing their headers, an ingress one lacks the header bytes of its extra
-// segments in the byte counters, and one without a segment count counts as a
-// single packet
+// the header size they needed, an ingress one lacks the header bytes of its
+// extra segments in the byte counters, and one without a segment count counts
+// as a single packet
 func (p *Probe) GSOHeaderErrors() (uint64, error) {
 	var vals []uint64
 	if err := p.objs.RfmGsoHdrErrors.Lookup(uint32(0), &vals); err != nil {
