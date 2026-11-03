@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"ysun.co/rfm/collector"
-	"ysun.co/rfm/config"
 )
 
 func TestIPFIXExportsToGoFlow2(t *testing.T) {
@@ -57,12 +56,7 @@ func TestIPFIXExportsToGoFlow2(t *testing.T) {
 
 	time.Sleep(300 * time.Millisecond)
 
-	exp, err := NewIPFIX(config.IPFIXConfig{
-		Host:                "127.0.0.1",
-		Port:                port,
-		TemplateRefresh:     60 * time.Second,
-		ObservationDomainID: 1,
-	})
+	exp, err := NewIPFIX(testIPFIXConfig("127.0.0.1", port))
 	if err != nil {
 		t.Fatalf("NewIPFIX: %v", err)
 	}

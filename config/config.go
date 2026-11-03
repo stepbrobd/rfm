@@ -110,35 +110,8 @@ func (c IPFIXConfig) Enabled() bool {
 	return c.Host != "" || c.Port != 0
 }
 
-// WithDefaults fills in collector defaults when IPFIX export is enabled
-func (c IPFIXConfig) WithDefaults() IPFIXConfig {
-	if !c.Enabled() {
-		return c
-	}
-	if c.Host == "" {
-		c.Host = "::1"
-	}
-	if c.Port == 0 {
-		c.Port = 4739
-	}
-	if c.QueueSize == 0 {
-		c.QueueSize = DefaultIPFIXQueueSize
-	}
-	if c.FlushInterval == 0 {
-		c.FlushInterval = DefaultIPFIXFlushInterval
-	}
-	if c.MaxMessageSize == 0 {
-		c.MaxMessageSize = DefaultIPFIXMaxMessageSize
-	}
-	return c
-}
-
 // Addr formats the collector address
 func (c IPFIXConfig) Addr() string {
-	c = c.WithDefaults()
-	if !c.Enabled() {
-		return ""
-	}
 	return net.JoinHostPort(c.Host, strconv.Itoa(c.Port))
 }
 
@@ -184,26 +157,8 @@ func (c BMPConfig) Enabled() bool {
 	return c.Host != "" || c.Port != 0
 }
 
-// WithDefaults fills in BMP defaults when the backend is enabled
-func (c BMPConfig) WithDefaults() BMPConfig {
-	if !c.Enabled() {
-		return c
-	}
-	if c.Host == "" {
-		c.Host = "::1"
-	}
-	if c.Port == 0 {
-		c.Port = 11019
-	}
-	return c
-}
-
 // Addr formats the listener address
 func (c BMPConfig) Addr() string {
-	c = c.WithDefaults()
-	if !c.Enabled() {
-		return ""
-	}
 	return net.JoinHostPort(c.Host, strconv.Itoa(c.Port))
 }
 
@@ -296,7 +251,8 @@ func Load(path string) (*Config, error) {
 		return nil, fmt.Errorf("parsing ipfix.flush_interval %q: %w", raw.Agent.IPFIX.FlushInterval, err)
 	}
 
-	raw.Agent.Enrich.RIB.BMP = raw.Agent.Enrich.RIB.BMP.WithDefaults()
+	defaultEndpoint(&raw.Agent.IPFIX.Host, &raw.Agent.IPFIX.Port, 4739)
+	defaultEndpoint(&raw.Agent.Enrich.RIB.BMP.Host, &raw.Agent.Enrich.RIB.BMP.Port, 11019)
 	queueSize := raw.Agent.IPFIX.QueueSize
 	if queueSize == 0 {
 		queueSize = max(DefaultIPFIXQueueSize, raw.Agent.Collector.MaxFlows)
@@ -310,7 +266,7 @@ func Load(path string) (*Config, error) {
 		QueueSize:           queueSize,
 		FlushInterval:       flushInterval,
 		MaxMessageSize:      raw.Agent.IPFIX.MaxMessageSize,
-	}.WithDefaults()
+	}
 
 	cfg := &Config{
 		Agent: AgentConfig{
@@ -333,6 +289,20 @@ func Load(path string) (*Config, error) {
 	}
 
 	return cfg, nil
+}
+
+// defaultEndpoint fills in the host or the port of an endpoint that sets only
+// the other
+func defaultEndpoint(host *string, port *int, defaultPort int) {
+	if *host == "" && *port == 0 {
+		return
+	}
+	if *host == "" {
+		*host = "::1"
+	}
+	if *port == 0 {
+		*port = defaultPort
+	}
 }
 
 // InterfaceMatcher compiles patterns into a predicate over interface names

@@ -147,7 +147,6 @@ type ipfixTemplate struct {
 
 // NewIPFIX creates an IPFIX exporter for a single configured collector
 func NewIPFIX(cfg config.IPFIXConfig) (*IPFIXExporter, error) {
-	cfg = cfg.WithDefaults()
 	if !cfg.Enabled() {
 		return nil, fmt.Errorf("ipfix exporter requires a collector host or port")
 	}

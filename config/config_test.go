@@ -814,6 +814,8 @@ func TestLoadBadIPFIXQueueSettings(t *testing.T) {
 	for _, body := range []string{
 		"queue_size = -1",
 		`flush_interval = "1ms"`,
+		`flush_interval = "0s"`,
+		"max_message_size = 0",
 		"max_message_size = 64",
 		"max_message_size = 70000",
 	} {
