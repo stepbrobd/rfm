@@ -1143,6 +1143,19 @@ func TestRollupSumsStayExactAcrossTheCap(t *testing.T) {
 	if folded != 1 {
 		t.Fatalf("folded flows = %v, want 1", folded)
 	}
+
+	// new tuples take the places of the shown idle ones, the fourth counts again and keeps its place until shown
+	for _, src := range []byte{4, 7, 5, 8, 9, 10} {
+		send(src, t0+2*time.Second)
+	}
+	scrape()
+	scrape()
+	if got := sum(); got != total {
+		t.Fatalf("sum over all series = %v, want %v", got, total)
+	}
+	if folded != 2 {
+		t.Fatalf("folded flows = %v, want 2", folded)
+	}
 }
 
 func TestCollectIPFIXErrorsComeFromTheExporter(t *testing.T) {

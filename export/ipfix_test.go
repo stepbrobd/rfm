@@ -283,7 +283,7 @@ func TestIPFIXSkipsCollectorTraffic(t *testing.T) {
 	assertNoIPFIXDatagram(t, conn)
 }
 
-func TestIPFIXExportsTrafficToCollectorDestinationFromOtherSocket(t *testing.T) {
+func TestIPFIXExportsFlowsThatDifferFromItsOwnTupleInOneField(t *testing.T) {
 	loadIPFIXRegistry.Do(registry.LoadRegistry)
 
 	conn := startIPFIXListener(t)
@@ -295,47 +295,34 @@ func TestIPFIXExportsTrafficToCollectorDestinationFromOtherSocket(t *testing.T) 
 	}
 	defer exp.Close()
 
-	srcPort := exp.localPort + 1
-	if srcPort == exp.collectorPort {
-		srcPort++
+	own := collector.FlowKey{
+		Ifindex: 1, Dir: 1, Proto: 17,
+		SrcAddr: exp.localAddr, DstAddr: exp.collectorAddr,
+		SrcPort: exp.localPort, DstPort: exp.collectorPort,
 	}
-
-	otherFlow := exportedFlow(
-		collector.FlowKey{
-			Ifindex: 1,
-			Dir:     1,
-			Proto:   17,
-			SrcAddr: netip.MustParseAddr("::ffff:192.0.2.1"),
-			DstAddr: exp.collectorAddr,
-			SrcPort: srcPort,
-			DstPort: exp.collectorPort,
-		},
-		collector.FlowEntry{
-			Packets:    3,
-			IPBytes:    384,
-			EstPackets: 3,
-		},
-		collector.FlowEndReasonEndOfFlow,
-	)
-
-	if err := exp.ExportFlow(otherFlow); err != nil {
-		t.Fatalf("ExportFlow: %v", err)
+	other := netip.MustParseAddr("192.0.2.1")
+	for i, tc := range []struct {
+		field string
+		key   func(*collector.FlowKey)
+	}{
+		{"source address", func(k *collector.FlowKey) { k.SrcAddr = other }},
+		{"source port", func(k *collector.FlowKey) { k.SrcPort ^= 1 }},
+		{"destination address", func(k *collector.FlowKey) { k.DstAddr = other }},
+		{"destination port", func(k *collector.FlowKey) { k.DstPort ^= 1 }},
+	} {
+		key := own
+		tc.key(&key)
+		flow := exportedFlow(key, collector.FlowEntry{Packets: 3, IPBytes: 384, EstPackets: 3}, collector.FlowEndReasonIdleTimeout)
+		if err := exp.ExportFlow(flow); err != nil {
+			t.Fatalf("ExportFlow: %v", err)
+		}
+		if err := exp.Flush(); err != nil {
+			t.Fatalf("Flush: %v", err)
+		}
+		if got := exp.Stats().Records; got != uint64(i+1) {
+			t.Fatalf("flow with another %s taken for the exporter's own and skipped", tc.field)
+		}
 	}
-	if err := exp.Flush(); err != nil {
-		t.Fatalf("Flush: %v", err)
-	}
-
-	msg := mustReadIPFIXDatagram(t, conn)
-	if got := len(msg.Sets); got != 2 {
-		t.Fatalf("set count = %d, want 2", got)
-	}
-
-	_, fields := parseTemplateSet(t, msg.Sets[0])
-	record := parseDataRecord(t, msg.Sets[1], fields)
-	assertIPFIXDataUInt16(t, record, "sourceTransportPort", srcPort)
-	assertIPFIXDataUInt16(t, record, "destinationTransportPort", exp.collectorPort)
-	assertIPFIXDataUInt64(t, record, "packetDeltaCount", 3)
-	assertIPFIXDataUInt64(t, record, "octetDeltaCount", 384)
 }
 
 func TestIPFIXUsesConfiguredBindHost(t *testing.T) {
