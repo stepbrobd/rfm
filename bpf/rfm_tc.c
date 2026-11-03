@@ -442,13 +442,23 @@ static __always_inline int rfm_tc(struct __sk_buff *skb, __u8 dir)
 
 	__builtin_memcpy(ring_ev, &ev, sizeof(ev));
 
-	// batch wakeups, only wake epoll every wakeup_batch events, Load
-	// refuses a batch of 0
+	// batch wakeups, only wake epoll every wakeup_batch events, counted
+	// down in the slot entry or per CPU for an interface without a slot,
+	// any wakeup drains the whole ring, Load refuses a batch of 0
 	__u64 flags = BPF_RB_NO_WAKEUP;
-	__u32 cnt_key = 0;
-	__u64 *cnt = bpf_map_lookup_elem(&rfm_submit_count, &cnt_key);
-	if (cnt && (++(*cnt) % rfm_cfg.wakeup_batch == 0))
-		flags = BPF_RB_FORCE_WAKEUP;
+	if (sval) {
+		if (sval->wake <= 1) {
+			sval->wake = rfm_cfg.wakeup_batch;
+			flags = BPF_RB_FORCE_WAKEUP;
+		} else {
+			sval->wake--;
+		}
+	} else {
+		__u32 cnt_key = 0;
+		__u64 *cnt = bpf_map_lookup_elem(&rfm_submit_count, &cnt_key);
+		if (cnt && (++(*cnt) % rfm_cfg.wakeup_batch == 0))
+			flags = BPF_RB_FORCE_WAKEUP;
+	}
 	bpf_ringbuf_submit(ring_ev, flags);
 
 	return TCX_NEXT;

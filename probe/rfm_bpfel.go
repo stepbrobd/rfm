@@ -41,7 +41,7 @@ type rfmRfmSlotValue struct {
 	Bytes   uint64
 	Skip    uint64
 	Gen     uint32
-	Pad     uint32
+	Wake    uint32
 }
 
 // Names of all BPF objects in the ELF.

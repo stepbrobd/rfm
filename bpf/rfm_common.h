@@ -34,12 +34,13 @@ struct rfm_iface_value {
 #define RFM_FAMILIES 3
 
 // a counter slot entry on one CPU, skip is the packets left before the next
-// sample and gen the config gen it was drawn under
+// sample, gen the config gen it was drawn under and wake the events left
+// before the next one that wakes the reader
 struct rfm_slot_value {
 	__u64 packets, bytes;
 	__u64 skip;
 	__u32 gen;
-	__u32 _pad;
+	__u32 wake;
 };
 
 // len is the on-wire byte count and segs the on-wire packet count of the

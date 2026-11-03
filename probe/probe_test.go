@@ -2508,3 +2508,62 @@ func TestPinnedSlotSamplingRedrawsOnLoad(t *testing.T) {
 		t.Fatalf("samples of 5 packets after a load at 1 in 1 = %d, want 5", got)
 	}
 }
+
+func TestSlotWakeupCountsDownTheBatch(t *testing.T) {
+	testutil.RequireRoot(t)
+
+	testutil.NewNS(t)
+
+	// test runs count on the CPU they run on, one CPU keeps the countdown
+	// in one slot entry
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
+	var set, one unix.CPUSet
+	if err := unix.SchedGetaffinity(0, &set); err != nil {
+		t.Fatal(err)
+	}
+	for cpu := 0; ; cpu++ {
+		if set.IsSet(cpu) {
+			one.Set(cpu)
+			break
+		}
+	}
+	if err := unix.SchedSetaffinity(0, &one); err != nil {
+		t.Fatal(err)
+	}
+	defer unix.SchedSetaffinity(0, &set)
+
+	p, err := Load(Config{SampleRate: 1, WakeupBatch: 4})
+	if err != nil {
+		skipIfUnsupported(t, err)
+		t.Fatal(err)
+	}
+	defer p.Close()
+	slotLoopback(t, p)
+
+	lo, err := netlink.LinkByName("lo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	p.mu.Lock()
+	slot := p.slots.held()[uint32(lo.Attrs().Index)]
+	p.mu.Unlock()
+
+	// the first event wakes the reader and every fourth after it
+	for i, want := range []uint32{4, 3, 2, 1, 4, 3} {
+		if got := loopbackSamples(t, p, 1); got != 1 {
+			t.Fatalf("event %d: samples = %d, want 1", i+1, got)
+		}
+		var vals []rfmRfmSlotValue
+		if err := p.objs.RfmIfaceArr.Lookup(slotIndex(slot, 0, slotFamily(4)), &vals); err != nil {
+			t.Fatal(err)
+		}
+		var left uint32
+		for _, v := range vals {
+			left += v.Wake
+		}
+		if left != want {
+			t.Fatalf("after event %d the slot waits %d events to wake, want %d", i+1, left, want)
+		}
+	}
+}
