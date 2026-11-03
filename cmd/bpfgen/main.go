@@ -13,6 +13,7 @@ package main
 import (
 	"cmp"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -193,9 +194,11 @@ func writeCompDB(path, source string, flags []string) error {
 	args := []string{"clang", "--target=bpf"}
 	for _, f := range flags {
 		if strings.HasPrefix(f, "-I") {
-			if abs, err := filepath.Abs(f[2:]); err == nil {
-				f = "-I" + abs
+			abs, err := filepath.Abs(f[2:])
+			if err != nil {
+				return err
 			}
+			f = "-I" + abs
 		}
 		args = append(args, f)
 	}
@@ -210,7 +213,10 @@ func writeCompDB(path, source string, flags []string) error {
 	var db []compentry
 	data, err := os.ReadFile(path)
 	if err == nil {
-		json.Unmarshal(data, &db)
+		err = json.Unmarshal(data, &db)
+	}
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("read %s: %w", path, err)
 	}
 
 	found := false

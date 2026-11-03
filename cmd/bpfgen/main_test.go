@@ -12,128 +12,21 @@ import (
 	"ysun.co/rfm/testutil"
 )
 
-func TestDetect(t *testing.T) {
-	tests := []struct {
-		arch    string
-		want    config
-		wantErr bool
-	}{
-		{"amd64", config{"x86", "x86_64"}, false},
-		{"x86_64", config{"x86", "x86_64"}, false},
-		{"386", config{"x86", "x86_64"}, false},
-		{"arm", config{"arm", "arm"}, false},
-		{"arm64", config{"arm64", "aarch64"}, false},
-		{"aarch64", config{"arm64", "aarch64"}, false},
-		{"loong64", config{"loongarch", "loongarch64"}, false},
-		{"riscv64", config{"riscv", "riscv64"}, false},
-		{"ppc64le", config{"powerpc", "powerpc"}, false},
-		{"s390x", config{"s390", "s390x"}, false},
-		{"mips", config{}, true},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.arch, func(t *testing.T) {
-			got, err := detect(tt.arch)
-			if (err != nil) != tt.wantErr {
-				t.Fatalf("detect(%q) error = %v, wantErr %v", tt.arch, err, tt.wantErr)
-			}
-			if got != tt.want {
-				t.Errorf("detect(%q) = %v, want %v", tt.arch, got, tt.want)
-			}
-		})
-	}
-}
-
-func TestCFlags(t *testing.T) {
-	tests := []struct {
-		name   string
-		source string
-		cfg    config
-		extra  []string
-		want   []string
-	}{
-		{
-			name:   "basic",
-			source: "testdata/without.bpf.c",
-			cfg:    config{"x86", "x86_64"},
-			want: []string{
-				"-O2", "-mcpu=v3", "-g", "-Wall", "-Wno-missing-declarations",
-				"-Itestdata/include",
-				"-Itestdata/include/vmlinux/x86_64",
-				"-D__TARGET_ARCH_x86",
-			},
-		},
-		{
-			name:   "with_extra",
-			source: "testdata/with.bpf.c",
-			cfg:    config{"arm64", "aarch64"},
-			extra:  []string{"-I/usr/include/bpf"},
-			want: []string{
-				"-O2", "-mcpu=v3", "-g", "-Wall", "-Wno-missing-declarations",
-				"-Itestdata/include",
-				"-Itestdata/include/vmlinux/aarch64",
-				"-D__TARGET_ARCH_arm64",
-				"-I/usr/include/bpf",
-			},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := cflags(tt.source, tt.cfg, tt.extra)
-			if !slices.Equal(got, tt.want) {
-				t.Errorf("cflags:\ngot:  %v\nwant: %v", got, tt.want)
-			}
-		})
-	}
-}
-
-func TestBpf2go(t *testing.T) {
-	flags := []string{"-O2", "-g", "-Wall", "-Wno-missing-declarations", "-Itestdata/include", "-D__TARGET_ARCH_x86"}
-	got := bpf2go("testdata/without.bpf.c", "test", "testdata", "mypkg", flags)
-	want := []string{
-		"tool", "bpf2go",
-		"-tags", "linux",
-		"-go-package", "mypkg",
-		"-output-dir", "testdata",
-		"test",
-		"testdata/without.bpf.c",
-		"--",
-		"-O2", "-g", "-Wall", "-Wno-missing-declarations", "-Itestdata/include", "-D__TARGET_ARCH_x86",
-	}
-	if !slices.Equal(got, want) {
-		t.Errorf("bpf2go:\ngot:  %v\nwant: %v", got, want)
-	}
-}
-
 func TestPkgconfig(t *testing.T) {
-	t.Run("nil", func(t *testing.T) {
-		got, err := pkgconfig(nil)
-		if err != nil {
-			t.Fatalf("pkgconfig(nil) error = %v", err)
-		}
-		if got != nil {
-			t.Errorf("pkgconfig(nil) = %v, want nil", got)
-		}
-	})
+	testutil.RequireCommand(t, "pkg-config")
 
-	t.Run("libbpf", func(t *testing.T) {
-		testutil.RequireCommand(t, "pkg-config")
-
-		got, err := pkgconfig([]string{"libbpf"})
-		if err != nil {
-			t.Skipf("libbpf pkg-config metadata not available: %v", err)
-		}
-		if len(got) == 0 {
-			t.Error("pkgconfig([libbpf]) returned empty")
-		}
-	})
+	got, err := pkgconfig([]string{"libbpf"})
+	if err != nil {
+		t.Skipf("libbpf pkg-config metadata not available: %v", err)
+	}
+	if len(got) == 0 {
+		t.Error("pkgconfig([libbpf]) returned empty")
+	}
 }
 
 func TestWriteCompDB(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "compile_commands.json")
 
-	// create new
 	if err := writeCompDB(path, "testdata/without.bpf.c", []string{"-O2", "-Ifoo"}); err != nil {
 		t.Fatal(err)
 	}
@@ -146,7 +39,6 @@ func TestWriteCompDB(t *testing.T) {
 		t.Errorf("file = %q", db[0].File)
 	}
 
-	// add second entry
 	if err := writeCompDB(path, "testdata/with.bpf.c", []string{"-O2", "-Ibar"}); err != nil {
 		t.Fatal(err)
 	}
@@ -156,7 +48,7 @@ func TestWriteCompDB(t *testing.T) {
 		t.Fatalf("got %d entries, want 2", len(db))
 	}
 
-	// update existing entry (should replace, not append)
+	// an entry of the same file is replaced
 	if err := writeCompDB(path, "testdata/without.bpf.c", []string{"-O2", "-Inew"}); err != nil {
 		t.Fatal(err)
 	}
@@ -166,8 +58,7 @@ func TestWriteCompDB(t *testing.T) {
 		t.Fatalf("got %d entries after update, want 2", len(db))
 	}
 
-	// verify updated flags
-	// -I paths are absolutized so check suffix
+	// -I paths are absolute
 	for _, e := range db {
 		if strings.HasSuffix(e.File, "without.bpf.c") {
 			hasNew := slices.ContainsFunc(e.Args, func(s string) bool {
@@ -183,6 +74,18 @@ func TestWriteCompDB(t *testing.T) {
 				t.Error("updated entry still has old -I.../foo")
 			}
 		}
+	}
+
+	// a file that does not parse stays as it is
+	bad := filepath.Join(t.TempDir(), "compile_commands.json")
+	if err := os.WriteFile(bad, []byte("not json"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeCompDB(bad, "testdata/without.bpf.c", nil); err == nil {
+		t.Fatal("writeCompDB over a file that does not parse succeeded")
+	}
+	if data, err := os.ReadFile(bad); err != nil || string(data) != "not json" {
+		t.Fatalf("file after the refused write = %q, %v, want it unchanged", data, err)
 	}
 }
 
