@@ -35,30 +35,36 @@ func (r *cycleReader) DroppedEvents() (uint64, error) { return 0, nil }
 func (r *cycleReader) Close() error                   { return nil }
 
 func BenchmarkRun(b *testing.B) {
-	for _, flows := range []int{1000, config.DefaultMaxFlows} {
-		b.Run(fmt.Sprintf("flows=%d", flows), func(b *testing.B) {
-			events := make([][]byte, flows)
-			for i := range events {
-				events[i] = encodeWireEvent(FlowEvent{
-					Tstamp:  bootNow(),
-					Ifindex: 1,
-					Proto:   6,
-					SrcAddr: netip.AddrFrom4([4]byte{10, 0, byte(i >> 8), byte(i)}),
-					DstAddr: netip.MustParseAddr("10.1.0.1"),
-					SrcPort: uint16(1024 + i%60000),
-					DstPort: 443,
-					Segs:    1,
-					Len:     1500,
-				})
+	for _, enricher := range []Enricher{nil, asnPerSource{}} {
+		for _, flows := range []int{1000, config.DefaultMaxFlows} {
+			name := fmt.Sprintf("flows=%d", flows)
+			if enricher != nil {
+				name += "/enricher"
 			}
-			c := New(time.Hour, nil, config.DefaultMaxFlows)
-			ctx, cancel := context.WithCancel(context.Background())
-			rd := &cycleReader{events: events, n: b.N, cancel: cancel}
-			b.ReportAllocs()
-			b.ResetTimer()
-			if err := c.Run(ctx, rd); err != context.Canceled {
-				b.Fatal(err)
-			}
-		})
+			b.Run(name, func(b *testing.B) {
+				events := make([][]byte, flows)
+				for i := range events {
+					events[i] = encodeWireEvent(FlowEvent{
+						Tstamp:  bootNow(),
+						Ifindex: 1,
+						Proto:   6,
+						SrcAddr: netip.AddrFrom4([4]byte{10, 0, byte(i >> 8), byte(i)}),
+						DstAddr: netip.MustParseAddr("10.1.0.1"),
+						SrcPort: uint16(1024 + i%60000),
+						DstPort: 443,
+						Segs:    1,
+						Len:     1500,
+					})
+				}
+				c := New(time.Hour, enricher, config.DefaultMaxFlows)
+				ctx, cancel := context.WithCancel(context.Background())
+				rd := &cycleReader{events: events, n: b.N, cancel: cancel}
+				b.ReportAllocs()
+				b.ResetTimer()
+				if err := c.Run(ctx, rd); err != context.Canceled {
+					b.Fatal(err)
+				}
+			})
+		}
 	}
 }
