@@ -1,7 +1,8 @@
 package enrich
 
 import (
-	"io"
+	"errors"
+	"net/netip"
 
 	"ysun.co/rfm/collector"
 	"ysun.co/rfm/config"
@@ -9,61 +10,51 @@ import (
 	"ysun.co/rfm/enrich/rib"
 )
 
-// Backends holds the configured enrichment backends
-// Enricher is what the collector uses, RIB and MMDB stay reachable for the
-// control plane, either may be nil
+// Backends holds the configured enrichment backends, either may be nil
 type Backends struct {
-	Enricher collector.Enricher
-	RIB      *rib.Server
-	MMDB     *mmdb.Enricher
-	closers  []io.Closer
+	RIB  *rib.Server
+	MMDB *mmdb.Enricher
 }
 
-// Build constructs the configured enrichment backends
-// when no backend is configured, it returns nil, nil
+// Build starts the configured backends, it returns nil, nil when none is
 func Build(cfg config.EnrichConfig) (*Backends, error) {
-	b := &Backends{}
-	var enrichers []collector.Enricher
-
-	r, rCloser, err := rib.Listen(cfg.RIB)
+	r, err := rib.Listen(cfg.RIB)
 	if err != nil {
 		return nil, err
 	}
-	if r != nil {
-		b.RIB = r.(*rib.Server)
-		enrichers = append(enrichers, r)
-		b.closers = append(b.closers, rCloser)
-	}
-
-	mm, mmCloser, err := mmdb.Open(cfg.MMDB)
+	m, err := mmdb.Open(cfg.MMDB)
 	if err != nil {
-		_ = b.Close()
+		if r != nil {
+			_ = r.Close()
+		}
 		return nil, err
 	}
-	if mm != nil {
-		b.MMDB = mm.(*mmdb.Enricher)
-		enrichers = append(enrichers, mm)
-		b.closers = append(b.closers, mmCloser)
-	}
-
-	switch len(enrichers) {
-	case 0:
+	if r == nil && m == nil {
 		return nil, nil
-	case 1:
-		b.Enricher = enrichers[0]
-	default:
-		b.Enricher = composite{enrichers: enrichers}
 	}
-	return b, nil
+	return &Backends{RIB: r, MMDB: m}, nil
 }
 
-// Close closes every backend and returns the first error
-func (b *Backends) Close() error {
-	var first error
-	for _, closer := range b.closers {
-		if err := closer.Close(); err != nil && first == nil {
-			first = err
-		}
+// Enrich labels from the RIB first and from MMDB what the RIB left out
+func (b *Backends) Enrich(src, dst netip.Addr) (collector.Labels, collector.Labels) {
+	var s, d collector.Labels
+	if b.RIB != nil {
+		s, d = b.RIB.Enrich(src, dst)
 	}
-	return first
+	if b.MMDB != nil {
+		s, d = b.MMDB.Fill(src, s), b.MMDB.Fill(dst, d)
+	}
+	return s, d
+}
+
+// Close closes every backend
+func (b *Backends) Close() error {
+	var err error
+	if b.RIB != nil {
+		err = b.RIB.Close()
+	}
+	if b.MMDB != nil {
+		err = errors.Join(err, b.MMDB.Close())
+	}
+	return err
 }

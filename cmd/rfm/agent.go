@@ -145,7 +145,7 @@ func runAgent(ctx context.Context, path string, deps agentDeps) error {
 	var enricher collector.Enricher
 	if backends != nil {
 		defer backends.Close()
-		enricher = backends.Enricher
+		enricher = backends
 	}
 
 	p, err := deps.loadProbe(probeConfig(cfg))

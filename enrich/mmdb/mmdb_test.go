@@ -167,18 +167,18 @@ func TestOpenAndLookup(t *testing.T) {
 	writeMMDB(t, asn, 1)
 	writeMMDB(t, city, 2)
 
-	enricher, closer, err := OpenWithInterval(config.MMDBConfig{ASNDB: asn, CityDB: city}, 0)
+	m, err := OpenWithInterval(config.MMDBConfig{ASNDB: asn, CityDB: city}, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer closer.Close()
+	defer m.Close()
 
-	src, dst := enricher.Enrich(netip.MustParseAddr("::ffff:192.0.2.1"), netip.MustParseAddr("2001:db8::1"))
-	if src.ASN != 0 || src.City != "" || dst.ASN != 0 || dst.City != "" {
-		t.Fatalf("empty databases produced labels: src=%+v dst=%+v", src, dst)
+	for _, addr := range []string{"::ffff:192.0.2.1", "2001:db8::1"} {
+		if labels := m.Fill(netip.MustParseAddr(addr), collector.Labels{}); labels != (collector.Labels{}) {
+			t.Fatalf("empty databases labeled %s %+v", addr, labels)
+		}
 	}
 
-	m := enricher.(*Enricher)
 	if a, c := m.Versions(); a != 1 || c != 2 {
 		t.Fatalf("versions = (%d, %d), want (1, 2)", a, c)
 	}
@@ -230,15 +230,15 @@ func TestLookupReadsTheGeoLite2Layout(t *testing.T) {
 			if err := os.WriteFile(cfg.CityDB, mmdbRecord(prefix, tc.city), 0o644); err != nil {
 				t.Fatal(err)
 			}
-			enricher, closer, err := OpenWithInterval(cfg, 0)
+			m, err := OpenWithInterval(cfg, 0)
 			if err != nil {
 				t.Fatal(err)
 			}
-			defer closer.Close()
+			defer m.Close()
 
 			for range 2 {
-				if src, _ := enricher.Enrich(addr, netip.MustParseAddr("198.51.100.1")); src != tc.want {
-					t.Fatalf("labels = %+v, want %+v", src, tc.want)
+				if labels := m.Fill(addr, collector.Labels{}); labels != tc.want {
+					t.Fatalf("labels = %+v, want %+v", labels, tc.want)
 				}
 			}
 			if got := strings.Count(out.String(), "mmdb lookup"); got != len(tc.failed) {
@@ -253,9 +253,35 @@ func TestLookupReadsTheGeoLite2Layout(t *testing.T) {
 	}
 }
 
+func TestFillKeepsTheASNItIsGiven(t *testing.T) {
+	addr := netip.MustParseAddr("192.0.2.1")
+	prefix := netip.MustParsePrefix("192.0.2.0/24")
+	dir := t.TempDir()
+	cfg := config.MMDBConfig{ASNDB: filepath.Join(dir, "asn.mmdb"), CityDB: filepath.Join(dir, "city.mmdb")}
+	if err := os.WriteFile(cfg.ASNDB, mmdbRecord(prefix, map[string]any{"autonomous_system_number": uint32(64500)}), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(cfg.CityDB, mmdbRecord(prefix, map[string]any{"city": map[string]any{"names": map[string]any{"en": "Paris"}}}), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	m, err := OpenWithInterval(cfg, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer m.Close()
+
+	// the rib labels first, mmdb adds the city and an ASN the rib had none of
+	if labels := m.Fill(addr, collector.Labels{ASN: 64511}); labels != (collector.Labels{ASN: 64511, City: "Paris"}) {
+		t.Fatalf("labels of an address the rib labeled = %+v, want its ASN and the city", labels)
+	}
+	if labels := m.Fill(addr, collector.Labels{}); labels != (collector.Labels{ASN: 64500, City: "Paris"}) {
+		t.Fatalf("labels of an address the rib left out = %+v, want both from mmdb", labels)
+	}
+}
+
 func TestOpenMissingFile(t *testing.T) {
 	dir := t.TempDir()
-	_, _, err := OpenWithInterval(config.MMDBConfig{ASNDB: filepath.Join(dir, "missing.mmdb")}, 0)
+	_, err := OpenWithInterval(config.MMDBConfig{ASNDB: filepath.Join(dir, "missing.mmdb")}, 0)
 	if err == nil {
 		t.Fatal("expected error for missing database")
 	}
@@ -269,12 +295,11 @@ func TestReloadPicksUpReplacedFile(t *testing.T) {
 	asn := filepath.Join(dir, "asn.mmdb")
 	writeMMDB(t, asn, 1)
 
-	enricher, closer, err := OpenWithInterval(config.MMDBConfig{ASNDB: asn}, 5*time.Millisecond)
+	m, err := OpenWithInterval(config.MMDBConfig{ASNDB: asn}, 5*time.Millisecond)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer closer.Close()
-	m := enricher.(*Enricher)
+	defer m.Close()
 
 	writeMMDB(t, asn, 2)
 
@@ -291,9 +316,8 @@ func TestReloadPicksUpReplacedFile(t *testing.T) {
 	}
 
 	// lookups keep working on the new reader
-	src, _ := m.Enrich(netip.MustParseAddr("::ffff:192.0.2.1"), netip.MustParseAddr("::ffff:192.0.2.2"))
-	if src.ASN != 0 {
-		t.Fatalf("unexpected asn %d from empty database", src.ASN)
+	if labels := m.Fill(netip.MustParseAddr("::ffff:192.0.2.1"), collector.Labels{}); labels.ASN != 0 {
+		t.Fatalf("unexpected asn %d from empty database", labels.ASN)
 	}
 }
 
@@ -302,12 +326,11 @@ func TestReloadKeepsOldReaderOnBadFile(t *testing.T) {
 	asn := filepath.Join(dir, "asn.mmdb")
 	writeMMDB(t, asn, 1)
 
-	enricher, closer, err := OpenWithInterval(config.MMDBConfig{ASNDB: asn}, 0)
+	m, err := OpenWithInterval(config.MMDBConfig{ASNDB: asn}, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer closer.Close()
-	m := enricher.(*Enricher)
+	defer m.Close()
 
 	if err := os.WriteFile(asn, []byte("not a database"), 0o644); err != nil {
 		t.Fatal(err)
@@ -367,14 +390,14 @@ func TestCloseIsIdempotent(t *testing.T) {
 	asn := filepath.Join(dir, "asn.mmdb")
 	writeMMDB(t, asn, 1)
 
-	_, closer, err := OpenWithInterval(config.MMDBConfig{ASNDB: asn}, time.Millisecond)
+	m, err := OpenWithInterval(config.MMDBConfig{ASNDB: asn}, time.Millisecond)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := closer.Close(); err != nil {
+	if err := m.Close(); err != nil {
 		t.Fatal(err)
 	}
-	if err := closer.Close(); err != nil {
+	if err := m.Close(); err != nil {
 		t.Fatal(err)
 	}
 }

@@ -38,8 +38,8 @@ func TestBuildRIBExposesServer(t *testing.T) {
 		t.Fatalf("Build: %v", err)
 	}
 	defer backends.Close()
-	if backends.RIB == nil || backends.Enricher == nil || backends.MMDB != nil {
-		t.Fatalf("backends = %+v, want a rib server and enricher only", backends)
+	if backends.RIB == nil || backends.MMDB != nil {
+		t.Fatalf("backends = %+v, want a rib server only", backends)
 	}
 }
 

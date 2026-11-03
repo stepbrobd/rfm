@@ -6,7 +6,6 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
-	"io"
 	"net"
 	"net/netip"
 	"slices"
@@ -608,17 +607,17 @@ func (s *Server) Stats() Stats {
 	}
 }
 
-// Listen starts a BMP listener when configured
-// When BMP listen is unset, it returns nil, nil, nil
-func Listen(cfg config.RIBConfig) (collector.Enricher, io.Closer, error) {
+// Listen starts the BMP listener cfg configures, it returns nil, nil when
+// cfg configures none
+func Listen(cfg config.RIBConfig) (*Server, error) {
 	if !cfg.BMP.Enabled() {
-		return nil, nil, nil
+		return nil, nil
 	}
 
 	addr := cfg.BMP.Addr()
 	ln, err := net.Listen("tcp", addr)
 	if err != nil {
-		return nil, nil, fmt.Errorf("listen BMP %q: %w", addr, err)
+		return nil, fmt.Errorf("listen BMP %q: %w", addr, err)
 	}
 
 	s := newServer(ln)
@@ -626,7 +625,7 @@ func Listen(cfg config.RIBConfig) (collector.Enricher, io.Closer, error) {
 	go s.accept()
 	go s.sweep()
 
-	return s, s, nil
+	return s, nil
 }
 
 func (s *Server) Enrich(src, dst netip.Addr) (collector.Labels, collector.Labels) {
