@@ -120,6 +120,8 @@ type IPFIXExporter struct {
 	conn          *net.UDPConn
 	localAddr     netip.Addr
 	localPort     uint16
+	prevAddr      netip.Addr
+	prevPort      uint16
 	collectorAddr netip.Addr
 	collectorPort uint16
 	remote        *net.UDPAddr
@@ -681,6 +683,7 @@ func (e *IPFIXExporter) ensureConn(now time.Time) error {
 
 	e.mu.Lock()
 	e.conn = conn
+	e.prevAddr, e.prevPort = e.localAddr, e.localPort
 	e.localAddr = localAddr.Unmap()
 	e.localPort = uint16(local.Port)
 	e.dialBackoff = 0
@@ -779,17 +782,11 @@ func flowIsIPv6(flow collector.ExportedFlow) bool {
 	return !netip.AddrFrom16(flow.SrcAddr).Is4In6() || !netip.AddrFrom16(flow.DstAddr).Is4In6()
 }
 
-// isOwnExportFlowLocked reports whether flow is this exporter's own udp
-// stream to the collector, which must not be exported again
-// it must be called with mu held
+// isOwnExportFlowLocked reports whether flow is the udp stream of this or the previous socket to the collector
 func (e *IPFIXExporter) isOwnExportFlowLocked(flow collector.ExportedFlow) bool {
-	if flow.Proto != 17 || e.conn == nil {
-		return false
-	}
-	if flow.SrcPort != e.localPort || flow.DstPort != e.collectorPort {
+	if flow.Proto != 17 || flow.DstPort != e.collectorPort || netip.AddrFrom16(flow.DstAddr).Unmap() != e.collectorAddr {
 		return false
 	}
 	src := netip.AddrFrom16(flow.SrcAddr).Unmap()
-	dst := netip.AddrFrom16(flow.DstAddr).Unmap()
-	return src == e.localAddr && dst == e.collectorAddr
+	return src == e.localAddr && flow.SrcPort == e.localPort || src == e.prevAddr && flow.SrcPort == e.prevPort
 }

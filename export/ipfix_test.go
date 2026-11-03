@@ -325,6 +325,54 @@ func TestIPFIXExportsFlowsThatDifferFromItsOwnTupleInOneField(t *testing.T) {
 	}
 }
 
+func TestIPFIXSkipsTheTrafficOfItsPreviousSocket(t *testing.T) {
+	loadIPFIXRegistry.Do(registry.LoadRegistry)
+
+	conn := startIPFIXListener(t)
+	addr := conn.LocalAddr().(*net.UDPAddr)
+
+	exp, err := NewIPFIX(testIPFIXConfig(addr.IP.String(), addr.Port))
+	if err != nil {
+		t.Fatalf("NewIPFIX: %v", err)
+	}
+	defer exp.Close()
+
+	// the next batch dials from another port while the flow of the closed socket is still in the table
+	old := collector.FlowKey{
+		Ifindex: 1, Dir: 1, Proto: 17,
+		SrcAddr: exp.localAddr, DstAddr: exp.collectorAddr,
+		SrcPort: exp.localPort, DstPort: exp.collectorPort,
+	}
+	exp.mu.Lock()
+	_ = exp.conn.Close()
+	exp.conn = nil
+	exp.nextDial = time.Time{}
+	exp.mu.Unlock()
+	if err := exp.ExportFlow(testFlow("::ffff:10.0.0.1", "::ffff:10.0.0.2", 1)); err != nil {
+		t.Fatalf("ExportFlow: %v", err)
+	}
+	if err := exp.Flush(); err != nil {
+		t.Fatalf("Flush: %v", err)
+	}
+	exp.mu.Lock()
+	port := exp.localPort
+	exp.mu.Unlock()
+	if port == old.SrcPort {
+		t.Fatalf("the new socket kept port %d", port)
+	}
+
+	flow := exportedFlow(old, collector.FlowEntry{Packets: 1, IPBytes: 128, EstPackets: 1}, collector.FlowEndReasonIdleTimeout)
+	if err := exp.ExportFlow(flow); err != nil {
+		t.Fatalf("ExportFlow: %v", err)
+	}
+	if err := exp.Flush(); err != nil {
+		t.Fatalf("Flush: %v", err)
+	}
+	if got := exp.Stats().Records; got != 1 {
+		t.Fatalf("records sent = %d, want the one record without the previous socket's flow", got)
+	}
+}
+
 func TestIPFIXUsesConfiguredBindHost(t *testing.T) {
 	conn := startIPFIXListener(t)
 	addr := conn.LocalAddr().(*net.UDPAddr)

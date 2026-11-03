@@ -112,8 +112,8 @@ rate there without reloading the programs.
    sends. Every record carries the sampled packets and their IP bytes since the
    previous record of the same flow, with the sampling probability that scales
    them. A failed dial is not fatal and is retried with backoff, so the agent
-   starts before its bind address exists. The exporter excludes only its own
-   socket tuple from recursive self-export.
+   starts before its bind address exists. The exporter excludes only the tuples
+   of its current and previous socket from recursive self-export.
 6. When a control socket is configured, `rfm status`, `rfm flows`, `rfm rib`,
    `rfm set`, `rfm config` and `rfm reload` talk to the running agent.
 
