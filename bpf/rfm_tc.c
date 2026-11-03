@@ -322,10 +322,9 @@ static __always_inline int rfm_tc(struct __sk_buff *skb, __u8 dir,
 {
 	struct rfm_slot_value *sval = NULL;
 	if (sampled_only) {
-		__u32 rate = rfm_cfg.sample_rate;
 		__u32 key = 0;
 		sval = bpf_map_lookup_elem(&rfm_cpu_draw, &key);
-		if (!sval || rate == 0 || !rfm_take(sval, rate))
+		if (!sval || !rfm_take(sval, rfm_cfg.sample_rate))
 			return TCX_NEXT;
 	}
 
@@ -421,8 +420,6 @@ static __always_inline int rfm_tc(struct __sk_buff *skb, __u8 dir,
 
 	if (!sampled_only) {
 		__u32 rate = rfm_cfg.sample_rate;
-		if (rate == 0)
-			return TCX_NEXT;
 		if (sval) {
 			if (!rfm_take(sval, rate))
 				return TCX_NEXT;

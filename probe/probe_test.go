@@ -59,12 +59,22 @@ func skipIfUnsupported(t *testing.T, err error) {
 func TestLoad(t *testing.T) {
 	testutil.RequireRoot(t)
 
-	p, err := Load(Config{WakeupBatch: 1})
+	p, err := Load(Config{SampleRate: 1 << 30, WakeupBatch: 1})
 	if err != nil {
 		skipIfUnsupported(t, err)
 		t.Fatal(err)
 	}
 	defer p.Close()
+}
+
+func TestLoadRefusesAZeroSampleRate(t *testing.T) {
+	p, err := Load(Config{WakeupBatch: 1})
+	if err == nil {
+		p.Close()
+	}
+	if err == nil || !strings.Contains(err.Error(), "sample rate") {
+		t.Fatalf("load with a sample rate of 0 = %v, want it refused", err)
+	}
 }
 
 func TestLoadRefusesAZeroWakeupBatch(t *testing.T) {
@@ -83,7 +93,7 @@ func TestAttach(t *testing.T) {
 
 	ns := testutil.NewNS(t)
 
-	p, err := Load(Config{WakeupBatch: 1})
+	p, err := Load(Config{SampleRate: 1 << 30, WakeupBatch: 1})
 	if err != nil {
 		skipIfUnsupported(t, err)
 		t.Fatal(err)
@@ -127,7 +137,7 @@ func TestAttachLinkTypes(t *testing.T) {
 
 	testutil.NewNS(t)
 
-	p, err := Load(Config{WakeupBatch: 1})
+	p, err := Load(Config{SampleRate: 1 << 30, WakeupBatch: 1})
 	if err != nil {
 		skipIfUnsupported(t, err)
 		t.Fatal(err)
@@ -167,7 +177,7 @@ func TestIfaceCounters(t *testing.T) {
 
 	ns := testutil.NewNS(t)
 
-	p, err := Load(Config{WakeupBatch: 1})
+	p, err := Load(Config{SampleRate: 1 << 30, WakeupBatch: 1})
 	if err != nil {
 		skipIfUnsupported(t, err)
 		t.Fatal(err)
@@ -220,7 +230,7 @@ func TestIfaceStatsErrorsCountFullMap(t *testing.T) {
 
 	// one entry holds one key, every other key is refused, and no counter
 	// slot is free so the interface counts in the hash
-	p, err := Load(Config{WakeupBatch: 1, IfaceStatsSize: 1})
+	p, err := Load(Config{SampleRate: 1 << 30, WakeupBatch: 1, IfaceStatsSize: 1})
 	if err != nil {
 		skipIfUnsupported(t, err)
 		t.Fatal(err)
@@ -254,7 +264,7 @@ func TestIfaceCountersVLAN(t *testing.T) {
 
 	ns := testutil.NewNS(t)
 
-	p, err := Load(Config{WakeupBatch: 1})
+	p, err := Load(Config{SampleRate: 1 << 30, WakeupBatch: 1})
 	if err != nil {
 		skipIfUnsupported(t, err)
 		t.Fatal(err)
@@ -288,7 +298,7 @@ func TestIfaceCountersVLANEgress(t *testing.T) {
 
 	ns := testutil.NewNS(t)
 
-	p, err := Load(Config{WakeupBatch: 1})
+	p, err := Load(Config{SampleRate: 1 << 30, WakeupBatch: 1})
 	if err != nil {
 		skipIfUnsupported(t, err)
 		t.Fatal(err)
@@ -319,7 +329,7 @@ func TestIfaceCountersVLANEgressGSO(t *testing.T) {
 
 	ns := testutil.NewNS(t)
 
-	p, err := Load(Config{WakeupBatch: 1})
+	p, err := Load(Config{SampleRate: 1 << 30, WakeupBatch: 1})
 	if err != nil {
 		skipIfUnsupported(t, err)
 		t.Fatal(err)
@@ -366,7 +376,7 @@ func TestIfaceCountersTruncatedVLANTag(t *testing.T) {
 
 	testutil.NewNS(t)
 
-	p, err := Load(Config{WakeupBatch: 1})
+	p, err := Load(Config{SampleRate: 1 << 30, WakeupBatch: 1})
 	if err != nil {
 		skipIfUnsupported(t, err)
 		t.Fatal(err)
@@ -766,7 +776,7 @@ func TestIngressGSOLongExtensionHeader(t *testing.T) {
 
 	testutil.NewNS(t)
 
-	p, err := Load(Config{WakeupBatch: 1})
+	p, err := Load(Config{SampleRate: 1 << 30, WakeupBatch: 1})
 	if err != nil {
 		skipIfUnsupported(t, err)
 		t.Fatal(err)
@@ -896,7 +906,7 @@ func TestIfaceCountersGSOEgress(t *testing.T) {
 
 	ns := testutil.NewNS(t)
 
-	p, err := Load(Config{WakeupBatch: 1})
+	p, err := Load(Config{SampleRate: 1 << 30, WakeupBatch: 1})
 	if err != nil {
 		skipIfUnsupported(t, err)
 		t.Fatal(err)
@@ -939,7 +949,7 @@ func TestIfaceCountersGROIngress(t *testing.T) {
 
 	ns := testutil.NewNS(t)
 
-	p, err := Load(Config{WakeupBatch: 1})
+	p, err := Load(Config{SampleRate: 1 << 30, WakeupBatch: 1})
 	if err != nil {
 		skipIfUnsupported(t, err)
 		t.Fatal(err)
@@ -994,7 +1004,7 @@ func TestGSOHeaderErrorsCountHeadersThatDoNotParse(t *testing.T) {
 
 	testutil.NewNS(t)
 
-	p, err := Load(Config{WakeupBatch: 1})
+	p, err := Load(Config{SampleRate: 1 << 30, WakeupBatch: 1})
 	if err != nil {
 		skipIfUnsupported(t, err)
 		t.Fatal(err)
@@ -1031,7 +1041,7 @@ func TestIngressGSOTakesTheKernelWireLen(t *testing.T) {
 
 	testutil.NewNS(t)
 
-	p, err := Load(Config{WakeupBatch: 1})
+	p, err := Load(Config{SampleRate: 1 << 30, WakeupBatch: 1})
 	if err != nil {
 		skipIfUnsupported(t, err)
 		t.Fatal(err)
@@ -1090,7 +1100,7 @@ func TestGSOHeaderErrorsSkipEgressWithASegmentCount(t *testing.T) {
 
 	testutil.NewNS(t)
 
-	p, err := Load(Config{WakeupBatch: 1})
+	p, err := Load(Config{SampleRate: 1 << 30, WakeupBatch: 1})
 	if err != nil {
 		skipIfUnsupported(t, err)
 		t.Fatal(err)
@@ -1269,7 +1279,7 @@ func TestAttachOrder(t *testing.T) {
 		}
 	}
 
-	p, err := Load(Config{WakeupBatch: 1})
+	p, err := Load(Config{SampleRate: 1 << 30, WakeupBatch: 1})
 	if err != nil {
 		skipIfUnsupported(t, err)
 		t.Fatal(err)
@@ -1384,7 +1394,7 @@ func TestDetachDropsCounters(t *testing.T) {
 
 	ns := testutil.NewNS(t)
 
-	p, err := Load(Config{WakeupBatch: 1})
+	p, err := Load(Config{SampleRate: 1 << 30, WakeupBatch: 1})
 	if err != nil {
 		skipIfUnsupported(t, err)
 		t.Fatal(err)
@@ -1446,7 +1456,7 @@ func TestPinnedCountersSurviveReload(t *testing.T) {
 
 	ns := testutil.NewNS(t)
 
-	p, err := Load(Config{WakeupBatch: 1, PinPath: dir})
+	p, err := Load(Config{SampleRate: 1 << 30, WakeupBatch: 1, PinPath: dir})
 	if err != nil {
 		skipIfUnsupported(t, err)
 		t.Fatal(err)
@@ -1471,7 +1481,7 @@ func TestPinnedCountersSurviveReload(t *testing.T) {
 	}
 
 	// a second load under the same pin path picks the counters up
-	p2, err := Load(Config{WakeupBatch: 1, PinPath: dir})
+	p2, err := Load(Config{SampleRate: 1 << 30, WakeupBatch: 1, PinPath: dir})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1483,12 +1493,12 @@ func TestPinnedCountersSurviveReload(t *testing.T) {
 
 	// a map of another size is refused and the pin keeps its counters
 	p2.Close()
-	_, err = Load(Config{WakeupBatch: 1, PinPath: dir, IfaceStatsSize: 128})
+	_, err = Load(Config{SampleRate: 1 << 30, WakeupBatch: 1, PinPath: dir, IfaceStatsSize: 128})
 	if !errors.Is(err, ebpf.ErrMapIncompatible) || !strings.Contains(err.Error(), "MaxEntries: 4096 changed to 128") ||
 		!strings.Contains(err.Error(), "remove the pin file or reboot") {
 		t.Fatalf("load with a map of another size = %v, want the pin refused", err)
 	}
-	p3, err := Load(Config{WakeupBatch: 1, PinPath: dir})
+	p3, err := Load(Config{SampleRate: 1 << 30, WakeupBatch: 1, PinPath: dir})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1715,7 +1725,7 @@ func TestPinnedCountersRefuseIncompatibleFlags(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, err = Load(Config{WakeupBatch: 1, PinPath: dir})
+	_, err = Load(Config{SampleRate: 1 << 30, WakeupBatch: 1, PinPath: dir})
 	if !errors.Is(err, ebpf.ErrMapIncompatible) || !strings.Contains(err.Error(), "Flags") ||
 		!strings.Contains(err.Error(), "remove the pin file or reboot") {
 		t.Fatalf("load with a pin of other flags = %v, want the pin refused", err)
@@ -1736,7 +1746,7 @@ func TestWatchFollowsInterfaces(t *testing.T) {
 
 	ns := testutil.NewNS(t)
 
-	p, err := Load(Config{WakeupBatch: 1})
+	p, err := Load(Config{SampleRate: 1 << 30, WakeupBatch: 1})
 	if err != nil {
 		skipIfUnsupported(t, err)
 		t.Fatal(err)
@@ -1796,7 +1806,7 @@ func TestWatchReconcilesExistingLinks(t *testing.T) {
 
 	ns := testutil.NewNS(t)
 
-	p, err := Load(Config{WakeupBatch: 1})
+	p, err := Load(Config{SampleRate: 1 << 30, WakeupBatch: 1})
 	if err != nil {
 		skipIfUnsupported(t, err)
 		t.Fatal(err)
@@ -1840,7 +1850,7 @@ func TestWatchSurvivesForeignMessages(t *testing.T) {
 
 	ns := testutil.NewNS(t)
 
-	p, err := Load(Config{WakeupBatch: 1})
+	p, err := Load(Config{SampleRate: 1 << 30, WakeupBatch: 1})
 	if err != nil {
 		skipIfUnsupported(t, err)
 		t.Fatal(err)
@@ -1892,7 +1902,7 @@ func TestWatchResubscribesOnALinkItCannotDecode(t *testing.T) {
 
 	ns := testutil.NewNS(t)
 
-	p, err := Load(Config{WakeupBatch: 1})
+	p, err := Load(Config{SampleRate: 1 << 30, WakeupBatch: 1})
 	if err != nil {
 		skipIfUnsupported(t, err)
 		t.Fatal(err)
@@ -1983,7 +1993,7 @@ func TestWatchResubscribesAfterOverflow(t *testing.T) {
 
 	ns := testutil.NewNS(t)
 
-	p, err := Load(Config{WakeupBatch: 1})
+	p, err := Load(Config{SampleRate: 1 << 30, WakeupBatch: 1})
 	if err != nil {
 		skipIfUnsupported(t, err)
 		t.Fatal(err)
@@ -2059,7 +2069,7 @@ func TestWatchPrunesPinnedCounters(t *testing.T) {
 	other := addVeth(t, "other0", "other1")
 
 	// an earlier run counted rfm0 and other0, this run only matches rfm0
-	p, err := Load(Config{WakeupBatch: 1, PinPath: dir})
+	p, err := Load(Config{SampleRate: 1 << 30, WakeupBatch: 1, PinPath: dir})
 	if err != nil {
 		skipIfUnsupported(t, err)
 		t.Fatal(err)
@@ -2085,7 +2095,7 @@ func TestWatchPrunesPinnedCounters(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	p, err = Load(Config{WakeupBatch: 1, PinPath: dir})
+	p, err = Load(Config{SampleRate: 1 << 30, WakeupBatch: 1, PinPath: dir})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2120,7 +2130,7 @@ func TestWatchRetriesAFailedPrune(t *testing.T) {
 	ns := testutil.NewNS(t)
 	other := addVeth(t, "other0", "other1")
 
-	p, err := Load(Config{WakeupBatch: 1})
+	p, err := Load(Config{SampleRate: 1 << 30, WakeupBatch: 1})
 	if err != nil {
 		skipIfUnsupported(t, err)
 		t.Fatal(err)
@@ -2162,7 +2172,7 @@ func TestWatchClearsCountersOfDeletedLinks(t *testing.T) {
 
 	ns := testutil.NewNS(t)
 
-	p, err := Load(Config{WakeupBatch: 1})
+	p, err := Load(Config{SampleRate: 1 << 30, WakeupBatch: 1})
 	if err != nil {
 		skipIfUnsupported(t, err)
 		t.Fatal(err)
@@ -2244,7 +2254,7 @@ func TestWatchRetriesAFailedAttach(t *testing.T) {
 
 	ns := testutil.NewNS(t)
 
-	p, err := Load(Config{WakeupBatch: 1})
+	p, err := Load(Config{SampleRate: 1 << 30, WakeupBatch: 1})
 	if err != nil {
 		skipIfUnsupported(t, err)
 		t.Fatal(err)
@@ -2327,7 +2337,7 @@ func TestWatchKeepsAPortThatLeavesItsBridge(t *testing.T) {
 
 	ns := testutil.NewNS(t)
 
-	p, err := Load(Config{WakeupBatch: 1})
+	p, err := Load(Config{SampleRate: 1 << 30, WakeupBatch: 1})
 	if err != nil {
 		skipIfUnsupported(t, err)
 		t.Fatal(err)
@@ -2377,7 +2387,7 @@ func TestIfaceCountersUseSlot(t *testing.T) {
 
 	ns := testutil.NewNS(t)
 
-	p, err := Load(Config{WakeupBatch: 1})
+	p, err := Load(Config{SampleRate: 1 << 30, WakeupBatch: 1})
 	if err != nil {
 		skipIfUnsupported(t, err)
 		t.Fatal(err)
@@ -2404,7 +2414,7 @@ func TestIfaceCountersFallBackToHash(t *testing.T) {
 
 	ns := testutil.NewNS(t)
 
-	p, err := Load(Config{WakeupBatch: 1})
+	p, err := Load(Config{SampleRate: 1 << 30, WakeupBatch: 1})
 	if err != nil {
 		skipIfUnsupported(t, err)
 		t.Fatal(err)
@@ -2432,7 +2442,7 @@ func TestIfaceCountersDetachZeroesSlot(t *testing.T) {
 
 	ns := testutil.NewNS(t)
 
-	p, err := Load(Config{WakeupBatch: 1})
+	p, err := Load(Config{SampleRate: 1 << 30, WakeupBatch: 1})
 	if err != nil {
 		skipIfUnsupported(t, err)
 		t.Fatal(err)
@@ -2465,7 +2475,7 @@ func TestPinnedCountersUpgradeFromHash(t *testing.T) {
 	ns := testutil.NewNS(t)
 
 	// a build without slots left its counters in the pinned hash alone
-	p, err := Load(Config{WakeupBatch: 1, PinPath: dir})
+	p, err := Load(Config{SampleRate: 1 << 30, WakeupBatch: 1, PinPath: dir})
 	if err != nil {
 		skipIfUnsupported(t, err)
 		t.Fatal(err)
@@ -2482,7 +2492,7 @@ func TestPinnedCountersUpgradeFromHash(t *testing.T) {
 	}
 
 	// the upgrade counts new traffic in a slot and reports both
-	p, err = Load(Config{WakeupBatch: 1, PinPath: dir})
+	p, err = Load(Config{SampleRate: 1 << 30, WakeupBatch: 1, PinPath: dir})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2505,7 +2515,7 @@ func TestPinnedCountersDropALoneSlotPin(t *testing.T) {
 	dir := pinDir(t)
 	ns := testutil.NewNS(t)
 
-	p, err := Load(Config{WakeupBatch: 1, PinPath: dir})
+	p, err := Load(Config{SampleRate: 1 << 30, WakeupBatch: 1, PinPath: dir})
 	if err != nil {
 		skipIfUnsupported(t, err)
 		t.Fatal(err)
@@ -2528,7 +2538,7 @@ func TestPinnedCountersDropALoneSlotPin(t *testing.T) {
 	if err := os.Remove(filepath.Join(dir, pinArr)); err != nil {
 		t.Fatal(err)
 	}
-	p, err = Load(Config{WakeupBatch: 1, PinPath: dir})
+	p, err = Load(Config{SampleRate: 1 << 30, WakeupBatch: 1, PinPath: dir})
 	if err != nil {
 		t.Fatalf("load with a lone slot pin: %v", err)
 	}
@@ -2886,7 +2896,7 @@ func TestSampledOnlyLeavesThePinsAlone(t *testing.T) {
 	key := rfmRfmIfaceKey{Ifindex: uint32(ns.Ifindex()), Dir: 0, Proto: 4}
 	pkt := testutil.EthIPv4TCP(net.IPv4(10, 0, 9, 1), net.IPv4(10, 0, 9, 2), 9400, 80)
 
-	p, err := Load(Config{WakeupBatch: 1, PinPath: dir})
+	p, err := Load(Config{SampleRate: 1 << 30, WakeupBatch: 1, PinPath: dir})
 	if err != nil {
 		skipIfUnsupported(t, err)
 		t.Fatal(err)
@@ -2932,7 +2942,7 @@ func TestSampledOnlyLeavesThePinsAlone(t *testing.T) {
 	}
 
 	// the next exact load carries on from the pins
-	p2, err := Load(Config{WakeupBatch: 1, PinPath: dir})
+	p2, err := Load(Config{SampleRate: 1 << 30, WakeupBatch: 1, PinPath: dir})
 	if err != nil {
 		t.Fatal(err)
 	}

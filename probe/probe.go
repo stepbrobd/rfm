@@ -54,6 +54,9 @@ type Probe struct {
 }
 
 func Load(cfg Config) (*Probe, error) {
+	if cfg.SampleRate == 0 {
+		return nil, errors.New("sample rate must be > 0")
+	}
 	if cfg.WakeupBatch == 0 {
 		return nil, errors.New("wakeup batch must be > 0")
 	}
@@ -80,10 +83,7 @@ func Load(cfg Config) (*Probe, error) {
 		}
 	}
 
-	// pinned counter maps from a previous run are reused, so a restart or
-	// upgrade keeps the counters monotonic, and one of another shape, size
-	// or flags fails the load, sampled only keeps no counters and leaves the
-	// pins to the next exact load
+	// pinned counters carry over restarts, sampled only leaves them for the next exact load
 	pin := cfg.PinPath != "" && !cfg.SampledOnly
 	var opts ebpf.CollectionOptions
 	var pinned map[string]*ebpf.Map
@@ -125,8 +125,7 @@ func Load(cfg Config) (*Probe, error) {
 		}
 	}
 
-	// a gen of its own per load, so the skip counts a pinned counter array
-	// kept from the last run are drawn again at this run's rate
+	// a gen of its own redraws the skip counts a pinned counter array kept
 	cfgVal := rfmRfmConfig{
 		SampleRate:  cfg.SampleRate,
 		Flags:       cfg.Flags,
