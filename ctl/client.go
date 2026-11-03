@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"net"
 	"net/netip"
-	"strconv"
 	"time"
 )
 
@@ -68,9 +67,11 @@ func (c *Client) Status() (Status, error) {
 	return s, err
 }
 
-func (c *Client) FlowsTop(n int, by string) ([]FlowRow, error) {
+// FlowsTop asks for the n busiest flows by bytes or packets, the agent
+// checks both and defaults an empty one
+func (c *Client) FlowsTop(n, by string) ([]FlowRow, error) {
 	var rows []FlowRow
-	err := c.Do(CmdFlowsTop, map[string]string{"n": strconv.Itoa(n), "by": by}, &rows)
+	err := c.Do(CmdFlowsTop, map[string]string{"n": n, "by": by}, &rows)
 	return rows, err
 }
 
@@ -92,8 +93,12 @@ func (c *Client) RIBSummary() (RIB, error) {
 	return r, err
 }
 
-func (c *Client) SetSampleRate(rate uint32) error {
-	return c.Do(CmdSetRate, map[string]string{"rate": strconv.FormatUint(uint64(rate), 10)}, nil)
+// SetSampleRate asks the agent to sample 1 in rate skbs and returns the rate
+// it applied
+func (c *Client) SetSampleRate(rate string) (Sampling, error) {
+	var s Sampling
+	err := c.Do(CmdSetRate, map[string]string{"rate": rate}, &s)
+	return s, err
 }
 
 func (c *Client) ConfigShow() (string, error) {

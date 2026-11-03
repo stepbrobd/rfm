@@ -114,13 +114,9 @@ var flowsTopCmd = &cobra.Command{
 	Short: "Show the busiest live flows",
 	Args:  cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		n := 20
+		var n string
 		if len(args) == 1 {
-			parsed, err := strconv.Atoi(args[0])
-			if err != nil || parsed < 1 {
-				return fmt.Errorf("the count must be a positive integer, got %q", args[0])
-			}
-			n = parsed
+			n = args[0]
 		}
 		rows, err := ctlClient().FlowsTop(n, flowsTopBy)
 		if err != nil {
@@ -263,17 +259,14 @@ var setSampleRateCmd = &cobra.Command{
 	Short: "Sample 1 in N skbs from now on",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		rate, err := strconv.ParseUint(args[0], 10, 32)
-		if err != nil || rate == 0 {
-			return fmt.Errorf("the rate must be a positive integer, got %q", args[0])
-		}
-		if err := ctlClient().SetSampleRate(uint32(rate)); err != nil {
+		s, err := ctlClient().SetSampleRate(args[0])
+		if err != nil {
 			return err
 		}
-		if emit(cmd, ctl.Sampling{Rate: uint32(rate)}) {
+		if emit(cmd, s) {
 			return nil
 		}
-		fmt.Fprintf(cmd.OutOrStdout(), "sampling 1 in %d\n", rate)
+		fmt.Fprintf(cmd.OutOrStdout(), "sampling 1 in %d\n", s.Rate)
 		return nil
 	},
 }
@@ -326,7 +319,7 @@ func init() {
 		c.PersistentFlags().BoolVar(&ctlJSON, "json", false, "Print the result as JSON")
 		root.AddCommand(c)
 	}
-	flowsTopCmd.Flags().StringVar(&flowsTopBy, "by", "bytes", "Order by bytes or packets")
+	flowsTopCmd.Flags().StringVar(&flowsTopBy, "by", "", "Order by bytes, the default, or packets")
 	flowsCmd.AddCommand(flowsTopCmd, flowsCountCmd)
 	ribCmd.AddCommand(ribLookupCmd, ribSummaryCmd)
 	setCmd.AddCommand(setSampleRateCmd)

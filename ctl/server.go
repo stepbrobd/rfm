@@ -255,10 +255,7 @@ func (s *Server) handle(req Request) (any, error) {
 	case CmdConfigShow:
 		return s.handler.ConfigShow(), nil
 	case CmdReloadMMDB:
-		if err := s.handler.ReloadMMDB(); err != nil {
-			return nil, err
-		}
-		return "reloaded", nil
+		return nil, s.handler.ReloadMMDB()
 	default:
 		return nil, fmt.Errorf("unknown command %q", req.Command)
 	}

@@ -129,7 +129,7 @@ func TestRoundTrip(t *testing.T) {
 		t.Fatalf("status = %+v", st)
 	}
 
-	rows, err := c.FlowsTop(1, "packets")
+	rows, err := c.FlowsTop("1", "packets")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -158,13 +158,10 @@ func TestRoundTrip(t *testing.T) {
 		t.Fatalf("summary = %+v err=%v", sum, err)
 	}
 
-	if err := c.SetSampleRate(50); err != nil {
-		t.Fatal(err)
+	if s, err := c.SetSampleRate("50"); err != nil || s.Rate != 50 || h.rate != 50 {
+		t.Fatalf("set rate = %+v err=%v handler rate %d, want 50", s, err, h.rate)
 	}
-	if h.rate != 50 {
-		t.Fatalf("handler rate = %d, want 50", h.rate)
-	}
-	if err := c.SetSampleRate(5000); err == nil || !strings.Contains(err.Error(), "above max") {
+	if _, err := c.SetSampleRate("5000"); err == nil || !strings.Contains(err.Error(), "above max") {
 		t.Fatalf("set rate error = %v, want the handler's error", err)
 	}
 
@@ -196,7 +193,7 @@ func TestBadRequests(t *testing.T) {
 	if _, err := c.RIBSummary(); err == nil || !strings.Contains(err.Error(), "not configured") {
 		t.Fatalf("rib summary without rib = %v", err)
 	}
-	if err := c.SetSampleRate(0); err == nil {
+	if _, err := c.SetSampleRate("0"); err == nil {
 		t.Fatal("rate 0 must be rejected")
 	}
 }
@@ -207,7 +204,7 @@ func TestHandlerErrorsReachTheClient(t *testing.T) {
 	if _, err := c.Status(); err == nil || err.Error() != "list links: refused by the test" {
 		t.Fatalf("status error = %v, want the handler's error", err)
 	}
-	if _, err := c.FlowsTop(1, "bytes"); err == nil || err.Error() != "list links: refused by the test" {
+	if _, err := c.FlowsTop("1", "bytes"); err == nil || err.Error() != "list links: refused by the test" {
 		t.Fatalf("flows top error = %v, want the handler's error", err)
 	}
 }

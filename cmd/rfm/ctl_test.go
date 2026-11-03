@@ -90,7 +90,7 @@ func runCLI(t *testing.T, sock string, args ...string) (string, error) {
 
 	// a flag keeps what an earlier run set, every run starts from the
 	// defaults
-	ctlJSON, flowsTopBy = false, "bytes"
+	ctlJSON, flowsTopBy = false, ""
 
 	var out bytes.Buffer
 	root.SetOut(&out)
@@ -220,7 +220,7 @@ func TestCLISetSampleRate(t *testing.T) {
 		t.Fatalf("set sample-rate: out=%q err=%v rate=%d", out, err, h.rate)
 	}
 	if _, err := runCLI(t, sock, "set", "sample-rate", "0"); err == nil {
-		t.Fatal("rate 0 must be rejected before reaching the agent")
+		t.Fatal("rate 0 must be rejected")
 	}
 	if _, err := runCLI(t, sock, "set", "sample-rate", "5000"); err == nil || err.Error() != "refused by the fake agent" {
 		t.Fatalf("set sample-rate 5000 = %v, want the agent's error as it sent it", err)
