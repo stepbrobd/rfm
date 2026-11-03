@@ -16,8 +16,8 @@
 }:
 
 writeShellScriptBin "formatter" ''
-  pushd "$(${lib.getExe git} rev-parse --show-toplevel)" > /dev/null
   set -eoux pipefail
+  pushd "$(${lib.getExe git} rev-parse --show-toplevel)" > /dev/null
   shopt -s globstar
   export PATH=${
     lib.makeBinPath [
@@ -42,7 +42,7 @@ writeShellScriptBin "formatter" ''
   ${lib.getExe' go-tools "staticcheck"} ./...
   ${lib.getExe' gomod2nix "gomod2nix"}
 
-  ${lib.getExe' llvmPackages.clang-tools "clang-format"} -i **/*.c **/*.h
+  ${lib.getExe' llvmPackages.clang-tools "clang-format"} -i $(${lib.getExe git} ls-files '*.c' '*.h' ':!bpf/include/vmlinux')
 
   popd
 ''
