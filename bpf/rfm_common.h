@@ -11,7 +11,6 @@
 // drawn under another gen draws it again
 struct rfm_config {
 	__u32 sample_rate;
-	__u32 flags;
 	__u32 wakeup_batch;
 	__u32 gen;
 };

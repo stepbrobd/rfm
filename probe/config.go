@@ -3,7 +3,6 @@ package probe
 // Config is what Load sets up, SetSampleRate changes the rate afterwards
 type Config struct {
 	SampleRate  uint32
-	Flags       uint32
 	WakeupBatch uint32
 	// RingBufSize is the size in bytes of the event ring of each possible
 	// CPU, 0 keeps the 256 KiB of the object

@@ -128,7 +128,6 @@ func Load(cfg Config) (*Probe, error) {
 	// a gen of its own redraws the skip counts a pinned counter array kept
 	cfgVal := rfmRfmConfig{
 		SampleRate:  cfg.SampleRate,
-		Flags:       cfg.Flags,
 		WakeupBatch: cfg.WakeupBatch,
 		Gen:         nextGen(rand.Uint32()),
 	}
