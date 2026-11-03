@@ -110,14 +110,12 @@ func Load(cfg Config) (*Probe, error) {
 		}
 	}
 
-	// write config into BPF map at load time
-	cfgKey := uint32(0)
 	cfgVal := rfmRfmConfig{
 		SampleRate:  cfg.SampleRate,
 		Flags:       cfg.Flags,
 		WakeupBatch: cfg.WakeupBatch,
 	}
-	if err := objs.RfmConfig.Update(cfgKey, cfgVal, ebpf.UpdateAny); err != nil {
+	if err := objs.RfmCfg.Set(cfgVal); err != nil {
 		objs.Close()
 		return nil, fmt.Errorf("write config: %w", err)
 	}
@@ -385,28 +383,26 @@ func (p *Probe) deleteIfaceStats(drop func(ifindex uint32) bool) error {
 }
 
 func (p *Probe) SampleRate() (uint32, error) {
-	key := uint32(0)
 	var cfg rfmRfmConfig
-	if err := p.objs.RfmConfig.Lookup(key, &cfg); err != nil {
+	if err := p.objs.RfmCfg.Get(&cfg); err != nil {
 		return 0, fmt.Errorf("read config: %w", err)
 	}
 	return cfg.SampleRate, nil
 }
 
 // SetSampleRate changes the 1-in-N sampling of the running programs
-// the config map is read per skb, so the change applies at once without
+// the config is read per skb, so the change applies at once without
 // detaching or reloading anything
 func (p *Probe) SetSampleRate(n uint32) error {
 	if n == 0 {
 		return fmt.Errorf("sample rate must be > 0")
 	}
-	key := uint32(0)
 	var cfg rfmRfmConfig
-	if err := p.objs.RfmConfig.Lookup(key, &cfg); err != nil {
+	if err := p.objs.RfmCfg.Get(&cfg); err != nil {
 		return fmt.Errorf("read config: %w", err)
 	}
 	cfg.SampleRate = n
-	if err := p.objs.RfmConfig.Update(key, cfg, ebpf.UpdateAny); err != nil {
+	if err := p.objs.RfmCfg.Set(cfg); err != nil {
 		return fmt.Errorf("write config: %w", err)
 	}
 	return nil

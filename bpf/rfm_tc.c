@@ -26,12 +26,10 @@ struct rfm_vlan_hdr {
 	__u16 encap_proto;
 };
 
-struct {
-	__uint(type, BPF_MAP_TYPE_ARRAY);
-	__uint(max_entries, 1);
-	__type(key, __u32);
-	__type(value, struct rfm_config);
-} rfm_config SEC(".maps");
+// rfm_cfg is set by Load before the programs attach and its rate by
+// SetSampleRate at run time, a global is a direct load where a map needs a
+// lookup call
+struct rfm_config rfm_cfg;
 
 struct {
 	__uint(type, BPF_MAP_TYPE_PERCPU_HASH);
@@ -339,12 +337,11 @@ static __always_inline int rfm_tc(struct __sk_buff *skb, __u8 dir)
 	if (iface_proto == 0)
 		return TCX_NEXT;
 
-	__u32 cfg_key = 0;
-	struct rfm_config *cfg = bpf_map_lookup_elem(&rfm_config, &cfg_key);
-	if (!cfg || cfg->sample_rate == 0)
+	__u32 rate = rfm_cfg.sample_rate;
+	if (rate == 0)
 		return TCX_NEXT;
 
-	if (bpf_get_prandom_u32() % cfg->sample_rate != 0)
+	if (bpf_get_prandom_u32() % rate != 0)
 		return TCX_NEXT;
 
 	// parse IP headers into a stack event
@@ -412,12 +409,12 @@ static __always_inline int rfm_tc(struct __sk_buff *skb, __u8 dir)
 
 	__builtin_memcpy(ring_ev, &ev, sizeof(ev));
 
-	// batch wakeups, only wake epoll every cfg->wakeup_batch events, Load
+	// batch wakeups, only wake epoll every wakeup_batch events, Load
 	// refuses a batch of 0
 	__u64 flags = BPF_RB_NO_WAKEUP;
 	__u32 cnt_key = 0;
 	__u64 *cnt = bpf_map_lookup_elem(&rfm_submit_count, &cnt_key);
-	if (cnt && (++(*cnt) % cfg->wakeup_batch == 0))
+	if (cnt && (++(*cnt) % rfm_cfg.wakeup_batch == 0))
 		flags = BPF_RB_FORCE_WAKEUP;
 	bpf_ringbuf_submit(ring_ev, flags);
 

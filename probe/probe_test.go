@@ -1214,7 +1214,7 @@ func TestSetSampleRate(t *testing.T) {
 
 	// the other config fields survive the update
 	var cfg rfmRfmConfig
-	if err := p.objs.RfmConfig.Lookup(uint32(0), &cfg); err != nil {
+	if err := p.objs.RfmCfg.Get(&cfg); err != nil {
 		t.Fatal(err)
 	}
 	if cfg.WakeupBatch != 64 {

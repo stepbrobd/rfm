@@ -38,7 +38,6 @@ type rfmRfmIfaceValue struct {
 //
 // Used for safe lookups in a Collection or CollectionSpec.
 const (
-	rfmMapRfmConfig       = "rfm_config"
 	rfmMapRfmFlowDrops    = "rfm_flow_drops"
 	rfmMapRfmFlowEvents   = "rfm_flow_events"
 	rfmMapRfmGsoHdrErrors = "rfm_gso_hdr_errors"
@@ -49,6 +48,7 @@ const (
 	rfmMapRfmSubmitCount  = "rfm_submit_count"
 	rfmProgRfmTcEgress    = "rfm_tc_egress"
 	rfmProgRfmTcIngress   = "rfm_tc_ingress"
+	rfmVarRfmCfg          = "rfm_cfg"
 )
 
 // loadRfm returns the embedded CollectionSpec for rfm.
@@ -101,7 +101,6 @@ type rfmProgramSpecs struct {
 //
 // It can be passed ebpf.CollectionSpec.Assign.
 type rfmMapSpecs struct {
-	RfmConfig       *ebpf.MapSpec `ebpf:"rfm_config"`
 	RfmFlowDrops    *ebpf.MapSpec `ebpf:"rfm_flow_drops"`
 	RfmFlowEvents   *ebpf.MapSpec `ebpf:"rfm_flow_events"`
 	RfmGsoHdrErrors *ebpf.MapSpec `ebpf:"rfm_gso_hdr_errors"`
@@ -116,6 +115,7 @@ type rfmMapSpecs struct {
 //
 // It can be passed ebpf.CollectionSpec.Assign.
 type rfmVariableSpecs struct {
+	RfmCfg *ebpf.VariableSpec `ebpf:"rfm_cfg"`
 }
 
 // rfmObjects contains all objects after they have been loaded into the kernel.
@@ -138,7 +138,6 @@ func (o *rfmObjects) Close() error {
 //
 // It can be passed to loadRfmObjects or ebpf.CollectionSpec.LoadAndAssign.
 type rfmMaps struct {
-	RfmConfig       *ebpf.Map `ebpf:"rfm_config"`
 	RfmFlowDrops    *ebpf.Map `ebpf:"rfm_flow_drops"`
 	RfmFlowEvents   *ebpf.Map `ebpf:"rfm_flow_events"`
 	RfmGsoHdrErrors *ebpf.Map `ebpf:"rfm_gso_hdr_errors"`
@@ -151,7 +150,6 @@ type rfmMaps struct {
 
 func (m *rfmMaps) Close() error {
 	return _RfmClose(
-		m.RfmConfig,
 		m.RfmFlowDrops,
 		m.RfmFlowEvents,
 		m.RfmGsoHdrErrors,
@@ -167,6 +165,7 @@ func (m *rfmMaps) Close() error {
 //
 // It can be passed to loadRfmObjects or ebpf.CollectionSpec.LoadAndAssign.
 type rfmVariables struct {
+	RfmCfg *ebpf.Variable `ebpf:"rfm_cfg"`
 }
 
 // rfmPrograms contains all programs after they have been loaded into the kernel.
