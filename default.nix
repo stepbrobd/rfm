@@ -1,6 +1,7 @@
 {
   lib,
   buildGoApplication,
+  goflow2,
   installShellFiles,
   versionCheckHook,
 }:
@@ -46,6 +47,8 @@ buildGoApplication (
       go test -p "$NIX_BUILD_CORES" ./...
       runHook postCheck
     '';
+
+    nativeCheckInputs = [ goflow2 ];
 
     CGO_ENABLED = 0;
 

@@ -6,6 +6,7 @@
   deno,
   go,
   go-tools,
+  goflow2,
   gomod2nix,
   gopls,
   libbpf,
@@ -23,6 +24,7 @@ mkShell {
     deno
     go
     go-tools
+    goflow2
     gomod2nix
     gopls
     llvmPackages.clang-tools
