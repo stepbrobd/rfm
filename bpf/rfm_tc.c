@@ -315,16 +315,11 @@ rfm_count(__u32 ifindex, __u8 dir, __u8 iface_proto, __u32 segs, __u32 len)
 	return sval;
 }
 
-// the programs only observe, so every exit returns TCX_NEXT (TC_ACT_UNSPEC)
-// and later TCX programs and the filters of a clsact or ingress qdisc still
-// run, TC_ACT_OK is TCX_PASS and would end the chain at rfm
-// sampled_only is a constant of each entry point, so the exact programs carry
-// none of the sampled only code
+// TC_ACT_OK would end the tcx chain, every exit returns TCX_NEXT
+// sampled_only is constant per entry point, clang specializes each
 static __always_inline int rfm_tc(struct __sk_buff *skb, __u8 dir,
 				  bool sampled_only)
 {
-	// sampled only draws first from the skip count of the CPU, the packets
-	// it passes over cost nothing more, and keeps no interface counters
 	struct rfm_slot_value *sval = NULL;
 	if (sampled_only) {
 		__u32 rate = rfm_cfg.sample_rate;
@@ -347,9 +342,6 @@ static __always_inline int rfm_tc(struct __sk_buff *skb, __u8 dir,
 		eth_proto = bpf_ntohs(eth->h_proto);
 	}
 
-// todo:
-// - handle PPPoE session frames carrying IPv4 or IPv6
-// - handle MPLS label stacks when the monitored link carries labeled IP
 #pragma unroll
 	for (int i = 0; i < 2; i++) {
 		if (eth_proto != ETH_P_8021Q && eth_proto != ETH_P_8021AD)
@@ -377,27 +369,16 @@ static __always_inline int rfm_tc(struct __sk_buff *skb, __u8 dir,
 		break;
 	}
 
-	// GRO (ingress) and GSO (egress) hand the tc hook one skb that stands
-	// for several wire packets, so account for the segments it carries and
-	// for the headers the merge removed, the counters then count wire
-	// packets after segmentation, on egress before the qdisc may drop them
+	// a gro or gso skb stands for gso_segs wire packets
 	__u32 len = skb->len;
 	__u32 segs = 1;
 	if (skb->gso_size && iface_proto) {
 		segs = skb->gso_segs;
-		// from 6.19 the kernel adds the header bytes of the extra
-		// segments to wire_len before the ingress hook too, counted
-		// from the network header, an older kernel or an skb without a
-		// transport header leaves it within a few tag bytes of the
-		// network length, short of a smallest IPv4 and UDP header for
-		// each extra segment
+		// ingress wire_len from 6.19 lacks only the ethernet headers
 		bool ingress_wire =
 			dir == RFM_DIR_INGRESS && segs > 1 &&
-			skb->wire_len >=
-				len - l3_off + (segs - 1) * RFM_SEG_HDR_MIN;
-		// egress and such an ingress skb take their bytes from wire_len,
-		// the rest and an skb without a segment count need the header
-		// size
+			skb->wire_len >= len - sizeof(struct ethhdr) +
+						 (segs - 1) * RFM_SEG_HDR_MIN;
 		__u32 hdr_len = 0;
 		if ((dir == RFM_DIR_INGRESS && !ingress_wire) || segs == 0) {
 			hdr_len = rfm_hdr_len(skb, l3, end, eth_proto, l3_off);
@@ -416,39 +397,28 @@ static __always_inline int rfm_tc(struct __sk_buff *skb, __u8 dir,
 			       skb->gso_size;
 		if (segs == 0)
 			segs = 1;
+		// egress wire_len holds the headers of every segment
 		if (dir == RFM_DIR_EGRESS)
-			// qdisc_pkt_len_init() already added the header bytes
-			// of every extra segment before the egress hook ran
 			len = skb->wire_len;
 		else if (ingress_wire)
-			len = skb->wire_len + segs * l3_off;
+			len = skb->wire_len + segs * sizeof(struct ethhdr);
 		else
 			len += (segs - 1) * hdr_len;
 	}
 
-	// the kernel holds the outer VLAN tag of a received frame in the skb
-	// from before the ingress hook, and a VLAN device hands its frames to
-	// the egress hook of the lower device with the tag in the skb, either
-	// way every wire packet carries the 4 tag bytes outside skb->len
+	// a tag held in the skb adds 4 wire bytes per segment
 	__u32 l2_len = l3_off;
 	if (skb->vlan_present) {
 		l2_len += sizeof(struct rfm_vlan_hdr);
 		len += segs * sizeof(struct rfm_vlan_hdr);
 	}
 
-	// iface stats are always updated, not gated by sampling, unless
-	// sampled only keeps none
 	if (!sampled_only)
 		sval = rfm_count(skb->ifindex, dir, iface_proto, segs, len);
 
-	// skip non-IP traffic for flow events
 	if (iface_proto == 0)
 		return TCX_NEXT;
 
-	// a slot samples after a gap drawn uniform from 1 to 2 * rate - 1, one
-	// draw per sample instead of one per packet with the same mean of 1 in
-	// rate, an interface without a slot keeps a draw per packet, sampled
-	// only has drawn already
 	if (!sampled_only) {
 		__u32 rate = rfm_cfg.sample_rate;
 		if (rate == 0)
@@ -461,9 +431,7 @@ static __always_inline int rfm_tc(struct __sk_buff *skb, __u8 dir,
 		}
 	}
 
-	// every check that can fail runs before the reservation, so the ring
-	// only drops events that parsed, the actual IHL skips IPv4 options and
-	// the walk skips IPv6 extension headers
+	// nothing after the reservation can fail
 	__u8 proto;
 	bool later_frag;
 	__u32 l4_off =
@@ -471,8 +439,6 @@ static __always_inline int rfm_tc(struct __sk_buff *skb, __u8 dir,
 	if (!l4_off)
 		return TCX_NEXT;
 
-	// extract ports for TCP and UDP, only the first fragment carries the
-	// transport header
 	__be16 ports[2] = {};
 	if (!later_frag && (proto == IPPROTO_TCP || proto == IPPROTO_UDP)) {
 		void *th = l3 + l4_off;
@@ -495,8 +461,7 @@ static __always_inline int rfm_tc(struct __sk_buff *skb, __u8 dir,
 		return TCX_NEXT;
 	}
 
-	// the record is written in place, every byte of it since the ring
-	// memory holds older records, rfm_l4 checked the IP header against end
+	// ring memory holds older records, every byte is written
 	ev->tstamp = bpf_ktime_get_boot_ns();
 	ev->ifindex = skb->ifindex;
 	ev->dir = dir;
@@ -504,7 +469,7 @@ static __always_inline int rfm_tc(struct __sk_buff *skb, __u8 dir,
 	ev->segs = segs > 0xffff ? 0xffff : segs;
 	if (eth_proto == ETH_P_IP) {
 		struct iphdr *ip = l3;
-		// map IPv4 to v6: ::ffff:x.x.x.x
+		// ipv4 mapped ipv6 address
 		__builtin_memset(ev->src_addr, 0, 10);
 		ev->src_addr[10] = 0xff;
 		ev->src_addr[11] = 0xff;
@@ -524,9 +489,7 @@ static __always_inline int rfm_tc(struct __sk_buff *skb, __u8 dir,
 	ev->l2_len = l2_len;
 	__builtin_memset(ev->_pad, 0, sizeof(ev->_pad));
 
-	// batch wakeups, only wake epoll every wakeup_batch events, counted
-	// down in the slot entry or per CPU for an interface without a slot,
-	// any wakeup drains the whole ring, Load refuses a batch of 0
+	// wake the reader once every wakeup_batch events, Load refuses 0
 	__u64 flags = BPF_RB_NO_WAKEUP;
 	if (sval) {
 		if (sval->wake <= 1) {

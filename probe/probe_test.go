@@ -1051,30 +1051,34 @@ func TestIngressGSOTakesTheKernelWireLen(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+	// wire_len from 6.19 counts every segment's headers but ethernet
+	kernelWire := func(frame []byte) uint32 {
+		segHdr := uint32(len(frame) - testutil.EthHdrLen - gsoPayload)
+		return uint32(len(frame)-testutil.EthHdrLen) + (gsoSegs-1)*segHdr
+	}
+	// a wire_len of 0, as before 6.19, takes the header parse
 	frame := gsoFrame(4900)
-	netLen := uint32(len(frame) - testutil.EthHdrLen)
-	segHdr := uint32(gsoHdrLen - testutil.EthHdrLen)
-	// what the kernel leaves in wire_len from 6.19, the network length
-	// plus the network and transport header of every extra segment
-	kernelWire := netLen + (gsoSegs-1)*segHdr
-
-	// a wire_len of 0 leaves the test run's own length, as an older kernel
-	// leaves the skb's, the header parse and the kernel's wire_len count
-	// the same wire bytes
 	run(frame, 0)
 	wantIfaceStats(t, p, key, gsoSegs, gsoWire)
-	run(frame, kernelWire)
+	run(frame, kernelWire(frame))
 	wantIfaceStats(t, p, key, 2*gsoSegs, 2*gsoWire)
 
-	// with the kernel's wire_len the headers are not parsed, an ihl of 4
-	// that does not parse costs nothing
+	// the inner tag of a qinq frame stays in the frame and in every segment
+	tagged := slices.Concat(frame[:12], []byte{0x81, 0x00, 0, 42}, frame[12:])
+	const taggedWire = gsoWire + gsoSegs*testutil.VLANHdrLen
+	run(tagged, 0)
+	wantIfaceStats(t, p, key, 3*gsoSegs, 2*gsoWire+taggedWire)
+	run(tagged, kernelWire(tagged))
+	wantIfaceStats(t, p, key, 4*gsoSegs, 2*gsoWire+2*taggedWire)
+
+	// an ihl of 4 does not parse, and the kernel's wire_len needs no parse
 	frame[testutil.EthHdrLen] = 0x44
-	run(frame, kernelWire)
+	run(frame, kernelWire(frame))
 	if n, err := p.GSOHeaderErrors(); err != nil || n != 0 {
 		t.Fatalf("gso header errors = %d, %v, want none with the kernel's wire_len", n, err)
 	}
-	wantIfaceStats(t, p, key, 3*gsoSegs, 3*gsoWire)
-	// without it they are, and one that does not parse is counted
+	wantIfaceStats(t, p, key, 5*gsoSegs, 3*gsoWire+2*taggedWire)
+	// the header parse counts it
 	run(frame, 0)
 	if n, err := p.GSOHeaderErrors(); err != nil || n != 1 {
 		t.Fatalf("gso header errors = %d, %v, want 1 without the kernel's wire_len", n, err)
