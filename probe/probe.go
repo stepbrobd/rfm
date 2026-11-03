@@ -82,10 +82,12 @@ func Load(cfg Config) (*Probe, error) {
 
 	// pinned counter maps from a previous run are reused, so a restart or
 	// upgrade keeps the counters monotonic, and one of another shape, size
-	// or flags fails the load
+	// or flags fails the load, sampled only keeps no counters and leaves the
+	// pins to the next exact load
+	pin := cfg.PinPath != "" && !cfg.SampledOnly
 	var opts ebpf.CollectionOptions
 	var pinned map[string]*ebpf.Map
-	if cfg.PinPath != "" {
+	if pin {
 		pinned, err = loadPins(cfg.PinPath, spec)
 		if err != nil {
 			return nil, err
@@ -107,7 +109,7 @@ func Load(cfg Config) (*Probe, error) {
 	if err != nil {
 		return nil, fmt.Errorf("load BPF: %w", err)
 	}
-	if cfg.PinPath != "" {
+	if pin {
 		for name, m := range map[string]*ebpf.Map{
 			pinStats: objs.RfmIfaceStats,
 			pinSlot:  objs.RfmIfaceSlot,

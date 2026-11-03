@@ -2855,6 +2855,70 @@ func TestSampledOnlyKeepsNoInterfaceCounters(t *testing.T) {
 	}
 }
 
+func TestSampledOnlyLeavesThePinsAlone(t *testing.T) {
+	testutil.RequireRoot(t)
+
+	dir := pinDir(t)
+	ns := testutil.NewNS(t)
+	key := rfmRfmIfaceKey{Ifindex: uint32(ns.Ifindex()), Dir: 0, Proto: 4}
+	pkt := testutil.EthIPv4TCP(net.IPv4(10, 0, 9, 1), net.IPv4(10, 0, 9, 2), 9400, 80)
+
+	p, err := Load(Config{WakeupBatch: 1, PinPath: dir})
+	if err != nil {
+		skipIfUnsupported(t, err)
+		t.Fatal(err)
+	}
+	if err := p.Attach(ns.Ifindex()); err != nil {
+		skipIfUnsupported(t, err)
+		p.Close()
+		t.Fatal(err)
+	}
+	ns.SendRaw(t, pkt)
+	testutil.Eventually(t, time.Second, 10*time.Millisecond, func() error {
+		if packets, _ := ifaceStats(t, p, key); packets == 0 {
+			return fmt.Errorf("expected packets > 0")
+		}
+		return nil
+	})
+	before, _ := ifaceStats(t, p, key)
+	if err := p.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	// sampled only shows none of the pinned counters, which would stay
+	// flat while it runs, and changes none of them
+	ps, err := Load(Config{SampleRate: 1, WakeupBatch: 1, PinPath: dir, SampledOnly: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := ps.Attach(ns.Ifindex()); err != nil {
+		ps.Close()
+		t.Fatal(err)
+	}
+	ns.SendRaw(t, pkt)
+	counters, err := ps.Counters()
+	if err != nil {
+		ps.Close()
+		t.Fatal(err)
+	}
+	if err := ps.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if len(counters) != 0 {
+		t.Fatalf("counters in sampled only mode = %+v, want none of the pinned ones", counters)
+	}
+
+	// the next exact load carries on from the pins
+	p2, err := Load(Config{WakeupBatch: 1, PinPath: dir})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer p2.Close()
+	if after, _ := ifaceStats(t, p2, key); after != before {
+		t.Fatalf("packets after a sampled only run = %d, want %d from the pins", after, before)
+	}
+}
+
 func TestSampledOnlyKeepsTheRate(t *testing.T) {
 	testutil.RequireRoot(t)
 
