@@ -115,6 +115,21 @@ in
         # seconds allows, which only a unit without a start limit survives
         systemd.services.rfm.serviceConfig.RestartSec = std.mkForce "100ms";
       };
+
+    machine6 = {
+      imports = [ (common.mkBase "192.168.1.6") ];
+
+      services.rfm = {
+        enable = true;
+        settings.agent = {
+          interfaces = [ "eth1" ];
+          bpf = {
+            sample_rate = 1;
+            sampled_only = true;
+          };
+        };
+      };
+    };
   };
 
   testScript = common.helpers + ''
@@ -161,6 +176,33 @@ in
       assert "1 in 7" in m.succeed("rfm status"), "sample rate change not visible in status"
       m.succeed("rfm status --json | grep -q '\"rate\": 7'")
       m.succeed("rfm set sample-rate 1")
+
+    # the pinned interface counters carry over a restart
+    def eth1_counters(m) -> dict[str, float]:
+      metrics = m.succeed("curl -sf http://localhost:9669/metrics")
+      return {
+        line.rsplit(" ", 1)[0]: float(line.rsplit(" ", 1)[1])
+        for line in metrics.splitlines()
+        if line.startswith("rfm_interface_") and 'ifname="eth1"' in line
+      }
+
+    machine2.succeed("ping -c 3 192.168.1.1")
+    before = eth1_counters(machine2)
+    assert before, "no eth1 counters before the restart"
+    machine2.succeed("systemctl restart rfm.service")
+    machine2.wait_for_open_port(9669)
+    after = eth1_counters(machine2)
+    dropped = {series: (value, after.get(series)) for series, value in before.items() if after.get(series, 0) < value}
+    assert not dropped, f"counters dropped across the restart: {dropped}"
+
+    # sampled only keeps the flow metrics and no interface counters
+    machine6.wait_for_unit("rfm.service")
+    machine6.wait_for_open_port(9669)
+    machine6.succeed("ping -c 3 192.168.1.2")
+    wait_for_positive_metric(machine6, "rfm_flow_packets_total", ifname="eth1")
+    metrics = machine6.succeed("curl -sf http://localhost:9669/metrics")
+    exact = [line for line in metrics.splitlines() if "rfm_interface_" in line]
+    assert not exact, f"sampled only exports interface counters: {exact}"
 
     # a start that fails until a file shows up is retried for as long as it
     # fails, on machine5 well past the default limit of five starts in ten
