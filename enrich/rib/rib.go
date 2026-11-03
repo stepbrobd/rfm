@@ -26,7 +26,7 @@ import (
 const (
 	// bmpScannerMaxBuf caps BMP message size, very big and prob not necessary (just in case)
 	bmpScannerMaxBuf = 1 << 20
-	// removeChunk is how many routes RemovePeer withdraws per hold of mu, the
+	// removeChunk is how many routes removePeer withdraws per hold of mu, the
 	// collector's read loop waits for labels meanwhile
 	removeChunk = 1024
 	// maxSessions bounds the BMP sessions open at once, a router runs one
@@ -159,18 +159,18 @@ type routeMetaState struct {
 	refs int
 }
 
-// Update is a batch of RIB changes
+// update is a batch of RIB changes
 // Reach routes carry their own peer, Withdraw paths are withdrawn from Peer,
 // or from every peer when Peer is the zero value
-type Update struct {
+type update struct {
 	Peer     Peer
 	Reach    []Route
-	Withdraw []Withdrawal
+	Withdraw []withdrawal
 }
 
-// Withdrawal names the path a withdraw removes, PathID is the ADD-PATH path
+// withdrawal names the path a withdraw removes, PathID is the ADD-PATH path
 // id and 0 when the session did not negotiate ADD-PATH
-type Withdrawal struct {
+type withdrawal struct {
 	Prefix netip.Prefix
 	PathID uint32
 }
@@ -184,17 +184,12 @@ type Summary struct {
 	Peers int
 }
 
-// Table is a longest-prefix-match routing table
-// every view keeps its routes in a trie of its own and best keeps the route
-// that wins per prefix, so a prefix that one view announces costs an entry
-// in two tries and no map, and removing a view walks only its own routes
-type Table struct {
-	// writeMu serializes the writers, RemovePeer releases mu between chunks
-	// for the readers but no writer may run then, best still counts the
-	// routes of the view it takes apart
-	writeMu sync.Mutex
-	mu      sync.RWMutex
-	best    bart.Table[bestRoute]
+// table keeps the routes of every view in a trie of its own and the route
+// that wins each prefix in best, its writers run one at a time under
+// Server.viewsMu
+type table struct {
+	mu   sync.RWMutex
+	best bart.Table[bestRoute]
 	// views holds the views with at least one route, order holds the same
 	// views by preference, see betterPeer
 	views    map[Peer]*view
@@ -214,9 +209,8 @@ type Table struct {
 	limitLogged time.Time
 }
 
-// NewTable creates an empty RIB table
-func NewTable() *Table {
-	return &Table{
+func newTable() *table {
+	return &table{
 		views:     make(map[Peer]*view),
 		metas:     make(map[uint64]*routeMetaState),
 		metaKeys:  make(map[routeMetaKey]uint64),
@@ -226,16 +220,13 @@ func NewTable() *Table {
 	}
 }
 
-// Apply applies a batch of route updates
-func (t *Table) Apply(update Update) {
-	t.writeMu.Lock()
-	defer t.writeMu.Unlock()
+func (t *table) apply(u update) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	for _, w := range update.Withdraw {
+	for _, w := range u.Withdraw {
 		prefix := w.Prefix.Masked()
-		if update.Peer == (Peer{}) {
+		if u.Peer == (Peer{}) {
 			// deleteRoute may drop the view from the map, which a range
 			// over it allows
 			for _, v := range t.views {
@@ -243,24 +234,19 @@ func (t *Table) Apply(update Update) {
 			}
 			continue
 		}
-		if v := t.views[update.Peer]; v != nil {
+		if v := t.views[u.Peer]; v != nil {
 			t.deleteRoute(prefix, w.PathID, v)
 		}
 	}
-	for _, route := range update.Reach {
+	for _, route := range u.Reach {
 		t.insertRoute(route)
 	}
 }
 
-// RemovePeer withdraws every route learned from peer
-// the view leaves the table before the walk over its routes, so withdrawn
-// picks the next best among the other views, and the walk releases mu
-// every removeChunk routes while it keeps writeMu, readers then wait for
-// one chunk and not for a whole table, and until the walk gets to a prefix
-// they still find the view's route for it through best
-func (t *Table) RemovePeer(peer Peer) {
-	t.writeMu.Lock()
-	defer t.writeMu.Unlock()
+// removePeer withdraws every route of the view peer, releasing mu every
+// removeChunk routes for the readers, which find the view's route for a
+// prefix through best until the walk gets to it
+func (t *table) removePeer(peer Peer) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
@@ -286,20 +272,20 @@ func (t *Table) RemovePeer(peer Peer) {
 	}
 }
 
-// RemovePeerViews withdraws every route learned from the pre and the post
+// removePeerViews withdraws every route learned from the pre and the post
 // policy view of peer's address and distinguisher
 // peer up and peer down concern the BGP session, which feeds both views, and
 // a speaker need not set the L flag of their per peer header to match the
 // routes, BIRD always sends them as pre policy
-func (t *Table) RemovePeerViews(peer Peer) {
+func (t *table) removePeerViews(peer Peer) {
 	for _, post := range []bool{false, true} {
 		peer.PostPolicy = post
-		t.RemovePeer(peer)
+		t.removePeer(peer)
 	}
 }
 
-// Lookup returns the best matching route for addr
-func (t *Table) Lookup(addr netip.Addr) (Route, bool) {
+// lookup returns the best matching route for addr
+func (t *table) lookup(addr netip.Addr) (Route, bool) {
 	addr = addr.Unmap()
 
 	t.mu.RLock()
@@ -319,15 +305,13 @@ func (t *Table) Lookup(addr netip.Addr) (Route, bool) {
 	return t.route(prefix, value)
 }
 
-// Enrich returns only the labels Prometheus needs
-// a default route labels nothing, its origin is the upstream that carries
-// the traffic and not the network that owns the address, so the next
-// backend gets to label it
-func (t *Table) Enrich(src, dst netip.Addr) (collector.Labels, collector.Labels) {
+// enrich labels nothing from a default route, its origin is the upstream
+// that carries the traffic and not the network that owns the address
+func (t *table) enrich(src, dst netip.Addr) (collector.Labels, collector.Labels) {
 	return t.labels(src), t.labels(dst)
 }
 
-func (t *Table) labels(addr netip.Addr) collector.Labels {
+func (t *table) labels(addr netip.Addr) collector.Labels {
 	addr = addr.Unmap()
 
 	t.mu.RLock()
@@ -340,9 +324,9 @@ func (t *Table) labels(addr netip.Addr) collector.Labels {
 	return collector.Labels{ASN: best.originASN}
 }
 
-// Summary counts the prefixes and routes in the table and the views that
+// summary counts the prefixes and routes in the table and the views that
 // hold them
-func (t *Table) Summary() Summary {
+func (t *table) summary() Summary {
 	t.mu.RLock()
 	defer t.mu.RUnlock()
 
@@ -354,8 +338,8 @@ func (t *Table) Summary() Summary {
 	}
 }
 
-// Peers lists the views with at least one route
-func (t *Table) Peers() []Peer {
+// peers lists the views with at least one route
+func (t *table) peers() []Peer {
 	t.mu.RLock()
 	defer t.mu.RUnlock()
 
@@ -367,7 +351,7 @@ func (t *Table) Peers() []Peer {
 }
 
 // holds reports whether the table holds a route of peer
-func (t *Table) holds(peer Peer) bool {
+func (t *table) holds(peer Peer) bool {
 	t.mu.RLock()
 	defer t.mu.RUnlock()
 
@@ -377,7 +361,7 @@ func (t *Table) holds(peer Peer) bool {
 // Server owns a BMP listener and an in-memory RIB
 type Server struct {
 	listener net.Listener
-	table    *Table
+	table    *table
 	done     chan struct{}
 	wg       sync.WaitGroup
 	connsMu  sync.Mutex
@@ -454,16 +438,16 @@ func (s *Server) sessionOpened(conn net.Conn) *session {
 // out, and an update without routes, such as an End-of-RIB marker, changes
 // nothing, the update runs under viewsMu so purgeStale cannot remove the
 // view between the update and the record
-func (s *Server) apply(sess *session, update Update) {
-	if len(update.Reach) == 0 && len(update.Withdraw) == 0 {
+func (s *Server) apply(sess *session, u update) {
+	if len(u.Reach) == 0 && len(u.Withdraw) == 0 {
 		return
 	}
 
 	s.viewsMu.Lock()
 	defer s.viewsMu.Unlock()
 
-	s.table.Apply(update)
-	view := update.Peer
+	s.table.apply(u)
+	view := u.Peer
 	if s.table.holds(view) {
 		if s.owners == nil {
 			s.owners = make(map[Peer]*session)
@@ -492,7 +476,7 @@ func (s *Server) peerChanged(peer Peer) {
 	s.viewsMu.Lock()
 	defer s.viewsMu.Unlock()
 
-	s.table.RemovePeerViews(peer)
+	s.table.removePeerViews(peer)
 	for _, post := range []bool{false, true} {
 		peer.PostPolicy = post
 		delete(s.owners, peer)
@@ -537,7 +521,7 @@ func (s *Server) purgeStale() {
 			if sess.speaker != view.Speaker || now.Before(start.Add(grace)) {
 				continue
 			}
-			s.table.RemovePeer(view)
+			s.table.removePeer(view)
 			delete(s.stale, view)
 			log.Info("bmp view aged out", "speaker", view.Speaker, "peer", view.Address, "post_policy", view.PostPolicy)
 			break
@@ -565,7 +549,7 @@ func (s *Server) sweep() {
 func newServer(ln net.Listener) *Server {
 	return &Server{
 		listener:    ln,
-		table:       NewTable(),
+		table:       newTable(),
 		done:        make(chan struct{}),
 		failed:      make(chan struct{}),
 		conns:       make(map[net.Conn]struct{}),
@@ -588,7 +572,7 @@ type Stats struct {
 	// held the most routes or views it keeps
 	RoutesRejected uint64
 	// Inconsistencies counts the lookups and updates that found the RIB
-	// contradicting itself, a bug in rfm, see Table.fault
+	// contradicting itself, a bug in rfm, see table.fault
 	Inconsistencies uint64
 }
 
@@ -629,17 +613,17 @@ func Listen(cfg config.RIBConfig) (*Server, error) {
 }
 
 func (s *Server) Enrich(src, dst netip.Addr) (collector.Labels, collector.Labels) {
-	return s.table.Enrich(src, dst)
+	return s.table.enrich(src, dst)
 }
 
 // Lookup returns the best matching route for addr
 func (s *Server) Lookup(addr netip.Addr) (Route, bool) {
-	return s.table.Lookup(addr)
+	return s.table.lookup(addr)
 }
 
-// Table exposes the RIB for inspection
-func (s *Server) Table() *Table {
-	return s.table
+// Summary counts what the RIB holds
+func (s *Server) Summary() Summary {
+	return s.table.summary()
 }
 
 func (s *Server) Close() error {
@@ -722,11 +706,6 @@ func (s *Server) accept() {
 }
 
 // handleConn reads one BMP session
-// a peer down message withdraws that peer, and a peer up message withdraws
-// what an earlier session announced for the peer, because the speaker dumps
-// the peer's table again right after it, routes survive the end of a session
-// so a speaker restart leaves enrichment in place until the next dump, and
-// purgeStale drops the views the next session does not announce again
 func (s *Server) handleConn(conn net.Conn) {
 	log.Info("bmp session opened", "remote", conn.RemoteAddr())
 	sess := s.sessionOpened(conn)
@@ -738,21 +717,11 @@ func (s *Server) handleConn(conn net.Conn) {
 	scanner.Split(splitBMP)
 	scanner.Buffer(nil, bmpScannerMaxBuf)
 
-	var messages int
-	var changes int
-	var parseErrors int
+	var messages, parseErrors int
 	var appliedLogged bool
-	seenTypes := make(map[uint8]struct{})
-	// peers holds the views the session names for the log line at its end,
-	// at most maxViews of them
-	peers := make(map[Peer]struct{})
 
-	// addPath holds the decode options of the peers whose peer up shows
-	// that they send ADD-PATH to the monitored router, and nil for those
-	// whose peer up did not parse, keyed by address and distinguisher, the
-	// policy views of a peer share its session
-	// it holds at most maxViews peers, overflow records that a peer up
-	// came past them
+	// addPath holds the decode options of at most maxViews peers whose peer
+	// up shows ADD-PATH, nil for one whose peer up did not parse
 	addPath := make(map[Peer][]*bgp.MarshallingOption)
 	var overflow bool
 	options := func(h bmp.BMPPeerHeader) []*bgp.MarshallingOption {
@@ -760,11 +729,8 @@ func (s *Server) handleConn(conn net.Conn) {
 		peer.PostPolicy = false
 		return addPath[peer]
 	}
-	// undecodable reports whether the session cannot read the updates of
-	// the peer of h, a peer up that did not parse leaves the capabilities
-	// of the peer unknown, and without them ADD-PATH path ids read as
-	// prefixes, after an overflow any peer the session does not hold may
-	// send them
+	// undecodable reports whether path ids the session cannot tell from
+	// prefixes may lead the updates of the peer of h
 	undecodable := func(h bmp.BMPPeerHeader) bool {
 		peer := peerFromHeader(sess.speaker, h)
 		peer.PostPolicy = false
@@ -793,13 +759,6 @@ func (s *Server) handleConn(conn net.Conn) {
 			}
 		}
 
-		if msg.Header.Type != bmp.BMP_MSG_ROUTE_MONITORING {
-			if _, ok := seenTypes[msg.Header.Type]; !ok {
-				log.Info("bmp message received", "remote", conn.RemoteAddr(), "type", msg.Header.Type)
-				seenTypes[msg.Header.Type] = struct{}{}
-			}
-		}
-
 		switch msg.Header.Type {
 		case bmp.BMP_MSG_PEER_UP_NOTIFICATION:
 			peer := peerFromHeader(sess.speaker, msg.PeerHeader)
@@ -825,16 +784,10 @@ func (s *Server) handleConn(conn net.Conn) {
 		case bmp.BMP_MSG_PEER_DOWN_NOTIFICATION:
 			peer := peerFromHeader(sess.speaker, msg.PeerHeader)
 			s.peerChanged(peer)
-			for _, post := range []bool{false, true} {
-				peer.PostPolicy = post
-				delete(peers, peer)
-			}
 			peer.PostPolicy = false
 			delete(addPath, peer)
 			log.Info("bmp peer down", "remote", conn.RemoteAddr(), "peer", peer.Address)
 			continue
-		case bmp.BMP_MSG_ROUTE_MONITORING:
-			debugRouteMonitoring(conn.RemoteAddr(), msg)
 		}
 
 		update, ok := updateFromBMP(sess.speaker, msg)
@@ -843,36 +796,14 @@ func (s *Server) handleConn(conn net.Conn) {
 		}
 		if treatAsWithdraw {
 			for _, route := range update.Reach {
-				update.Withdraw = append(update.Withdraw, Withdrawal{Prefix: route.Prefix, PathID: route.PathID})
+				update.Withdraw = append(update.Withdraw, withdrawal{Prefix: route.Prefix, PathID: route.PathID})
 			}
 			update.Reach = nil
 		}
-		if len(peers) < maxViews {
-			peers[update.Peer] = struct{}{}
+		if !appliedLogged && (len(update.Reach) > 0 || len(update.Withdraw) > 0) {
+			log.Info("bmp route monitoring applied", "remote", conn.RemoteAddr(), "reach", len(update.Reach), "withdraw", len(update.Withdraw))
+			appliedLogged = true
 		}
-
-		if len(update.Reach) > 0 || len(update.Withdraw) > 0 {
-			if !appliedLogged {
-				log.Info(
-					"bmp route monitoring applied",
-					"remote", conn.RemoteAddr(),
-					"reach", len(update.Reach),
-					"withdraw", len(update.Withdraw),
-				)
-				appliedLogged = true
-			}
-
-			if log.GetLevel() <= log.DebugLevel {
-				log.Debug(
-					"bmp route monitoring applied",
-					"remote", conn.RemoteAddr(),
-					"reach", len(update.Reach),
-					"withdraw", len(update.Withdraw),
-				)
-			}
-		}
-
-		changes += len(update.Reach) + len(update.Withdraw)
 		s.apply(sess, update)
 	}
 
@@ -887,14 +818,7 @@ func (s *Server) handleConn(conn net.Conn) {
 		log.Error("read bmp stream", "remote", conn.RemoteAddr(), "err", err)
 	}
 
-	log.Info(
-		"bmp session closed",
-		"remote", conn.RemoteAddr(),
-		"messages", messages,
-		"parse_errors", parseErrors,
-		"changes", changes,
-		"peers", len(peers),
-	)
+	log.Info("bmp session closed", "remote", conn.RemoteAddr(), "messages", messages, "parse_errors", parseErrors)
 }
 
 // salvage returns what a message that failed to parse still offers, and
@@ -1024,24 +948,24 @@ func peerFromHeader(speaker netip.Addr, h bmp.BMPPeerHeader) Peer {
 	return peer
 }
 
-func updateFromBMP(speaker netip.Addr, msg *bmp.BMPMessage) (Update, bool) {
+func updateFromBMP(speaker netip.Addr, msg *bmp.BMPMessage) (update, bool) {
 	if msg.Header.Type != bmp.BMP_MSG_ROUTE_MONITORING {
-		return Update{}, false
+		return update{}, false
 	}
 
 	body, ok := msg.Body.(*bmp.BMPRouteMonitoring)
 	if !ok || body.BGPUpdate == nil {
-		return Update{}, false
+		return update{}, false
 	}
 
 	updateMsg, ok := body.BGPUpdate.Body.(*bgp.BGPUpdate)
 	if !ok {
-		return Update{}, false
+		return update{}, false
 	}
 
 	attrs := routeAttrs(updateMsg.PathAttributes, msg.PeerHeader.Flags&bmp.BMP_PEER_FLAG_TWO_AS != 0)
 
-	out := Update{Peer: peerFromHeader(speaker, msg.PeerHeader)}
+	out := update{Peer: peerFromHeader(speaker, msg.PeerHeader)}
 	reach := func(nlri bgp.AddrPrefixInterface) {
 		if prefix, ok := prefixFromNLRI(nlri); ok {
 			route := attrs.route(prefix, out.Peer, msg.PeerHeader.PeerAS)
@@ -1051,7 +975,7 @@ func updateFromBMP(speaker netip.Addr, msg *bmp.BMPMessage) (Update, bool) {
 	}
 	withdraw := func(nlri bgp.AddrPrefixInterface) {
 		if prefix, ok := prefixFromNLRI(nlri); ok {
-			out.Withdraw = append(out.Withdraw, Withdrawal{Prefix: prefix, PathID: nlri.PathIdentifier()})
+			out.Withdraw = append(out.Withdraw, withdrawal{Prefix: prefix, PathID: nlri.PathIdentifier()})
 		}
 	}
 
@@ -1130,92 +1054,9 @@ func addPathModes(msg *bgp.BGPMessage) map[bgp.RouteFamily]bgp.BGPAddPathMode {
 	return modes
 }
 
-// debugRouteMonitoring logs a summary of a route monitoring message
-// arguments are built before log.Debug checks the level, and the summary
-// costs about as much as parsing the message, so the level is checked first
-func debugRouteMonitoring(remote net.Addr, msg *bmp.BMPMessage) {
-	if log.GetLevel() > log.DebugLevel {
-		return
-	}
-	log.Debug(
-		"bmp route monitoring raw",
-		"remote", remote,
-		"summary", describeRouteMonitoring(msg),
-	)
-}
-
-func describeRouteMonitoring(msg *bmp.BMPMessage) string {
-	body, ok := msg.Body.(*bmp.BMPRouteMonitoring)
-	if !ok || body.BGPUpdate == nil {
-		return "missing bgp update"
-	}
-
-	out := []string{
-		fmt.Sprintf("bgp_type=%d", body.BGPUpdate.Header.Type),
-	}
-
-	update, ok := body.BGPUpdate.Body.(*bgp.BGPUpdate)
-	if !ok {
-		return strings.Join(out, " ")
-	}
-
-	end, rf := update.IsEndOfRib()
-	out = append(
-		out,
-		fmt.Sprintf("eor=%t", end),
-		fmt.Sprintf("rf=%d", rf),
-		fmt.Sprintf("nlri=%d", len(update.NLRI)),
-		fmt.Sprintf("withdraw=%d", len(update.WithdrawnRoutes)),
-		fmt.Sprintf("attrs=%d", len(update.PathAttributes)),
-	)
-
-	if len(update.NLRI) > 0 {
-		out = append(out, "nlri0="+describePrefix(update.NLRI[0]))
-	}
-	if len(update.WithdrawnRoutes) > 0 {
-		out = append(out, "withdraw0="+describePrefix(update.WithdrawnRoutes[0]))
-	}
-
-	for _, attr := range update.PathAttributes {
-		switch a := attr.(type) {
-		case *bgp.PathAttributeMpReachNLRI:
-			out = append(
-				out,
-				fmt.Sprintf("mp_reach=%d", len(a.Value)),
-			)
-			if len(a.Value) > 0 {
-				out = append(out, "mp_reach0="+describePrefix(a.Value[0]))
-			}
-		case *bgp.PathAttributeMpUnreachNLRI:
-			out = append(
-				out,
-				fmt.Sprintf("mp_unreach=%d", len(a.Value)),
-			)
-			if len(a.Value) > 0 {
-				out = append(out, "mp_unreach0="+describePrefix(a.Value[0]))
-			}
-		}
-	}
-
-	return strings.Join(out, " ")
-}
-
-func describePrefix(nlri bgp.AddrPrefixInterface) string {
-	if prefix, ok := prefixFromNLRI(nlri); ok {
-		return prefix.String()
-	}
-
-	flat := nlri.Flat()
-	if len(flat) == 0 {
-		return nlri.String()
-	}
-
-	return fmt.Sprintf("%s flat=%v", nlri.String(), flat)
-}
-
 // insertRoute stores route in the view of its peer and updates best
 // it must be called with mu held
-func (t *Table) insertRoute(route Route) {
+func (t *table) insertRoute(route Route) {
 	prefix := route.Prefix.Masked()
 	if !prefix.IsValid() {
 		t.fault("a route without a valid prefix", route.Prefix)
@@ -1280,7 +1121,7 @@ func (t *Table) insertRoute(route Route) {
 // one more view when newView is set, a route turned away is counted and
 // logged once a minute at most
 // it must be called with mu held
-func (t *Table) admit(newView bool) bool {
+func (t *table) admit(newView bool) bool {
 	var limit string
 	switch {
 	case newView && len(t.views) >= t.maxViews:
@@ -1299,7 +1140,7 @@ func (t *Table) admit(newView bool) bool {
 
 // deleteRoute drops path pathID of view v for prefix and updates best
 // it must be called with mu held
-func (t *Table) deleteRoute(prefix netip.Prefix, pathID uint32, v *view) {
+func (t *table) deleteRoute(prefix netip.Prefix, pathID uint32, v *view) {
 	head, ok := v.routes.Get(prefix)
 	if !ok {
 		return
@@ -1355,7 +1196,7 @@ func (v *view) setMore(prefix netip.Prefix, paths []viewRoute) {
 // offered updates best after view v announced value for prefix, added says
 // that v did not hold prefix before
 // it must be called with mu held
-func (t *Table) offered(prefix netip.Prefix, v *view, value viewRoute, added bool) {
+func (t *table) offered(prefix netip.Prefix, v *view, value viewRoute, added bool) {
 	best, ok := t.best.Get(prefix)
 	if !ok {
 		t.best.Insert(prefix, bestRoute{
@@ -1380,7 +1221,7 @@ func (t *Table) offered(prefix netip.Prefix, v *view, value viewRoute, added boo
 // first view in order that still holds prefix takes over
 // v may still hold prefix in its trie, so it is skipped
 // it must be called with mu held
-func (t *Table) withdrawn(prefix netip.Prefix, v *view) {
+func (t *table) withdrawn(prefix netip.Prefix, v *view) {
 	best, ok := t.best.Get(prefix)
 	if !ok {
 		t.fault("a view gave up a prefix best does not hold", prefix)
@@ -1405,7 +1246,7 @@ func (t *Table) withdrawn(prefix netip.Prefix, v *view) {
 // itself, a bug in rfm, the lookup then finds no route and the update skips
 // what it would change, lookups hold mu for reading only, so the count is
 // atomic and only the first fault is logged
-func (t *Table) fault(what string, prefix netip.Prefix) {
+func (t *table) fault(what string, prefix netip.Prefix) {
 	if t.faults.Add(1) == 1 {
 		log.Error("rib table inconsistent, a bug in rfm", "fault", what, "prefix", prefix)
 	}
@@ -1413,7 +1254,7 @@ func (t *Table) fault(what string, prefix netip.Prefix) {
 
 // addView adds v to the views and keeps order sorted by preference
 // it must be called with mu held
-func (t *Table) addView(v *view) {
+func (t *table) addView(v *view) {
 	t.views[v.peer] = v
 	i, _ := slices.BinarySearchFunc(t.order, v, func(a, b *view) int {
 		if betterPeer(a.peer, b.peer) {
@@ -1426,7 +1267,7 @@ func (t *Table) addView(v *view) {
 
 // dropView removes v from the views and from order
 // it must be called with mu held
-func (t *Table) dropView(v *view) {
+func (t *table) dropView(v *view) {
 	delete(t.views, v.peer)
 	if i := slices.Index(t.order, v); i >= 0 {
 		t.order = slices.Delete(t.order, i, i+1)
@@ -1448,7 +1289,7 @@ func betterPeer(a, b Peer) bool {
 	return a.Speaker.Less(b.Speaker)
 }
 
-func (t *Table) route(prefix netip.Prefix, value viewRoute) (Route, bool) {
+func (t *table) route(prefix netip.Prefix, value viewRoute) (Route, bool) {
 	route := Route{
 		Prefix:      prefix,
 		OriginASN:   value.originASN,
@@ -1478,7 +1319,7 @@ func (t *Table) route(prefix netip.Prefix, value viewRoute) (Route, bool) {
 	return route, true
 }
 
-func (t *Table) internMeta(meta routeMeta) uint64 {
+func (t *table) internMeta(meta routeMeta) uint64 {
 	if meta.empty() {
 		return 0
 	}
@@ -1500,7 +1341,7 @@ func (t *Table) internMeta(meta routeMeta) uint64 {
 	return id
 }
 
-func (t *Table) releaseMeta(id uint64) {
+func (t *table) releaseMeta(id uint64) {
 	if id == 0 {
 		return
 	}

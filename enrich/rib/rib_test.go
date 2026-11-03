@@ -11,24 +11,21 @@ import (
 	"math/rand/v2"
 	"net"
 	"net/netip"
-	"os"
 	"runtime"
 	"slices"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"syscall"
 	"testing"
 	"time"
 
-	"github.com/charmbracelet/log"
 	"github.com/osrg/gobgp/v3/pkg/packet/bgp"
 	"github.com/osrg/gobgp/v3/pkg/packet/bmp"
 )
 
 func TestTableLookup(t *testing.T) {
-	tab := NewTable()
-	tab.Apply(Update{
+	tab := newTable()
+	tab.apply(update{
 		Reach: []Route{
 			{
 				Prefix:    netip.MustParsePrefix("203.0.113.0/24"),
@@ -37,7 +34,7 @@ func TestTableLookup(t *testing.T) {
 		},
 	})
 
-	route, ok := tab.Lookup(netip.MustParseAddr("203.0.113.42"))
+	route, ok := tab.lookup(netip.MustParseAddr("203.0.113.42"))
 	if !ok {
 		t.Fatal("Lookup should find prefix")
 	}
@@ -47,9 +44,9 @@ func TestTableLookup(t *testing.T) {
 }
 
 func TestTableWithdraw(t *testing.T) {
-	tab := NewTable()
+	tab := newTable()
 	pfx := netip.MustParsePrefix("2001:db8::/32")
-	tab.Apply(Update{
+	tab.apply(update{
 		Reach: []Route{
 			{
 				Prefix:    pfx,
@@ -57,18 +54,18 @@ func TestTableWithdraw(t *testing.T) {
 			},
 		},
 	})
-	tab.Apply(Update{
-		Withdraw: []Withdrawal{{Prefix: pfx}},
+	tab.apply(update{
+		Withdraw: []withdrawal{{Prefix: pfx}},
 	})
 
-	if _, ok := tab.Lookup(netip.MustParseAddr("2001:db8::1")); ok {
+	if _, ok := tab.lookup(netip.MustParseAddr("2001:db8::1")); ok {
 		t.Fatal("Lookup should miss withdrawn prefix")
 	}
 }
 
 func TestTableUnmapsIPv4(t *testing.T) {
-	tab := NewTable()
-	tab.Apply(Update{
+	tab := newTable()
+	tab.apply(update{
 		Reach: []Route{
 			{
 				Prefix:    netip.MustParsePrefix("198.51.100.0/24"),
@@ -77,7 +74,7 @@ func TestTableUnmapsIPv4(t *testing.T) {
 		},
 	})
 
-	route, ok := tab.Lookup(netip.MustParseAddr("::ffff:198.51.100.7"))
+	route, ok := tab.lookup(netip.MustParseAddr("::ffff:198.51.100.7"))
 	if !ok {
 		t.Fatal("Lookup should match mapped IPv4 address")
 	}
@@ -87,8 +84,8 @@ func TestTableUnmapsIPv4(t *testing.T) {
 }
 
 func TestTableEnrich(t *testing.T) {
-	tab := NewTable()
-	tab.Apply(Update{
+	tab := newTable()
+	tab.apply(update{
 		Reach: []Route{
 			{
 				Prefix:    netip.MustParsePrefix("203.0.113.0/24"),
@@ -98,7 +95,7 @@ func TestTableEnrich(t *testing.T) {
 		},
 	})
 
-	src, dst := tab.Enrich(
+	src, dst := tab.enrich(
 		netip.MustParseAddr("192.0.2.1"),
 		netip.MustParseAddr("203.0.113.7"),
 	)
@@ -112,8 +109,8 @@ func TestTableEnrich(t *testing.T) {
 }
 
 func TestTableEnrichSkipsDefaultRoute(t *testing.T) {
-	tab := NewTable()
-	tab.Apply(Update{
+	tab := newTable()
+	tab.apply(update{
 		Reach: []Route{
 			{Prefix: netip.MustParsePrefix("0.0.0.0/0"), OriginASN: 64500, ASPath: []uint32{64500}},
 			{Prefix: netip.MustParsePrefix("::/0"), OriginASN: 64501, ASPath: []uint32{64501}},
@@ -123,27 +120,27 @@ func TestTableEnrichSkipsDefaultRoute(t *testing.T) {
 
 	// the default route says which upstream carries the traffic, not who
 	// owns the address, so it leaves the label to the next backend
-	src, dst := tab.Enrich(netip.MustParseAddr("8.8.8.8"), netip.MustParseAddr("2001:db8::1"))
+	src, dst := tab.enrich(netip.MustParseAddr("8.8.8.8"), netip.MustParseAddr("2001:db8::1"))
 	if src.ASN != 0 || dst.ASN != 0 {
 		t.Fatalf("labels from default routes = %d and %d, want 0 and 0", src.ASN, dst.ASN)
 	}
 
 	// a more specific route still labels
-	if _, dst := tab.Enrich(netip.MustParseAddr("8.8.8.8"), netip.MustParseAddr("203.0.113.7")); dst.ASN != 64496 {
+	if _, dst := tab.enrich(netip.MustParseAddr("8.8.8.8"), netip.MustParseAddr("203.0.113.7")); dst.ASN != 64496 {
 		t.Fatalf("dst ASN = %d, want 64496", dst.ASN)
 	}
 
 	// the default route stays visible to a lookup
-	route, ok := tab.Lookup(netip.MustParseAddr("8.8.8.8"))
+	route, ok := tab.lookup(netip.MustParseAddr("8.8.8.8"))
 	if !ok || route.OriginASN != 64500 || route.Prefix != netip.MustParsePrefix("0.0.0.0/0") {
 		t.Fatalf("Lookup = %+v ok=%v, want the default route from 64500", route, ok)
 	}
 }
 
 func TestTableDedupesMetadata(t *testing.T) {
-	tab := NewTable()
+	tab := newTable()
 
-	tab.Apply(Update{
+	tab.apply(update{
 		Reach: []Route{
 			{
 				Prefix:      netip.MustParsePrefix("203.0.113.0/24"),
@@ -170,15 +167,15 @@ func TestTableDedupesMetadata(t *testing.T) {
 		t.Fatalf("metadata entries = %d, want 1", got)
 	}
 
-	tab.Apply(Update{
-		Withdraw: []Withdrawal{{Prefix: netip.MustParsePrefix("203.0.113.0/24")}},
+	tab.apply(update{
+		Withdraw: []withdrawal{{Prefix: netip.MustParsePrefix("203.0.113.0/24")}},
 	})
 	if got := len(tab.metas); got != 1 {
 		t.Fatalf("metadata entries after single withdraw = %d, want 1", got)
 	}
 
-	tab.Apply(Update{
-		Withdraw: []Withdrawal{{Prefix: netip.MustParsePrefix("203.0.114.0/24")}},
+	tab.apply(update{
+		Withdraw: []withdrawal{{Prefix: netip.MustParsePrefix("203.0.114.0/24")}},
 	})
 	if got := len(tab.metas); got != 0 {
 		t.Fatalf("metadata entries after full withdraw = %d, want 0", got)
@@ -186,8 +183,8 @@ func TestTableDedupesMetadata(t *testing.T) {
 }
 
 func TestLookupClonesMetadata(t *testing.T) {
-	tab := NewTable()
-	tab.Apply(Update{
+	tab := newTable()
+	tab.apply(update{
 		Reach: []Route{
 			{
 				Prefix:           netip.MustParsePrefix("203.0.113.0/24"),
@@ -199,7 +196,7 @@ func TestLookupClonesMetadata(t *testing.T) {
 		},
 	})
 
-	route, ok := tab.Lookup(netip.MustParseAddr("203.0.113.7"))
+	route, ok := tab.lookup(netip.MustParseAddr("203.0.113.7"))
 	if !ok {
 		t.Fatal("Lookup should find prefix")
 	}
@@ -208,7 +205,7 @@ func TestLookupClonesMetadata(t *testing.T) {
 	route.Communities[0] = 2
 	route.LargeCommunities[0] = LargeCommunity{GlobalAdmin: 3, LocalData1: 4, LocalData2: 5}
 
-	again, ok := tab.Lookup(netip.MustParseAddr("203.0.113.7"))
+	again, ok := tab.lookup(netip.MustParseAddr("203.0.113.7"))
 	if !ok {
 		t.Fatal("Lookup should find prefix")
 	}
@@ -257,7 +254,7 @@ func TestHandleConnAppliesBMPRouteMonitoring(t *testing.T) {
 	defer clientConn.Close()
 
 	s := &Server{
-		table: NewTable(),
+		table: newTable(),
 	}
 
 	done := make(chan struct{})
@@ -322,7 +319,7 @@ func (c *fakeClock) advance(d time.Duration) {
 
 func TestStaleViewsAgeOut(t *testing.T) {
 	clock := &fakeClock{now: time.Unix(1_790_000_000, 0)}
-	s := &Server{table: NewTable(), staleGrace: time.Minute, clock: clock.Now}
+	s := &Server{table: newTable(), staleGrace: time.Minute, clock: clock.Now}
 	present := func(addr string) bool {
 		_, ok := s.Lookup(netip.MustParseAddr(addr))
 		return ok
@@ -372,7 +369,7 @@ func TestStaleViewsAgeOut(t *testing.T) {
 
 func TestOnlyViewsTheTableHoldsGoStale(t *testing.T) {
 	clock := &fakeClock{now: time.Unix(1_790_000_000, 0)}
-	s := &Server{table: NewTable(), staleGrace: time.Minute, clock: clock.Now}
+	s := &Server{table: newTable(), staleGrace: time.Minute, clock: clock.Now}
 	s.table.maxViews = 2
 	withdraw := func(peer *bmp.BMPPeerHeader, prefix string) []byte {
 		nlri := []*bgp.IPAddrPrefix{bgp.NewIPAddrPrefix(prefixBits(t, prefix), prefixAddr(t, prefix))}
@@ -414,7 +411,7 @@ func TestOnlyViewsTheTableHoldsGoStale(t *testing.T) {
 	s.viewsMu.Lock()
 	staleViews := s.stale
 	s.viewsMu.Unlock()
-	if got := s.table.Summary(); staleViews != nil || got != (Summary{PrefixesV4: 1, Routes: 1, Peers: 1}) {
+	if got := s.table.summary(); staleViews != nil || got != (Summary{PrefixesV4: 1, Routes: 1, Peers: 1}) {
 		t.Fatalf("stale views = %v and table = %+v after the grace period, want no map and the route of the later session", staleViews, got)
 	}
 	_ = second.Close()
@@ -435,7 +432,7 @@ func mustRouteMonitoringWire(t *testing.T, peer *bmp.BMPPeerHeader, update *bgp.
 
 func TestStaleViewsOfALateEndedSession(t *testing.T) {
 	clock := &fakeClock{now: time.Unix(1_790_000_000, 0)}
-	s := &Server{table: NewTable(), staleGrace: time.Minute, clock: clock.Now}
+	s := &Server{table: newTable(), staleGrace: time.Minute, clock: clock.Now}
 	present := func(addr string) bool {
 		_, ok := s.Lookup(netip.MustParseAddr(addr))
 		return ok
@@ -475,7 +472,7 @@ func TestStaleViewsOfALateEndedSession(t *testing.T) {
 }
 
 func TestSpeakersKeepTheirOwnViewsOfOnePeer(t *testing.T) {
-	s := &Server{table: NewTable()}
+	s := &Server{table: newTable()}
 	present := func(addr string) bool {
 		_, ok := s.Lookup(netip.MustParseAddr(addr))
 		return ok
@@ -512,37 +509,12 @@ func TestSpeakersKeepTheirOwnViewsOfOnePeer(t *testing.T) {
 	<-bDone
 }
 
-func TestDebugSummaryCostsNothingAtInfo(t *testing.T) {
-	level := log.GetLevel()
-	log.SetLevel(log.InfoLevel)
-	defer log.SetLevel(level)
-
-	msg := mustBMPMessage(t, "203.0.113.0/24", 65002)
-	remote := &net.TCPAddr{IP: net.ParseIP("127.0.0.1"), Port: 40000}
-
-	// the summary costs about as much as parsing the message, and it is
-	// built for every route monitoring message of a full table dump
-	if allocs := testing.AllocsPerRun(100, func() { debugRouteMonitoring(remote, msg) }); allocs != 0 {
-		t.Fatalf("debug summary at info level allocated %v times, want none", allocs)
-	}
-
-	// at debug level the summary is still written
-	var out bytes.Buffer
-	log.SetOutput(&out)
-	defer log.SetOutput(os.Stderr)
-	log.SetLevel(log.DebugLevel)
-	debugRouteMonitoring(remote, msg)
-	if !strings.Contains(out.String(), "nlri0=203.0.113.0/24") {
-		t.Fatalf("debug output = %q, want the route monitoring summary", out.String())
-	}
-}
-
 func TestHandleConnPeerUpReplacesPeer(t *testing.T) {
 	serverConn, clientConn := net.Pipe()
 	defer clientConn.Close()
 
 	s := &Server{
-		table: NewTable(),
+		table: newTable(),
 	}
 
 	done := make(chan struct{})
@@ -609,7 +581,7 @@ func TestHandleConnPeerDownWithdrawsPeer(t *testing.T) {
 	defer clientConn.Close()
 
 	s := &Server{
-		table: NewTable(),
+		table: newTable(),
 	}
 
 	done := make(chan struct{})
@@ -664,7 +636,7 @@ func TestHandleConnPeerDownWithdrawsPeer(t *testing.T) {
 }
 
 func TestHandleConnPeerNotificationsIgnorePolicy(t *testing.T) {
-	s := &Server{table: NewTable()}
+	s := &Server{table: newTable()}
 	client, done := startSession(t, s)
 
 	// BIRD sends peer up and peer down with the L flag clear whatever the
@@ -690,7 +662,7 @@ func TestHandleConnPeerNotificationsIgnorePolicy(t *testing.T) {
 }
 
 func TestHandleConnIgnoresAdjRIBOut(t *testing.T) {
-	s := &Server{table: NewTable()}
+	s := &Server{table: newTable()}
 	client, done := startSession(t, s)
 	out := func(update *bgp.BGPMessage) []byte {
 		peer := bmp.NewBMPPeerHeader(bmp.BMP_PEER_TYPE_GLOBAL, bmp.BMP_PEER_FLAG_ADJ_RIB_TYP, 0, "192.0.2.2", 65003, "192.0.2.2", 0)
@@ -704,7 +676,7 @@ func TestHandleConnIgnoresAdjRIBOut(t *testing.T) {
 	write(t, client, out(mustBMPMessage(t, "203.0.113.0/24", 65004).Body.(*bmp.BMPRouteMonitoring).BGPUpdate))
 	write(t, client, mustBMPWireFrom(t, "192.0.2.0/24", 65005, "192.0.2.5", 0))
 	waitForRoute(t, s, "192.0.2.7", true)
-	if got := s.Table().Summary(); got != (Summary{PrefixesV4: 2, Routes: 2, Peers: 2}) {
+	if got := s.Summary(); got != (Summary{PrefixesV4: 2, Routes: 2, Peers: 2}) {
 		t.Fatalf("summary = %+v, want the two received routes alone", got)
 	}
 	if route, ok := s.Lookup(netip.MustParseAddr("198.51.100.7")); !ok || route.OriginASN != 65003 {
@@ -716,7 +688,7 @@ func TestHandleConnIgnoresAdjRIBOut(t *testing.T) {
 }
 
 func TestHandleConnDecodesAddPath(t *testing.T) {
-	s := &Server{table: NewTable()}
+	s := &Server{table: newTable()}
 	client, done := startSession(t, s)
 
 	// the monitored router offered to receive paths and the peer to send
@@ -747,7 +719,7 @@ func TestHandleConnDecodesAddPath(t *testing.T) {
 }
 
 func TestHandleConnWithoutAddPath(t *testing.T) {
-	s := &Server{table: NewTable()}
+	s := &Server{table: newTable()}
 	client, done := startSession(t, s)
 
 	// one side alone does not enable ADD-PATH
@@ -815,7 +787,7 @@ func waitForSummary(t *testing.T, s *Server, want Summary) {
 
 	deadline := time.Now().Add(2 * time.Second)
 	for {
-		got := s.Table().Summary()
+		got := s.Summary()
 		if got == want {
 			return
 		}
@@ -884,7 +856,7 @@ func mustAddPathWireFrom(t *testing.T, addr, prefix string, pathID, origin uint3
 }
 
 func TestHandleConnRecoversFromParseErrors(t *testing.T) {
-	s := &Server{table: NewTable()}
+	s := &Server{table: newTable()}
 	client, done := startSession(t, s)
 
 	asPath := []byte{0x40, 2, 6, 2, 1, 0, 0, 0xfd, 0xea} // AS_PATH 65002
@@ -974,7 +946,7 @@ func rawRouteMonitoring(addr string, flags uint8, attrs, nlri []byte) []byte {
 
 func TestHandleConnBuffersLazily(t *testing.T) {
 	const sessions = 64
-	s := &Server{table: NewTable()}
+	s := &Server{table: newTable()}
 
 	var before, after runtime.MemStats
 	runtime.GC()
@@ -1060,7 +1032,7 @@ func TestHandleConnBoundsAddPathPeers(t *testing.T) {
 
 	// one session brings up many more peers that send ADD-PATH than the
 	// table keeps views, 192.0.2.2 first
-	s := &Server{table: NewTable()}
+	s := &Server{table: newTable()}
 	client, done := startSession(t, s)
 	wire := mustAddPathPeerUpWire(t, "192.0.2.2", bgp.BGP_ADD_PATH_RECEIVE, bgp.BGP_ADD_PATH_SEND)
 	for i := range peers {
@@ -1101,54 +1073,19 @@ func TestHandleConnBoundsAddPathPeers(t *testing.T) {
 	<-done
 }
 
-func TestHandleConnBoundsViewsItCounts(t *testing.T) {
-	const views = 1 << 15
-
-	var before, after runtime.MemStats
-	runtime.GC()
-	runtime.ReadMemStats(&before)
-
-	// one session names many more views than the table keeps, each with an
-	// End-of-RIB marker
-	s := &Server{table: NewTable()}
-	client, done := startSession(t, s)
-	var wire []byte
-	for i := range views {
-		peer := bmp.NewBMPPeerHeader(bmp.BMP_PEER_TYPE_GLOBAL, 0, uint64(i+1), "192.0.2.3", 65003, "192.0.2.3", 0)
-		wire = append(wire, mustRouteMonitoringWire(t, peer, bgp.NewBGPUpdateMessage(nil, nil, nil))...)
-		if len(wire) >= 1<<16 || i == views-1 {
-			write(t, client, wire)
-			wire = wire[:0]
-		}
-	}
-	write(t, client, mustBMPWire(t, "203.0.113.0/24", 65002))
-	waitForRoute(t, s, "203.0.113.7", true)
-
-	runtime.GC()
-	runtime.ReadMemStats(&after)
-	perView := (int64(after.HeapAlloc) - int64(before.HeapAlloc)) / views
-	t.Logf("heap per view: %d bytes", perView)
-	if perView > 16 {
-		t.Fatalf("heap per view = %d bytes, want at most 16", perView)
-	}
-
-	_ = client.Close()
-	<-done
-}
-
 func TestTableLimitsRoutes(t *testing.T) {
-	tab := NewTable()
+	tab := newTable()
 	tab.maxRoutes = 2
 	peer := netip.MustParseAddr("192.0.2.1")
 	route := func(prefix string, origin uint32) Route {
 		return Route{Prefix: netip.MustParsePrefix(prefix), OriginASN: origin, PeerAddress: peer}
 	}
 
-	tab.Apply(Update{Reach: []Route{route("203.0.113.0/24", 1), route("198.51.100.0/24", 1), route("192.0.2.0/24", 1)}})
-	if got := tab.Summary(); got.Routes != 2 {
+	tab.apply(update{Reach: []Route{route("203.0.113.0/24", 1), route("198.51.100.0/24", 1), route("192.0.2.0/24", 1)}})
+	if got := tab.summary(); got.Routes != 2 {
 		t.Fatalf("routes = %d, want the limit of 2", got.Routes)
 	}
-	if _, ok := tab.Lookup(netip.MustParseAddr("192.0.2.1")); ok {
+	if _, ok := tab.lookup(netip.MustParseAddr("192.0.2.1")); ok {
 		t.Fatal("route past the limit was stored")
 	}
 	if got := tab.rejected.Load(); got != 1 {
@@ -1156,15 +1093,15 @@ func TestTableLimitsRoutes(t *testing.T) {
 	}
 
 	// a route that replaces one the table holds does not grow it
-	tab.Apply(Update{Reach: []Route{route("203.0.113.0/24", 2)}})
-	if r, ok := tab.Lookup(netip.MustParseAddr("203.0.113.1")); !ok || r.OriginASN != 2 {
+	tab.apply(update{Reach: []Route{route("203.0.113.0/24", 2)}})
+	if r, ok := tab.lookup(netip.MustParseAddr("203.0.113.1")); !ok || r.OriginASN != 2 {
 		t.Fatalf("replaced route = %+v ok=%v, want origin 2", r, ok)
 	}
 
 	// a withdraw makes room again
-	tab.Apply(Update{Peer: Peer{Address: peer}, Withdraw: []Withdrawal{{Prefix: netip.MustParsePrefix("198.51.100.0/24")}}})
-	tab.Apply(Update{Reach: []Route{route("192.0.2.0/24", 1)}})
-	if _, ok := tab.Lookup(netip.MustParseAddr("192.0.2.1")); !ok {
+	tab.apply(update{Peer: Peer{Address: peer}, Withdraw: []withdrawal{{Prefix: netip.MustParsePrefix("198.51.100.0/24")}}})
+	tab.apply(update{Reach: []Route{route("192.0.2.0/24", 1)}})
+	if _, ok := tab.lookup(netip.MustParseAddr("192.0.2.1")); !ok {
 		t.Fatal("route not stored after a withdraw made room")
 	}
 	if got := tab.rejected.Load(); got != 1 {
@@ -1174,22 +1111,22 @@ func TestTableLimitsRoutes(t *testing.T) {
 	// another ADD-PATH path of a prefix the table holds takes room
 	extra := route("203.0.113.0/24", 3)
 	extra.PathID = 7
-	tab.Apply(Update{Reach: []Route{extra}})
-	if got := tab.Summary(); got.Routes != 2 || tab.rejected.Load() != 2 {
+	tab.apply(update{Reach: []Route{extra}})
+	if got := tab.summary(); got.Routes != 2 || tab.rejected.Load() != 2 {
 		t.Fatalf("routes = %d rejected = %d, want 2 and 2", got.Routes, tab.rejected.Load())
 	}
 	checkInvariants(t, tab)
 }
 
 func TestTableLimitsViews(t *testing.T) {
-	tab := NewTable()
+	tab := newTable()
 	tab.maxViews = 2
 	prefix := netip.MustParsePrefix("203.0.113.0/24")
 
 	for _, addr := range []string{"192.0.2.1", "192.0.2.2", "192.0.2.3"} {
-		tab.Apply(Update{Reach: []Route{{Prefix: prefix, OriginASN: 1, PeerAddress: netip.MustParseAddr(addr)}}})
+		tab.apply(update{Reach: []Route{{Prefix: prefix, OriginASN: 1, PeerAddress: netip.MustParseAddr(addr)}}})
 	}
-	if got := tab.Summary(); got.Peers != 2 || got.Routes != 2 {
+	if got := tab.summary(); got.Peers != 2 || got.Routes != 2 {
 		t.Fatalf("summary = %+v, want the limit of 2 views", got)
 	}
 	if got := tab.rejected.Load(); got != 1 {
@@ -1197,8 +1134,8 @@ func TestTableLimitsViews(t *testing.T) {
 	}
 
 	// a view the table holds still takes more routes
-	tab.Apply(Update{Reach: []Route{{Prefix: netip.MustParsePrefix("198.51.100.0/24"), PeerAddress: netip.MustParseAddr("192.0.2.1")}}})
-	if got := tab.Summary(); got.Routes != 3 {
+	tab.apply(update{Reach: []Route{{Prefix: netip.MustParsePrefix("198.51.100.0/24"), PeerAddress: netip.MustParseAddr("192.0.2.1")}}})
+	if got := tab.summary(); got.Routes != 3 {
 		t.Fatalf("routes = %d, want 3", got.Routes)
 	}
 	checkInvariants(t, tab)
@@ -1225,19 +1162,19 @@ func uniqueAttrsRoute(i, pathLen, n int) Route {
 }
 
 func TestTableKeepsLeadingAttributes(t *testing.T) {
-	tab := NewTable()
+	tab := newTable()
 	route := uniqueAttrsRoute(0, 1000, 1000)
-	tab.Apply(Update{Reach: []Route{route}})
+	tab.apply(update{Reach: []Route{route}})
 
 	// labels need only the origin, which the route keeps whatever its
 	// path holds
 	addr := netip.MustParseAddr("1.0.0.1")
-	if labels, _ := tab.Enrich(addr, addr); labels.ASN != route.OriginASN {
+	if labels, _ := tab.enrich(addr, addr); labels.ASN != route.OriginASN {
 		t.Fatalf("label = %d, want the origin %d", labels.ASN, route.OriginASN)
 	}
 
 	// a lookup shows the leading part of each list and that it is cut
-	got, ok := tab.Lookup(addr)
+	got, ok := tab.lookup(addr)
 	if !ok || got.OriginASN != route.OriginASN || !got.Truncated {
 		t.Fatalf("Lookup = origin %d truncated=%v ok=%v, want origin %d truncated", got.OriginASN, got.Truncated, ok, route.OriginASN)
 	}
@@ -1258,8 +1195,8 @@ func TestTableKeepsLeadingAttributes(t *testing.T) {
 	whole.ASPath = got.ASPath
 	whole.Communities = got.Communities
 	whole.LargeCommunities = got.LargeCommunities
-	tab.Apply(Update{Reach: []Route{whole}})
-	if got, ok := tab.Lookup(netip.MustParseAddr("2.0.0.1")); !ok || got.Truncated || !slices.Equal(got.ASPath, whole.ASPath) {
+	tab.apply(update{Reach: []Route{whole}})
+	if got, ok := tab.lookup(netip.MustParseAddr("2.0.0.1")); !ok || got.Truncated || !slices.Equal(got.ASPath, whole.ASPath) {
 		t.Fatalf("Lookup = path of %d ASNs truncated=%v ok=%v, want the whole path", len(got.ASPath), got.Truncated, ok)
 	}
 }
@@ -1271,12 +1208,12 @@ func TestTableHeapPerRouteWithUniqueAttributes(t *testing.T) {
 	runtime.GC()
 	runtime.ReadMemStats(&before)
 
-	tab := NewTable()
+	tab := newTable()
 	batch := make([]Route, 0, 256)
 	for i := range n {
 		batch = append(batch, uniqueAttrsRoute(i, 64, 256))
 		if len(batch) == cap(batch) {
-			tab.Apply(Update{Reach: batch})
+			tab.apply(update{Reach: batch})
 			batch = batch[:0]
 		}
 	}
@@ -1284,7 +1221,7 @@ func TestTableHeapPerRouteWithUniqueAttributes(t *testing.T) {
 
 	runtime.GC()
 	runtime.ReadMemStats(&after)
-	if got := tab.Summary(); got.Routes != n {
+	if got := tab.summary(); got.Routes != n {
 		t.Fatalf("summary = %+v, want %d routes", got, n)
 	}
 	runtime.KeepAlive(tab)
@@ -1418,7 +1355,7 @@ func TestHandleConnEndsOnBadHeader(t *testing.T) {
 			serverConn, clientConn := net.Pipe()
 			defer clientConn.Close()
 
-			s := &Server{table: NewTable()}
+			s := &Server{table: newTable()}
 			done := make(chan struct{})
 			go func() {
 				defer close(done)
@@ -1652,14 +1589,14 @@ func TestUpdateFromBMPSkipsMulticastRoutes(t *testing.T) {
 }
 
 func TestTableCountsMappedPrefixAsIPv6(t *testing.T) {
-	tab := NewTable()
+	tab := newTable()
 	prefix, ok := prefixFromNLRI(bgp.NewIPv6AddrPrefix(96, "::ffff:0.0.0.0"))
 	if !ok {
 		t.Fatal("prefixFromNLRI rejected an ipv4 mapped ipv6 prefix")
 	}
-	tab.Apply(Update{Reach: []Route{{Prefix: prefix, OriginASN: 64500}}})
+	tab.apply(update{Reach: []Route{{Prefix: prefix, OriginASN: 64500}}})
 
-	if got := tab.Summary(); got != (Summary{PrefixesV6: 1, Routes: 1, Peers: 1}) {
+	if got := tab.summary(); got != (Summary{PrefixesV6: 1, Routes: 1, Peers: 1}) {
 		t.Fatalf("summary = %+v, want one ipv6 prefix", got)
 	}
 }
@@ -1793,58 +1730,58 @@ func prefixAddr(t *testing.T, prefix string) string {
 }
 
 func TestTableKeepsRoutesPerPeer(t *testing.T) {
-	tab := NewTable()
+	tab := newTable()
 	pfx := netip.MustParsePrefix("203.0.113.0/24")
 	a := Peer{Address: netip.MustParseAddr("192.0.2.1")}
 	b := Peer{Address: netip.MustParseAddr("192.0.2.2")}
 
-	tab.Apply(Update{Reach: []Route{
+	tab.apply(update{Reach: []Route{
 		{Prefix: pfx, OriginASN: 64501, PeerASN: 64501, PeerAddress: a.Address},
 		{Prefix: pfx, OriginASN: 64502, PeerASN: 64502, PeerAddress: b.Address},
 	}})
 
-	if got := tab.Summary(); got.Routes != 2 || got.PrefixesV4 != 1 || got.Peers != 2 {
+	if got := tab.summary(); got.Routes != 2 || got.PrefixesV4 != 1 || got.Peers != 2 {
 		t.Fatalf("summary = %+v, want 2 routes, 1 prefix, 2 peers", got)
 	}
 
 	// the lowest peer address wins while both are pre policy
-	route, ok := tab.Lookup(netip.MustParseAddr("203.0.113.9"))
+	route, ok := tab.lookup(netip.MustParseAddr("203.0.113.9"))
 	if !ok || route.OriginASN != 64501 {
 		t.Fatalf("best route = %+v, want origin 64501 from the lower peer", route)
 	}
 
 	// a withdraw from one peer leaves the other peer's route in place
-	tab.Apply(Update{Peer: a, Withdraw: []Withdrawal{{Prefix: pfx}}})
-	route, ok = tab.Lookup(netip.MustParseAddr("203.0.113.9"))
+	tab.apply(update{Peer: a, Withdraw: []withdrawal{{Prefix: pfx}}})
+	route, ok = tab.lookup(netip.MustParseAddr("203.0.113.9"))
 	if !ok || route.OriginASN != 64502 {
 		t.Fatalf("route after withdraw = %+v ok=%v, want origin 64502 from the other peer", route, ok)
 	}
-	if got := tab.Summary(); got.Routes != 1 || got.Peers != 1 {
+	if got := tab.summary(); got.Routes != 1 || got.Peers != 1 {
 		t.Fatalf("summary after withdraw = %+v, want 1 route from 1 peer", got)
 	}
 
-	tab.Apply(Update{Peer: b, Withdraw: []Withdrawal{{Prefix: pfx}}})
-	if _, ok := tab.Lookup(netip.MustParseAddr("203.0.113.9")); ok {
+	tab.apply(update{Peer: b, Withdraw: []withdrawal{{Prefix: pfx}}})
+	if _, ok := tab.lookup(netip.MustParseAddr("203.0.113.9")); ok {
 		t.Fatal("prefix still present after every peer withdrew it")
 	}
-	if got := tab.Summary(); got.Routes != 0 || got.PrefixesV4 != 0 || got.Peers != 0 {
+	if got := tab.summary(); got.Routes != 0 || got.PrefixesV4 != 0 || got.Peers != 0 {
 		t.Fatalf("summary after full withdraw = %+v, want empty", got)
 	}
 }
 
 func TestTableCountsInconsistencies(t *testing.T) {
-	tab := NewTable()
+	tab := newTable()
 	peer := Peer{Address: netip.MustParseAddr("192.0.2.1")}
 	lost := netip.MustParsePrefix("203.0.113.0/24")
 	bare := netip.MustParsePrefix("198.51.100.0/24")
 	orphan := netip.MustParsePrefix("192.0.2.0/24")
 	for i, prefix := range []netip.Prefix{lost, bare, orphan} {
 		origin := uint32(64501 + i)
-		tab.Apply(Update{Reach: []Route{{Prefix: prefix, OriginASN: origin, ASPath: []uint32{origin}, PeerAddress: peer.Address}}})
+		tab.apply(update{Reach: []Route{{Prefix: prefix, OriginASN: origin, ASPath: []uint32{origin}, PeerAddress: peer.Address}}})
 	}
 
 	// a route without a prefix is a bug of the caller and stays out
-	tab.Apply(Update{Reach: []Route{{OriginASN: 64500, PeerAddress: peer.Address}}})
+	tab.apply(update{Reach: []Route{{OriginASN: 64500, PeerAddress: peer.Address}}})
 
 	// best credits the view with a prefix it lost, a route refers to
 	// metadata the table released, and the view gives up a prefix best lost
@@ -1855,11 +1792,11 @@ func TestTableCountsInconsistencies(t *testing.T) {
 	tab.best.Delete(orphan)
 
 	for _, addr := range []string{"203.0.113.7", "198.51.100.7"} {
-		if route, ok := tab.Lookup(netip.MustParseAddr(addr)); ok {
+		if route, ok := tab.lookup(netip.MustParseAddr(addr)); ok {
 			t.Fatalf("Lookup(%s) = %+v, want no route from a table that contradicts itself", addr, route)
 		}
 	}
-	tab.RemovePeer(peer)
+	tab.removePeer(peer)
 	if got := (&Server{table: tab}).Stats().Inconsistencies; got != 4 {
 		t.Fatalf("inconsistencies = %d, want 4", got)
 	}
@@ -1867,7 +1804,7 @@ func TestTableCountsInconsistencies(t *testing.T) {
 
 // fillTable announces n consecutive /24 prefixes from 1.0.0.0 by peer, with
 // a thousand distinct AS paths between them
-func fillTable(tab *Table, peer netip.Addr, n int) {
+func fillTable(tab *table, peer netip.Addr, n int) {
 	batch := make([]Route, 0, 1024)
 	for i := range n {
 		addr := netip.AddrFrom4([4]byte{byte(1 + i>>16), byte(i >> 8), byte(i), 0})
@@ -1880,7 +1817,7 @@ func fillTable(tab *Table, peer netip.Addr, n int) {
 			PeerAddress: peer,
 		})
 		if len(batch) == cap(batch) || i == n-1 {
-			tab.Apply(Update{Reach: batch})
+			tab.apply(update{Reach: batch})
 			batch = batch[:0]
 		}
 	}
@@ -1893,12 +1830,12 @@ func TestTableHeapPerPrefix(t *testing.T) {
 	runtime.GC()
 	runtime.ReadMemStats(&before)
 
-	tab := NewTable()
+	tab := newTable()
 	fillTable(tab, netip.MustParseAddr("192.0.2.1"), n)
 
 	runtime.GC()
 	runtime.ReadMemStats(&after)
-	if got := tab.Summary(); got.PrefixesV4 != n || got.Routes != n {
+	if got := tab.summary(); got.PrefixesV4 != n || got.Routes != n {
 		t.Fatalf("summary = %+v, want %d prefixes and routes", got, n)
 	}
 	runtime.KeepAlive(tab)
@@ -1969,7 +1906,7 @@ func (m ribModel) withdraw(peer Peer, prefix netip.Prefix, pathID uint32) {
 	}
 }
 
-func (m ribModel) check(t *testing.T, tab *Table, probes []netip.Addr, step int) {
+func (m ribModel) check(t *testing.T, tab *table, probes []netip.Addr, step int) {
 	t.Helper()
 
 	var want Summary
@@ -1992,7 +1929,7 @@ func (m ribModel) check(t *testing.T, tab *Table, probes []netip.Addr, step int)
 			want.PrefixesV6++
 		}
 	}
-	if got := tab.Summary(); got != want {
+	if got := tab.summary(); got != want {
 		t.Fatalf("step %d: summary = %+v, want %+v", step, got, want)
 	}
 	if got := len(tab.metas); got != len(metas) {
@@ -2001,7 +1938,7 @@ func (m ribModel) check(t *testing.T, tab *Table, probes []netip.Addr, step int)
 
 	for _, addr := range probes {
 		prefix, peer, pathID, origin, ok := m.lookup(addr)
-		route, gotOK := tab.Lookup(addr)
+		route, gotOK := tab.lookup(addr)
 		if gotOK != ok || route.Prefix != prefix || route.OriginASN != origin || route.Peer() != peer || route.PathID != pathID {
 			t.Fatalf("step %d: Lookup(%s) = %s path %d origin %d from %+v ok=%v, want %s path %d origin %d from %+v ok=%v",
 				step, addr, route.Prefix, route.PathID, route.OriginASN, route.Peer(), gotOK, prefix, pathID, origin, peer, ok)
@@ -2009,7 +1946,7 @@ func (m ribModel) check(t *testing.T, tab *Table, probes []netip.Addr, step int)
 		if prefix.Bits() == 0 {
 			origin = 0
 		}
-		if labels, _ := tab.Enrich(addr, addr); labels.ASN != origin {
+		if labels, _ := tab.enrich(addr, addr); labels.ASN != origin {
 			t.Fatalf("step %d: label for %s = %d, want %d", step, addr, labels.ASN, origin)
 		}
 	}
@@ -2039,7 +1976,7 @@ func TestTableMatchesModel(t *testing.T) {
 	}
 
 	rng := rand.New(rand.NewPCG(1, 2))
-	tab := NewTable()
+	tab := newTable()
 	model := make(ribModel)
 	for step := range 6000 {
 		peer := peers[rng.IntN(len(peers))]
@@ -2049,7 +1986,7 @@ func TestTableMatchesModel(t *testing.T) {
 		switch op := rng.IntN(10); {
 		case op < 5:
 			origin := uint32(64500 + rng.IntN(4))
-			tab.Apply(Update{Reach: []Route{{
+			tab.apply(update{Reach: []Route{{
 				Prefix:            prefix,
 				OriginASN:         origin,
 				ASPath:            []uint32{origin},
@@ -2060,15 +1997,15 @@ func TestTableMatchesModel(t *testing.T) {
 			}}})
 			model.reach(peer, prefix, pathID, origin)
 		case op < 8:
-			tab.Apply(Update{Peer: peer, Withdraw: []Withdrawal{{Prefix: prefix, PathID: pathID}}})
+			tab.apply(update{Peer: peer, Withdraw: []withdrawal{{Prefix: prefix, PathID: pathID}}})
 			model.withdraw(peer, prefix, pathID)
 		case op < 9:
-			tab.Apply(Update{Withdraw: []Withdrawal{{Prefix: prefix, PathID: pathID}}})
+			tab.apply(update{Withdraw: []withdrawal{{Prefix: prefix, PathID: pathID}}})
 			for peer := range model {
 				model.withdraw(peer, prefix, pathID)
 			}
 		default:
-			tab.RemovePeer(peer)
+			tab.removePeer(peer)
 			delete(model, peer)
 		}
 		model.check(t, tab, probes, step)
@@ -2077,7 +2014,7 @@ func TestTableMatchesModel(t *testing.T) {
 }
 
 // checkInvariants verifies that best, the views and the counters agree
-func checkInvariants(t *testing.T, tab *Table) {
+func checkInvariants(t *testing.T, tab *table) {
 	t.Helper()
 
 	tab.mu.RLock()
@@ -2146,76 +2083,16 @@ func checkInvariants(t *testing.T, tab *Table) {
 	}
 }
 
-func TestRemovePeerWithConcurrentWriter(t *testing.T) {
-	tab := NewTable()
-	a := netip.MustParseAddr("192.0.2.1")
-	b := netip.MustParseAddr("192.0.2.2")
-	fillTable(tab, a, 1<<14)
-	fillTable(tab, b, 1<<12)
-
-	// b churns the prefixes it shares with a while a goes away in chunks
-	var wg sync.WaitGroup
-	wg.Go(func() { tab.RemovePeer(Peer{Address: a}) })
-	wg.Go(func() {
-		for i := range 1 << 12 {
-			prefix := netip.PrefixFrom(netip.AddrFrom4([4]byte{1, byte(i >> 8), byte(i), 0}), 24)
-			tab.Apply(Update{Peer: Peer{Address: b}, Withdraw: []Withdrawal{{Prefix: prefix}}})
-			tab.Apply(Update{Reach: []Route{{Prefix: prefix, OriginASN: 64999, PeerAddress: b}}})
-		}
-	})
-	wg.Wait()
-
-	checkInvariants(t, tab)
-	if got := tab.Summary(); got != (Summary{PrefixesV4: 1 << 12, Routes: 1 << 12, Peers: 1}) {
-		t.Fatalf("summary = %+v, want only the routes of %s", got, b)
-	}
-	if route, ok := tab.Lookup(netip.MustParseAddr("1.0.0.1")); !ok || route.OriginASN != 64999 {
-		t.Fatalf("Lookup = %+v ok=%v, want origin 64999 from %s", route, ok, b)
-	}
-}
-
-func TestConcurrentRemovals(t *testing.T) {
-	const n = 1 << 13
-
-	for range 5 {
-		tab := NewTable()
-		a := netip.MustParseAddr("192.0.2.1")
-		b := netip.MustParseAddr("192.0.2.2")
-		c := netip.MustParseAddr("192.0.2.3")
-		fillTable(tab, a, n)
-		fillTable(tab, b, n)
-
-		// a, the preferred view, goes while b is taken apart, and c
-		// announces the prefixes again from the end, so it reaches prefixes
-		// that the removal of b has not withdrawn yet
-		var wg sync.WaitGroup
-		wg.Go(func() { tab.RemovePeer(Peer{Address: b}) })
-		wg.Go(func() {
-			tab.RemovePeer(Peer{Address: a})
-			for i := n - 1; i >= 0; i-- {
-				prefix := netip.PrefixFrom(netip.AddrFrom4([4]byte{byte(1 + i>>16), byte(i >> 8), byte(i), 0}), 24)
-				tab.Apply(Update{Reach: []Route{{Prefix: prefix, OriginASN: 64999, PeerAddress: c}}})
-			}
-		})
-		wg.Wait()
-
-		checkInvariants(t, tab)
-		if got := tab.Summary(); got != (Summary{PrefixesV4: n, Routes: n, Peers: 1}) {
-			t.Fatalf("summary = %+v, want only the routes of %s", got, c)
-		}
-	}
-}
-
 func TestRemovePeerLetsLookupsThrough(t *testing.T) {
 	const n = 1 << 17
 
-	tab := NewTable()
+	tab := newTable()
 	big := netip.MustParseAddr("192.0.2.1")
 	fillTable(tab, big, n)
 	probe := netip.MustParseAddr("1.0.0.1")
 
-	// the collector enriches under its own write lock, a lookup that waits
-	// for the whole removal stalls ingestion for as long
+	// the collector's read loop waits for labels, a lookup that waits for
+	// the whole removal stalls ingestion for as long
 	running := make(chan struct{})
 	stop := make(chan struct{})
 	longest := make(chan time.Duration)
@@ -2223,7 +2100,7 @@ func TestRemovePeerLetsLookupsThrough(t *testing.T) {
 		var worst time.Duration
 		for i := 0; ; i++ {
 			start := time.Now()
-			tab.Enrich(probe, probe)
+			tab.enrich(probe, probe)
 			worst = max(worst, time.Since(start))
 			if i == 0 {
 				close(running)
@@ -2239,12 +2116,12 @@ func TestRemovePeerLetsLookupsThrough(t *testing.T) {
 	<-running
 
 	start := time.Now()
-	tab.RemovePeer(Peer{Address: big})
+	tab.removePeer(Peer{Address: big})
 	total := time.Since(start)
 	close(stop)
 	worst := <-longest
 
-	if got := tab.Summary(); got != (Summary{}) {
+	if got := tab.summary(); got != (Summary{}) {
 		t.Fatalf("summary after RemovePeer = %+v, want empty", got)
 	}
 	t.Logf("removal took %v, the longest lookup %v", total, worst)
@@ -2254,49 +2131,49 @@ func TestRemovePeerLetsLookupsThrough(t *testing.T) {
 }
 
 func TestTablePrefersPostPolicy(t *testing.T) {
-	tab := NewTable()
+	tab := newTable()
 	pfx := netip.MustParsePrefix("2001:db8::/32")
 	addr := netip.MustParseAddr("192.0.2.1")
 
-	tab.Apply(Update{Reach: []Route{
+	tab.apply(update{Reach: []Route{
 		{Prefix: pfx, OriginASN: 64511, PeerAddress: addr, PostPolicy: false},
 		{Prefix: pfx, OriginASN: 64512, PeerAddress: addr, PostPolicy: true},
 	}})
 
-	route, ok := tab.Lookup(netip.MustParseAddr("2001:db8::1"))
+	route, ok := tab.lookup(netip.MustParseAddr("2001:db8::1"))
 	if !ok || route.OriginASN != 64512 || !route.PostPolicy {
 		t.Fatalf("best route = %+v, want the post policy view", route)
 	}
 
 	// dropping the post policy view falls back to the pre policy one
-	tab.RemovePeer(Peer{Address: addr, PostPolicy: true})
-	route, ok = tab.Lookup(netip.MustParseAddr("2001:db8::1"))
+	tab.removePeer(Peer{Address: addr, PostPolicy: true})
+	route, ok = tab.lookup(netip.MustParseAddr("2001:db8::1"))
 	if !ok || route.OriginASN != 64511 {
 		t.Fatalf("route after removing the post policy peer = %+v, want origin 64511", route)
 	}
 }
 
 func TestRemovePeerDropsOnlyThatPeer(t *testing.T) {
-	tab := NewTable()
+	tab := newTable()
 	a := Peer{Address: netip.MustParseAddr("192.0.2.1")}
 	b := Peer{Address: netip.MustParseAddr("192.0.2.2")}
 
-	tab.Apply(Update{Reach: []Route{
+	tab.apply(update{Reach: []Route{
 		{Prefix: netip.MustParsePrefix("203.0.113.0/24"), OriginASN: 1, PeerAddress: a.Address},
 		{Prefix: netip.MustParsePrefix("198.51.100.0/24"), OriginASN: 2, PeerAddress: a.Address},
 		{Prefix: netip.MustParsePrefix("198.51.100.0/24"), OriginASN: 3, PeerAddress: b.Address},
 	}})
 
-	tab.RemovePeer(a)
+	tab.removePeer(a)
 
-	if _, ok := tab.Lookup(netip.MustParseAddr("203.0.113.1")); ok {
+	if _, ok := tab.lookup(netip.MustParseAddr("203.0.113.1")); ok {
 		t.Fatal("prefix announced only by the removed peer is still present")
 	}
-	route, ok := tab.Lookup(netip.MustParseAddr("198.51.100.1"))
+	route, ok := tab.lookup(netip.MustParseAddr("198.51.100.1"))
 	if !ok || route.OriginASN != 3 {
 		t.Fatalf("route from the remaining peer = %+v ok=%v, want origin 3", route, ok)
 	}
-	if got := tab.Peers(); len(got) != 1 || got[0] != b {
+	if got := tab.peers(); len(got) != 1 || got[0] != b {
 		t.Fatalf("peers = %v, want only %v", got, b)
 	}
 	if got := len(tab.metas); got != 1 {
@@ -2305,23 +2182,23 @@ func TestRemovePeerDropsOnlyThatPeer(t *testing.T) {
 }
 
 func TestRemovePeerViewsKeepsOtherDistinguishers(t *testing.T) {
-	tab := NewTable()
+	tab := newTable()
 	addr := netip.MustParseAddr("192.0.2.1")
 	pfx := netip.MustParsePrefix("203.0.113.0/24")
 
-	tab.Apply(Update{Reach: []Route{
+	tab.apply(update{Reach: []Route{
 		{Prefix: pfx, OriginASN: 1, PeerAddress: addr},
 		{Prefix: pfx, OriginASN: 2, PeerAddress: addr, PostPolicy: true},
 		{Prefix: pfx, OriginASN: 3, PeerAddress: addr, PeerDistinguisher: 7},
 	}})
 
-	tab.RemovePeerViews(Peer{Address: addr, PostPolicy: true})
+	tab.removePeerViews(Peer{Address: addr, PostPolicy: true})
 
-	route, ok := tab.Lookup(netip.MustParseAddr("203.0.113.1"))
+	route, ok := tab.lookup(netip.MustParseAddr("203.0.113.1"))
 	if !ok || route.OriginASN != 3 {
 		t.Fatalf("route = %+v ok=%v, want origin 3 from the other distinguisher", route, ok)
 	}
-	if got := tab.Peers(); len(got) != 1 || got[0] != (Peer{Address: addr, Distinguisher: 7}) {
+	if got := tab.peers(); len(got) != 1 || got[0] != (Peer{Address: addr, Distinguisher: 7}) {
 		t.Fatalf("peers = %v, want only the view with distinguisher 7", got)
 	}
 }

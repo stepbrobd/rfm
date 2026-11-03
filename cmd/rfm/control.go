@@ -178,7 +178,7 @@ func (h *controlHandler) RIBSummary() (ctl.RIB, error) {
 	if h.backends == nil || h.backends.RIB == nil {
 		return ctl.RIB{}, errNoRIB
 	}
-	s := h.backends.RIB.Table().Summary()
+	s := h.backends.RIB.Summary()
 	return ctl.RIB{
 		Listen:     h.cfg.Agent.Enrich.RIB.BMP.Addr(),
 		PrefixesV4: s.PrefixesV4,
