@@ -67,6 +67,15 @@ struct {
 	__type(value, struct rfm_slot_value);
 } rfm_iface_arr SEC(".maps");
 
+// rfm_cpu_draw holds the skip count and wakeup countdown of each CPU for the
+// sampled only programs, which draw before any parse, its counters stay unused
+struct {
+	__uint(type, BPF_MAP_TYPE_PERCPU_ARRAY);
+	__uint(max_entries, 1);
+	__type(key, __u32);
+	__type(value, struct rfm_slot_value);
+} rfm_cpu_draw SEC(".maps");
+
 // rfm_iface_errors counts the counter updates rfm_iface_stats refused, a
 // full map is the usual cause and leaves the traffic of the new key uncounted
 struct {
@@ -263,11 +272,68 @@ static __always_inline __u64 rfm_gap(__u32 n)
 	return ((__u64)bpf_get_prandom_u32() * (2 * (__u64)n - 1)) >> 32;
 }
 
+// rfm_take reports whether the skip count of s samples this packet, drawing
+// the gap again when the rate changed since it was drawn and after a sample
+static __always_inline bool rfm_take(struct rfm_slot_value *s, __u32 rate)
+{
+	__u32 gen = rfm_cfg.gen;
+	if (s->gen != gen) {
+		s->gen = gen;
+		s->skip = rfm_gap(rate);
+	}
+	if (s->skip) {
+		s->skip--;
+		return false;
+	}
+	s->skip = rfm_gap(rate);
+	return true;
+}
+
+// rfm_count adds the packet to the counters of its interface, in its counter
+// slot when it has one and in the hash otherwise, and returns the slot entry
+static __always_inline struct rfm_slot_value *
+rfm_count(__u32 ifindex, __u8 dir, __u8 iface_proto, __u32 segs, __u32 len)
+{
+	struct rfm_slot_value *sval = NULL;
+	if (ifindex < RFM_SLOT_IFINDEX_MAX) {
+		__u32 *slot = bpf_map_lookup_elem(&rfm_iface_slot, &ifindex);
+		if (slot && *slot && *slot <= RFM_SLOTS) {
+			__u32 fam = iface_proto == 4 ? 1 :
+				    iface_proto == 6 ? 2 :
+						       0;
+			__u32 idx = (*slot - 1) * 2 * RFM_FAMILIES +
+				    dir * RFM_FAMILIES + fam;
+			sval = bpf_map_lookup_elem(&rfm_iface_arr, &idx);
+		}
+	}
+	if (sval) {
+		sval->packets += segs;
+		sval->bytes += len;
+	} else {
+		rfm_hash_count(ifindex, dir, iface_proto, segs, len);
+	}
+	return sval;
+}
+
 // the programs only observe, so every exit returns TCX_NEXT (TC_ACT_UNSPEC)
 // and later TCX programs and the filters of a clsact or ingress qdisc still
 // run, TC_ACT_OK is TCX_PASS and would end the chain at rfm
-static __always_inline int rfm_tc(struct __sk_buff *skb, __u8 dir)
+// sampled_only is a constant of each entry point, so the exact programs carry
+// none of the sampled only code
+static __always_inline int rfm_tc(struct __sk_buff *skb, __u8 dir,
+				  bool sampled_only)
 {
+	// sampled only draws first from the skip count of the CPU, the packets
+	// it passes over cost nothing more, and keeps no interface counters
+	struct rfm_slot_value *sval = NULL;
+	if (sampled_only) {
+		__u32 rate = rfm_cfg.sample_rate;
+		__u32 key = 0;
+		sval = bpf_map_lookup_elem(&rfm_cpu_draw, &key);
+		if (!sval || rate == 0 || !rfm_take(sval, rate))
+			return TCX_NEXT;
+	}
+
 	void *data = (void *)(long)skb->data;
 	void *end = (void *)(long)skb->data_end;
 
@@ -370,53 +436,29 @@ static __always_inline int rfm_tc(struct __sk_buff *skb, __u8 dir)
 		len += segs * sizeof(struct rfm_vlan_hdr);
 	}
 
-	// iface stats are always updated, not gated by sampling, in the slot
-	// of the interface when it has one and in the hash otherwise
-	struct rfm_slot_value *sval = NULL;
-	__u32 ifindex = skb->ifindex;
-	if (ifindex < RFM_SLOT_IFINDEX_MAX) {
-		__u32 *slot = bpf_map_lookup_elem(&rfm_iface_slot, &ifindex);
-		if (slot && *slot && *slot <= RFM_SLOTS) {
-			__u32 fam = iface_proto == 4 ? 1 :
-				    iface_proto == 6 ? 2 :
-						       0;
-			__u32 idx = (*slot - 1) * 2 * RFM_FAMILIES +
-				    dir * RFM_FAMILIES + fam;
-			sval = bpf_map_lookup_elem(&rfm_iface_arr, &idx);
-		}
-	}
-
-	if (sval) {
-		sval->packets += segs;
-		sval->bytes += len;
-	} else {
-		rfm_hash_count(ifindex, dir, iface_proto, segs, len);
-	}
+	// iface stats are always updated, not gated by sampling, unless
+	// sampled only keeps none
+	if (!sampled_only)
+		sval = rfm_count(skb->ifindex, dir, iface_proto, segs, len);
 
 	// skip non-IP traffic for flow events
 	if (iface_proto == 0)
 		return TCX_NEXT;
 
-	__u32 rate = rfm_cfg.sample_rate;
-	if (rate == 0)
-		return TCX_NEXT;
-
 	// a slot samples after a gap drawn uniform from 1 to 2 * rate - 1, one
 	// draw per sample instead of one per packet with the same mean of 1 in
-	// rate, an interface without a slot keeps a draw per packet
-	if (sval) {
-		__u32 gen = rfm_cfg.gen;
-		if (sval->gen != gen) {
-			sval->gen = gen;
-			sval->skip = rfm_gap(rate);
-		}
-		if (sval->skip) {
-			sval->skip--;
+	// rate, an interface without a slot keeps a draw per packet, sampled
+	// only has drawn already
+	if (!sampled_only) {
+		__u32 rate = rfm_cfg.sample_rate;
+		if (rate == 0)
+			return TCX_NEXT;
+		if (sval) {
+			if (!rfm_take(sval, rate))
+				return TCX_NEXT;
+		} else if (bpf_get_prandom_u32() % rate != 0) {
 			return TCX_NEXT;
 		}
-		sval->skip = rfm_gap(rate);
-	} else if (bpf_get_prandom_u32() % rate != 0) {
-		return TCX_NEXT;
 	}
 
 	// every check that can fail runs before the reservation, so the ring
@@ -507,13 +549,26 @@ static __always_inline int rfm_tc(struct __sk_buff *skb, __u8 dir)
 SEC("tc/ingress")
 int rfm_tc_ingress(struct __sk_buff *skb)
 {
-	return rfm_tc(skb, RFM_DIR_INGRESS);
+	return rfm_tc(skb, RFM_DIR_INGRESS, false);
 }
 
 SEC("tc/egress")
 int rfm_tc_egress(struct __sk_buff *skb)
 {
-	return rfm_tc(skb, RFM_DIR_EGRESS);
+	return rfm_tc(skb, RFM_DIR_EGRESS, false);
+}
+
+// the sampled only programs, Load loads them in place of the two above
+SEC("tc/ingress")
+int rfm_tc_ingress_sampled(struct __sk_buff *skb)
+{
+	return rfm_tc(skb, RFM_DIR_INGRESS, true);
+}
+
+SEC("tc/egress")
+int rfm_tc_egress_sampled(struct __sk_buff *skb)
+{
+	return rfm_tc(skb, RFM_DIR_EGRESS, true);
 }
 
 char LICENSE[] SEC("license") = "GPL";

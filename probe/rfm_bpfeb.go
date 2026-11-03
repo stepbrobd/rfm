@@ -48,17 +48,20 @@ type rfmRfmSlotValue struct {
 //
 // Used for safe lookups in a Collection or CollectionSpec.
 const (
-	rfmMapRfmFlowDrops    = "rfm_flow_drops"
-	rfmMapRfmFlowRings    = "rfm_flow_rings"
-	rfmMapRfmGsoHdrErrors = "rfm_gso_hdr_errors"
-	rfmMapRfmIfaceArr     = "rfm_iface_arr"
-	rfmMapRfmIfaceErrors  = "rfm_iface_errors"
-	rfmMapRfmIfaceSlot    = "rfm_iface_slot"
-	rfmMapRfmIfaceStats   = "rfm_iface_stats"
-	rfmMapRfmSubmitCount  = "rfm_submit_count"
-	rfmProgRfmTcEgress    = "rfm_tc_egress"
-	rfmProgRfmTcIngress   = "rfm_tc_ingress"
-	rfmVarRfmCfg          = "rfm_cfg"
+	rfmMapRfmCpuDraw           = "rfm_cpu_draw"
+	rfmMapRfmFlowDrops         = "rfm_flow_drops"
+	rfmMapRfmFlowRings         = "rfm_flow_rings"
+	rfmMapRfmGsoHdrErrors      = "rfm_gso_hdr_errors"
+	rfmMapRfmIfaceArr          = "rfm_iface_arr"
+	rfmMapRfmIfaceErrors       = "rfm_iface_errors"
+	rfmMapRfmIfaceSlot         = "rfm_iface_slot"
+	rfmMapRfmIfaceStats        = "rfm_iface_stats"
+	rfmMapRfmSubmitCount       = "rfm_submit_count"
+	rfmProgRfmTcEgress         = "rfm_tc_egress"
+	rfmProgRfmTcEgressSampled  = "rfm_tc_egress_sampled"
+	rfmProgRfmTcIngress        = "rfm_tc_ingress"
+	rfmProgRfmTcIngressSampled = "rfm_tc_ingress_sampled"
+	rfmVarRfmCfg               = "rfm_cfg"
 )
 
 // loadRfm returns the embedded CollectionSpec for rfm.
@@ -103,14 +106,17 @@ type rfmSpecs struct {
 //
 // It can be passed ebpf.CollectionSpec.Assign.
 type rfmProgramSpecs struct {
-	RfmTcEgress  *ebpf.ProgramSpec `ebpf:"rfm_tc_egress"`
-	RfmTcIngress *ebpf.ProgramSpec `ebpf:"rfm_tc_ingress"`
+	RfmTcEgress         *ebpf.ProgramSpec `ebpf:"rfm_tc_egress"`
+	RfmTcEgressSampled  *ebpf.ProgramSpec `ebpf:"rfm_tc_egress_sampled"`
+	RfmTcIngress        *ebpf.ProgramSpec `ebpf:"rfm_tc_ingress"`
+	RfmTcIngressSampled *ebpf.ProgramSpec `ebpf:"rfm_tc_ingress_sampled"`
 }
 
 // rfmMapSpecs contains maps before they are loaded into the kernel.
 //
 // It can be passed ebpf.CollectionSpec.Assign.
 type rfmMapSpecs struct {
+	RfmCpuDraw      *ebpf.MapSpec `ebpf:"rfm_cpu_draw"`
 	RfmFlowDrops    *ebpf.MapSpec `ebpf:"rfm_flow_drops"`
 	RfmFlowRings    *ebpf.MapSpec `ebpf:"rfm_flow_rings"`
 	RfmGsoHdrErrors *ebpf.MapSpec `ebpf:"rfm_gso_hdr_errors"`
@@ -148,6 +154,7 @@ func (o *rfmObjects) Close() error {
 //
 // It can be passed to loadRfmObjects or ebpf.CollectionSpec.LoadAndAssign.
 type rfmMaps struct {
+	RfmCpuDraw      *ebpf.Map `ebpf:"rfm_cpu_draw"`
 	RfmFlowDrops    *ebpf.Map `ebpf:"rfm_flow_drops"`
 	RfmFlowRings    *ebpf.Map `ebpf:"rfm_flow_rings"`
 	RfmGsoHdrErrors *ebpf.Map `ebpf:"rfm_gso_hdr_errors"`
@@ -160,6 +167,7 @@ type rfmMaps struct {
 
 func (m *rfmMaps) Close() error {
 	return _RfmClose(
+		m.RfmCpuDraw,
 		m.RfmFlowDrops,
 		m.RfmFlowRings,
 		m.RfmGsoHdrErrors,
@@ -182,14 +190,18 @@ type rfmVariables struct {
 //
 // It can be passed to loadRfmObjects or ebpf.CollectionSpec.LoadAndAssign.
 type rfmPrograms struct {
-	RfmTcEgress  *ebpf.Program `ebpf:"rfm_tc_egress"`
-	RfmTcIngress *ebpf.Program `ebpf:"rfm_tc_ingress"`
+	RfmTcEgress         *ebpf.Program `ebpf:"rfm_tc_egress"`
+	RfmTcEgressSampled  *ebpf.Program `ebpf:"rfm_tc_egress_sampled"`
+	RfmTcIngress        *ebpf.Program `ebpf:"rfm_tc_ingress"`
+	RfmTcIngressSampled *ebpf.Program `ebpf:"rfm_tc_ingress_sampled"`
 }
 
 func (p *rfmPrograms) Close() error {
 	return _RfmClose(
 		p.RfmTcEgress,
+		p.RfmTcEgressSampled,
 		p.RfmTcIngress,
+		p.RfmTcIngressSampled,
 	)
 }
 

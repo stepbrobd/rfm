@@ -93,8 +93,13 @@ func Load(cfg Config) (*Probe, error) {
 		opts.MapReplacements = pinned
 	}
 
+	// only the program pair of the mode loads, the other stays nil
+	ingress, egress := "rfm_tc_ingress", "rfm_tc_egress"
+	if cfg.SampledOnly {
+		ingress, egress = "rfm_tc_ingress_sampled", "rfm_tc_egress_sampled"
+	}
 	var objs rfmObjects
-	err = spec.LoadAndAssign(&objs, &opts)
+	err = loadObjects(spec, opts, &objs, ingress, egress)
 	// the collection holds its own handles now
 	for _, m := range pinned {
 		m.Close()
@@ -161,6 +166,31 @@ func Load(cfg Config) (*Probe, error) {
 		}
 	}
 	return p, nil
+}
+
+// loadObjects loads the maps and variables of spec and its programs ingress
+// and egress, as the RfmTcIngress and RfmTcEgress of objs
+func loadObjects(spec *ebpf.CollectionSpec, opts ebpf.CollectionOptions, objs *rfmObjects, ingress, egress string) error {
+	for name := range spec.Programs {
+		if name != ingress && name != egress {
+			delete(spec.Programs, name)
+		}
+	}
+	coll, err := ebpf.NewCollectionWithOptions(spec, opts)
+	if err != nil {
+		return err
+	}
+	defer coll.Close()
+	if err := coll.Assign(&objs.rfmMaps); err != nil {
+		return err
+	}
+	if err := coll.Assign(&objs.rfmVariables); err != nil {
+		objs.rfmMaps.Close()
+		return err
+	}
+	objs.RfmTcIngress = coll.DetachProgram(ingress)
+	objs.RfmTcEgress = coll.DetachProgram(egress)
+	return nil
 }
 
 func closeMaps(maps []*ebpf.Map) {

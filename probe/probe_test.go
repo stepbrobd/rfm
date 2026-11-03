@@ -2807,3 +2807,75 @@ func TestFlowEventWritesEveryByte(t *testing.T) {
 		}
 	}
 }
+
+func TestSampledOnlyKeepsNoInterfaceCounters(t *testing.T) {
+	testutil.RequireRoot(t)
+
+	ns := testutil.NewNS(t)
+
+	p, err := Load(Config{SampleRate: 1, WakeupBatch: 1, SampledOnly: true})
+	if err != nil {
+		skipIfUnsupported(t, err)
+		t.Fatal(err)
+	}
+	defer p.Close()
+	if err := p.Attach(ns.Ifindex()); err != nil {
+		skipIfUnsupported(t, err)
+		t.Fatal(err)
+	}
+	rd := newFlowReader(t, p)
+
+	// the packet is sampled, its event carries what the exact counters
+	// would have counted, and no counter moves
+	pkt := testutil.EthIPv4UDP(net.IPv4(10, 0, 9, 1), net.IPv4(10, 0, 9, 2), 9300, 53)
+	ns.SendRaw(t, pkt)
+	deadline := time.Now().Add(time.Second)
+	for {
+		raw, err := rd.read(deadline)
+		if err != nil {
+			t.Fatalf("read flow event: %v", err)
+		}
+		var ev rfmRfmFlowEvent
+		if err := binary.Read(bytes.NewReader(raw), binary.NativeEndian, &ev); err != nil {
+			t.Fatal(err)
+		}
+		if ev.Ifindex == uint32(ns.Ifindex()) && ev.SrcPort == 9300 {
+			if ev.Segs != 1 || ev.Len != uint32(len(pkt)) {
+				t.Fatalf("event of %d segments and %d bytes, want 1 and %d", ev.Segs, ev.Len, len(pkt))
+			}
+			break
+		}
+	}
+	counters, err := p.Counters()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(counters) != 0 {
+		t.Fatalf("counters in sampled only mode = %+v, want none", counters)
+	}
+}
+
+func TestSampledOnlyKeepsTheRate(t *testing.T) {
+	testutil.RequireRoot(t)
+
+	testutil.NewNS(t)
+
+	p, err := Load(Config{SampleRate: 10, WakeupBatch: 1, SampledOnly: true})
+	if err != nil {
+		skipIfUnsupported(t, err)
+		t.Fatal(err)
+	}
+	defer p.Close()
+
+	// the skip count of each CPU puts 2000 samples in 20000 packets
+	if got := loopbackSamples(t, p, 20000); got < 1800 || got > 2200 {
+		t.Fatalf("samples of 20000 packets at 1 in 10 = %d, want 2000 within 200", got)
+	}
+	// a new rate draws again at the next packet
+	if err := p.SetSampleRate(1); err != nil {
+		t.Fatal(err)
+	}
+	if got := loopbackSamples(t, p, 5); got != 5 {
+		t.Fatalf("samples of 5 packets after the rate went to 1 = %d, want 5", got)
+	}
+}
