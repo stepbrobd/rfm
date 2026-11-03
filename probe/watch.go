@@ -276,9 +276,16 @@ func nlmsgErrno(data []byte) (syscall.Errno, error) {
 func (p *Probe) handleLink(typ uint16, attrs *netlink.LinkAttrs, match func(string) bool, notify func(LinkEvent)) {
 	switch typ {
 	case unix.RTM_NEWLINK:
-		// every state change of a link arrives as a new link message, an
-		// interface that is already attached stays as it is
+		// every state change of a link arrives as a new link message
 		if !match(attrs.Name) {
+			// a rename can take an attached or pending link out of the patterns
+			p.mu.Lock()
+			_, attached := p.links[attrs.Index]
+			_, pending := p.pending[attrs.Index]
+			p.mu.Unlock()
+			if attached || pending {
+				p.forget(attrs.Index, notify)
+			}
 			return
 		}
 		if err := checkLinkType(attrs); err != nil {

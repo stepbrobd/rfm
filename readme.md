@@ -205,13 +205,15 @@ Patterns may overlap. For example `["eth0", "eth.*"]` matches `eth0` once even
 though both patterns apply, and a TC program is attached at most once per
 interface. The agent follows the links over netlink. It attaches every matching
 link of its first link dump and every matching link that appears later, and
-detaches a link that goes away, whose counters go with it. A matching link
-without an ethernet header, such as a WireGuard, tun (`tailscale0`) or xfrm
-interface, is skipped with a warning, because the programs would read its IP
-header as ethernet. An attach that finds the link already gone is only logged as
-a warning, as the removal of the link follows. Any other attach that fails is
-tried again after a pause that doubles from 100 milliseconds up to 30 seconds,
-and every failed try counts as an `attach` error.
+detaches a link that goes away or that a rename takes out of the patterns. The
+counters of a detached link are dropped with it. A matching link without an
+ethernet header, such as a WireGuard, tun (`tailscale0`) or xfrm interface, is
+skipped with a warning, because the programs would read its IP header as
+ethernet. An attach that finds the link already gone is only logged as a
+warning, as the removal of the link follows. Any other failed attach is tried
+again after a pause that doubles from 100 milliseconds up to 30 seconds, until
+the link goes away or a rename takes it out of the patterns. Every failed try
+counts as an `attach` error.
 
 The agent starts when no interface matches yet, see
 [Startup and shutdown](#startup-and-shutdown). A pattern that fails to compile

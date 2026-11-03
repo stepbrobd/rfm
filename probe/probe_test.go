@@ -2235,6 +2235,65 @@ func TestWatchRetriesAFailedAttach(t *testing.T) {
 	}
 }
 
+func TestWatchForgetsALinkRenamedAway(t *testing.T) {
+	testutil.RequireRoot(t)
+
+	ns := testutil.NewNS(t)
+
+	p, err := Load(Config{SampleRate: 1 << 30, WakeupBatch: 1})
+	if err != nil {
+		testutil.SkipIfUnprivileged(t, err)
+		t.Fatal(err)
+	}
+	defer p.Close()
+
+	// rfmw1 stays pending while its full ingress hook refuses the attach
+	addVeth(t, "rfmw0", "zzp0")
+	addVeth(t, "rfmw1", "zzp1")
+	attached, pending := ifindexOf(t, "rfmw0"), ifindexOf(t, "rfmw1")
+	fillers := fillIngress(t, pending)
+	w := startWatch(t, p, ns, "rfmw", nil)
+	w.expect(t, true, "rfmw0")
+	testutil.Eventually(t, time.Second, 10*time.Millisecond, func() error {
+		if got := p.Pending(); len(got) != 1 || got[0] != pending {
+			return fmt.Errorf("pending = %v, want [%d]", got, pending)
+		}
+		return nil
+	})
+
+	for _, ifindex := range []int{attached, pending} {
+		l, err := netlink.LinkByIndex(ifindex)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := netlink.LinkSetName(l, fmt.Sprintf("zzr%d", ifindex)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	w.expect(t, false, "rfmw0")
+
+	// the hook has room again, and a matching pair after the renames orders the checks behind their messages
+	if err := fillers[0].Close(); err != nil {
+		t.Fatal(err)
+	}
+	addVeth(t, "rfmw2", "zzp2")
+	w.expect(t, true, "rfmw2")
+	if got := p.Pending(); len(got) != 0 {
+		t.Fatalf("pending after the rename = %v, want none", got)
+	}
+	p.mu.Lock()
+	held := p.slots.held()
+	p.mu.Unlock()
+	for _, ifindex := range []int{attached, pending} {
+		if attachedSet(p)[ifindex] {
+			t.Fatalf("ifindex %d still attached after its rename", ifindex)
+		}
+		if _, ok := held[uint32(ifindex)]; ok {
+			t.Fatalf("ifindex %d keeps its slot after its rename", ifindex)
+		}
+	}
+}
+
 func TestWatchKeepsAPortThatLeavesItsBridge(t *testing.T) {
 	testutil.RequireRoot(t)
 
