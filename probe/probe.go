@@ -411,15 +411,14 @@ func (p *Probe) pruneIfaceStats() error {
 // deleteIfaceStats deletes the counter entries whose ifindex drop accepts
 func (p *Probe) deleteIfaceStats(drop func(ifindex uint32) bool) error {
 	var key rfmRfmIfaceKey
-	var vals []rfmRfmIfaceValue
 	var keys []rfmRfmIfaceKey
-	iter := p.objs.RfmIfaceStats.Iterate()
-	for iter.Next(&key, &vals) {
+	err := p.objs.RfmIfaceStats.NextKey(nil, &key)
+	for ; err == nil; err = p.objs.RfmIfaceStats.NextKey(key, &key) {
 		if drop(key.Ifindex) {
 			keys = append(keys, key)
 		}
 	}
-	if err := iter.Err(); err != nil {
+	if !errors.Is(err, ebpf.ErrKeyNotExist) {
 		return fmt.Errorf("iterate iface stats: %w", err)
 	}
 	for _, k := range keys {
@@ -465,11 +464,7 @@ func nextGen(gen uint32) uint32 {
 	return gen
 }
 
-// Counters returns the traffic the programs counted per interface,
-// direction and family, summed over CPUs and over the counter slot of the
-// interface and its hash entries, which hold what it counted without a slot,
-// before an upgrade added the slots or once every slot was taken, and only
-// the entries that saw traffic
+// Counters sums CPUs and the slot and hash entries per interface, direction and family, leaving out empty ones
 func (p *Probe) Counters() ([]IfaceCounter, error) {
 	type key struct {
 		ifindex    uint32
@@ -477,8 +472,7 @@ func (p *Probe) Counters() ([]IfaceCounter, error) {
 	}
 	sums := make(map[key]IfaceCounter)
 
-	// deleting a key under a hash iterator restarts the walk, so a read
-	// that overlaps a detach can see a key twice, the later read wins
+	// a walk that overlaps a delete restarts and can see a key twice, the later read wins
 	var hk rfmRfmIfaceKey
 	var vals []rfmRfmIfaceValue
 	iter := p.objs.RfmIfaceStats.Iterate()
@@ -494,19 +488,35 @@ func (p *Probe) Counters() ([]IfaceCounter, error) {
 		return nil, fmt.Errorf("iterate iface stats: %w", err)
 	}
 
-	var svals []rfmRfmSlotValue
+	ncpu, err := ebpf.PossibleCPU()
+	if err != nil {
+		return nil, fmt.Errorf("count CPUs: %w", err)
+	}
+	// the slots keep their owners while mu is held
 	p.mu.Lock()
-	for ifindex, slot := range p.slots.held() {
+	held := p.slots.held()
+	n := 0
+	for _, slot := range held {
+		n = max(n, int(slotIndex(slot+1, 0, 0)))
+	}
+	svals := make([]rfmRfmSlotValue, n*ncpu)
+	if n > 0 {
+		var cursor ebpf.MapBatchCursor
+		_, err := p.objs.RfmIfaceArr.BatchLookup(&cursor, make([]uint32, n), svals, nil)
+		if err != nil && !errors.Is(err, ebpf.ErrKeyNotExist) {
+			p.mu.Unlock()
+			return nil, fmt.Errorf("read counter slots: %w", err)
+		}
+	}
+	p.mu.Unlock()
+	for ifindex, slot := range held {
 		for dir := range uint8(2) {
 			for fam := range ifaceFamilies {
-				if err := p.objs.RfmIfaceArr.Lookup(slotIndex(slot, dir, fam), &svals); err != nil {
-					p.mu.Unlock()
-					return nil, fmt.Errorf("read counter slot %d: %w", slot, err)
-				}
+				i := int(slotIndex(slot, dir, fam))
 				k := key{ifindex, dir, familyProto(fam)}
 				c := sums[k]
 				c.Ifindex, c.Dir, c.Proto = k.ifindex, k.dir, k.proto
-				for _, v := range svals {
+				for _, v := range svals[i*ncpu : (i+1)*ncpu] {
 					c.Packets += v.Packets
 					c.Bytes += v.Bytes
 				}
@@ -514,7 +524,6 @@ func (p *Probe) Counters() ([]IfaceCounter, error) {
 			}
 		}
 	}
-	p.mu.Unlock()
 
 	out := make([]IfaceCounter, 0, len(sums))
 	for _, c := range sums {
