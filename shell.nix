@@ -1,7 +1,6 @@
 {
   lib,
   mkShell,
-  bear,
   bpftools,
   deno,
   go,
@@ -20,7 +19,6 @@
 
 mkShell {
   packages = [
-    bear
     deno
     go
     go-tools

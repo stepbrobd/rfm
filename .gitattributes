@@ -2,11 +2,6 @@
 
 *.patch -text
 
-# *.csv text eol=lf
-# .gitattributes export-ignore
-# .gitignore export-ignore
-# .gitkeep export-ignore
-
 *.bash text eol=lf
 *.bat text eol=crlf
 *.cmd text eol=crlf
