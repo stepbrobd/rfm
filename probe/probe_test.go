@@ -2294,6 +2294,32 @@ func TestWatchForgetsALinkRenamedAway(t *testing.T) {
 	}
 }
 
+func TestAttachLinkReleasesTheSlotOfAGoneLink(t *testing.T) {
+	testutil.RequireRoot(t)
+
+	testutil.NewNS(t)
+
+	p, err := Load(Config{SampleRate: 1 << 30, WakeupBatch: 1})
+	if err != nil {
+		testutil.SkipIfUnprivileged(t, err)
+		t.Fatal(err)
+	}
+	defer p.Close()
+
+	veth := addVeth(t, "rfmw0", "zzp0")
+	ifindex := ifindexOf(t, "rfmw0")
+	if err := netlink.LinkDel(veth); err != nil {
+		t.Fatal(err)
+	}
+	p.attachLink(ifindex, "rfmw0", func(LinkEvent) {})
+	p.mu.Lock()
+	_, held := p.slots.held()[uint32(ifindex)]
+	p.mu.Unlock()
+	if held {
+		t.Fatal("a link gone at its attach keeps its slot")
+	}
+}
+
 func TestWatchKeepsAPortThatLeavesItsBridge(t *testing.T) {
 	testutil.RequireRoot(t)
 

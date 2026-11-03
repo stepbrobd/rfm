@@ -303,8 +303,11 @@ func (p *Probe) handleLink(typ uint16, attrs *netlink.LinkAttrs, match func(stri
 func (p *Probe) attachLink(ifindex int, name string, notify func(LinkEvent)) {
 	attached, err := p.attach(ifindex, name)
 	if errors.Is(err, unix.ENODEV) {
-		// the link went away before the attach, its delete message follows
+		// the link went before the attach, an overflow can lose its delete message
 		log.Warn("attach interface", "interface", name, "err", err)
+		if err := p.clearIfaceStats(ifindex); err != nil {
+			log.Error("clear interface counters", "interface", name, "err", err)
+		}
 		return
 	}
 	if err != nil {
