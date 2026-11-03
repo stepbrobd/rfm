@@ -28,6 +28,8 @@ type ifaceLinks struct {
 
 type Probe struct {
 	objs *rfmObjects
+	// ingress and egress are the program pair Load loaded for the mode
+	ingress, egress *ebpf.Program
 	// rings holds the event ring of every possible CPU, by CPU
 	rings []*ebpf.Map
 
@@ -78,9 +80,7 @@ func Load(cfg Config) (*Probe, error) {
 	}
 
 	if cfg.IfaceStatsSize > 0 {
-		if ms, ok := spec.Maps["rfm_iface_stats"]; ok {
-			ms.MaxEntries = uint32(cfg.IfaceStatsSize)
-		}
+		spec.Maps[pinStats].MaxEntries = uint32(cfg.IfaceStatsSize)
 	}
 
 	// pinned counters carry over restarts, sampled only leaves them for the next exact load
@@ -95,13 +95,20 @@ func Load(cfg Config) (*Probe, error) {
 		opts.MapReplacements = pinned
 	}
 
-	// only the program pair of the mode loads, the other stays nil
+	// only the program pair of the mode loads
 	ingress, egress := "rfm_tc_ingress", "rfm_tc_egress"
 	if cfg.SampledOnly {
 		ingress, egress = "rfm_tc_ingress_sampled", "rfm_tc_egress_sampled"
 	}
-	var objs rfmObjects
-	err = loadObjects(spec, opts, &objs, ingress, egress)
+	p := &Probe{
+		objs:    new(rfmObjects),
+		rings:   make([]*ebpf.Map, 0, ncpu),
+		links:   make(map[int]ifaceLinks),
+		skipped: make(map[int]bool),
+		pending: make(map[int]string),
+		slots:   newSlotAlloc(int(spec.Maps[pinArr].MaxEntries)/(2*ifaceFamilies), spec.Maps[pinSlot].MaxEntries),
+	}
+	p.ingress, p.egress, err = loadObjects(spec, opts, p.objs, ingress, egress)
 	// the collection holds its own handles now
 	for _, m := range pinned {
 		m.Close()
@@ -111,15 +118,15 @@ func Load(cfg Config) (*Probe, error) {
 	}
 	if pin {
 		for name, m := range map[string]*ebpf.Map{
-			pinStats: objs.RfmIfaceStats,
-			pinSlot:  objs.RfmIfaceSlot,
-			pinArr:   objs.RfmIfaceArr,
+			pinStats: p.objs.RfmIfaceStats,
+			pinSlot:  p.objs.RfmIfaceSlot,
+			pinArr:   p.objs.RfmIfaceArr,
 		} {
 			if pinned[name] != nil {
 				continue
 			}
 			if err := m.Pin(filepath.Join(cfg.PinPath, name)); err != nil {
-				objs.Close()
+				p.Close()
 				return nil, fmt.Errorf("pin %s: %w", name, err)
 			}
 		}
@@ -131,46 +138,34 @@ func Load(cfg Config) (*Probe, error) {
 		WakeupBatch: cfg.WakeupBatch,
 		Gen:         nextGen(rand.Uint32()),
 	}
-	if err := objs.RfmCfg.Set(cfgVal); err != nil {
-		objs.Close()
+	if err := p.objs.RfmCfg.Set(cfgVal); err != nil {
+		p.Close()
 		return nil, fmt.Errorf("write config: %w", err)
 	}
 
-	rings := make([]*ebpf.Map, 0, ncpu)
 	for cpu := range ncpu {
 		ring, err := ebpf.NewMap(ringSpec)
 		if err == nil {
-			err = objs.RfmFlowRings.Put(uint32(cpu), ring)
+			p.rings = append(p.rings, ring)
+			err = p.objs.RfmFlowRings.Put(uint32(cpu), ring)
 		}
 		if err != nil {
-			closeMaps(rings)
-			objs.Close()
+			p.Close()
 			return nil, fmt.Errorf("event ring of cpu %d: %w", cpu, err)
 		}
-		rings = append(rings, ring)
 	}
 
-	p := &Probe{
-		objs:    &objs,
-		rings:   rings,
-		links:   make(map[int]ifaceLinks),
-		skipped: make(map[int]bool),
-		pending: make(map[int]string),
-		slots:   newSlotAlloc(int(spec.Maps[pinArr].MaxEntries)/(2*ifaceFamilies), spec.Maps[pinSlot].MaxEntries),
-	}
 	if pinned[pinSlot] != nil {
 		if err := p.restoreSlots(); err != nil {
-			closeMaps(rings)
-			objs.Close()
+			p.Close()
 			return nil, err
 		}
 	}
 	return p, nil
 }
 
-// loadObjects loads the maps and variables of spec and its programs ingress
-// and egress, as the RfmTcIngress and RfmTcEgress of objs
-func loadObjects(spec *ebpf.CollectionSpec, opts ebpf.CollectionOptions, objs *rfmObjects, ingress, egress string) error {
+// loadObjects loads the maps and variables of spec into objs and returns the programs named ingress and egress
+func loadObjects(spec *ebpf.CollectionSpec, opts ebpf.CollectionOptions, objs *rfmObjects, ingress, egress string) (*ebpf.Program, *ebpf.Program, error) {
 	for name := range spec.Programs {
 		if name != ingress && name != egress {
 			delete(spec.Programs, name)
@@ -178,25 +173,17 @@ func loadObjects(spec *ebpf.CollectionSpec, opts ebpf.CollectionOptions, objs *r
 	}
 	coll, err := ebpf.NewCollectionWithOptions(spec, opts)
 	if err != nil {
-		return err
+		return nil, nil, err
 	}
 	defer coll.Close()
 	if err := coll.Assign(&objs.rfmMaps); err != nil {
-		return err
+		return nil, nil, err
 	}
 	if err := coll.Assign(&objs.rfmVariables); err != nil {
 		objs.rfmMaps.Close()
-		return err
+		return nil, nil, err
 	}
-	objs.RfmTcIngress = coll.DetachProgram(ingress)
-	objs.RfmTcEgress = coll.DetachProgram(egress)
-	return nil
-}
-
-func closeMaps(maps []*ebpf.Map) {
-	for _, m := range maps {
-		m.Close()
-	}
+	return coll.DetachProgram(ingress), coll.DetachProgram(egress), nil
 }
 
 // the pinned counter maps, the hash and the slot map with its counter array
@@ -350,7 +337,7 @@ func (p *Probe) Close() error {
 	for _, ring := range p.rings {
 		errs = append(errs, ring.Close())
 	}
-	errs = append(errs, p.objs.Close())
+	errs = append(errs, p.objs.Close(), p.ingress.Close(), p.egress.Close())
 	return errors.Join(errs...)
 }
 
@@ -635,15 +622,14 @@ func (p *Probe) attach(ifindex int, name string) (bool, error) {
 		return false, nil
 	}
 
-	// the slot is in place before the first packet, a link that fails to
-	// attach keeps it until it attaches or prune finds it gone
+	// the slot is in place before the first packet, a pending link keeps it
 	if err := p.assignSlot(ifindex); err != nil {
 		return false, err
 	}
 
 	ing, err := link.AttachTCX(link.TCXOptions{
 		Interface: ifindex,
-		Program:   p.objs.RfmTcIngress,
+		Program:   p.ingress,
 		Attach:    ebpf.AttachTCXIngress,
 		Anchor:    link.Head(),
 	})
@@ -653,7 +639,7 @@ func (p *Probe) attach(ifindex int, name string) (bool, error) {
 
 	egr, err := link.AttachTCX(link.TCXOptions{
 		Interface: ifindex,
-		Program:   p.objs.RfmTcEgress,
+		Program:   p.egress,
 		Attach:    ebpf.AttachTCXEgress,
 		Anchor:    link.Tail(),
 	})

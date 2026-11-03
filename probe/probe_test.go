@@ -392,7 +392,7 @@ func TestIfaceCountersTruncatedVLANTag(t *testing.T) {
 		testutil.EthP8021Q,
 		nil,
 	)
-	if _, err := p.objs.RfmTcIngress.Run(&ebpf.RunOptions{Data: frame}); err != nil {
+	if _, err := p.ingress.Run(&ebpf.RunOptions{Data: frame}); err != nil {
 		skipIfUnsupported(t, err)
 		t.Fatal(err)
 	}
@@ -790,7 +790,7 @@ func TestIngressGSOLongExtensionHeader(t *testing.T) {
 	payload = append(payload, make([]byte, 2*gsoSize)...)
 	frame := testutil.EthIPv6(net.ParseIP("fd00:9::1"), net.ParseIP("fd00:9::2"), testutil.IPProtoDstOpts, payload)
 	ctx := skbContext{GSOSegs: 2, GSOSize: gsoSize}
-	if _, err := p.objs.RfmTcIngress.Run(&ebpf.RunOptions{Data: frame, Context: ctx}); err != nil {
+	if _, err := p.ingress.Run(&ebpf.RunOptions{Data: frame, Context: ctx}); err != nil {
 		skipIfUnsupported(t, err)
 		t.Fatal(err)
 	}
@@ -1013,7 +1013,7 @@ func TestGSOHeaderErrorsCountHeadersThatDoNotParse(t *testing.T) {
 
 	run := func(frame []byte, ctx skbContext) {
 		t.Helper()
-		if _, err := p.objs.RfmTcIngress.Run(&ebpf.RunOptions{Data: frame, Context: ctx}); err != nil {
+		if _, err := p.ingress.Run(&ebpf.RunOptions{Data: frame, Context: ctx}); err != nil {
 			skipIfUnsupported(t, err)
 			t.Fatal(err)
 		}
@@ -1060,7 +1060,7 @@ func TestIngressGSOTakesTheKernelWireLen(t *testing.T) {
 	run := func(frame []byte, wire uint32) {
 		t.Helper()
 		ctx := skbContext{WireLen: wire, GSOSegs: gsoSegs, GSOSize: gsoSize}
-		if _, err := p.objs.RfmTcIngress.Run(&ebpf.RunOptions{Data: frame, Context: ctx}); err != nil {
+		if _, err := p.ingress.Run(&ebpf.RunOptions{Data: frame, Context: ctx}); err != nil {
 			skipIfUnsupported(t, err)
 			t.Fatal(err)
 		}
@@ -1113,7 +1113,7 @@ func TestGSOHeaderErrorsSkipEgressWithASegmentCount(t *testing.T) {
 
 	run := func(frame []byte, ctx skbContext) {
 		t.Helper()
-		if _, err := p.objs.RfmTcEgress.Run(&ebpf.RunOptions{Data: frame, Context: ctx}); err != nil {
+		if _, err := p.egress.Run(&ebpf.RunOptions{Data: frame, Context: ctx}); err != nil {
 			skipIfUnsupported(t, err)
 			t.Fatal(err)
 		}
@@ -1310,8 +1310,8 @@ func TestAttachOrder(t *testing.T) {
 	for at, prog := range others {
 		otherID[at] = progID(prog)
 	}
-	ingressID := progID(p.objs.RfmTcIngress)
-	egressID := progID(p.objs.RfmTcEgress)
+	ingressID := progID(p.ingress)
+	egressID := progID(p.egress)
 
 	order := func(at ebpf.AttachType) []ebpf.ProgramID {
 		res, err := link.QueryPrograms(link.QueryOptions{Target: ns.Ifindex(), Attach: at})
@@ -2583,7 +2583,7 @@ func loopbackSamples(t *testing.T, p *Probe, n uint32) int {
 	}
 	before := drops()
 	frame := testutil.EthIPv4UDP(net.IPv4(10, 0, 9, 1), net.IPv4(10, 0, 9, 2), 9100, 53)
-	if _, err := p.objs.RfmTcIngress.Run(&ebpf.RunOptions{Data: frame, Repeat: n}); err != nil {
+	if _, err := p.ingress.Run(&ebpf.RunOptions{Data: frame, Repeat: n}); err != nil {
 		skipIfUnsupported(t, err)
 		t.Fatal(err)
 	}
@@ -2825,7 +2825,7 @@ func TestFlowEventWritesEveryByte(t *testing.T) {
 
 	emit := func(frame []byte) []byte {
 		t.Helper()
-		if _, err := p.objs.RfmTcIngress.Run(&ebpf.RunOptions{Data: frame}); err != nil {
+		if _, err := p.ingress.Run(&ebpf.RunOptions{Data: frame}); err != nil {
 			skipIfUnsupported(t, err)
 			t.Fatal(err)
 		}
