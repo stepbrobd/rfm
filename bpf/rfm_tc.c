@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
 #include "rfm_common.h"
+#include <bpf/bpf_core_read.h>
 #include <bpf/bpf_endian.h>
 #include <bpf/bpf_helpers.h>
 
@@ -200,6 +201,33 @@ static __always_inline __u32 rfm_hdr_len(struct __sk_buff *skb, void *l3,
 	return l2_len + l3_len;
 }
 
+// a tunnel skb's inner headers, from the offsets qdisc_pkt_len_segs_init reads
+static __always_inline __u32 rfm_tunnel_hdr_len(struct __sk_buff *skb,
+						struct sk_buff *k)
+{
+	__u32 nh = (__u32)k->inner_network_header - k->mac_header;
+	__u32 th = (__u32)k->inner_transport_header - k->mac_header;
+	__u8 b, proto;
+
+	if (bpf_skb_load_bytes(skb, nh, &b, 1))
+		return 0;
+	__u32 proto_off =
+		b >> 4 == 4 ? __builtin_offsetof(struct iphdr, protocol) :
+		b >> 4 == 6 ? __builtin_offsetof(struct ipv6hdr, nexthdr) :
+			      0;
+	if (!proto_off || bpf_skb_load_bytes(skb, nh + proto_off, &proto, 1))
+		return 0;
+
+	if (proto == IPPROTO_TCP) {
+		if (bpf_skb_load_bytes(skb, th + 12, &b, 1))
+			return 0;
+		return th + rfm_tcp_hdr_len(b);
+	}
+	if (proto == IPPROTO_UDP)
+		return th + sizeof(struct udphdr);
+	return th;
+}
+
 static __always_inline void
 rfm_hash_count(__u32 ifindex, __u8 dir, __u8 iface_proto, __u32 segs, __u32 len)
 {
@@ -335,7 +363,11 @@ static __always_inline int rfm_tc(struct __sk_buff *skb, __u8 dir,
 		__u32 hdr_len = 0;
 		if ((dir == RFM_DIR_INGRESS && segs > 1 && !ingress_wire) ||
 		    segs == 0) {
-			hdr_len = rfm_hdr_len(skb, l3, end, eth_proto, l3_off);
+			struct sk_buff *k = bpf_cast_to_kern_ctx(skb);
+			hdr_len = BPF_CORE_READ_BITFIELD(k, encapsulation) ?
+					  rfm_tunnel_hdr_len(skb, k) :
+					  rfm_hdr_len(skb, l3, end, eth_proto,
+						      l3_off);
 			if (!hdr_len) {
 				__u32 err_key = 0;
 				__u64 *errs = bpf_map_lookup_elem(

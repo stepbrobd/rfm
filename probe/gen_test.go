@@ -1,19 +1,21 @@
 package probe
 
 import (
-	"bytes"
-	"debug/elf"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/cilium/ebpf"
+	"github.com/cilium/ebpf/asm"
+	"github.com/cilium/ebpf/btf"
+
 	"ysun.co/rfm/testutil"
 )
 
-// tcSections compiles the BPF source for target against the vmlinux.h of
+// tcPrograms compiles the BPF source for target against the vmlinux.h of
 // arch and returns the instructions of every tc program in the object
-func tcSections(t *testing.T, clang string, cflags []string, target, arch string) map[string][]byte {
+func tcPrograms(t *testing.T, clang string, cflags []string, target, arch string) map[string]asm.Instructions {
 	t.Helper()
 
 	obj := filepath.Join(t.TempDir(), target+"-"+arch+".o")
@@ -25,27 +27,37 @@ func tcSections(t *testing.T, clang string, cflags []string, target, arch string
 		t.Fatalf("compile for %s against %s: %v\n%s", target, arch, err, out)
 	}
 
-	f, err := elf.Open(obj)
+	spec, err := ebpf.LoadCollectionSpec(obj)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer f.Close()
-
-	progs := make(map[string][]byte)
-	for _, s := range f.Sections {
-		if !strings.HasPrefix(s.Name, "tc/") {
-			continue
+	progs := make(map[string]asm.Instructions)
+	for name, p := range spec.Programs {
+		if strings.HasPrefix(p.SectionName, "tc/") {
+			progs[name] = p.Instructions
 		}
-		data, err := s.Data()
-		if err != nil {
-			t.Fatal(err)
-		}
-		progs[s.Name] = data
 	}
 	if len(progs) == 0 {
 		t.Fatalf("no tc programs in the %s object", target)
 	}
 	return progs
+}
+
+// sameUpToCORE compares two programs except the immediates the loader relocates against the kernel's BTF
+func sameUpToCORE(a, b asm.Instructions) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		x, y := a[i], b[i]
+		if x.OpCode != y.OpCode || x.Dst != y.Dst || x.Src != y.Src {
+			return false
+		}
+		if btf.CORERelocationMetadata(&x) == nil && (x.Offset != y.Offset || x.Constant != y.Constant) {
+			return false
+		}
+	}
+	return true
 }
 
 // bpfgen compiles the bpfel and the bpfeb object against the vmlinux.h of
@@ -64,10 +76,10 @@ func TestProgramsIgnoreHeaderBitfieldLayout(t *testing.T) {
 	cflags := strings.Fields(string(out))
 
 	for _, target := range []string{"bpfel", "bpfeb"} {
-		little := tcSections(t, clang, cflags, target, "x86_64")
-		big := tcSections(t, clang, cflags, target, "s390x")
+		little := tcPrograms(t, clang, cflags, target, "x86_64")
+		big := tcPrograms(t, clang, cflags, target, "s390x")
 		for name, insns := range little {
-			if !bytes.Equal(insns, big[name]) {
+			if !sameUpToCORE(insns, big[name]) {
 				t.Errorf("%s %s depends on the bitfield layout of vmlinux.h", target, name)
 			}
 		}

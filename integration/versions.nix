@@ -88,6 +88,14 @@ in
           )
         assert_rx_matches_nic(a, b, "10.43.0.2")
 
+        for m, end, peer in ((a, 1, b_ip), (b, 2, a_ip)):
+          m.succeed(
+            f"ip link add vxlan42 type vxlan id 42 dev eth1 remote {peer} dstport 4789",
+            f"ip addr add 10.42.0.{end}/24 dev vxlan42",
+            "ip link set vxlan42 up",
+          )
+        assert_rx_matches_nic(a, b, "10.42.0.2")
+
         a.succeed(f"ping -6 -c 5 fd00::{b_ip.split('.')[3]}")
         wait_for_positive_metric(b, "rfm_flow_packets", ifname="eth1", direction="ingress", proto="58")
 
