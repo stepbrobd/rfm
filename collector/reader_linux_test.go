@@ -5,7 +5,9 @@ package collector
 import (
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"os"
+	"slices"
 	"testing"
 	"time"
 
@@ -46,48 +48,55 @@ func ringProducer(tb testing.TB, events *ebpf.Map, mark int32) *ebpf.Program {
 	return prog
 }
 
-// BenchmarkRingReader times ReadRawEvent on records a test run wrote to a
-// real ring buffer, one op is one record
+// BenchmarkRingReader times ReadRawEvent per record written to the first of several rings
 func BenchmarkRingReader(b *testing.B) {
 	if os.Geteuid() != 0 {
 		b.Skip("requires root privileges")
 	}
 
-	events, err := ebpf.NewMap(&ebpf.MapSpec{Type: ebpf.RingBuf, MaxEntries: 1 << 22})
-	if err != nil {
-		b.Fatal(err)
-	}
-	defer events.Close()
-	drops, err := ebpf.NewMap(&ebpf.MapSpec{Type: ebpf.PerCPUArray, KeySize: 4, ValueSize: 8, MaxEntries: 1})
-	if err != nil {
-		b.Fatal(err)
-	}
-	defer drops.Close()
-	prog := ringProducer(b, events, 0)
-	rd, err := NewReader([]*ebpf.Map{events}, drops)
-	if err != nil {
-		b.Fatal(err)
-	}
-	defer rd.Close()
-
-	// 32768 records of 72 bytes fit the 4 MiB ring
-	const chunk = 1 << 15
-	frame := make([]byte, 64)
-	b.ReportAllocs()
-	b.ResetTimer()
-	for left := b.N; left > 0; {
-		n := min(left, chunk)
-		b.StopTimer()
-		if _, err := prog.Run(&ebpf.RunOptions{Data: frame, Repeat: uint32(n)}); err != nil {
-			b.Fatal(err)
-		}
-		b.StartTimer()
-		for range n {
-			if _, err := rd.ReadRawEvent(); err != nil {
+	for _, n := range []int{1, 4} {
+		b.Run(fmt.Sprintf("rings=%d", n), func(b *testing.B) {
+			rings := make([]*ebpf.Map, n)
+			for i := range rings {
+				ring, err := ebpf.NewMap(&ebpf.MapSpec{Type: ebpf.RingBuf, MaxEntries: 1 << 22})
+				if err != nil {
+					b.Fatal(err)
+				}
+				defer ring.Close()
+				rings[i] = ring
+			}
+			drops, err := ebpf.NewMap(&ebpf.MapSpec{Type: ebpf.PerCPUArray, KeySize: 4, ValueSize: 8, MaxEntries: 1})
+			if err != nil {
 				b.Fatal(err)
 			}
-		}
-		left -= n
+			defer drops.Close()
+			prog := ringProducer(b, rings[0], 0)
+			rd, err := NewReader(rings, drops)
+			if err != nil {
+				b.Fatal(err)
+			}
+			defer rd.Close()
+
+			// 32768 records of 72 bytes fit the 4 MiB ring
+			const chunk = 1 << 15
+			frame := make([]byte, 64)
+			b.ReportAllocs()
+			b.ResetTimer()
+			for left := b.N; left > 0; {
+				n := min(left, chunk)
+				b.StopTimer()
+				if _, err := prog.Run(&ebpf.RunOptions{Data: frame, Repeat: uint32(n)}); err != nil {
+					b.Fatal(err)
+				}
+				b.StartTimer()
+				for range n {
+					if _, err := rd.ReadRawEvent(); err != nil {
+						b.Fatal(err)
+					}
+				}
+				left -= n
+			}
+		})
 	}
 }
 
@@ -135,8 +144,7 @@ func TestRingReaderTakesTurnsAcrossRings(t *testing.T) {
 	produce(t, rings[0], 1, 100)
 	produce(t, rings[2], 3, 2)
 
-	// a ring that holds many records cannot hold back the others, every
-	// ring with a record gives one before any gives a second
+	// a ring gives at most readBatch records in a row, then the next ring with records has its turn
 	rd.SetDeadline(time.Now())
 	var marks []uint64
 	for {
@@ -152,8 +160,8 @@ func TestRingReaderTakesTurnsAcrossRings(t *testing.T) {
 	if len(marks) != 102 {
 		t.Fatalf("read %d records, want the 102 written", len(marks))
 	}
-	if marks[0] != 1 || marks[1] != 3 || marks[2] != 1 || marks[3] != 3 {
-		t.Fatalf("first marks %v, want the two rings in turn", marks[:4])
+	if turn := slices.Index(marks, 3); turn != readBatch || marks[turn+1] != 3 || marks[turn+2] != 1 {
+		t.Fatalf("marks %v, want %d of the first ring, both of the third, then the rest of the first", marks, readBatch)
 	}
 }
 

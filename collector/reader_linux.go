@@ -13,15 +13,15 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-// ringReader reads the event rings of every CPU as one stream, it takes the
-// next record from the next ring that holds one, so a busy ring cannot starve
-// the others, and sleeps on one epoll set over all rings when they are empty
+// ringReader reads every CPU's ring as one stream, up to readBatch records per ring in turn
 type ringReader struct {
 	rings []*ringbuf.Reader
 	drops *ebpf.Map
 	epfd  int
 	// next is the ring the next read looks at first
-	next     int
+	next int
+	// burst counts the records next gave in a row
+	burst    int
 	deadline time.Time
 	events   []unix.EpollEvent
 	// rec is reused by every read, ReadRawEvent hands out its sample
@@ -60,23 +60,30 @@ func NewReader(rings []*ebpf.Map, drops *ebpf.Map) (Reader, error) {
 func (r *ringReader) ReadRawEvent() ([]byte, error) {
 	for {
 		for range r.rings {
-			rd := r.rings[r.next]
-			r.next = (r.next + 1) % len(r.rings)
-			if rd.AvailableBytes() == 0 {
-				continue
+			if r.burst > 0 || r.rings[r.next].AvailableBytes() > 0 {
+				err := r.rings[r.next].ReadInto(&r.rec)
+				if err == nil {
+					if r.burst++; r.rec.Remaining == 0 || r.burst == readBatch {
+						r.turn()
+					}
+					return r.rec.RawSample, nil
+				}
+				if !errors.Is(err, os.ErrDeadlineExceeded) {
+					return nil, err
+				}
 			}
-			err := rd.ReadInto(&r.rec)
-			if err == nil {
-				return r.rec.RawSample, nil
-			}
-			if !errors.Is(err, os.ErrDeadlineExceeded) {
-				return nil, err
-			}
+			r.turn()
 		}
 		if err := r.wait(); err != nil {
 			return nil, err
 		}
 	}
+}
+
+// turn hands the next read to the next ring
+func (r *ringReader) turn() {
+	r.next = (r.next + 1) % len(r.rings)
+	r.burst = 0
 }
 
 // wait sleeps until a ring holds data or the deadline passes, a ring polls

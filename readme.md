@@ -88,11 +88,10 @@ rate there without reloading the programs.
    draw the sample first, parse only the skbs it selects, and keep no interface
    counters.
 2. The userspace collector reads the per-CPU ring buffers as one stream, taking
-   one record from each nonempty ring buffer in turn, scales each event by the
-   sample rate that was in force when it was sampled, and aggregates flows into
-   an in-memory table keyed by
-   `(ifindex, direction, protocol,
-   src/dst address, src/dst port)`. The table
+   up to 64 records from one ring buffer before it moves to the next nonempty
+   one. It scales each event by the sample rate that was in force when it was
+   sampled and aggregates flows into an in-memory table keyed by
+   `(ifindex, direction, protocol, src/dst address, src/dst port)`. The table
    keeps the `CLOCK_BOOTTIME` timestamps of the events, which a step of the wall
    clock does not move, and the IPFIX exporter and `rfm flows` convert them to
    wall clock time. Enrichment labels are resolved once when a flow is created
