@@ -9,13 +9,15 @@ let
     "linuxPackages_7_2"
   ];
 
-  nodeName = attr: "k" + std.replaceStrings [ "_" ] [ "" ] (std.removePrefix "linuxPackages_" attr);
+  pairName = attr: "k" + std.replaceStrings [ "_" ] [ "" ] (std.removePrefix "linuxPackages_" attr);
+
+  hostIP = i: end: "192.168.1.${toString (10 * i + end)}";
 
   mkNode =
-    attr:
+    attr: ip:
     { pkgs, ... }:
     {
-      imports = [ (common.mkBase "192.168.1.10") ];
+      imports = [ (common.mkBase ip) ];
 
       boot.kernelPackages = std.mkForce pkgs.${attr};
 
@@ -38,28 +40,58 @@ in
   inherit (common) interactive;
 
   nodes = std.listToAttrs (
-    std.map (attr: {
-      name = nodeName attr;
-      value = mkNode attr;
-    }) kernels
+    std.concatLists (
+      std.imap1 (i: attr: [
+        {
+          name = "${pairName attr}a";
+          value = mkNode attr (hostIP i 1);
+        }
+        {
+          name = "${pairName attr}b";
+          value = mkNode attr (hostIP i 2);
+        }
+      ]) kernels
+    )
   );
 
-  testScript = ''
-    machines = [ ${std.concatStringsSep ", " (std.map nodeName kernels)} ]
+  testScript = common.helpers + ''
+    pairs = [ ${
+      std.concatStringsSep ", " (
+        std.imap1 (
+          i: attr: ''(${pairName attr}a, ${pairName attr}b, "${hostIP i 1}", "${hostIP i 2}")''
+        ) kernels
+      )
+    } ]
 
-    for m in machines:
-      with subtest(m.name):
-        m.start()
-        m.wait_for_unit("multi-user.target")
-        print(m.succeed("uname -r"))
+    for a, b, a_ip, b_ip in pairs:
+      with subtest(b.name):
+        for m in (a, b):
+          m.start()
+        for m in (a, b):
+          m.wait_for_unit("rfm.service")
+          m.wait_for_open_port(9669)
+        print(b.succeed("uname -r"))
 
-        m.wait_for_unit("rfm.service")
-        m.wait_for_open_port(9669)
-        m.succeed("curl -sf http://localhost:9669/metrics | grep rfm_")
+        b.succeed("bpftool net show | grep rfm_tc_ingress")
+        b.succeed("bpftool net show | grep rfm_tc_egress")
+        b.succeed("iperf3 -s -D -p 5201")
 
-        m.succeed("bpftool net show | grep rfm_tc_ingress")
-        m.succeed("bpftool net show | grep rfm_tc_egress")
+        assert_rx_matches_nic(a, b, b_ip)
 
-        m.shutdown()
+        for m, end in ((a, 1), (b, 2)):
+          m.succeed(
+            "ip link add link eth1 name eth1.100 type vlan proto 802.1ad id 100",
+            "ip link add link eth1.100 name eth1.100.200 mtu 1492 type vlan proto 802.1Q id 200",
+            f"ip addr add 10.43.0.{end}/24 dev eth1.100.200",
+            "ip link set eth1.100 up",
+            "ip link set eth1.100.200 up",
+          )
+        assert_rx_matches_nic(a, b, "10.43.0.2")
+
+        a.succeed(f"ping -6 -c 5 fd00::{b_ip.split('.')[3]}")
+        wait_for_positive_metric(b, "rfm_flow_packets", ifname="eth1", direction="ingress", proto="58")
+
+        for m in (a, b):
+          m.shutdown()
   '';
 }

@@ -47,6 +47,18 @@ def iface_counters(machine, ifname: str, direction: str = "rx") -> tuple[int, in
     octets,
   )
 
+def assert_rx_matches_nic(sender, receiver, dst: str, ifname: str = "eth1") -> None:
+  """rfm's rx counters of ifname on receiver match the kernel's over an iperf3 tcp run from sender to dst, whose segments gro merges before the tc hook."""
+  before = iface_counters(receiver, ifname)
+  sender.succeed(f"iperf3 -c {dst} -p 5201 -t 2 -P 1")
+  time.sleep(2)
+  after = iface_counters(receiver, ifname)
+  rfm_pkts, rfm_bytes, nic_pkts, nic_bytes = (a - b for a, b in zip(after, before))
+  print(f"{receiver.name} rx to {dst}: rfm {rfm_pkts} pkts {rfm_bytes} bytes, nic {nic_pkts} pkts {nic_bytes} bytes")
+  assert nic_pkts > 100, f"iperf3 produced too few packets: {nic_pkts}"
+  assert abs(rfm_pkts - nic_pkts) <= 4, f"rx packets: rfm {rfm_pkts} vs nic {nic_pkts}"
+  assert abs(rfm_bytes - nic_bytes) <= 4 * 1514, f"rx bytes: rfm {rfm_bytes} vs nic {nic_bytes}"
+
 def wait_for_positive_metric(machine, name: str, timeout_s: float = 10, **labels: str) -> list[float]:
   deadline = time.time() + timeout_s
   last_metrics = ""
