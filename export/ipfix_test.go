@@ -24,7 +24,6 @@ func testIPFIXConfig(host string, port int) config.IPFIXConfig {
 		TemplateRefresh:     60 * time.Second,
 		ObservationDomainID: 1,
 		QueueSize:           config.DefaultIPFIXQueueSize,
-		FlushInterval:       config.DefaultIPFIXFlushInterval,
 		MaxMessageSize:      config.DefaultIPFIXMaxMessageSize,
 	}
 }

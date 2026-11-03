@@ -61,6 +61,9 @@ const (
 	// before the sender packs them, so a burst is split into messages
 	// without waiting for the flush interval
 	ipfixGatherLimit = 512
+	// ipfixFlushInterval is how long the sender gathers fewer records than
+	// ipfixGatherLimit before they go out
+	ipfixFlushInterval = time.Second
 
 	ipfixDialBackoffMin = time.Second
 	ipfixDialBackoffMax = 30 * time.Second
@@ -127,7 +130,6 @@ type IPFIXExporter struct {
 	observationDomainID    uint32
 	seqNumber              uint32
 	templateRefreshTimeout time.Duration
-	flushInterval          time.Duration
 	maxMessageSize         int
 	nowFunc                func() time.Time
 	buf                    bytes.Buffer
@@ -193,7 +195,6 @@ func NewIPFIX(cfg config.IPFIXConfig) (*IPFIXExporter, error) {
 		},
 		observationDomainID:    cfg.ObservationDomainID,
 		templateRefreshTimeout: cfg.TemplateRefresh,
-		flushInterval:          cfg.FlushInterval,
 		maxMessageSize:         cfg.MaxMessageSize,
 		nowFunc:                time.Now,
 		ipv4:                   ipv4,
@@ -306,7 +307,7 @@ func (e *IPFIXExporter) ExportFlow(flow collector.ExportedFlow) error {
 }
 
 // run is the sender goroutine
-// records gather for up to flushInterval after the first one arrives, or
+// records gather for up to ipfixFlushInterval after the first one arrives, or
 // until ipfixGatherLimit records are waiting, then go out as messages
 func (e *IPFIXExporter) run() {
 	defer close(e.done)
@@ -329,7 +330,7 @@ func (e *IPFIXExporter) run() {
 		case flow := <-e.queue:
 			pending = append(pending, flow)
 			if timer == nil {
-				timer = time.NewTimer(e.flushInterval)
+				timer = time.NewTimer(ipfixFlushInterval)
 				timerC = timer.C
 			}
 			if len(pending) >= ipfixGatherLimit {

@@ -735,10 +735,7 @@ host = "127.0.0.1"
 	}
 	// the default queue holds a full table sweep
 	if cfg.Agent.IPFIX.QueueSize != 65536 {
-		t.Fatalf("queue_size = %d, want max_flows 65536", cfg.Agent.IPFIX.QueueSize)
-	}
-	if cfg.Agent.IPFIX.FlushInterval != DefaultIPFIXFlushInterval {
-		t.Fatalf("flush_interval = %v, want %v", cfg.Agent.IPFIX.FlushInterval, DefaultIPFIXFlushInterval)
+		t.Fatalf("queue size = %d, want max_flows 65536", cfg.Agent.IPFIX.QueueSize)
 	}
 	if cfg.Agent.IPFIX.MaxMessageSize != DefaultIPFIXMaxMessageSize {
 		t.Fatalf("max_message_size = %d, want %d", cfg.Agent.IPFIX.MaxMessageSize, DefaultIPFIXMaxMessageSize)
@@ -762,7 +759,7 @@ host = "127.0.0.1"
 		t.Fatal(err)
 	}
 	if cfg.Agent.IPFIX.QueueSize != DefaultIPFIXQueueSize {
-		t.Fatalf("queue_size = %d, want the floor %d", cfg.Agent.IPFIX.QueueSize, DefaultIPFIXQueueSize)
+		t.Fatalf("queue size = %d, want the floor %d", cfg.Agent.IPFIX.QueueSize, DefaultIPFIXQueueSize)
 	}
 }
 
@@ -783,15 +780,13 @@ max_flows = `+strconv.Itoa(n)+`
 	}
 }
 
-func TestLoadIPFIXQueueSettings(t *testing.T) {
+func TestLoadIPFIXMaxMessageSize(t *testing.T) {
 	path := writeTOML(t, `
 [agent]
 interfaces = ["eth0"]
 
 [agent.ipfix]
 host = "127.0.0.1"
-queue_size = 16
-flush_interval = "250ms"
 max_message_size = 512
 `)
 
@@ -799,22 +794,13 @@ max_message_size = 512
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.Agent.IPFIX.QueueSize != 16 {
-		t.Fatalf("queue_size = %d, want 16", cfg.Agent.IPFIX.QueueSize)
-	}
-	if cfg.Agent.IPFIX.FlushInterval != 250*time.Millisecond {
-		t.Fatalf("flush_interval = %v, want 250ms", cfg.Agent.IPFIX.FlushInterval)
-	}
 	if cfg.Agent.IPFIX.MaxMessageSize != 512 {
 		t.Fatalf("max_message_size = %d, want 512", cfg.Agent.IPFIX.MaxMessageSize)
 	}
 }
 
-func TestLoadBadIPFIXQueueSettings(t *testing.T) {
+func TestLoadBadIPFIXMaxMessageSize(t *testing.T) {
 	for _, body := range []string{
-		"queue_size = -1",
-		`flush_interval = "1ms"`,
-		`flush_interval = "0s"`,
 		"max_message_size = 0",
 		"max_message_size = 64",
 		"max_message_size = 70000",

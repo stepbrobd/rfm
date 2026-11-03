@@ -72,14 +72,10 @@ type IPFIXConfig struct {
 	Bind                IPFIXBindConfig `toml:"bind"`
 	TemplateRefresh     time.Duration   `toml:"template_refresh"`
 	ObservationDomainID uint32          `toml:"observation_domain_id"`
-	// QueueSize bounds the records waiting for the sender goroutine, an
-	// eviction sweep can hand the exporter every flow in the table at once,
-	// so the default is max_flows or DefaultIPFIXQueueSize, whichever is
-	// larger
-	QueueSize int `toml:"queue_size"`
-	// FlushInterval is how long the sender gathers records before a message
-	// goes out when fewer than a full message are waiting
-	FlushInterval time.Duration `toml:"flush_interval"`
+	// QueueSize bounds the records waiting for the sender, max_flows or
+	// DefaultIPFIXQueueSize, whichever is larger, holds one sweep of a full
+	// table
+	QueueSize int `toml:"-"`
 	// MaxMessageSize caps one IPFIX message in bytes, the udp payload, kept
 	// 28 bytes under the path mtu over ipv4 and 48 over ipv6 for the ip and
 	// udp headers, so a message never fragments
@@ -89,7 +85,6 @@ type IPFIXConfig struct {
 // default exporter sizing
 const (
 	DefaultIPFIXQueueSize      = 4096
-	DefaultIPFIXFlushInterval  = time.Second
 	DefaultIPFIXMaxMessageSize = 1200
 )
 
@@ -178,7 +173,7 @@ func Load(path string) (*Config, error) {
 	cfg := &Config{Agent: AgentConfig{
 		BPF:        BPFConfig{SampleRate: 100, RingBufSize: 262144, WakeupBatch: 64, MaxSampleRate: 1000},
 		Collector:  CollectorConfig{MaxFlows: DefaultMaxFlows, EvictionTimeout: 30 * time.Second, ActiveTimeout: time.Minute},
-		IPFIX:      IPFIXConfig{TemplateRefresh: time.Minute, ObservationDomainID: 1, FlushInterval: time.Second, MaxMessageSize: DefaultIPFIXMaxMessageSize},
+		IPFIX:      IPFIXConfig{TemplateRefresh: time.Minute, ObservationDomainID: 1, MaxMessageSize: DefaultIPFIXMaxMessageSize},
 		Prometheus: PrometheusConfig{Host: "::1", Port: 9669},
 	}}
 	meta, err := toml.Decode(string(data), cfg)
@@ -192,9 +187,7 @@ func Load(path string) (*Config, error) {
 	a := &cfg.Agent
 	defaultEndpoint(&a.IPFIX.Host, &a.IPFIX.Port, 4739)
 	defaultEndpoint(&a.Enrich.RIB.BMP.Host, &a.Enrich.RIB.BMP.Port, 11019)
-	if a.IPFIX.QueueSize == 0 {
-		a.IPFIX.QueueSize = max(DefaultIPFIXQueueSize, a.Collector.MaxFlows)
-	}
+	a.IPFIX.QueueSize = max(DefaultIPFIXQueueSize, a.Collector.MaxFlows)
 
 	if err := validate(cfg); err != nil {
 		return nil, err
@@ -336,12 +329,6 @@ func validate(cfg *Config) error {
 	}
 	if a.IPFIX.ObservationDomainID == 0 {
 		return fmt.Errorf("agent.ipfix.observation_domain_id must be > 0")
-	}
-	if a.IPFIX.QueueSize < 1 {
-		return fmt.Errorf("agent.ipfix.queue_size must be >= 1, got %d", a.IPFIX.QueueSize)
-	}
-	if a.IPFIX.FlushInterval < 10*time.Millisecond {
-		return fmt.Errorf("agent.ipfix.flush_interval must be >= 10ms, got %v", a.IPFIX.FlushInterval)
 	}
 	if a.IPFIX.MaxMessageSize < MinIPFIXMaxMessageSize || a.IPFIX.MaxMessageSize > 65535 {
 		return fmt.Errorf("agent.ipfix.max_message_size must be between %d and 65535, got %d", MinIPFIXMaxMessageSize, a.IPFIX.MaxMessageSize)

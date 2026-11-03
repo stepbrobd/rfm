@@ -172,18 +172,6 @@ in
                       description = "IPFIX observation domain id used in exported messages.";
                     };
 
-                    queue_size = std.mkOption {
-                      type = std.types.ints.unsigned;
-                      default = 0;
-                      description = "Records that may wait for the IPFIX sender before new ones are dropped, 0 means max_flows or 4096, whichever is larger.";
-                    };
-
-                    flush_interval = std.mkOption {
-                      type = std.types.str;
-                      default = "1s";
-                      description = "How long the IPFIX sender gathers records before sending a partial message (Go duration).";
-                    };
-
                     max_message_size = std.mkOption {
                       type = std.types.ints.between 171 65535;
                       default = 1200;

@@ -169,8 +169,6 @@ host = "127.0.0.1"
 port = 4739
 template_refresh = "60s"
 observation_domain_id = 1
-queue_size = 0
-flush_interval = "1s"
 max_message_size = 1200
 
 [agent.control]
@@ -342,20 +340,17 @@ one refresh window.
 in exported message headers. Must be > 0. Set distinct values when multiple RFM
 agents export to one collector and downstream needs to demultiplex by source.
 
-`queue_size` (int, default 0): Records that may wait for the sender goroutine.
-`0` means `max_flows` or 4096, whichever is larger, so one eviction sweep of a
-full table always fits. A full queue drops the newest record and counts it, so a
-slow socket never stalls flow collection.
-
-`flush_interval` (string, default "1s"): How long the sender gathers records
-before a partial message goes out. Minimum 10ms.
-
 `max_message_size` (int, default 1200): Largest IPFIX message in bytes, between
 171 and 65535. A message carries at least one record, and 171 bytes hold an IPv6
 record with its template. The message is the UDP payload. Keep it at most the
 path MTU, including any tunnel the exporter traffic crosses, minus 28 bytes for
 the IPv4 and UDP headers or 48 bytes for the IPv6 and UDP headers, so messages
 never fragment.
+
+The exporter queues up to `max_flows` or 4096 records, whichever is larger,
+enough for one eviction sweep of a full table. A full queue drops the newest
+record and counts it, and flow collection never waits on a slow socket. The
+sender gathers records for up to 1 second before a partial message goes out.
 
 The exporter dials the collector at start and, when that fails, again with
 backoff (1s to 30s), so the agent starts and keeps counting while the collector
