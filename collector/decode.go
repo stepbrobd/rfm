@@ -9,7 +9,7 @@ import (
 	"unsafe"
 )
 
-const wireFlowEventSize = 64
+const wireFlowEventSize = int(unsafe.Sizeof(wireFlowEvent{}))
 
 // wireFlowEvent mirrors struct rfm_flow_event in bpf/rfm_common.h
 type wireFlowEvent struct {

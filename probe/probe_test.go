@@ -9,12 +9,12 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"net/netip"
 	"os"
 	"path/filepath"
 	"runtime"
 	"slices"
 	"strings"
-	"structs"
 	"testing"
 	"time"
 
@@ -26,27 +26,9 @@ import (
 	"github.com/vishvananda/netlink/nl"
 	"github.com/vishvananda/netns"
 	"golang.org/x/sys/unix"
+	"ysun.co/rfm/collector"
 	"ysun.co/rfm/testutil"
 )
-
-// rfmRfmFlowEvent matches the BPF struct rfm_flow_event
-// ring buffer maps do not generate Go types
-// define it here
-type rfmRfmFlowEvent struct {
-	_       structs.HostLayout
-	Tstamp  uint64
-	Ifindex uint32
-	Dir     uint8
-	Proto   uint8
-	Segs    uint16
-	SrcAddr [16]uint8
-	DstAddr [16]uint8
-	SrcPort uint16
-	DstPort uint16
-	Len     uint32
-	L2Len   uint8
-	_       [7]uint8
-}
 
 func TestLoadRefusesAZeroSampleRate(t *testing.T) {
 	p, err := Load(Config{WakeupBatch: 1})
@@ -312,14 +294,14 @@ func TestIfaceCountersTruncatedVLANTag(t *testing.T) {
 // readFlowEvent sets up a probe with sampling, attaches it, sends a packet
 // and reads flow events from the ring buffer until match returns true
 // this filters out background traffic like ICMPv6 neighbor solicitations
-func readFlowEvent(t *testing.T, pkt []byte, match func(rfmRfmFlowEvent) bool) rfmRfmFlowEvent {
+func readFlowEvent(t *testing.T, pkt []byte, match func(collector.FlowEvent) bool) collector.FlowEvent {
 	t.Helper()
 
 	return readFlowEventFrom(t, func(ns *testutil.NS) { ns.SendRaw(t, pkt) }, match)
 }
 
 // readFlowEventFrom is readFlowEvent with a caller supplied sender
-func readFlowEventFrom(t *testing.T, send func(*testutil.NS), match func(rfmRfmFlowEvent) bool) rfmRfmFlowEvent {
+func readFlowEventFrom(t *testing.T, send func(*testutil.NS), match func(collector.FlowEvent) bool) collector.FlowEvent {
 	t.Helper()
 
 	ns := testutil.NewNS(t)
@@ -347,8 +329,8 @@ func readFlowEventFrom(t *testing.T, send func(*testutil.NS), match func(rfmRfmF
 			t.Fatalf("read flow event: %v", err)
 		}
 
-		var ev rfmRfmFlowEvent
-		if err := binary.Read(bytes.NewReader(raw), binary.NativeEndian, &ev); err != nil {
+		ev, err := collector.DecodeFlowEvent(raw)
+		if err != nil {
 			t.Fatalf("decode event: %v", err)
 		}
 
@@ -370,7 +352,7 @@ func TestFlowEventIPv4TCP(t *testing.T) {
 		12345, 80,
 	)
 
-	ev := readFlowEvent(t, pkt, func(e rfmRfmFlowEvent) bool {
+	ev := readFlowEvent(t, pkt, func(e collector.FlowEvent) bool {
 		return e.Proto == 6 && e.SrcPort == 12345
 	})
 
@@ -381,12 +363,12 @@ func TestFlowEventIPv4TCP(t *testing.T) {
 		t.Fatalf("proto = %d, want 6 (TCP)", ev.Proto)
 	}
 
-	wantSrc := [16]uint8{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xff, 0xff, 10, 0, 0, 1}
+	wantSrc := netip.MustParseAddr("::ffff:10.0.0.1")
 	if ev.SrcAddr != wantSrc {
 		t.Fatalf("src_addr = %v, want %v", ev.SrcAddr, wantSrc)
 	}
 
-	wantDst := [16]uint8{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xff, 0xff, 10, 0, 0, 2}
+	wantDst := netip.MustParseAddr("::ffff:10.0.0.2")
 	if ev.DstAddr != wantDst {
 		t.Fatalf("dst_addr = %v, want %v", ev.DstAddr, wantDst)
 	}
@@ -414,16 +396,16 @@ func TestFlowEventIPv6TCP(t *testing.T) {
 		4000, 443,
 	)
 
-	ev := readFlowEvent(t, pkt, func(e rfmRfmFlowEvent) bool {
+	ev := readFlowEvent(t, pkt, func(e collector.FlowEvent) bool {
 		return e.Proto == 6 && e.SrcPort == 4000
 	})
 
-	wantSrc := [16]uint8{0xfd, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1}
+	wantSrc := netip.MustParseAddr("fd00::1")
 	if ev.SrcAddr != wantSrc {
 		t.Fatalf("src_addr = %v, want %v", ev.SrcAddr, wantSrc)
 	}
 
-	wantDst := [16]uint8{0xfd, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2}
+	wantDst := netip.MustParseAddr("fd00::2")
 	if ev.DstAddr != wantDst {
 		t.Fatalf("dst_addr = %v, want %v", ev.DstAddr, wantDst)
 	}
@@ -448,7 +430,7 @@ func TestFlowEventIPv4Options(t *testing.T) {
 		options,
 	)
 
-	ev := readFlowEvent(t, pkt, func(e rfmRfmFlowEvent) bool {
+	ev := readFlowEvent(t, pkt, func(e collector.FlowEvent) bool {
 		return e.Proto == 6 && e.SrcPort == 7777
 	})
 
@@ -469,7 +451,7 @@ func TestFlowEventUDP(t *testing.T) {
 		5000, 53,
 	)
 
-	ev := readFlowEvent(t, pkt, func(e rfmRfmFlowEvent) bool {
+	ev := readFlowEvent(t, pkt, func(e collector.FlowEvent) bool {
 		return e.Proto == 17 && e.SrcPort == 5000
 	})
 
@@ -490,7 +472,7 @@ func TestFlowEventIPv4FirstFragmentKeepsPorts(t *testing.T) {
 		testutil.UDP(5001, 53),
 	)
 
-	ev := readFlowEvent(t, pkt, func(e rfmRfmFlowEvent) bool {
+	ev := readFlowEvent(t, pkt, func(e collector.FlowEvent) bool {
 		return e.Proto == 17 && e.SrcPort == 5001
 	})
 
@@ -514,8 +496,8 @@ func TestFlowEventIPv4NonInitialFragmentZeroPorts(t *testing.T) {
 		[]byte{0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff, 0x11, 0x22},
 	)
 
-	ev := readFlowEvent(t, pkt, func(e rfmRfmFlowEvent) bool {
-		wantSrc := [16]uint8{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xff, 0xff, 10, 0, 4, 1}
+	ev := readFlowEvent(t, pkt, func(e collector.FlowEvent) bool {
+		wantSrc := netip.MustParseAddr("::ffff:10.0.4.1")
 		return e.Proto == 17 && e.SrcAddr == wantSrc && e.DstPort == 0
 	})
 
@@ -536,11 +518,11 @@ func TestFlowEventVLANIPv4TCP(t *testing.T) {
 		33000, 8443, 123,
 	)
 
-	ev := readFlowEvent(t, pkt, func(e rfmRfmFlowEvent) bool {
+	ev := readFlowEvent(t, pkt, func(e collector.FlowEvent) bool {
 		return e.Proto == 6 && e.SrcPort == 33000
 	})
 
-	wantSrc := [16]uint8{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xff, 0xff, 10, 0, 2, 1}
+	wantSrc := netip.MustParseAddr("::ffff:10.0.2.1")
 	if ev.SrcAddr != wantSrc {
 		t.Fatalf("src_addr = %v, want %v", ev.SrcAddr, wantSrc)
 	}
@@ -565,11 +547,11 @@ func TestFlowEventQinQIPv6UDP(t *testing.T) {
 		5300, 5353, 10, 20,
 	)
 
-	ev := readFlowEvent(t, pkt, func(e rfmRfmFlowEvent) bool {
+	ev := readFlowEvent(t, pkt, func(e collector.FlowEvent) bool {
 		return e.Proto == 17 && e.SrcPort == 5300
 	})
 
-	wantDst := [16]uint8{0xfd, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2}
+	wantDst := netip.MustParseAddr("fd00:1::2")
 	if ev.DstAddr != wantDst {
 		t.Fatalf("dst_addr = %v, want %v", ev.DstAddr, wantDst)
 	}
@@ -582,18 +564,13 @@ func TestFlowEventQinQIPv6UDP(t *testing.T) {
 	}
 }
 
-// v6 returns addr as the 16 address bytes of a flow event
-func v6(addr string) [16]uint8 {
-	return [16]uint8(net.ParseIP(addr).To16())
-}
-
 // readFlowEventFromSrc reads the first flow event of pkt, matched on its
 // source address, so a wrong protocol or wrong ports still find the event
-func readFlowEventFromSrc(t *testing.T, pkt []byte, src string) rfmRfmFlowEvent {
+func readFlowEventFromSrc(t *testing.T, pkt []byte, src string) collector.FlowEvent {
 	t.Helper()
 
-	return readFlowEvent(t, pkt, func(e rfmRfmFlowEvent) bool {
-		return e.SrcAddr == v6(src)
+	return readFlowEvent(t, pkt, func(e collector.FlowEvent) bool {
+		return e.SrcAddr == netip.MustParseAddr(src)
 	})
 }
 
@@ -723,8 +700,8 @@ func TestFlowEventGROIngressIPv6ExtensionHeader(t *testing.T) {
 
 	ev := readFlowEventFrom(t, func(ns *testutil.NS) {
 		ns.SendGSO(t, "rfm1", frame, hdrLen, gsoSize)
-	}, func(e rfmRfmFlowEvent) bool {
-		return e.SrcAddr == v6(src) && e.Dir == 0
+	}, func(e collector.FlowEvent) bool {
+		return e.SrcAddr == netip.MustParseAddr(src) && e.Dir == 0
 	})
 
 	if ev.Segs != gsoSegs {
@@ -1051,7 +1028,7 @@ func TestFlowEventGSOSegments(t *testing.T) {
 
 	ev := readFlowEventFrom(t, func(ns *testutil.NS) {
 		ns.SendGSO(t, ns.Name(), gsoFrame(4300), gsoHdrLen, gsoSize)
-	}, func(e rfmRfmFlowEvent) bool {
+	}, func(e collector.FlowEvent) bool {
 		return e.Proto == 6 && e.SrcPort == 4300 && e.Dir == 1
 	})
 
@@ -1072,7 +1049,7 @@ func TestFlowEventPlainPacketOneSegment(t *testing.T) {
 		4400, 80,
 	)
 
-	ev := readFlowEvent(t, pkt, func(e rfmRfmFlowEvent) bool {
+	ev := readFlowEvent(t, pkt, func(e collector.FlowEvent) bool {
 		return e.Proto == 6 && e.SrcPort == 4400
 	})
 
@@ -2872,8 +2849,8 @@ func TestSampledOnlyKeepsNoInterfaceCounters(t *testing.T) {
 		if err != nil {
 			t.Fatalf("read flow event: %v", err)
 		}
-		var ev rfmRfmFlowEvent
-		if err := binary.Read(bytes.NewReader(raw), binary.NativeEndian, &ev); err != nil {
+		ev, err := collector.DecodeFlowEvent(raw)
+		if err != nil {
 			t.Fatal(err)
 		}
 		if ev.Ifindex == uint32(ns.Ifindex()) && ev.SrcPort == 9300 {
