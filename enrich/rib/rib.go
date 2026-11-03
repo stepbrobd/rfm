@@ -62,11 +62,10 @@ type LargeCommunity struct {
 	LocalData2  uint32
 }
 
-// Peer identifies one view of the routing table as seen over BMP
-// a speaker sends one view per monitored peer and, when configured, one
-// each for pre and post policy, routes are kept per view so a withdraw from
-// one peer never removes what another peer still announces
+// Peer keys a view, the routes one speaker monitors of one peer before or
+// after policy
 type Peer struct {
+	Speaker       netip.Addr
 	Address       netip.Addr
 	Distinguisher uint64
 	PostPolicy    bool
@@ -82,6 +81,7 @@ type Route struct {
 	ASPath            []uint32
 	Communities       []uint32
 	LargeCommunities  []LargeCommunity
+	Speaker           netip.Addr
 	PeerASN           uint32
 	PeerAddress       netip.Addr
 	PeerDistinguisher uint64
@@ -97,7 +97,7 @@ type Route struct {
 
 // Peer returns the view this route belongs to
 func (r Route) Peer() Peer {
-	return Peer{Address: r.PeerAddress, Distinguisher: r.PeerDistinguisher, PostPolicy: r.PostPolicy}
+	return Peer{Speaker: r.Speaker, Address: r.PeerAddress, Distinguisher: r.PeerDistinguisher, PostPolicy: r.PostPolicy}
 }
 
 // view holds the routes of one view, keyed by prefix in a trie of its own
@@ -134,6 +134,7 @@ type routeMeta struct {
 	ASPath            []uint32
 	Communities       []uint32
 	LargeCommunities  []LargeCommunity
+	Speaker           netip.Addr
 	PeerASN           uint32
 	PeerAddress       netip.Addr
 	PeerDistinguisher uint64
@@ -145,6 +146,7 @@ type routeMetaKey struct {
 	ASPath            string
 	Communities       string
 	LargeCommunities  string
+	Speaker           netip.Addr
 	PeerASN           uint32
 	PeerAddress       netip.Addr
 	PeerDistinguisher uint64
@@ -402,7 +404,7 @@ type Server struct {
 	viewsMu  sync.Mutex
 	sessions map[*session]struct{}
 	owners   map[Peer]*session
-	stale    map[Peer]staleView
+	stale    map[Peer]time.Time
 	// staleGrace overrides the default grace period and clock the time
 	// source, for tests
 	staleGrace time.Duration
@@ -414,12 +416,6 @@ type Server struct {
 type session struct {
 	speaker netip.Addr
 	opened  time.Time
-}
-
-// staleView is a view whose announcing session ended at since
-type staleView struct {
-	speaker netip.Addr
-	since   time.Time
 }
 
 func (s *Server) now() time.Time {
@@ -518,20 +514,14 @@ func (s *Server) sessionEnded(sess *session) {
 		if owner == sess {
 			delete(s.owners, view)
 			if s.stale == nil {
-				s.stale = make(map[Peer]staleView)
+				s.stale = make(map[Peer]time.Time)
 			}
-			s.stale[view] = staleView{speaker: sess.speaker, since: now}
+			s.stale[view] = now
 		}
 	}
 	s.owners = release(s.owners)
 }
 
-// purgeStale withdraws a stale view once a session of its speaker has been
-// open for the grace period after the view went stale without announcing
-// it again, the speaker sends every peer it still has right after it
-// connects, so the view belongs to a peer the speaker lost
-// a speaker without a session keeps its views, so a restart leaves
-// enrichment in place until the speaker is back
 func (s *Server) purgeStale() {
 	now := s.now()
 	grace := s.grace()
@@ -539,18 +529,18 @@ func (s *Server) purgeStale() {
 	s.viewsMu.Lock()
 	defer s.viewsMu.Unlock()
 
-	for view, st := range s.stale {
+	for view, since := range s.stale {
 		for sess := range s.sessions {
-			start := st.since
+			start := since
 			if sess.opened.After(start) {
 				start = sess.opened
 			}
-			if sess.speaker != st.speaker || now.Before(start.Add(grace)) {
+			if sess.speaker != view.Speaker || now.Before(start.Add(grace)) {
 				continue
 			}
 			s.table.RemovePeer(view)
 			delete(s.stale, view)
-			log.Info("bmp view aged out", "speaker", st.speaker, "peer", view.Address, "post_policy", view.PostPolicy)
+			log.Info("bmp view aged out", "speaker", view.Speaker, "peer", view.Address, "post_policy", view.PostPolicy)
 			break
 		}
 	}
@@ -768,7 +758,7 @@ func (s *Server) handleConn(conn net.Conn) {
 	addPath := make(map[Peer][]*bgp.MarshallingOption)
 	var overflow bool
 	options := func(h bmp.BMPPeerHeader) []*bgp.MarshallingOption {
-		peer := peerFromHeader(h)
+		peer := peerFromHeader(sess.speaker, h)
 		peer.PostPolicy = false
 		return addPath[peer]
 	}
@@ -778,7 +768,7 @@ func (s *Server) handleConn(conn net.Conn) {
 	// prefixes, after an overflow any peer the session does not hold may
 	// send them
 	undecodable := func(h bmp.BMPPeerHeader) bool {
-		peer := peerFromHeader(h)
+		peer := peerFromHeader(sess.speaker, h)
 		peer.PostPolicy = false
 		opts, held := addPath[peer]
 		return held && opts == nil || !held && overflow
@@ -811,7 +801,7 @@ func (s *Server) handleConn(conn net.Conn) {
 
 		switch msg.Header.Type {
 		case bmp.BMP_MSG_PEER_UP_NOTIFICATION:
-			peer := peerFromHeader(msg.PeerHeader)
+			peer := peerFromHeader(sess.speaker, msg.PeerHeader)
 			s.peerChanged(peer)
 			peer.PostPolicy = false
 			delete(addPath, peer)
@@ -832,7 +822,7 @@ func (s *Server) handleConn(conn net.Conn) {
 			log.Info("bmp peer up", "remote", conn.RemoteAddr(), "peer", peer.Address, "add_path", opts != nil, "capabilities_known", parsed)
 			continue
 		case bmp.BMP_MSG_PEER_DOWN_NOTIFICATION:
-			peer := peerFromHeader(msg.PeerHeader)
+			peer := peerFromHeader(sess.speaker, msg.PeerHeader)
 			s.peerChanged(peer)
 			for _, post := range []bool{false, true} {
 				peer.PostPolicy = post
@@ -846,7 +836,7 @@ func (s *Server) handleConn(conn net.Conn) {
 			debugRouteMonitoring(conn.RemoteAddr(), msg)
 		}
 
-		update, ok := updateFromBMP(msg)
+		update, ok := updateFromBMP(sess.speaker, msg)
 		if !ok {
 			continue
 		}
@@ -1019,15 +1009,15 @@ func (s *Server) isClosing() bool {
 	}
 }
 
-func peerFromHeader(h bmp.BMPPeerHeader) Peer {
-	peer := Peer{Distinguisher: h.PeerDistinguisher, PostPolicy: h.IsPostPolicy()}
+func peerFromHeader(speaker netip.Addr, h bmp.BMPPeerHeader) Peer {
+	peer := Peer{Speaker: speaker, Distinguisher: h.PeerDistinguisher, PostPolicy: h.IsPostPolicy()}
 	if addr, ok := netip.AddrFromSlice(h.PeerAddress); ok {
 		peer.Address = addr.Unmap()
 	}
 	return peer
 }
 
-func updateFromBMP(msg *bmp.BMPMessage) (Update, bool) {
+func updateFromBMP(speaker netip.Addr, msg *bmp.BMPMessage) (Update, bool) {
 	if msg.Header.Type != bmp.BMP_MSG_ROUTE_MONITORING {
 		return Update{}, false
 	}
@@ -1044,10 +1034,10 @@ func updateFromBMP(msg *bmp.BMPMessage) (Update, bool) {
 
 	attrs := routeAttrs(updateMsg.PathAttributes, msg.PeerHeader.Flags&bmp.BMP_PEER_FLAG_TWO_AS != 0)
 
-	out := Update{Peer: peerFromHeader(msg.PeerHeader)}
+	out := Update{Peer: peerFromHeader(speaker, msg.PeerHeader)}
 	reach := func(nlri bgp.AddrPrefixInterface) {
 		if prefix, ok := prefixFromNLRI(nlri); ok {
-			route := attrs.route(prefix, msg.PeerHeader)
+			route := attrs.route(prefix, out.Peer, msg.PeerHeader.PeerAS)
 			route.PathID = nlri.PathIdentifier()
 			out.Reach = append(out.Reach, route)
 		}
@@ -1436,9 +1426,8 @@ func (t *Table) dropView(v *view) {
 	}
 }
 
-// betterPeer orders the views, a post policy view wins over a pre policy
-// one, then the lowest peer address and distinguisher, which keeps the
-// choice stable across updates
+// betterPeer orders the views totally, post policy first, which keeps the
+// view that wins a prefix the same across updates
 func betterPeer(a, b Peer) bool {
 	if a.PostPolicy != b.PostPolicy {
 		return a.PostPolicy
@@ -1446,7 +1435,10 @@ func betterPeer(a, b Peer) bool {
 	if c := a.Address.Compare(b.Address); c != 0 {
 		return c < 0
 	}
-	return a.Distinguisher < b.Distinguisher
+	if a.Distinguisher != b.Distinguisher {
+		return a.Distinguisher < b.Distinguisher
+	}
+	return a.Speaker.Less(b.Speaker)
 }
 
 func (t *Table) route(prefix netip.Prefix, value viewRoute) (Route, bool) {
@@ -1470,6 +1462,7 @@ func (t *Table) route(prefix netip.Prefix, value viewRoute) (Route, bool) {
 	route.ASPath = routeMeta.ASPath
 	route.Communities = routeMeta.Communities
 	route.LargeCommunities = routeMeta.LargeCommunities
+	route.Speaker = routeMeta.Speaker
 	route.PeerASN = routeMeta.PeerASN
 	route.PeerAddress = routeMeta.PeerAddress
 	route.PeerDistinguisher = routeMeta.PeerDistinguisher
@@ -1633,24 +1626,20 @@ func isConfed(seg bgp.AsPathParamInterface) bool {
 	return false
 }
 
-func (a attrs) route(prefix netip.Prefix, peer bmp.BMPPeerHeader) Route {
-	route := Route{
+func (a attrs) route(prefix netip.Prefix, peer Peer, peerASN uint32) Route {
+	return Route{
 		Prefix:            prefix,
 		OriginASN:         a.originASN,
 		OriginASSet:       a.originASSet,
 		ASPath:            append([]uint32(nil), a.asPath...),
 		Communities:       append([]uint32(nil), a.communities...),
 		LargeCommunities:  append([]LargeCommunity(nil), a.largeCommunities...),
-		PeerASN:           peer.PeerAS,
-		PeerDistinguisher: peer.PeerDistinguisher,
-		PostPolicy:        peer.IsPostPolicy(),
+		Speaker:           peer.Speaker,
+		PeerASN:           peerASN,
+		PeerAddress:       peer.Address,
+		PeerDistinguisher: peer.Distinguisher,
+		PostPolicy:        peer.PostPolicy,
 	}
-
-	if addr, ok := netip.AddrFromSlice(peer.PeerAddress); ok {
-		route.PeerAddress = addr.Unmap()
-	}
-
-	return route
 }
 
 // meta returns what the table keeps of r besides its prefix and origin, the
@@ -1661,6 +1650,7 @@ func (r Route) meta() routeMeta {
 		ASPath:            leading(r.ASPath, maxPathLen),
 		Communities:       leading(r.Communities, maxCommunities),
 		LargeCommunities:  leading(r.LargeCommunities, maxCommunities),
+		Speaker:           r.Speaker,
 		PeerASN:           r.PeerASN,
 		PeerAddress:       r.PeerAddress,
 		PeerDistinguisher: r.PeerDistinguisher,
@@ -1678,6 +1668,7 @@ func (m routeMeta) empty() bool {
 	return len(m.ASPath) == 0 &&
 		len(m.Communities) == 0 &&
 		len(m.LargeCommunities) == 0 &&
+		!m.Speaker.IsValid() &&
 		m.PeerASN == 0 &&
 		!m.PeerAddress.IsValid() &&
 		m.PeerDistinguisher == 0 &&
@@ -1696,6 +1687,7 @@ func (m routeMeta) key() routeMetaKey {
 		ASPath:            encodeUint32s(m.ASPath),
 		Communities:       encodeUint32s(m.Communities),
 		LargeCommunities:  encodeLargeCommunities(m.LargeCommunities),
+		Speaker:           m.Speaker,
 		PeerASN:           m.PeerASN,
 		PeerAddress:       m.PeerAddress,
 		PeerDistinguisher: m.PeerDistinguisher,

@@ -226,7 +226,7 @@ func TestLookupClonesMetadata(t *testing.T) {
 func TestUpdateFromBMPRouteMonitoring(t *testing.T) {
 	msg := mustBMPMessage(t, "203.0.113.0/24", 65002)
 
-	update, ok := updateFromBMP(msg)
+	update, ok := updateFromBMP(netip.Addr{}, msg)
 	if !ok {
 		t.Fatal("updateFromBMP should accept route-monitoring message")
 	}
@@ -472,6 +472,44 @@ func TestStaleViewsOfALateEndedSession(t *testing.T) {
 
 	_ = fresh.Close()
 	<-freshDone
+}
+
+func TestSpeakersKeepTheirOwnViewsOfOnePeer(t *testing.T) {
+	s := &Server{table: NewTable()}
+	present := func(addr string) bool {
+		_, ok := s.Lookup(netip.MustParseAddr(addr))
+		return ok
+	}
+
+	// two routers peer with 192.0.2.2 and both send bmp
+	a, aDone := startSessionFrom(t, s, "10.0.0.1")
+	b, bDone := startSessionFrom(t, s, "10.0.0.2")
+	write(t, a, mustBMPWireFrom(t, "198.51.100.0/24", 65003, "192.0.2.2", 0))
+	waitForRoute(t, s, "198.51.100.7", true)
+
+	write(t, b, mustPeerUpWire(t, "192.0.2.2", 0))
+	write(t, b, mustBMPWireFrom(t, "203.0.113.0/24", 65004, "192.0.2.2", 0))
+	waitForRoute(t, s, "203.0.113.7", true)
+	if !present("198.51.100.7") {
+		t.Fatal("the peer up of one speaker withdrew the route of the other")
+	}
+
+	write(t, b, mustBMPWireFrom(t, "198.51.100.0/24", 65005, "192.0.2.2", 0))
+	waitForSummary(t, s, Summary{PrefixesV4: 2, Routes: 3, Peers: 2})
+	if route, ok := s.Lookup(netip.MustParseAddr("198.51.100.7")); !ok || route.OriginASN != 65003 {
+		t.Fatalf("Lookup = %+v ok=%v, want the route of the lower speaker", route, ok)
+	}
+	withdraw := bgp.NewBGPUpdateMessage([]*bgp.IPAddrPrefix{bgp.NewIPAddrPrefix(24, "198.51.100.0")}, nil, nil)
+	write(t, b, mustRouteMonitoringWire(t, bmp.NewBMPPeerHeader(bmp.BMP_PEER_TYPE_GLOBAL, 0, 0, "192.0.2.2", 65003, "192.0.2.2", 0), withdraw))
+	waitForSummary(t, s, Summary{PrefixesV4: 2, Routes: 2, Peers: 2})
+	if route, ok := s.Lookup(netip.MustParseAddr("198.51.100.7")); !ok || route.OriginASN != 65003 || route.Speaker != netip.MustParseAddr("10.0.0.1") {
+		t.Fatalf("Lookup = %+v ok=%v, want the route of the speaker that did not withdraw it", route, ok)
+	}
+
+	_ = a.Close()
+	_ = b.Close()
+	<-aDone
+	<-bDone
 }
 
 func TestDebugSummaryCostsNothingAtInfo(t *testing.T) {
@@ -1441,7 +1479,7 @@ func TestUpdateFromBMPRouteMetadata(t *testing.T) {
 		0,
 	)
 
-	out, ok := updateFromBMP(bmp.NewBMPRouteMonitoring(*peer, update))
+	out, ok := updateFromBMP(netip.Addr{}, bmp.NewBMPRouteMonitoring(*peer, update))
 	if !ok {
 		t.Fatal("updateFromBMP should accept route-monitoring message")
 	}
@@ -1515,7 +1553,7 @@ func TestUpdateFromBMPSkipsVPNRoutes(t *testing.T) {
 	)
 	peer := bmp.NewBMPPeerHeader(bmp.BMP_PEER_TYPE_GLOBAL, 0, 0, "192.0.2.2", 65010, "192.0.2.2", 0)
 
-	out, ok := updateFromBMP(bmp.NewBMPRouteMonitoring(*peer, update))
+	out, ok := updateFromBMP(netip.Addr{}, bmp.NewBMPRouteMonitoring(*peer, update))
 	if !ok {
 		t.Fatal("updateFromBMP should accept route-monitoring message")
 	}
@@ -1576,7 +1614,7 @@ func TestUpdateFromBMPSkipsMulticastRoutes(t *testing.T) {
 				t.Fatalf("ParseBMPMessage: %v", err)
 			}
 
-			out, ok := updateFromBMP(msg)
+			out, ok := updateFromBMP(netip.Addr{}, msg)
 			if !ok {
 				t.Fatal("updateFromBMP should accept route-monitoring message")
 			}
@@ -1605,8 +1643,26 @@ func TestTableCountsMappedPrefixAsIPv6(t *testing.T) {
 func startSession(t *testing.T, s *Server) (net.Conn, chan struct{}) {
 	t.Helper()
 
+	return startSessionFrom(t, s, "")
+}
+
+// speakerConn is a pipe end that reports the tcp address of a speaker
+type speakerConn struct {
+	net.Conn
+	remote net.Addr
+}
+
+func (c speakerConn) RemoteAddr() net.Addr { return c.remote }
+
+// startSessionFrom is startSession for the speaker at addr, none when empty
+func startSessionFrom(t *testing.T, s *Server, addr string) (net.Conn, chan struct{}) {
+	t.Helper()
+
 	serverConn, clientConn := net.Pipe()
 	t.Cleanup(func() { _ = clientConn.Close() })
+	if addr != "" {
+		serverConn = speakerConn{serverConn, net.TCPAddrFromAddrPort(netip.AddrPortFrom(netip.MustParseAddr(addr), 40000))}
+	}
 
 	done := make(chan struct{})
 	go func() {
@@ -2352,7 +2408,7 @@ func TestUpdateFromBMPMergesAS4Path(t *testing.T) {
 				t.Fatalf("ParseBMPMessage: %v", err)
 			}
 
-			out, ok := updateFromBMP(msg)
+			out, ok := updateFromBMP(netip.Addr{}, msg)
 			if !ok || len(out.Reach) != 1 {
 				t.Fatalf("updateFromBMP = %+v ok=%v, want one route", out, ok)
 			}
@@ -2380,7 +2436,7 @@ func TestOriginFromASSetIsFlagged(t *testing.T) {
 	)
 	peer := bmp.NewBMPPeerHeader(bmp.BMP_PEER_TYPE_LOCAL_RIB, 0, 0, "192.0.2.2", 65010, "192.0.2.2", 0)
 
-	out, ok := updateFromBMP(bmp.NewBMPRouteMonitoring(*peer, update))
+	out, ok := updateFromBMP(netip.Addr{}, bmp.NewBMPRouteMonitoring(*peer, update))
 	if !ok || len(out.Reach) != 1 {
 		t.Fatalf("updateFromBMP = %+v ok=%v, want one route", out, ok)
 	}
