@@ -69,13 +69,12 @@ func main() {
 }
 
 func run(_ *cobra.Command, args []string) error {
-	arch := cmp.Or(os.Getenv("BPF_TARGET_ARCH"), os.Getenv("GOARCH"), runtime.GOARCH)
-	cfg, err := detect(arch)
+	cfg, err := detect(cmp.Or(os.Getenv("GOARCH"), runtime.GOARCH))
 	if err != nil {
 		return err
 	}
 
-	skip := runtime.GOOS != "linux" && os.Getenv("BPFGEN_FORCE") != "1"
+	skip := runtime.GOOS != "linux"
 
 	extra, err := pkgconfig(libs)
 	if err != nil {
@@ -84,11 +83,9 @@ func run(_ *cobra.Command, args []string) error {
 		}
 		extra = nil
 	}
-	extra = append(extra, strings.Fields(os.Getenv("BPFGEN_EXTRA_CFLAGS"))...)
 
 	flags := cflags(args[0], cfg, extra)
 
-	// update compile_commands.json for clangd if requested
 	if compdb != "" {
 		if err := writeCompDB(compdb, args[0], flags); err != nil {
 			return err
