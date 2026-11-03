@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0
 #include "vmlinux.h"
 
 #define SEC(name) __attribute__((section(name), used))

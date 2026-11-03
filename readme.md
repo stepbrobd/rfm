@@ -837,5 +837,6 @@ network-intensive and distributed systems workloads.
 
 ## License
 
-Source files under `bpf/` are licensed under GPLv2 to satisfy kernel BPF
+The BPF C sources under `bpf/`, `bench/progbench/bpf/` and
+`cmd/bpfgen/testdata/` are licensed under GPLv2 to satisfy kernel BPF
 requirements. Everything else is AGPLv3.
