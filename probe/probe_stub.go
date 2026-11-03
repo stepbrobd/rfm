@@ -64,3 +64,7 @@ func (p *Probe) Watch(context.Context, func(string) bool, func(LinkEvent)) error
 func (p *Probe) WatchState() WatchState {
 	return WatchState{}
 }
+
+func (p *Probe) Synced() <-chan struct{} {
+	return nil
+}

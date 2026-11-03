@@ -60,6 +60,7 @@ type agentProbe interface {
 	SetSampleRate(n uint32) error
 	Watch(ctx context.Context, match func(string) bool, notify func(probe.LinkEvent)) error
 	WatchState() probe.WatchState
+	Synced() <-chan struct{}
 	// Events opens the reader of the sampled flow events
 	Events() (collector.Reader, error)
 }
@@ -318,22 +319,15 @@ func stopped(ctx, run context.Context) error {
 	return context.Cause(run)
 }
 
-// syncPoll is how often the agent looks for the watcher's first sync
-const syncPoll = 50 * time.Millisecond
-
-// waitSynced waits until the watcher's first link dump went through and
-// reports whether it did before ctx was done
+// waitSynced reports whether the watcher's first link dump went through
+// before ctx was done
 func waitSynced(ctx context.Context, p agentProbe) bool {
-	tick := time.NewTicker(syncPoll)
-	defer tick.Stop()
-	for !p.WatchState().Synced {
-		select {
-		case <-ctx.Done():
-			return false
-		case <-tick.C:
-		}
+	select {
+	case <-p.Synced():
+		return true
+	case <-ctx.Done():
+		return false
 	}
-	return true
 }
 
 // reportInterfaces waits for the watcher's first link dump, then logs the

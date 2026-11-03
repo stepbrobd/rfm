@@ -190,7 +190,14 @@ func (p *Probe) watch(ctx context.Context, match func(string) bool, notify func(
 				p.reconcile(seen, notify)
 				onSync()
 				seen, synced = nil, true
-				p.updateWatch(func(st *WatchState) { st.Synced = true })
+				p.updateWatch(func(st *WatchState) {
+					st.Synced = true
+					select {
+					case <-p.synced:
+					default:
+						close(p.synced)
+					}
+				})
 			case unix.NLMSG_ERROR:
 				errno, err := nlmsgErrno(m.Data)
 				if err == nil && errno == 0 {
@@ -384,6 +391,11 @@ func (p *Probe) WatchState() WatchState {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	return p.watchState
+}
+
+// Synced returns the channel that closes at the first reconciled link dump
+func (p *Probe) Synced() <-chan struct{} {
+	return p.synced
 }
 
 func (p *Probe) updateWatch(fn func(*WatchState)) {

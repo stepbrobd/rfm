@@ -51,13 +51,12 @@ type fakeProbe struct {
 	attached map[int]bool
 	// pending lists the links whose attach failed, state holds the counters
 	// WatchState reports
-	pending  []int
-	state    probe.WatchState
-	rate     uint32
-	watching bool
-	synced   bool
-	closed   bool
-	events   chan []byte
+	pending []int
+	state   probe.WatchState
+	rate    uint32
+	synced  chan struct{}
+	closed  bool
+	events  chan []byte
 	// dump, when set, holds the watcher's link dump back until it is closed
 	dump chan struct{}
 	// watchErr fails the watcher's first subscription, readErr every read
@@ -67,7 +66,7 @@ type fakeProbe struct {
 }
 
 func newFakeProbe() *fakeProbe {
-	return &fakeProbe{attached: map[int]bool{}, events: make(chan []byte, 16)}
+	return &fakeProbe{attached: map[int]bool{}, synced: make(chan struct{}), events: make(chan []byte, 16)}
 }
 
 func (f *fakeProbe) load(cfg probe.Config) (agentProbe, error) {
@@ -118,14 +117,8 @@ func (f *fakeProbe) Watch(ctx context.Context, match func(string) bool, notify f
 		return f.watchErr
 	}
 	f.mu.Lock()
-	f.watching = true
 	dump := f.dump
 	f.mu.Unlock()
-	defer func() {
-		f.mu.Lock()
-		f.watching, f.synced = false, false
-		f.mu.Unlock()
-	}()
 
 	if dump != nil {
 		select {
@@ -147,9 +140,7 @@ func (f *fakeProbe) Watch(ctx context.Context, match func(string) bool, notify f
 		f.mu.Unlock()
 		notify(probe.LinkEvent{Name: l.Name, Ifindex: l.Index, Attached: true})
 	}
-	f.mu.Lock()
-	f.synced = true
-	f.mu.Unlock()
+	close(f.synced)
 	<-ctx.Done()
 	return ctx.Err()
 }
@@ -157,10 +148,10 @@ func (f *fakeProbe) Watch(ctx context.Context, match func(string) bool, notify f
 func (f *fakeProbe) WatchState() probe.WatchState {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	st := f.state
-	st.Running, st.Synced = f.watching, f.synced
-	return st
+	return f.state
 }
+
+func (f *fakeProbe) Synced() <-chan struct{} { return f.synced }
 
 func (f *fakeProbe) Events() (collector.Reader, error) {
 	return &fakeReader{events: f.events, err: f.readErr}, nil
@@ -922,7 +913,8 @@ func TestReportInterfacesNamesLinksWhoseAttachFailed(t *testing.T) {
 	// the watcher retries a link whose attach failed, the link is there and
 	// the report must not call it missing
 	f := newFakeProbe()
-	f.synced, f.pending = true, []int{mustInterface(t, lo).Index}
+	close(f.synced)
+	f.pending = []int{mustInterface(t, lo).Index}
 	reportInterfaces(context.Background(), f, []string{lo})
 	waitLog(t, logs, "WARN", "attach failed", lo)
 	if strings.Contains(logs.String(), "no interface attached") || strings.Contains(logs.String(), "matches no link") {

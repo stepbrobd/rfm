@@ -40,6 +40,8 @@ type Probe struct {
 	pending map[int]string
 
 	watchState WatchState
+	// synced closes once the first link dump of Watch is reconciled
+	synced chan struct{}
 
 	// slots assigns the counter slots of rfm_iface_arr, guarded by mu
 	slots *slotAlloc
@@ -109,6 +111,7 @@ func Load(cfg Config) (*Probe, error) {
 		links:   make(map[int]ifaceLinks),
 		skipped: make(map[int]bool),
 		pending: make(map[int]string),
+		synced:  make(chan struct{}),
 		slots:   newSlotAlloc(int(spec.Maps[pinArr].MaxEntries)/(2*ifaceFamilies), spec.Maps[pinSlot].MaxEntries),
 	}
 	p.ingress, p.egress, err = loadObjects(spec, opts, p.objs, ingress, egress)
