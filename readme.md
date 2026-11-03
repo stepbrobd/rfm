@@ -533,7 +533,10 @@ takes the place of the one idle longest once a scrape has shown all of that
 tuple's counts, and otherwise its flow counts under the tuple of its interface,
 direction and protocol with empty labels. `rfm_collector_folded_flows_total`
 counts those flows, and the ASN and city rankings of the bundled dashboard leave
-them out.
+them out. These rules count every scrape, whoever sends it, and hold for a
+single scraper. With a second Prometheus server or a manual request to
+`/metrics`, a scraper can miss the zero sample of a new tuple or the last counts
+of a tuple that leaves.
 
 Sampling:
 
