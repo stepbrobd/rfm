@@ -972,6 +972,36 @@ func TestIPFIXKeepsToTheSmallestMaxMessageSize(t *testing.T) {
 	}
 }
 
+// parkSender parks the sender in the dial of a Flush of one record until release is closed
+func parkSender(t *testing.T, exp *IPFIXExporter) (release chan struct{}, flushed chan error) {
+	t.Helper()
+
+	release = make(chan struct{})
+	exp.mu.Lock()
+	_ = exp.conn.Close()
+	exp.conn = nil
+	exp.nextDial = time.Time{}
+	exp.dial = func(local, remote *net.UDPAddr) (*net.UDPConn, error) {
+		<-release
+		return net.DialUDP("udp", local, remote)
+	}
+	exp.mu.Unlock()
+
+	if err := exp.ExportFlow(testFlow("::ffff:10.0.0.1", "::ffff:10.0.0.2", 1)); err != nil {
+		t.Fatalf("ExportFlow: %v", err)
+	}
+	flushed = make(chan error, 1)
+	go func() { flushed <- exp.Flush() }()
+	deadline := time.Now().Add(2 * time.Second)
+	for exp.Stats().Dials < 2 {
+		if time.Now().After(deadline) {
+			t.Fatal("sender never reached the dial")
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	return release, flushed
+}
+
 func TestIPFIXQueueFullDropsRecords(t *testing.T) {
 	loadIPFIXRegistry.Do(registry.LoadRegistry)
 
@@ -986,33 +1016,8 @@ func TestIPFIXQueueFullDropsRecords(t *testing.T) {
 	}
 	defer exp.Close()
 
-	// park the sender inside a dial so the queue fills behind it
-	release := make(chan struct{})
-	exp.mu.Lock()
-	_ = exp.conn.Close()
-	exp.conn = nil
-	exp.nextDial = time.Time{}
-	exp.dial = func(local, remote *net.UDPAddr) (*net.UDPConn, error) {
-		<-release
-		return net.DialUDP("udp", local, remote)
-	}
-	exp.mu.Unlock()
-
-	if err := exp.ExportFlow(testFlow("::ffff:10.0.0.1", "::ffff:10.0.0.2", 1)); err != nil {
-		t.Fatalf("ExportFlow: %v", err)
-	}
-	flushed := make(chan error, 1)
-	go func() { flushed <- exp.Flush() }()
-
-	// wait until the sender is parked in the dial
-	deadline := time.Now().Add(2 * time.Second)
-	for exp.Stats().Dials < 2 {
-		if time.Now().After(deadline) {
-			t.Fatal("sender never reached the dial")
-		}
-		time.Sleep(5 * time.Millisecond)
-	}
-
+	// the queue fills behind the parked sender
+	release, flushed := parkSender(t, exp)
 	var refused int
 	for port := uint16(2); port <= 5; port++ {
 		if err := exp.ExportFlow(testFlow("::ffff:10.0.0.1", "::ffff:10.0.0.2", port)); err != nil {
@@ -1035,6 +1040,40 @@ func TestIPFIXQueueFullDropsRecords(t *testing.T) {
 	}
 	if got := exp.Stats().Records; got != 3 {
 		t.Fatalf("records sent = %d, want 3", got)
+	}
+}
+
+func TestIPFIXCloseSendsTheQueuedRecords(t *testing.T) {
+	loadIPFIXRegistry.Do(registry.LoadRegistry)
+
+	conn := startIPFIXListener(t)
+	addr := conn.LocalAddr().(*net.UDPAddr)
+
+	exp, err := NewIPFIX(testIPFIXConfig(addr.IP.String(), addr.Port))
+	if err != nil {
+		t.Fatalf("NewIPFIX: %v", err)
+	}
+
+	// the records stay queued behind the parked sender until Close
+	release, flushed := parkSender(t, exp)
+	const queued = 16
+	for port := range uint16(queued) {
+		if err := exp.ExportFlow(testFlow("::ffff:10.0.0.1", "::ffff:10.0.0.2", 100+port)); err != nil {
+			t.Fatalf("ExportFlow: %v", err)
+		}
+	}
+	closed := make(chan error, 1)
+	go func() { closed <- exp.Close() }()
+	<-exp.stop
+	close(release)
+	if err := <-flushed; err != nil {
+		t.Fatalf("Flush: %v", err)
+	}
+	if err := <-closed; err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+	if got := exp.Stats().Records; got != 1+queued {
+		t.Fatalf("records sent = %d, want the flushed one and the %d Close found queued", got, queued)
 	}
 }
 
