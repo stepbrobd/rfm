@@ -28,6 +28,7 @@ import (
 	"unsafe"
 
 	"github.com/cilium/ebpf"
+	"github.com/cilium/ebpf/btf"
 	"golang.org/x/sys/unix"
 )
 
@@ -226,7 +227,7 @@ func trial(obj, pname string, fr frame, n, repeat, ringOrder uint32) (uint32, fl
 	}
 	defer coll.Close()
 
-	if err := writeConfig(coll, n); err != nil {
+	if err := writeConfig(spec, coll, n); err != nil {
 		return 0, 0, 0, 0, info, err
 	}
 	// the rings stay referenced by rfm_flow_rings, nothing reads them here
@@ -279,18 +280,21 @@ func trial(obj, pname string, fr frame, n, repeat, ringOrder uint32) (uint32, fl
 	return ns, wall, ret, drops, info, nil
 }
 
-// writeConfig sets sample rate n and a wakeup batch of 64, in the rfm_cfg
-// global of an agent object that keeps its config there, otherwise in the
-// rfm_config map, whose value is sample_rate, flags, wakeup_batch and, in the
-// variants, the threshold
-func writeConfig(coll *ebpf.Collection, n uint32) error {
+// writeConfig sets rate n, a wakeup batch of 64 and the variants' threshold by btf member name, in the rfm_cfg global or the rfm_config map
+func writeConfig(spec *ebpf.CollectionSpec, coll *ebpf.Collection, n uint32) error {
+	fields := map[string]uint32{
+		"sample_rate":  n,
+		"wakeup_batch": 64,
+		"threshold":    uint32(min(uint64(1<<32)/uint64(max(n, 1)), 0xffffffff)),
+	}
 	if v, ok := coll.Variables["rfm_cfg"]; ok {
 		var val []byte
 		if err := v.Get(&val); err != nil {
 			return err
 		}
-		binary.NativeEndian.PutUint32(val[0:], n)
-		binary.NativeEndian.PutUint32(val[8:], 64)
+		if err := setMembers(val, v.Type().Type, fields); err != nil {
+			return err
+		}
 		return v.Set(val)
 	}
 	m := coll.Maps["rfm_config"]
@@ -298,13 +302,29 @@ func writeConfig(coll *ebpf.Collection, n uint32) error {
 		return errors.New("no rfm_cfg global or rfm_config map")
 	}
 	val := make([]byte, m.ValueSize())
-	binary.NativeEndian.PutUint32(val[0:], n)
-	binary.NativeEndian.PutUint32(val[8:], 64)
-	if len(val) >= 16 {
-		thr := min(uint64(1<<32)/uint64(max(n, 1)), 0xffffffff)
-		binary.NativeEndian.PutUint32(val[12:], uint32(thr))
+	if err := setMembers(val, spec.Maps["rfm_config"].Value, fields); err != nil {
+		return err
 	}
 	return m.Put(uint32(0), val)
+}
+
+// setMembers writes fields into val at the offsets of struct typ
+func setMembers(val []byte, typ btf.Type, fields map[string]uint32) error {
+	st, ok := btf.UnderlyingType(typ).(*btf.Struct)
+	if !ok {
+		return fmt.Errorf("config type %v is not a struct", typ)
+	}
+	set := map[string]bool{}
+	for _, mb := range st.Members {
+		if v, ok := fields[mb.Name]; ok {
+			binary.NativeEndian.PutUint32(val[mb.Offset.Bytes():], v)
+			set[mb.Name] = true
+		}
+	}
+	if !set["sample_rate"] || !set["wakeup_batch"] {
+		return fmt.Errorf("config type %v lacks sample_rate or wakeup_batch", typ)
+	}
+	return nil
 }
 
 func testRun(fd int, fr frame, repeat uint32, skbCtx bool) (uint32, uint32, error) {

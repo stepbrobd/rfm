@@ -72,7 +72,7 @@ func insitu(obj, label, iface, ingress, egress string, n uint32, ringOrder uint3
 			return err
 		}
 		defer coll.Close()
-		if err := writeConfig(coll, n); err != nil {
+		if err := writeConfig(spec, coll, n); err != nil {
 			return err
 		}
 		rings, own, err := eventRings(spec, coll, splitRing(ringOrder))

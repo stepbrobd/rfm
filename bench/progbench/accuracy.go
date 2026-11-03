@@ -79,7 +79,7 @@ func accuracy(obj, label, prog, km string, n, ringOrder uint32, kernel string) e
 		return err
 	}
 	defer coll.Close()
-	if err := writeConfig(coll, n); err != nil {
+	if err := writeConfig(spec, coll, n); err != nil {
 		return err
 	}
 	rings, own, err := eventRings(spec, coll, pinnedRing(ringOrder))
