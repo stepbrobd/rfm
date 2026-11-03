@@ -54,7 +54,7 @@ struct {
 	__uint(type, BPF_MAP_TYPE_PERCPU_ARRAY);
 	__uint(max_entries, RFM_SLOTS * 2 * RFM_FAMILIES);
 	__type(key, __u32);
-	__type(value, struct rfm_iface_value);
+	__type(value, struct rfm_slot_value);
 } rfm_iface_arr SEC(".maps");
 
 // rfm_iface_errors counts the counter updates rfm_iface_stats refused, a
@@ -206,6 +206,39 @@ static __always_inline __u32 rfm_hdr_len(struct __sk_buff *skb, void *l3,
 	return l2_len + l3_len;
 }
 
+// rfm_hash_count adds a packet of an interface without a counter slot to its
+// hash entry, inserting it when it is new
+static __always_inline void
+rfm_hash_count(__u32 ifindex, __u8 dir, __u8 iface_proto, __u32 segs, __u32 len)
+{
+	struct rfm_iface_key ikey = {
+		.ifindex = ifindex,
+		.dir = dir,
+		.proto = iface_proto,
+	};
+	struct rfm_iface_value *val =
+		bpf_map_lookup_elem(&rfm_iface_stats, &ikey);
+	if (val) {
+		val->packets += segs;
+		val->bytes += len;
+		return;
+	}
+	struct rfm_iface_value init = { .packets = segs, .bytes = len };
+	if (bpf_map_update_elem(&rfm_iface_stats, &ikey, &init, BPF_ANY)) {
+		__u32 err_key = 0;
+		__u64 *errs = bpf_map_lookup_elem(&rfm_iface_errors, &err_key);
+		if (errs)
+			(*errs)++;
+	}
+}
+
+// rfm_gap draws the packets to skip before the next sample, uniform from 0
+// to 2 * n - 2, so the gap to that sample has a mean of n
+static __always_inline __u64 rfm_gap(__u32 n)
+{
+	return ((__u64)bpf_get_prandom_u32() * (2 * (__u64)n - 1)) >> 32;
+}
+
 // the programs only observe, so every exit returns TCX_NEXT (TC_ACT_UNSPEC)
 // and later TCX programs and the filters of a clsact or ingress qdisc still
 // run, TC_ACT_OK is TCX_PASS and would end the chain at rfm
@@ -297,7 +330,7 @@ static __always_inline int rfm_tc(struct __sk_buff *skb, __u8 dir)
 
 	// iface stats are always updated, not gated by sampling, in the slot
 	// of the interface when it has one and in the hash otherwise
-	struct rfm_iface_value *val = NULL;
+	struct rfm_slot_value *sval = NULL;
 	__u32 ifindex = skb->ifindex;
 	if (ifindex < RFM_SLOT_IFINDEX_MAX) {
 		__u32 *slot = bpf_map_lookup_elem(&rfm_iface_slot, &ifindex);
@@ -307,30 +340,15 @@ static __always_inline int rfm_tc(struct __sk_buff *skb, __u8 dir)
 						       0;
 			__u32 idx = (*slot - 1) * 2 * RFM_FAMILIES +
 				    dir * RFM_FAMILIES + fam;
-			val = bpf_map_lookup_elem(&rfm_iface_arr, &idx);
+			sval = bpf_map_lookup_elem(&rfm_iface_arr, &idx);
 		}
 	}
 
-	struct rfm_iface_key ikey = {
-		.ifindex = ifindex,
-		.dir = dir,
-		.proto = iface_proto,
-	};
-	if (!val)
-		val = bpf_map_lookup_elem(&rfm_iface_stats, &ikey);
-	if (val) {
-		val->packets += segs;
-		val->bytes += len;
+	if (sval) {
+		sval->packets += segs;
+		sval->bytes += len;
 	} else {
-		struct rfm_iface_value init = { .packets = segs, .bytes = len };
-		if (bpf_map_update_elem(&rfm_iface_stats, &ikey, &init,
-					BPF_ANY)) {
-			__u32 err_key = 0;
-			__u64 *errs = bpf_map_lookup_elem(&rfm_iface_errors,
-							  &err_key);
-			if (errs)
-				(*errs)++;
-		}
+		rfm_hash_count(ifindex, dir, iface_proto, segs, len);
 	}
 
 	// skip non-IP traffic for flow events
@@ -341,8 +359,23 @@ static __always_inline int rfm_tc(struct __sk_buff *skb, __u8 dir)
 	if (rate == 0)
 		return TCX_NEXT;
 
-	if (bpf_get_prandom_u32() % rate != 0)
+	// a slot samples after a gap drawn uniform from 1 to 2 * rate - 1, one
+	// draw per sample instead of one per packet with the same mean of 1 in
+	// rate, an interface without a slot keeps a draw per packet
+	if (sval) {
+		__u32 gen = rfm_cfg.gen;
+		if (sval->gen != gen) {
+			sval->gen = gen;
+			sval->skip = rfm_gap(rate);
+		}
+		if (sval->skip) {
+			sval->skip--;
+			return TCX_NEXT;
+		}
+		sval->skip = rfm_gap(rate);
+	} else if (bpf_get_prandom_u32() % rate != 0) {
 		return TCX_NEXT;
+	}
 
 	// parse IP headers into a stack event
 	struct rfm_flow_event ev = {

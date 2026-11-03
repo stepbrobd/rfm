@@ -18,6 +18,7 @@ type rfmRfmConfig struct {
 	SampleRate  uint32
 	Flags       uint32
 	WakeupBatch uint32
+	Gen         uint32
 }
 
 type rfmRfmIfaceKey struct {
@@ -32,6 +33,15 @@ type rfmRfmIfaceValue struct {
 	_       structs.HostLayout
 	Packets uint64
 	Bytes   uint64
+}
+
+type rfmRfmSlotValue struct {
+	_       structs.HostLayout
+	Packets uint64
+	Bytes   uint64
+	Skip    uint64
+	Gen     uint32
+	Pad     uint32
 }
 
 // Names of all BPF objects in the ELF.

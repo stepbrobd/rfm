@@ -2376,3 +2376,135 @@ func TestPinnedCountersDropALoneSlotPin(t *testing.T) {
 	ns.SendRaw(t, pkt)
 	wantIfaceStats(t, p, key, 1, uint64(len(pkt)))
 }
+
+// loopbackSamples runs the ingress program n times on an IPv4 frame, which a
+// test run hands in on loopback, and returns how many runs it sampled, the
+// events in the ring buffer plus the ones the ring dropped
+func loopbackSamples(t *testing.T, p *Probe, n uint32) int {
+	t.Helper()
+
+	rd, err := ringbuf.NewReader(p.FlowEvents())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rd.Close()
+
+	drops := func() (sum uint64) {
+		var vals []uint64
+		if err := p.FlowDrops().Lookup(uint32(0), &vals); err != nil {
+			t.Fatal(err)
+		}
+		for _, v := range vals {
+			sum += v
+		}
+		return sum
+	}
+	before := drops()
+	frame := testutil.EthIPv4UDP(net.IPv4(10, 0, 9, 1), net.IPv4(10, 0, 9, 2), 9100, 53)
+	if _, err := p.objs.RfmTcIngress.Run(&ebpf.RunOptions{Data: frame, Repeat: n}); err != nil {
+		skipIfUnsupported(t, err)
+		t.Fatal(err)
+	}
+	samples := int(drops() - before)
+	rd.SetDeadline(time.Now())
+	for {
+		if _, err := rd.Read(); errors.Is(err, os.ErrDeadlineExceeded) {
+			return samples
+		} else if err != nil {
+			t.Fatal(err)
+		}
+		samples++
+	}
+}
+
+// slotLoopback gives loopback a counter slot, as Attach gives one to an
+// interface it attaches
+func slotLoopback(t *testing.T, p *Probe) {
+	t.Helper()
+
+	lo, err := netlink.LinkByName("lo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := p.assignSlot(lo.Attrs().Index); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestSlotSamplingKeepsTheRate(t *testing.T) {
+	testutil.RequireRoot(t)
+
+	testutil.NewNS(t)
+
+	p, err := Load(Config{SampleRate: 10, WakeupBatch: 1})
+	if err != nil {
+		skipIfUnsupported(t, err)
+		t.Fatal(err)
+	}
+	defer p.Close()
+	slotLoopback(t, p)
+
+	// gaps uniform from 1 to 19 put 2000 samples in 20000 packets with a
+	// standard deviation near 25
+	if got := loopbackSamples(t, p, 20000); got < 1800 || got > 2200 {
+		t.Fatalf("samples of 20000 packets at 1 in 10 = %d, want 2000 within 200", got)
+	}
+}
+
+func TestSlotSamplingFollowsARateChange(t *testing.T) {
+	testutil.RequireRoot(t)
+
+	testutil.NewNS(t)
+
+	p, err := Load(Config{SampleRate: 1 << 30, WakeupBatch: 1})
+	if err != nil {
+		skipIfUnsupported(t, err)
+		t.Fatal(err)
+	}
+	defer p.Close()
+	slotLoopback(t, p)
+
+	// the first packet draws a gap of up to 2^31 packets
+	if got := loopbackSamples(t, p, 1); got != 0 {
+		t.Fatalf("samples at 1 in 2^30 = %d, want none", got)
+	}
+	// a new rate draws again at the next packet instead of finishing the gap
+	if err := p.SetSampleRate(1); err != nil {
+		t.Fatal(err)
+	}
+	if got := loopbackSamples(t, p, 5); got != 5 {
+		t.Fatalf("samples of 5 packets after the rate went to 1 = %d, want 5", got)
+	}
+}
+
+func TestPinnedSlotSamplingRedrawsOnLoad(t *testing.T) {
+	testutil.RequireRoot(t)
+
+	dir := pinDir(t)
+	testutil.NewNS(t)
+
+	p, err := Load(Config{SampleRate: 1 << 30, WakeupBatch: 1, PinPath: dir})
+	if err != nil {
+		skipIfUnsupported(t, err)
+		t.Fatal(err)
+	}
+	slotLoopback(t, p)
+	if got := loopbackSamples(t, p, 1); got != 0 {
+		p.Close()
+		t.Fatalf("samples at 1 in 2^30 = %d, want none", got)
+	}
+	if err := p.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	// the pinned slot keeps its gap, the next load draws it again at its
+	// own rate
+	p, err = Load(Config{SampleRate: 1, WakeupBatch: 1, PinPath: dir})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer p.Close()
+	if got := loopbackSamples(t, p, 5); got != 5 {
+		t.Fatalf("samples of 5 packets after a load at 1 in 1 = %d, want 5", got)
+	}
+}

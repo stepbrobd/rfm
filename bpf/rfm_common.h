@@ -7,10 +7,13 @@
 #define RFM_DIR_INGRESS 0
 #define RFM_DIR_EGRESS 1
 
+// gen changes with every sample rate, a counter slot whose skip count was
+// drawn under another gen draws it again
 struct rfm_config {
 	__u32 sample_rate;
 	__u32 flags;
 	__u32 wakeup_batch;
+	__u32 gen;
 };
 
 struct rfm_iface_key {
@@ -29,6 +32,15 @@ struct rfm_iface_value {
 #define RFM_SLOTS 256
 #define RFM_SLOT_IFINDEX_MAX 16384
 #define RFM_FAMILIES 3
+
+// a counter slot entry on one CPU, skip is the packets left before the next
+// sample and gen the config gen it was drawn under
+struct rfm_slot_value {
+	__u64 packets, bytes;
+	__u64 skip;
+	__u32 gen;
+	__u32 _pad;
+};
 
 // len is the on-wire byte count and segs the on-wire packet count of the
 // sampled skb, GRO on ingress and GSO on egress coalesce several wire packets

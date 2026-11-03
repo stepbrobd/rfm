@@ -6,6 +6,7 @@ import (
 	"cmp"
 	"errors"
 	"fmt"
+	"math/rand/v2"
 	"os"
 	"path/filepath"
 	"slices"
@@ -110,10 +111,13 @@ func Load(cfg Config) (*Probe, error) {
 		}
 	}
 
+	// a gen of its own per load, so the skip counts a pinned counter array
+	// kept from the last run are drawn again at this run's rate
 	cfgVal := rfmRfmConfig{
 		SampleRate:  cfg.SampleRate,
 		Flags:       cfg.Flags,
 		WakeupBatch: cfg.WakeupBatch,
+		Gen:         nextGen(rand.Uint32()),
 	}
 	if err := objs.RfmCfg.Set(cfgVal); err != nil {
 		objs.Close()
@@ -262,7 +266,7 @@ func (p *Probe) zeroSlot(slot int) error {
 	if err != nil {
 		return fmt.Errorf("count CPUs: %w", err)
 	}
-	zero := make([]rfmRfmIfaceValue, ncpu)
+	zero := make([]rfmRfmSlotValue, ncpu)
 	for dir := range uint8(2) {
 		for fam := range ifaceFamilies {
 			if err := p.objs.RfmIfaceArr.Put(slotIndex(slot, dir, fam), zero); err != nil {
@@ -402,10 +406,19 @@ func (p *Probe) SetSampleRate(n uint32) error {
 		return fmt.Errorf("read config: %w", err)
 	}
 	cfg.SampleRate = n
+	cfg.Gen = nextGen(cfg.Gen)
 	if err := p.objs.RfmCfg.Set(cfg); err != nil {
 		return fmt.Errorf("write config: %w", err)
 	}
 	return nil
+}
+
+// nextGen is the config gen after gen, never 0, the gen of a zeroed slot
+func nextGen(gen uint32) uint32 {
+	if gen++; gen == 0 {
+		gen = 1
+	}
+	return gen
 }
 
 func (p *Probe) IfaceStats() *ebpf.Map {
@@ -441,18 +454,19 @@ func (p *Probe) Counters() ([]IfaceCounter, error) {
 		return nil, fmt.Errorf("iterate iface stats: %w", err)
 	}
 
+	var svals []rfmRfmSlotValue
 	p.mu.Lock()
 	for ifindex, slot := range p.slots.held() {
 		for dir := range uint8(2) {
 			for fam := range ifaceFamilies {
-				if err := p.objs.RfmIfaceArr.Lookup(slotIndex(slot, dir, fam), &vals); err != nil {
+				if err := p.objs.RfmIfaceArr.Lookup(slotIndex(slot, dir, fam), &svals); err != nil {
 					p.mu.Unlock()
 					return nil, fmt.Errorf("read counter slot %d: %w", slot, err)
 				}
 				k := key{ifindex, dir, familyProto(fam)}
 				c := sums[k]
 				c.Ifindex, c.Dir, c.Proto = k.ifindex, k.dir, k.proto
-				for _, v := range vals {
+				for _, v := range svals {
 					c.Packets += v.Packets
 					c.Bytes += v.Bytes
 				}
