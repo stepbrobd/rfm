@@ -410,65 +410,31 @@ static __always_inline int rfm_tc(struct __sk_buff *skb, __u8 dir)
 		return TCX_NEXT;
 	}
 
-	// parse IP headers into a stack event
-	struct rfm_flow_event ev = {
-		.tstamp = bpf_ktime_get_boot_ns(),
-		.ifindex = skb->ifindex,
-		.dir = dir,
-		.segs = segs > 0xffff ? 0xffff : segs,
-		.len = len,
-		.l2_len = l2_len,
-	};
-
-	if (eth_proto == ETH_P_IP) {
-		struct iphdr *ip = l3;
-		if ((void *)(ip + 1) > end)
-			return TCX_NEXT;
-
-		// map IPv4 to v6: ::ffff:x.x.x.x
-		ev.src_addr[10] = 0xff;
-		ev.src_addr[11] = 0xff;
-		__builtin_memcpy(&ev.src_addr[12], &ip->saddr, 4);
-
-		ev.dst_addr[10] = 0xff;
-		ev.dst_addr[11] = 0xff;
-		__builtin_memcpy(&ev.dst_addr[12], &ip->daddr, 4);
-	} else {
-		struct ipv6hdr *ip6 = l3;
-		if ((void *)(ip6 + 1) > end)
-			return TCX_NEXT;
-
-		__builtin_memcpy(ev.src_addr, &ip6->saddr, 16);
-		__builtin_memcpy(ev.dst_addr, &ip6->daddr, 16);
-	}
-
-	// the actual IHL skips IPv4 options, and the walk skips IPv6
-	// extension headers
+	// every check that can fail runs before the reservation, so the ring
+	// only drops events that parsed, the actual IHL skips IPv4 options and
+	// the walk skips IPv6 extension headers
+	__u8 proto;
 	bool later_frag;
 	__u32 l4_off =
-		rfm_l4(skb, l3, end, l3_off, eth_proto, &ev.proto, &later_frag);
+		rfm_l4(skb, l3, end, l3_off, eth_proto, &proto, &later_frag);
 	if (!l4_off)
 		return TCX_NEXT;
 
 	// extract ports for TCP and UDP, only the first fragment carries the
 	// transport header
-	if (!later_frag &&
-	    (ev.proto == IPPROTO_TCP || ev.proto == IPPROTO_UDP)) {
-		__be16 ports[2];
+	__be16 ports[2] = {};
+	if (!later_frag && (proto == IPPROTO_TCP || proto == IPPROTO_UDP)) {
 		void *th = l3 + l4_off;
 		if (l4_off <= RFM_DIRECT_OFF_MAX && th + sizeof(ports) <= end)
 			__builtin_memcpy(ports, th, sizeof(ports));
 		else if (bpf_skb_load_bytes(skb, l3_off + l4_off, ports,
 					    sizeof(ports)))
 			return TCX_NEXT;
-		ev.src_port = bpf_ntohs(ports[0]);
-		ev.dst_port = bpf_ntohs(ports[1]);
 	}
 
-	// emit to ring buffer
-	struct rfm_flow_event *ring_ev =
-		bpf_ringbuf_reserve(&rfm_flow_events, sizeof(*ring_ev), 0);
-	if (!ring_ev) {
+	struct rfm_flow_event *ev =
+		bpf_ringbuf_reserve(&rfm_flow_events, sizeof(*ev), 0);
+	if (!ev) {
 		__u32 drop_key = 0;
 		__u64 *drops = bpf_map_lookup_elem(&rfm_flow_drops, &drop_key);
 		if (drops)
@@ -476,7 +442,34 @@ static __always_inline int rfm_tc(struct __sk_buff *skb, __u8 dir)
 		return TCX_NEXT;
 	}
 
-	__builtin_memcpy(ring_ev, &ev, sizeof(ev));
+	// the record is written in place, every byte of it since the ring
+	// memory holds older records, rfm_l4 checked the IP header against end
+	ev->tstamp = bpf_ktime_get_boot_ns();
+	ev->ifindex = skb->ifindex;
+	ev->dir = dir;
+	ev->proto = proto;
+	ev->segs = segs > 0xffff ? 0xffff : segs;
+	if (eth_proto == ETH_P_IP) {
+		struct iphdr *ip = l3;
+		// map IPv4 to v6: ::ffff:x.x.x.x
+		__builtin_memset(ev->src_addr, 0, 10);
+		ev->src_addr[10] = 0xff;
+		ev->src_addr[11] = 0xff;
+		__builtin_memcpy(&ev->src_addr[12], &ip->saddr, 4);
+		__builtin_memset(ev->dst_addr, 0, 10);
+		ev->dst_addr[10] = 0xff;
+		ev->dst_addr[11] = 0xff;
+		__builtin_memcpy(&ev->dst_addr[12], &ip->daddr, 4);
+	} else {
+		struct ipv6hdr *ip6 = l3;
+		__builtin_memcpy(ev->src_addr, &ip6->saddr, 16);
+		__builtin_memcpy(ev->dst_addr, &ip6->daddr, 16);
+	}
+	ev->src_port = bpf_ntohs(ports[0]);
+	ev->dst_port = bpf_ntohs(ports[1]);
+	ev->len = len;
+	ev->l2_len = l2_len;
+	__builtin_memset(ev->_pad, 0, sizeof(ev->_pad));
 
 	// batch wakeups, only wake epoll every wakeup_batch events, counted
 	// down in the slot entry or per CPU for an interface without a slot,
@@ -495,7 +488,7 @@ static __always_inline int rfm_tc(struct __sk_buff *skb, __u8 dir)
 		if (cnt && (++(*cnt) % rfm_cfg.wakeup_batch == 0))
 			flags = BPF_RB_FORCE_WAKEUP;
 	}
-	bpf_ringbuf_submit(ring_ev, flags);
+	bpf_ringbuf_submit(ev, flags);
 
 	return TCX_NEXT;
 }

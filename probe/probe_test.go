@@ -2721,3 +2721,51 @@ func TestSlotWakeupCountsDownTheBatch(t *testing.T) {
 		}
 	}
 }
+
+func TestFlowEventWritesEveryByte(t *testing.T) {
+	testutil.RequireRoot(t)
+
+	testutil.NewNS(t)
+
+	// a ring of one page wraps after 57 records of 72 bytes
+	p, err := Load(Config{SampleRate: 1, WakeupBatch: 1, RingBufSize: 4096})
+	if err != nil {
+		skipIfUnsupported(t, err)
+		t.Fatal(err)
+	}
+	defer p.Close()
+	rd, err := ringbuf.NewReader(p.FlowEvents())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rd.Close()
+
+	emit := func(frame []byte) []byte {
+		t.Helper()
+		if _, err := p.objs.RfmTcIngress.Run(&ebpf.RunOptions{Data: frame}); err != nil {
+			skipIfUnsupported(t, err)
+			t.Fatal(err)
+		}
+		rd.SetDeadline(time.Now().Add(time.Second))
+		rec, err := rd.Read()
+		if err != nil {
+			t.Fatal(err)
+		}
+		return rec.RawSample
+	}
+
+	// records with every address byte set fill the whole ring, then IPv4
+	// records written over them must leave the zero prefix of the mapped
+	// addresses and the padding zero
+	ones := net.IP(bytes.Repeat([]byte{0xff}, 16))
+	for range 64 {
+		emit(testutil.EthIPv6UDP(ones, ones, 0xffff, 0xffff))
+	}
+	zero := make([]byte, 10)
+	for i := range 64 {
+		rec := emit(testutil.EthIPv4UDP(net.IPv4(10, 0, 9, 1), net.IPv4(10, 0, 9, 2), 9200, 53))
+		if !bytes.Equal(rec[16:26], zero) || !bytes.Equal(rec[32:42], zero) || !bytes.Equal(rec[57:64], zero[:7]) {
+			t.Fatalf("ipv4 record %d keeps bytes of an older record: % x", i, rec)
+		}
+	}
+}
