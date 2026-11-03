@@ -27,8 +27,8 @@ import (
 const (
 	// bmpScannerMaxBuf caps BMP message size, very big and prob not necessary (just in case)
 	bmpScannerMaxBuf = 1 << 20
-	// removeChunk is how many routes RemovePeer withdraws per hold of the
-	// write lock, the collector looks labels up under its own lock
+	// removeChunk is how many routes RemovePeer withdraws per hold of mu, the
+	// collector's read loop waits for labels meanwhile
 	removeChunk = 1024
 	// maxSessions bounds the BMP sessions open at once, a router runs one
 	// or a few and every session holds a goroutine and its read buffer
