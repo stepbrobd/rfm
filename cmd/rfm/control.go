@@ -144,7 +144,7 @@ func (h *controlHandler) FlowsTop(n int, by string) ([]ctl.FlowRow, error) {
 		} else if a.EstBytes != b.EstBytes {
 			return a.EstBytes > b.EstBytes
 		}
-		return a.FirstSeen.Before(b.FirstSeen)
+		return a.FirstSeen < b.FirstSeen
 	})
 	flows = flows[:min(n, len(flows))]
 
@@ -152,6 +152,7 @@ func (h *controlHandler) FlowsTop(n int, by string) ([]ctl.FlowRow, error) {
 	if err != nil {
 		return nil, err
 	}
+	epoch := collector.BootEpoch()
 	rows := make([]ctl.FlowRow, len(flows))
 	for i, f := range flows {
 		key, entry := f.key, f.entry
@@ -171,8 +172,8 @@ func (h *controlHandler) FlowsTop(n int, by string) ([]ctl.FlowRow, error) {
 			Bytes:      entry.Bytes,
 			EstPackets: entry.EstPackets,
 			EstBytes:   entry.EstBytes,
-			FirstSeen:  entry.FirstSeen,
-			LastSeen:   entry.LastSeen,
+			FirstSeen:  epoch.Add(entry.FirstSeen),
+			LastSeen:   epoch.Add(entry.LastSeen),
 		}
 	}
 	return rows, nil

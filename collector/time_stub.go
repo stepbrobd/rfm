@@ -4,10 +4,4 @@ package collector
 
 import "time"
 
-func eventTime(FlowEvent) time.Time {
-	return time.Now()
-}
-
-func refreshBootOffset() {}
-
-func bootNow() uint64 { return 0 }
+func bootNow() time.Duration { return 0 }

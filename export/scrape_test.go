@@ -44,13 +44,13 @@ func fleetCollector(tb testing.TB) *collector.Collector {
 	c := collector.New(30*time.Second, tupleEnricher{}, config.DefaultMaxFlows)
 	c.SetSampleRate(10, 0)
 
-	t0 := time.Now()
+	t0 := time.Hour
 	for i := range 10_000 {
-		c.Record(tupleEvent(i, 1), t0)
+		c.Record(at(tupleEvent(i, 1), t0))
 	}
-	c.Evict(t0.Add(time.Minute))
+	c.Evict(t0 + time.Minute)
 	for j := range 50_000 {
-		c.Record(tupleEvent(j%2675, 2+j/2675), t0.Add(time.Minute))
+		c.Record(at(tupleEvent(j%2675, 2+j/2675), t0+time.Minute))
 	}
 	return c
 }
@@ -82,13 +82,13 @@ func smallFleetCollector(tb testing.TB) *collector.Collector {
 	c := collector.New(30*time.Second, tupleEnricher{}, config.DefaultMaxFlows)
 	c.SetSampleRate(10, 0)
 
-	t0 := time.Now()
+	t0 := time.Hour
 	for i := range 1000 {
-		c.Record(tupleEvent(i, 1), t0)
+		c.Record(at(tupleEvent(i, 1), t0))
 	}
-	c.Evict(t0.Add(time.Minute))
+	c.Evict(t0 + time.Minute)
 	for j := range 5000 {
-		c.Record(tupleEvent(j%268, 2+j/268), t0.Add(time.Minute))
+		c.Record(at(tupleEvent(j%268, 2+j/268), t0+time.Minute))
 	}
 	return c
 }
@@ -138,7 +138,7 @@ func TestScrapeSeriesMatchFlowsAndRollups(t *testing.T) {
 	// a second interface and direction join the mix
 	other := tupleEvent(7, 9)
 	other.Ifindex, other.Dir = 3, 1
-	c.Record(other, time.Now())
+	c.Record(other)
 
 	mc := New(nil, c)
 	mc.resolveIfname = func(ifindex uint32) string { return "if" + strconv.Itoa(int(ifindex)) }
@@ -192,7 +192,7 @@ func TestScrapeSeriesMatchFlowsAndRollups(t *testing.T) {
 
 func TestScrapeFollowsInterfaceRenames(t *testing.T) {
 	c := collector.New(time.Minute, tupleEnricher{}, config.DefaultMaxFlows)
-	c.Record(tupleEvent(1, 1), time.Now())
+	c.Record(tupleEvent(1, 1))
 	mc := New(nil, c)
 
 	name := "eth0"
@@ -241,7 +241,7 @@ func TestFlowLabelNamesMatchEveryFlowFamily(t *testing.T) {
 
 func TestScrapeSurvivesLabelsThatAreNotUTF8(t *testing.T) {
 	c := collector.New(time.Minute, &staticEnricher{srcCity: "M\xfcnchen"}, config.DefaultMaxFlows)
-	c.Record(tupleEvent(1, 1), time.Now())
+	c.Record(tupleEvent(1, 1))
 	reg := prometheus.NewRegistry()
 	reg.MustRegister(New(nil, c))
 	mfs, err := reg.Gather()

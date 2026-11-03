@@ -400,7 +400,7 @@ func (e *IPFIXExporter) sendAll(pending []collector.ExportedFlow) {
 		return
 	}
 
-	now := e.nowFunc()
+	now, epoch := e.nowFunc(), collector.BootEpoch()
 	if err := e.ensureConn(now); err != nil {
 		e.mu.Lock()
 		e.stats.Unsent += uint64(len(pending))
@@ -424,7 +424,7 @@ func (e *IPFIXExporter) sendAll(pending []collector.ExportedFlow) {
 		}
 
 		if e.messageLen(msg, isIPv6, ipv4Due, ipv6Due) > e.maxMessageSize && e.messageRecords(msg) > 0 {
-			sent4, sent6 := e.send(msg, now, ipv4Due, ipv6Due)
+			sent4, sent6 := e.send(msg, now, epoch, ipv4Due, ipv6Due)
 			ipv4Due = ipv4Due && !sent4
 			ipv6Due = ipv6Due && !sent6
 			msg = ipfixMessage{}
@@ -449,7 +449,7 @@ func (e *IPFIXExporter) sendAll(pending []collector.ExportedFlow) {
 		}
 	}
 	if e.messageRecords(msg) > 0 {
-		e.send(msg, now, ipv4Due, ipv6Due)
+		e.send(msg, now, epoch, ipv4Due, ipv6Due)
 	}
 }
 
@@ -487,7 +487,7 @@ func (e *IPFIXExporter) templateDue(t *ipfixTemplate, now time.Time) bool {
 }
 
 // send encodes and sends one message, it reports which templates went out
-func (e *IPFIXExporter) send(msg ipfixMessage, now time.Time, ipv4Due, ipv6Due bool) (sent4, sent6 bool) {
+func (e *IPFIXExporter) send(msg ipfixMessage, now, epoch time.Time, ipv4Due, ipv6Due bool) (sent4, sent6 bool) {
 	var sets []entities.Set
 	var dataRecords uint32
 
@@ -523,7 +523,7 @@ func (e *IPFIXExporter) send(msg ipfixMessage, now time.Time, ipv4Due, ipv6Due b
 			continue
 		}
 		for _, flow := range family.flows {
-			if err := set.AddRecord(e.dataElements(flow, family.isV6), family.tmpl.id); err != nil {
+			if err := set.AddRecord(e.dataElements(flow, family.isV6, epoch), family.tmpl.id); err != nil {
 				e.countEncodeError(1)
 				continue
 			}
@@ -734,7 +734,7 @@ func (e *IPFIXExporter) scheduleDialLocked(now time.Time) {
 	e.nextDial = now.Add(e.dialBackoff)
 }
 
-func (e *IPFIXExporter) dataElements(flow collector.ExportedFlow, isIPv6 bool) []entities.InfoElementWithValue {
+func (e *IPFIXExporter) dataElements(flow collector.ExportedFlow, isIPv6 bool, epoch time.Time) []entities.InfoElementWithValue {
 	t := &e.ipv4
 	if isIPv6 {
 		t = &e.ipv6
@@ -772,9 +772,9 @@ func (e *IPFIXExporter) dataElements(flow collector.ExportedFlow, isIPv6 bool) [
 		case "flowDirection":
 			elements = append(elements, entities.NewUnsigned8InfoElement(ie, flow.Dir))
 		case "flowStartMilliseconds":
-			elements = append(elements, entities.NewDateTimeMillisecondsInfoElement(ie, uint64(flow.Start/int64(time.Millisecond))))
+			elements = append(elements, entities.NewDateTimeMillisecondsInfoElement(ie, uint64(epoch.Add(flow.Start).UnixMilli())))
 		case "flowEndMilliseconds":
-			elements = append(elements, entities.NewDateTimeMillisecondsInfoElement(ie, uint64(flow.End/int64(time.Millisecond))))
+			elements = append(elements, entities.NewDateTimeMillisecondsInfoElement(ie, uint64(epoch.Add(flow.End).UnixMilli())))
 		case "packetDeltaCount":
 			elements = append(elements, entities.NewUnsigned64InfoElement(ie, flow.Packets))
 		case "octetDeltaCount":

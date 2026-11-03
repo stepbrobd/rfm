@@ -88,14 +88,16 @@ rate there without reloading the programs.
    draw the sample first, parse only the skbs it selects, and keep no interface
    counters.
 2. The userspace collector reads the per-CPU ring buffers as one stream, taking
-   one record from each nonempty ring buffer in turn, converts `CLOCK_BOOTTIME`
-   timestamps to wall clock, scales each event by the sample rate that was in
-   force when it was sampled, and aggregates flows into an in-memory table keyed
-   by `(ifindex, direction, protocol,
-   src/dst address, src/dst port)`.
-   Enrichment labels are resolved once when a flow is created and ride along
-   with it. An event that fails to decode is counted as a `ring_buffer` error
-   and skipped.
+   one record from each nonempty ring buffer in turn, scales each event by the
+   sample rate that was in force when it was sampled, and aggregates flows into
+   an in-memory table keyed by
+   `(ifindex, direction, protocol,
+   src/dst address, src/dst port)`. The table
+   keeps the `CLOCK_BOOTTIME` timestamps of the events, which a step of the wall
+   clock does not move, and the IPFIX exporter and `rfm flows` convert them to
+   wall clock time. Enrichment labels are resolved once when a flow is created
+   and stay with it. An event that fails to decode is counted as a `ring_buffer`
+   error and skipped.
 3. Flows are evicted after a configurable idle timeout. Under high load, when
    the flow table is full, the flow with the oldest last-seen timestamp is
    forcibly evicted. A flow that keeps going is exported as an interval record

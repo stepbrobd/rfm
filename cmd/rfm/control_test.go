@@ -30,7 +30,6 @@ func testHandler(t *testing.T) (*controlHandler, *collector.Collector) {
 
 func TestControlFlowsTopOrdersAndLimits(t *testing.T) {
 	h, c := testHandler(t)
-	now := time.Now()
 	mk := func(port uint16, n int, size uint32) {
 		ev := collector.FlowEvent{
 			Ifindex: 1, Proto: 6, SrcPort: port, DstPort: 443,
@@ -40,7 +39,7 @@ func TestControlFlowsTopOrdersAndLimits(t *testing.T) {
 			Len:     size,
 		}
 		for range n {
-			c.Record(ev, now)
+			c.Record(ev)
 		}
 	}
 	mk(1, 1, 5000) // most bytes
@@ -75,7 +74,6 @@ func TestControlResolvesInterfaceNamesOncePerRequest(t *testing.T) {
 		dumps++
 		return []net.Interface{{Index: 1, Name: "eth0"}, {Index: 2, Name: "eth1"}}, nil
 	}
-	now := time.Now()
 	flow := func(ifindex uint32, port uint16, size uint32) {
 		c.Record(collector.FlowEvent{
 			Ifindex: ifindex, Proto: 17, SrcPort: port, DstPort: 53,
@@ -83,7 +81,7 @@ func TestControlResolvesInterfaceNamesOncePerRequest(t *testing.T) {
 			DstAddr: netip.MustParseAddr("::ffff:10.0.0.2"),
 			Segs:    1,
 			Len:     size,
-		}, now)
+		})
 	}
 	// many small flows on eth1, the two largest on eth0 and on a link that
 	// is gone
@@ -129,7 +127,7 @@ func TestControlFailsWithTheLinkDump(t *testing.T) {
 		DstAddr: netip.MustParseAddr("::ffff:10.0.0.2"),
 		Segs:    1,
 		Len:     100,
-	}, time.Now())
+	})
 
 	// without the dump every interface would show as its index, as one whose
 	// link is gone does, so the request fails with it instead
@@ -233,7 +231,6 @@ func TestControlStatusCountsFoldedFlowsAndFailedSends(t *testing.T) {
 	// one label tuple fits, the flow of the second folds under empty labels
 	c := collector.New(30*time.Second, asnOfLastByte{}, 1)
 	h.col = c
-	now := time.Now()
 	for _, src := range []string{"::ffff:192.0.2.1", "::ffff:192.0.2.2"} {
 		c.Record(collector.FlowEvent{
 			Ifindex: 1, Proto: 6, SrcPort: 1, DstPort: 443,
@@ -241,7 +238,7 @@ func TestControlStatusCountsFoldedFlowsAndFailedSends(t *testing.T) {
 			DstAddr: netip.MustParseAddr("::ffff:198.51.100.7"),
 			Segs:    1,
 			Len:     100,
-		}, now)
+		})
 	}
 	h.ipfix = func() export.IPFIXStats {
 		return export.IPFIXStats{Connected: true, Messages: 3, Records: 40, Unsent: 2, EncodeErrors: 7, SendFailed: 5}

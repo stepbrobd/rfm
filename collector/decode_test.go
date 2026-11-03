@@ -23,7 +23,7 @@ func TestDecodeFlowEvent(t *testing.T) {
 	}
 
 	wire := wireFlowEvent{
-		Tstamp:  want.Tstamp,
+		Tstamp:  uint64(want.Tstamp),
 		Ifindex: want.Ifindex,
 		Dir:     want.Dir,
 		Proto:   want.Proto,
@@ -87,7 +87,7 @@ func TestDecodeFlowEventRefusesEventsTheProbeCannotEmit(t *testing.T) {
 // used by Run tests in collector_test.go
 func encodeWireEvent(ev FlowEvent) []byte {
 	wire := wireFlowEvent{
-		Tstamp:  ev.Tstamp,
+		Tstamp:  uint64(ev.Tstamp),
 		Ifindex: ev.Ifindex,
 		Dir:     ev.Dir,
 		Proto:   ev.Proto,

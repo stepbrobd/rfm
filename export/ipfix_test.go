@@ -94,7 +94,7 @@ func TestIPFIXExportsEvictedFlowsOverUDP(t *testing.T) {
 			c.SetFlowExporter(exp)
 			c.SetSampleRate(100, 0)
 
-			t0 := time.Unix(1_700_000_000, 0).UTC()
+			t0 := time.Hour
 			ev := collector.FlowEvent{
 				Ifindex: 7,
 				Dir:     0,
@@ -106,8 +106,8 @@ func TestIPFIXExportsEvictedFlowsOverUDP(t *testing.T) {
 				Segs:    1,
 				Len:     512,
 			}
-			c.Record(ev, t0)
-			c.Evict(t0.Add(11 * time.Second))
+			c.Record(at(ev, t0))
+			c.Evict(t0 + 11*time.Second)
 			if err := exp.Flush(); err != nil {
 				t.Fatalf("Flush: %v", err)
 			}
@@ -141,8 +141,13 @@ func TestIPFIXExportsEvictedFlowsOverUDP(t *testing.T) {
 			assertIPFIXDataUInt32(t, record, "ingressInterface", 7)
 			assertIPFIXDataUInt32(t, record, "egressInterface", 0)
 			assertIPFIXDataUInt8(t, record, "flowDirection", 0)
-			assertIPFIXDataUInt64(t, record, "flowStartMilliseconds", uint64(t0.UnixMilli()))
-			assertIPFIXDataUInt64(t, record, "flowEndMilliseconds", uint64(t0.UnixMilli()))
+			// the test and the exporter read the boot epoch apart, which can cross a millisecond
+			want := uint64(collector.BootEpoch().Add(t0).UnixMilli())
+			for _, name := range []string{"flowStartMilliseconds", "flowEndMilliseconds"} {
+				if got := binary.BigEndian.Uint64(record[name]); got+1 < want || got > want+1 {
+					t.Fatalf("%s = %d, want %d within a millisecond", name, got, want)
+				}
+			}
 			assertIPFIXDataUInt64(t, record, "packetDeltaCount", 1)
 			assertIPFIXDataUInt64(t, record, "octetDeltaCount", 512)
 			assertIPFIXDataUInt8(t, record, "flowEndReason", collector.FlowEndReasonIdleTimeout)
@@ -166,7 +171,7 @@ func TestIPFIXOctetDeltaCountCarriesIPBytes(t *testing.T) {
 	c := collector.New(10*time.Second, nil, config.DefaultMaxFlows)
 	c.SetFlowExporter(exp)
 
-	t0 := time.Unix(1_700_000_000, 0).UTC()
+	t0 := time.Hour
 	// a gro skb of three 1500 byte ip packets, each behind an ethernet header
 	gro := collector.FlowEvent{
 		Ifindex: 7, Dir: 0, Proto: 6,
@@ -178,15 +183,15 @@ func TestIPFIXOctetDeltaCountCarriesIPBytes(t *testing.T) {
 	// one 86 byte ip packet behind ethernet and a vlan tag
 	tagged := gro
 	tagged.Segs, tagged.Len, tagged.L2Len = 1, 104, 18
-	c.Record(gro, t0)
-	c.Record(tagged, t0)
+	c.Record(at(gro, t0))
+	c.Record(at(tagged, t0))
 
 	// prometheus keeps counting wire bytes
 	if got := c.Flows()[gro.Key()].Bytes; got != 3*1514+104 {
 		t.Fatalf("flow bytes = %d, want the %d wire bytes", got, 3*1514+104)
 	}
 
-	c.Evict(t0.Add(11 * time.Second))
+	c.Evict(t0 + 11*time.Second)
 	if err := exp.Flush(); err != nil {
 		t.Fatalf("Flush: %v", err)
 	}
@@ -216,7 +221,6 @@ func TestIPFIXUsesConfiguredObservationDomainID(t *testing.T) {
 	}
 	defer exp.Close()
 
-	now := time.Unix(1_700_000_000, 0).UTC()
 	flow := exportedFlow(
 		collector.FlowKey{
 			Ifindex: 1, Dir: 0, Proto: 6,
@@ -225,7 +229,7 @@ func TestIPFIXUsesConfiguredObservationDomainID(t *testing.T) {
 			SrcPort: 1234, DstPort: 80,
 		},
 		collector.FlowEntry{
-			FirstSeen: now, LastSeen: now, Packets: 1, IPBytes: 100, EstPackets: 1,
+			Packets: 1, IPBytes: 100, EstPackets: 1,
 		},
 		collector.FlowEndReasonIdleTimeout,
 	)
@@ -263,8 +267,6 @@ func TestIPFIXSkipsCollectorTraffic(t *testing.T) {
 			DstPort: exp.collectorPort,
 		},
 		collector.FlowEntry{
-			FirstSeen:  time.Unix(1_700_000_000, 0).UTC(),
-			LastSeen:   time.Unix(1_700_000_000, 0).UTC(),
 			Packets:    1,
 			IPBytes:    128,
 			EstPackets: 1,
@@ -309,8 +311,6 @@ func TestIPFIXExportsTrafficToCollectorDestinationFromOtherSocket(t *testing.T) 
 			DstPort: exp.collectorPort,
 		},
 		collector.FlowEntry{
-			FirstSeen:  time.Unix(1_700_000_000, 0).UTC(),
-			LastSeen:   time.Unix(1_700_000_000, 0).UTC(),
 			Packets:    3,
 			IPBytes:    384,
 			EstPackets: 3,
@@ -643,7 +643,7 @@ func TestIPFIXTemplateSuppressedWithinRefreshWindow(t *testing.T) {
 			SrcPort: 1234, DstPort: 80,
 		},
 		collector.FlowEntry{
-			FirstSeen: now, LastSeen: now, Packets: 1, IPBytes: 100, EstPackets: 1,
+			Packets: 1, IPBytes: 100, EstPackets: 1,
 		},
 		collector.FlowEndReasonIdleTimeout,
 	)
@@ -699,7 +699,7 @@ func TestIPFIXTemplateResendAfterRefreshTimeout(t *testing.T) {
 			SrcPort: 1234, DstPort: 80,
 		},
 		collector.FlowEntry{
-			FirstSeen: now, LastSeen: now, Packets: 1, IPBytes: 100, EstPackets: 1,
+			Packets: 1, IPBytes: 100, EstPackets: 1,
 		},
 		collector.FlowEndReasonIdleTimeout,
 	)
@@ -746,7 +746,7 @@ func TestIPFIXSendsTemplatesFirstOnANewSocket(t *testing.T) {
 
 	send := func() decodedIPFIXMessage {
 		t.Helper()
-		if err := exp.ExportFlow(testFlow("::ffff:10.0.0.1", "::ffff:10.0.0.2", 1, now)); err != nil {
+		if err := exp.ExportFlow(testFlow("::ffff:10.0.0.1", "::ffff:10.0.0.2", 1)); err != nil {
 			t.Fatalf("ExportFlow: %v", err)
 		}
 		if err := exp.Flush(); err != nil {
@@ -786,8 +786,8 @@ func exportedFlow(key collector.FlowKey, e collector.FlowEntry, reason uint8) co
 	return collector.ExportedFlow{
 		SrcAddr:    key.SrcAddr.As16(),
 		DstAddr:    key.DstAddr.As16(),
-		Start:      e.FirstSeen.UnixNano(),
-		End:        e.LastSeen.UnixNano(),
+		Start:      e.FirstSeen,
+		End:        e.LastSeen,
 		Packets:    e.Packets,
 		Octets:     e.IPBytes,
 		EstPackets: e.EstPackets,
@@ -800,7 +800,7 @@ func exportedFlow(key collector.FlowKey, e collector.FlowEntry, reason uint8) co
 	}
 }
 
-func testFlow(src, dst string, port uint16, now time.Time) collector.ExportedFlow {
+func testFlow(src, dst string, port uint16) collector.ExportedFlow {
 	return exportedFlow(
 		collector.FlowKey{
 			Ifindex: 1, Dir: 0, Proto: 6,
@@ -809,7 +809,7 @@ func testFlow(src, dst string, port uint16, now time.Time) collector.ExportedFlo
 			SrcPort: port, DstPort: 443,
 		},
 		collector.FlowEntry{
-			FirstSeen: now, LastSeen: now, Packets: 2, IPBytes: 300, EstPackets: 2,
+			Packets: 2, IPBytes: 300, EstPackets: 2,
 		},
 		collector.FlowEndReasonIdleTimeout,
 	)
@@ -827,14 +827,13 @@ func TestIPFIXPacksRecordsIntoOneMessage(t *testing.T) {
 	}
 	defer exp.Close()
 
-	now := time.Unix(1_700_000_000, 0).UTC()
 	for port := uint16(1); port <= 5; port++ {
-		if err := exp.ExportFlow(testFlow("::ffff:10.0.0.1", "::ffff:10.0.0.2", port, now)); err != nil {
+		if err := exp.ExportFlow(testFlow("::ffff:10.0.0.1", "::ffff:10.0.0.2", port)); err != nil {
 			t.Fatalf("ExportFlow: %v", err)
 		}
 	}
 	for port := uint16(1); port <= 2; port++ {
-		if err := exp.ExportFlow(testFlow("2001:db8::1", "2001:db8::2", port, now)); err != nil {
+		if err := exp.ExportFlow(testFlow("2001:db8::1", "2001:db8::2", port)); err != nil {
 			t.Fatalf("ExportFlow: %v", err)
 		}
 	}
@@ -865,7 +864,7 @@ func TestIPFIXPacksRecordsIntoOneMessage(t *testing.T) {
 	assertNoIPFIXDatagram(t, conn)
 
 	// the next message continues the sequence by the records sent so far
-	if err := exp.ExportFlow(testFlow("::ffff:10.0.0.1", "::ffff:10.0.0.2", 9, now)); err != nil {
+	if err := exp.ExportFlow(testFlow("::ffff:10.0.0.1", "::ffff:10.0.0.2", 9)); err != nil {
 		t.Fatalf("ExportFlow: %v", err)
 	}
 	if err := exp.Flush(); err != nil {
@@ -900,9 +899,8 @@ func TestIPFIXSplitsMessagesAtMaxSize(t *testing.T) {
 	}
 	defer exp.Close()
 
-	now := time.Unix(1_700_000_000, 0).UTC()
 	for port := uint16(1); port <= 5; port++ {
-		if err := exp.ExportFlow(testFlow("::ffff:10.0.0.1", "::ffff:10.0.0.2", port, now)); err != nil {
+		if err := exp.ExportFlow(testFlow("::ffff:10.0.0.1", "::ffff:10.0.0.2", port)); err != nil {
 			t.Fatalf("ExportFlow: %v", err)
 		}
 	}
@@ -948,10 +946,9 @@ func TestIPFIXKeepsToTheSmallestMaxMessageSize(t *testing.T) {
 	}
 	defer exp.Close()
 
-	now := time.Unix(1_700_000_000, 0).UTC()
 	for _, flow := range []collector.ExportedFlow{
-		testFlow("::ffff:10.0.0.1", "::ffff:10.0.0.2", 1, now),
-		testFlow("2001:db8::1", "2001:db8::2", 1, now),
+		testFlow("::ffff:10.0.0.1", "::ffff:10.0.0.2", 1),
+		testFlow("2001:db8::1", "2001:db8::2", 1),
 	} {
 		if err := exp.ExportFlow(flow); err != nil {
 			t.Fatalf("ExportFlow: %v", err)
@@ -1001,8 +998,7 @@ func TestIPFIXQueueFullDropsRecords(t *testing.T) {
 	}
 	exp.mu.Unlock()
 
-	now := time.Unix(1_700_000_000, 0).UTC()
-	if err := exp.ExportFlow(testFlow("::ffff:10.0.0.1", "::ffff:10.0.0.2", 1, now)); err != nil {
+	if err := exp.ExportFlow(testFlow("::ffff:10.0.0.1", "::ffff:10.0.0.2", 1)); err != nil {
 		t.Fatalf("ExportFlow: %v", err)
 	}
 	flushed := make(chan error, 1)
@@ -1019,7 +1015,7 @@ func TestIPFIXQueueFullDropsRecords(t *testing.T) {
 
 	var refused int
 	for port := uint16(2); port <= 5; port++ {
-		if err := exp.ExportFlow(testFlow("::ffff:10.0.0.1", "::ffff:10.0.0.2", port, now)); err != nil {
+		if err := exp.ExportFlow(testFlow("::ffff:10.0.0.1", "::ffff:10.0.0.2", port)); err != nil {
 			refused++
 		}
 	}
@@ -1057,7 +1053,7 @@ func TestIPFIXRefusesRecordsWithoutAnEstimate(t *testing.T) {
 	// the sampling probability of a record is its packets over its
 	// estimate, which counts every sampled packet at least once
 	for _, tc := range []struct{ packets, estimate uint64 }{{2, 0}, {2, 1}, {0, 0}} {
-		flow := testFlow("::ffff:10.0.0.1", "::ffff:10.0.0.2", 1, time.Now())
+		flow := testFlow("::ffff:10.0.0.1", "::ffff:10.0.0.2", 1)
 		flow.Packets, flow.EstPackets = tc.packets, tc.estimate
 		if err := exp.ExportFlow(flow); err == nil {
 			t.Fatalf("record of %d packets with an estimate of %d queued, want it refused", tc.packets, tc.estimate)
@@ -1087,7 +1083,7 @@ func TestIPFIXRefusesRecordsOnceClosed(t *testing.T) {
 	}
 
 	// nothing drains the queue any more, a record queued now is lost
-	if err := exp.ExportFlow(testFlow("::ffff:10.0.0.1", "::ffff:10.0.0.2", 1, time.Now())); err == nil {
+	if err := exp.ExportFlow(testFlow("::ffff:10.0.0.1", "::ffff:10.0.0.2", 1)); err == nil {
 		t.Fatal("ExportFlow after Close succeeded")
 	}
 	if got := exp.Stats().Unsent; got != 1 {
@@ -1122,9 +1118,8 @@ func TestIPFIXCountsRecordsLostWithFailedMessages(t *testing.T) {
 	}
 
 	// three messages worth of records in one batch
-	now := time.Unix(1_700_000_000, 0).UTC()
 	for port := uint16(1); port <= 45; port++ {
-		if err := exp.ExportFlow(testFlow("::ffff:10.0.0.1", "::ffff:10.0.0.2", port, now)); err != nil {
+		if err := exp.ExportFlow(testFlow("::ffff:10.0.0.1", "::ffff:10.0.0.2", port)); err != nil {
 			t.Fatalf("ExportFlow: %v", err)
 		}
 	}
@@ -1162,13 +1157,12 @@ func TestIPFIXCountsSendErrorsByErrno(t *testing.T) {
 	// ECONNREFUSED on a later send of the connected socket
 	_ = conn.Close()
 
-	now := time.Unix(1_700_000_000, 0).UTC()
 	deadline := time.Now().Add(3 * time.Second)
 	for exp.Stats().SendErrors["ECONNREFUSED"] == 0 {
 		if time.Now().After(deadline) {
 			t.Fatalf("no ECONNREFUSED counted, stats = %+v", exp.Stats())
 		}
-		if err := exp.ExportFlow(testFlow("::ffff:10.0.0.1", "::ffff:10.0.0.2", 1, now)); err != nil {
+		if err := exp.ExportFlow(testFlow("::ffff:10.0.0.1", "::ffff:10.0.0.2", 1)); err != nil {
 			t.Fatalf("ExportFlow: %v", err)
 		}
 		if err := exp.Flush(); err != nil {
@@ -1204,8 +1198,7 @@ func TestIPFIXDialsLazily(t *testing.T) {
 		t.Fatalf("stats after failed dial = %+v, want disconnected with one dial error", stats)
 	}
 
-	now := time.Unix(1_700_000_000, 0).UTC()
-	if err := exp.ExportFlow(testFlow("::ffff:10.0.0.1", "::ffff:10.0.0.2", 1, now)); err != nil {
+	if err := exp.ExportFlow(testFlow("::ffff:10.0.0.1", "::ffff:10.0.0.2", 1)); err != nil {
 		t.Fatalf("ExportFlow: %v", err)
 	}
 	if err := exp.Flush(); err != nil {
@@ -1222,7 +1215,7 @@ func TestIPFIXDialsLazily(t *testing.T) {
 	exp.nextDial = time.Time{}
 	exp.mu.Unlock()
 
-	if err := exp.ExportFlow(testFlow("::ffff:10.0.0.1", "::ffff:10.0.0.2", 2, now)); err != nil {
+	if err := exp.ExportFlow(testFlow("::ffff:10.0.0.1", "::ffff:10.0.0.2", 2)); err != nil {
 		t.Fatalf("ExportFlow: %v", err)
 	}
 	if err := exp.Flush(); err != nil {

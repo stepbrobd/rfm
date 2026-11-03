@@ -76,6 +76,12 @@ func (m *exportMockReader) Close() error { return nil }
 
 // --- test helpers ---
 
+// at returns ev sampled at boot time t
+func at(ev collector.FlowEvent, t time.Duration) collector.FlowEvent {
+	ev.Tstamp = t
+	return ev
+}
+
 // collectAll calls Collect and returns a map of metric name -> summed value
 func collectAll(t *testing.T, mc *MetricsCollector) map[string]float64 {
 	t.Helper()
@@ -256,7 +262,7 @@ func TestCollectHealth(t *testing.T) {
 		DstPort: 80,
 		Segs:    1,
 		Len:     100,
-	}, time.Now())
+	})
 
 	mc := New(nil, c)
 	vals := collectAll(t, mc)
@@ -331,7 +337,7 @@ func TestScrapeSurvivesAnInterfaceNameThatIsNotUTF8(t *testing.T) {
 		DstAddr: netip.MustParseAddr("10.0.0.2"),
 		Segs:    1,
 		Len:     60,
-	}, time.Now())
+	})
 	mc := New(src, c)
 	mc.resolveIfname = func(uint32) string { return "d\xff" }
 	reg := prometheus.NewRegistry()
@@ -372,7 +378,6 @@ func TestCollectCachesIfnames(t *testing.T) {
 	}
 
 	c := collector.New(time.Minute, nil, config.DefaultMaxFlows)
-	now := time.Now()
 	c.Record(collector.FlowEvent{
 		Ifindex: 7,
 		Dir:     0,
@@ -383,7 +388,7 @@ func TestCollectCachesIfnames(t *testing.T) {
 		DstPort: 80,
 		Segs:    1,
 		Len:     100,
-	}, now)
+	})
 	c.Record(collector.FlowEvent{
 		Ifindex: 7,
 		Dir:     1,
@@ -394,7 +399,7 @@ func TestCollectCachesIfnames(t *testing.T) {
 		DstPort: 53,
 		Segs:    1,
 		Len:     200,
-	}, now)
+	})
 
 	mc := New(src, c)
 	calls := make(map[uint32]int)
@@ -427,7 +432,7 @@ func TestCollectFlowsNoEnricher(t *testing.T) {
 		DstPort: 443,
 		Segs:    1,
 		Len:     200,
-	}, time.Now())
+	})
 
 	mc := New(nil, c)
 	vals := collectAll(t, mc)
@@ -473,7 +478,7 @@ func TestCollectFlowsWithEnricher(t *testing.T) {
 		DstPort: 53,
 		Segs:    1,
 		Len:     64,
-	}, time.Now())
+	})
 
 	mc := New(nil, c)
 	metrics := collectMetrics(t, mc)
@@ -528,7 +533,7 @@ func TestCollectFlowsScalesBySampleRate(t *testing.T) {
 		DstPort: 443,
 		Segs:    1,
 		Len:     200,
-	}, time.Now())
+	})
 
 	mc := New(src, c)
 	vals := collectAll(t, mc)
@@ -552,19 +557,18 @@ func TestCollectFlowsAggregatesDuplicateLabels(t *testing.T) {
 	// two flows with different ports but same exported labels
 	// must produce one aggregated metric, not duplicate series
 	c := collector.New(time.Minute, nil, config.DefaultMaxFlows)
-	now := time.Now()
 	c.Record(collector.FlowEvent{
 		Ifindex: 1, Dir: 0, Proto: 6,
 		SrcAddr: netip.MustParseAddr("10.0.0.1"),
 		DstAddr: netip.MustParseAddr("10.0.0.2"),
 		SrcPort: 1000, DstPort: 80, Segs: 1, Len: 100,
-	}, now)
+	})
 	c.Record(collector.FlowEvent{
 		Ifindex: 1, Dir: 0, Proto: 6,
 		SrcAddr: netip.MustParseAddr("10.0.0.1"),
 		DstAddr: netip.MustParseAddr("10.0.0.2"),
 		SrcPort: 2000, DstPort: 80, Segs: 1, Len: 200,
-	}, now)
+	})
 
 	mc := New(nil, c)
 
@@ -756,7 +760,7 @@ func TestCollectErrorsTotalOnSampleRateLookupError(t *testing.T) {
 		DstPort: 443,
 		Segs:    1,
 		Len:     200,
-	}, time.Now())
+	})
 
 	mc := New(src, c)
 	metrics := collectMetrics(t, mc)
@@ -953,17 +957,17 @@ func TestCollectRollupCountersSurviveEviction(t *testing.T) {
 	c := collector.New(time.Second, e, config.DefaultMaxFlows)
 	c.SetSampleRate(10, 0)
 
-	t0 := time.Now()
+	t0 := time.Hour
 	ev := collector.FlowEvent{
 		Ifindex: 2, Dir: 1, Proto: 17,
 		SrcAddr: netip.MustParseAddr("192.168.1.1"),
 		DstAddr: netip.MustParseAddr("192.168.1.2"),
 		SrcPort: 1234, DstPort: 53, Segs: 1, Len: 100,
 	}
-	c.Record(ev, t0)
+	c.Record(at(ev, t0))
 	other := ev
 	other.SrcPort = 4321
-	c.Record(other, t0)
+	c.Record(at(other, t0))
 
 	// the first scrape shows the new tuple at zero
 	mc := New(nil, c)
@@ -972,7 +976,7 @@ func TestCollectRollupCountersSurviveEviction(t *testing.T) {
 	}
 
 	// evicting the flows resets the gauges but not the counters
-	c.Evict(t0.Add(5 * time.Second))
+	c.Evict(t0 + 5*time.Second)
 
 	vals := collectAll(t, mc)
 	if got := vals["rfm_flow_bytes"]; got != 0 {
@@ -1002,11 +1006,11 @@ func TestCollectRollupCountersSurviveEviction(t *testing.T) {
 	}
 
 	// the counters outlive their flows for the retention, then leave the scrape
-	c.Evict(t0.Add(collector.RollupRetention*time.Second - time.Second))
+	c.Evict(t0 + collector.RollupRetention*time.Second - time.Second)
 	if got := collectAll(t, mc)["rfm_flow_bytes_total"]; got != 2000 {
 		t.Fatalf("rfm_flow_bytes_total inside the retention = %v, want 2000", got)
 	}
-	c.Evict(t0.Add(collector.RollupRetention*time.Second + time.Second))
+	c.Evict(t0 + collector.RollupRetention*time.Second + time.Second)
 	vals = collectAll(t, mc)
 	if _, ok := vals["rfm_flow_bytes_total"]; ok {
 		t.Fatal("idle rollup still exported after the retention window")
@@ -1022,7 +1026,7 @@ func TestCollectRollupSeriesStartAtZero(t *testing.T) {
 		DstAddr: netip.MustParseAddr("192.168.1.2"),
 		SrcPort: 1234, DstPort: 443, Segs: 1, Len: 100,
 	}
-	c.Record(ev, time.Now())
+	c.Record(ev)
 
 	// a series whose first sample already holds its first packets loses
 	// them to increase(), which takes the first sample for history
@@ -1101,16 +1105,16 @@ func TestRollupSumsStayExactAcrossTheCap(t *testing.T) {
 		return s
 	}
 
-	t0 := time.Now()
+	t0 := time.Hour
 	var total float64
-	send := func(src byte, at time.Time) {
-		c.Record(collector.FlowEvent{
+	send := func(src byte, t time.Duration) {
+		c.Record(at(collector.FlowEvent{
 			Ifindex: 2, Dir: 0, Proto: 17, SrcPort: 5000, DstPort: 53,
 			SrcAddr: netip.AddrFrom4([4]byte{10, 1, 0, src}),
 			DstAddr: netip.MustParseAddr("10.0.0.1"),
 			Segs:    1,
 			Len:     100,
-		}, at)
+		}, t))
 		total += 10
 	}
 
@@ -1131,9 +1135,9 @@ func TestRollupSumsStayExactAcrossTheCap(t *testing.T) {
 	// the first tuple lost its flow to the fifth and two scrapes showed all
 	// of it, a new tuple takes its place, its series keeps what it counted
 	// and none of it moves to the overflow series
-	send(6, t0.Add(time.Second))
-	send(3, t0.Add(time.Second))
-	send(5, t0.Add(time.Second))
+	send(6, t0+time.Second)
+	send(3, t0+time.Second)
+	send(5, t0+time.Second)
 	for range 2 {
 		if n := scrape(); n > 5 {
 			t.Fatalf("series = %d, want at most four tuples and the overflow", n)
@@ -1153,15 +1157,15 @@ func TestCollectIPFIXErrorsComeFromTheExporter(t *testing.T) {
 	exp := &recordingExporter{err: errors.New("ipfix queue full")}
 	c := collector.New(30*time.Second, nil, config.DefaultMaxFlows)
 	c.SetFlowExporter(exp)
-	t0 := time.Now()
-	c.Record(collector.FlowEvent{
+	t0 := time.Hour
+	c.Record(at(collector.FlowEvent{
 		Proto: 6, SrcPort: 1, DstPort: 80,
 		SrcAddr: netip.MustParseAddr("10.0.0.1"),
 		DstAddr: netip.MustParseAddr("10.0.0.2"),
 		Segs:    1,
 		Len:     100,
-	}, t0)
-	c.Evict(t0.Add(time.Minute))
+	}, t0))
+	c.Evict(t0 + time.Minute)
 
 	mc := New(nil, c)
 	if got := errorsBySubsystem(t, mc)["ipfix"]; got != 0 {

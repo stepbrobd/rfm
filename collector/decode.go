@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/netip"
 	"structs"
+	"time"
 	"unsafe"
 )
 
@@ -53,7 +54,7 @@ func DecodeFlowEvent(raw []byte) (FlowEvent, error) {
 
 	ne := binary.NativeEndian
 	ev := FlowEvent{
-		Tstamp:  ne.Uint64(raw[offTstamp:]),
+		Tstamp:  time.Duration(ne.Uint64(raw[offTstamp:])),
 		Ifindex: ne.Uint32(raw[offIfindex:]),
 		Dir:     raw[offDir],
 		Proto:   raw[offProto],

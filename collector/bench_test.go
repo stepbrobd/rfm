@@ -40,6 +40,7 @@ func BenchmarkRun(b *testing.B) {
 			events := make([][]byte, flows)
 			for i := range events {
 				events[i] = encodeWireEvent(FlowEvent{
+					Tstamp:  bootNow(),
 					Ifindex: 1,
 					Proto:   6,
 					SrcAddr: netip.AddrFrom4([4]byte{10, 0, byte(i >> 8), byte(i)}),

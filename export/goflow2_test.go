@@ -79,8 +79,6 @@ func TestIPFIXExportsToGoFlow2(t *testing.T) {
 			DstPort: 53,
 		},
 		collector.FlowEntry{
-			FirstSeen:  time.Unix(1_700_000_000, 0).UTC(),
-			LastSeen:   time.Unix(1_700_000_000, 0).UTC(),
 			Packets:    3,
 			IPBytes:    384,
 			EstPackets: 300,

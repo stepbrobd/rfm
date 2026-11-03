@@ -91,7 +91,7 @@ const RollupRetention = 10
 
 // rateChange is one sample rate in force from a boot time onwards
 type rateChange struct {
-	since uint64
+	since time.Duration
 	rate  uint32
 }
 
@@ -99,10 +99,8 @@ type rateChange struct {
 // within milliseconds so old changes are never consulted again
 const rateHistory = 64
 
-// SetSampleRate records that packets sampled from boot time since on are
-// 1-in-rate samples, since is CLOCK_BOOTTIME nanoseconds and 0 covers
-// everything seen so far
-func (c *Collector) SetSampleRate(rate uint32, since uint64) {
+// SetSampleRate records that packets sampled from boot time since on are 1-in-rate samples, 0 covers everything seen so far
+func (c *Collector) SetSampleRate(rate uint32, since time.Duration) {
 	if rate == 0 {
 		rate = 1
 	}
@@ -201,11 +199,10 @@ func (c *Collector) SampleRate() uint32 {
 	return c.rates[len(c.rates)-1].rate
 }
 
-// sampleRateAtLocked returns the rate in force at boot time tstamp
-// it must be called with mu held
-func (c *Collector) sampleRateAtLocked(tstamp uint64) uint32 {
+// sampleRateAtLocked returns the rate in force at boot time t
+func (c *Collector) sampleRateAtLocked(t time.Duration) uint32 {
 	for i := len(c.rates) - 1; i > 0; i-- {
-		if c.rates[i].since <= tstamp {
+		if c.rates[i].since <= t {
 			return c.rates[i].rate
 		}
 	}
@@ -234,18 +231,13 @@ func (c *Collector) SetFlowExporter(exp FlowExporter) {
 	c.mu.Unlock()
 }
 
-// Record adds a flow event to the table
-// it creates or updates the entry
-func (c *Collector) Record(ev FlowEvent, now time.Time) {
-	c.RecordBatch([]FlowEvent{ev}, []time.Time{now})
+// Record records ev
+func (c *Collector) Record(ev FlowEvent) {
+	c.RecordBatch([]FlowEvent{ev})
 }
 
-// RecordBatch records several events under one lock acquisition
-// at[i] is the observation time of evs[i]
-// the labels of new flows are resolved before the lock is taken, an enricher
-// can be slow, a rib lookup waits behind a peer purge, and must not hold up
-// recording, scrapes and the control socket
-func (c *Collector) RecordBatch(evs []FlowEvent, at []time.Time) {
+// RecordBatch records evs under one lock, the labels of new flows are looked up before it
+func (c *Collector) RecordBatch(evs []FlowEvent) {
 	labels := c.newFlowLabels(evs)
 
 	var expired []ExportedFlow
@@ -253,7 +245,7 @@ func (c *Collector) RecordBatch(evs []FlowEvent, at []time.Time) {
 
 	c.mu.Lock()
 	for i, ev := range evs {
-		ended, evicted, ok := c.recordLocked(ev, at[i], labels)
+		ended, evicted, ok := c.recordLocked(ev, labels)
 		if !ok {
 			unresolved = append(unresolved, i)
 		} else if evicted {
@@ -263,10 +255,6 @@ func (c *Collector) RecordBatch(evs []FlowEvent, at []time.Time) {
 	exp := c.exporter
 	c.mu.Unlock()
 
-	// a flow that left the table after the labels were looked up, evicted
-	// by a sweep or forced out earlier in this batch, comes back as a new
-	// flow, its labels are resolved now and the events recorded in a second
-	// pass that always has the labels it needs
 	if len(unresolved) > 0 {
 		pairs := make([]addrPair, len(unresolved))
 		for j, i := range unresolved {
@@ -276,7 +264,7 @@ func (c *Collector) RecordBatch(evs []FlowEvent, at []time.Time) {
 
 		c.mu.Lock()
 		for _, i := range unresolved {
-			if ended, evicted, _ := c.recordLocked(evs[i], at[i], labels); evicted {
+			if ended, evicted, _ := c.recordLocked(evs[i], labels); evicted {
 				expired = append(expired, ended)
 			}
 		}
@@ -333,12 +321,9 @@ func (c *Collector) enrich(pairs []addrPair, labels map[addrPair]labelPair) map[
 	return labels
 }
 
-// recordLocked creates or updates the flow for ev
-// a new flow takes its labels from labels, ok is false when they are missing
-// and the event was not recorded
-// it returns the flow forced out to make room, if any
-// it must be called with mu held
-func (c *Collector) recordLocked(ev FlowEvent, now time.Time, labels map[addrPair]labelPair) (ended ExportedFlow, evicted, ok bool) {
+// recordLocked records ev, ok is false when its new flow has no labels yet
+func (c *Collector) recordLocked(ev FlowEvent, labels map[addrPair]labelPair) (ended ExportedFlow, evicted, ok bool) {
+	now := ev.Tstamp
 	key := ev.Key()
 	packets := ev.Packets()
 	bytes := uint64(ev.Len)
@@ -358,8 +343,6 @@ func (c *Collector) recordLocked(ev FlowEvent, now time.Time, labels map[addrPai
 		return ExportedFlow{}, false, true
 	}
 
-	// enrichment happens once per flow, the labels then ride along with
-	// every event of the flow and with the rollup it lands in
 	var lp labelPair
 	if c.enricher != nil {
 		var resolved bool
@@ -392,8 +375,8 @@ func (c *Collector) recordLocked(ev FlowEvent, now time.Time, labels map[addrPai
 		},
 		rollup:        rollup,
 		intervalStart: now,
-		first:         now.UnixNano(),
-		last:          now.UnixNano(),
+		first:         now,
+		last:          now,
 	}
 	state.elem = c.lru.PushBack(state)
 	state.active = c.activeQueue.PushBack(state)
@@ -484,25 +467,21 @@ func (c *Collector) evictOldestLocked(reason uint8) (ExportedFlow, bool) {
 	return oldest.record(reason), true
 }
 
-// Evict removes flows whose LastSeen is older than the configured timeout
-// and, when an active timeout is set, exports an interval record for every
-// flow whose unexported interval is at least that old
-func (c *Collector) Evict(now time.Time) {
+// Evict sweeps the table once at now, a CLOCK_BOOTTIME reading
+func (c *Collector) Evict(now time.Duration) {
 	c.sweep(now, 0)
 }
 
-// sweep is Evict for a sweep that repeats every period, it sends the interval
-// record of a flow at the sweep nearest the end of its active timeout instead
-// of the first sweep after it
-func (c *Collector) sweep(now time.Time, period time.Duration) {
-	cutoff := now.Add(-c.timeout)
+// sweep is Evict repeated every period, an interval record goes out at the sweep nearest its active timeout
+func (c *Collector) sweep(now, period time.Duration) {
+	cutoff := now - c.timeout
 	var expired []ExportedFlow
 
 	c.mu.Lock()
 
 	for {
 		front := c.lru.Front()
-		if front == nil || !front.Value.(*flowState).entry.LastSeen.Before(cutoff) {
+		if front == nil || front.Value.(*flowState).entry.LastSeen >= cutoff {
 			break
 		}
 		oldest := front.Value.(*flowState)
@@ -513,20 +492,17 @@ func (c *Collector) sweep(now time.Time, period time.Duration) {
 	}
 
 	// idle tuples are in the order they lost their last flow
-	stale := now.Add(-RollupRetention * c.timeout)
+	stale := now - RollupRetention*c.timeout
 	for front := c.idleRollups.Front(); front != nil; front = c.idleRollups.Front() {
 		r := front.Value.(*rollupState)
-		if !r.LastSeen.Before(stale) || !r.shown {
+		if r.LastSeen >= stale || !r.shown {
 			break
 		}
 		c.dropRollupLocked(r)
 	}
 
 	if c.active > 0 {
-		// an exact comparison would hold a flow marked a whole number of
-		// periods ago back by one more period whenever its tick comes a few
-		// microseconds early, or whenever a flow created after the tick that
-		// marked it but before that sweep ran sits ahead of it in the queue
+		// half a period of slack keeps a record from slipping a period when its tick comes early
 		due := c.active - period/2
 		for {
 			front := c.activeQueue.Front()
@@ -534,7 +510,7 @@ func (c *Collector) sweep(now time.Time, period time.Duration) {
 				break
 			}
 			state := front.Value.(*flowState)
-			if now.Sub(state.intervalStart) < due {
+			if now-state.intervalStart < due {
 				break
 			}
 			if state.pending() {
@@ -687,13 +663,7 @@ func sweepPeriod(timeout, active time.Duration) time.Duration {
 	return active / parts
 }
 
-// Run reads events from rd, decodes them, and records them until ctx is done
-// It also runs a background goroutine for eviction and drop counter polling
-// the drop counter is polled from that goroutine only, once per tick, so the
-// read loop never spends a map lookup on an idle deadline
-// after a blocking read the loop drains whatever the ring already holds with
-// an expired deadline, so a burst is recorded under one lock instead of one
-// lock per event
+// Run records the events of rd until ctx is done, a ticker sweeps and polls the drops
 func (c *Collector) Run(ctx context.Context, rd Reader) error {
 	if c.timeout <= 0 {
 		return fmt.Errorf("eviction timeout must be positive, got %v", c.timeout)
@@ -708,10 +678,7 @@ func (c *Collector) Run(ctx context.Context, rd Reader) error {
 	tick := time.NewTicker(period)
 	defer tick.Stop()
 
-	// derive a child context so the background goroutine exits when Run
-	// returns, even on non-context reader errors, and wait for it, the
-	// caller flushes and closes the exporter next and a sweep still
-	// exporting would strand its records
+	// the sweep goroutine ends before Run returns
 	var sweeps sync.WaitGroup
 	defer sweeps.Wait()
 	ctx, cancel := context.WithCancel(ctx)
@@ -722,16 +689,14 @@ func (c *Collector) Run(ctx context.Context, rd Reader) error {
 			select {
 			case <-ctx.Done():
 				return
-			case t := <-tick.C:
-				refreshBootOffset()
-				c.sweep(t, period)
+			case <-tick.C:
+				c.sweep(bootNow(), period)
 				c.pollDrops(rd)
 			}
 		}
 	})
 
 	events := make([]FlowEvent, 0, readBatch)
-	times := make([]time.Time, 0, readBatch)
 	for {
 		if ctx.Err() != nil {
 			return ctx.Err()
@@ -746,35 +711,31 @@ func (c *Collector) Run(ctx context.Context, rd Reader) error {
 			return fmt.Errorf("read event: %w", err)
 		}
 
-		events, times = events[:0], times[:0]
-		events, times = c.appendEvent(events, times, raw)
+		events = c.appendEvent(events[:0], raw)
 
-		// a deadline in the past turns the read into a poll, an empty ring
-		// comes back as a deadline error and a real error surfaces again
-		// on the next blocking read
+		// a past deadline drains the rings without blocking
 		rd.SetDeadline(time.Now())
 		for len(events) < readBatch {
 			raw, err := rd.ReadRawEvent()
 			if err != nil {
 				break
 			}
-			events, times = c.appendEvent(events, times, raw)
+			events = c.appendEvent(events, raw)
 		}
 
 		if len(events) > 0 {
-			c.RecordBatch(events, times)
+			c.RecordBatch(events)
 		}
 	}
 }
 
-// appendEvent decodes raw and appends it with its observation time
-// a record that fails to decode is counted and skipped
-func (c *Collector) appendEvent(events []FlowEvent, times []time.Time, raw []byte) ([]FlowEvent, []time.Time) {
+// appendEvent decodes raw onto events, a record that fails to decode is counted and skipped
+func (c *Collector) appendEvent(events []FlowEvent, raw []byte) []FlowEvent {
 	ev, err := DecodeFlowEvent(raw)
 	if err != nil {
 		log.Error("decode flow event", "err", err, "raw_len", len(raw))
 		c.ringBufErrs.Add(1)
-		return events, times
+		return events
 	}
-	return append(events, ev), append(times, eventTime(ev))
+	return append(events, ev)
 }

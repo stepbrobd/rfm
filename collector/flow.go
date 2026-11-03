@@ -27,7 +27,7 @@ type Labels struct {
 // L2Len is the L2 header size of each wire packet, ethernet plus VLAN tags,
 // so Len - Packets() * L2Len is the IP byte count of the skb
 type FlowEvent struct {
-	Tstamp  uint64 // CLOCK_BOOTTIME nanoseconds
+	Tstamp  time.Duration // CLOCK_BOOTTIME
 	Ifindex uint32
 	Dir     uint8
 	Proto   uint8
@@ -83,17 +83,23 @@ type FlowKey struct {
 // Bytes are wire bytes like the interface counters, IPBytes leave out the L2
 // header of every packet, which is what IPFIX octet counts carry
 type FlowEntry struct {
-	FirstSeen  time.Time
+	// FirstSeen and LastSeen are CLOCK_BOOTTIME readings, BootEpoch dates them
+	FirstSeen  time.Duration
 	Packets    uint64
 	Bytes      uint64
 	IPBytes    uint64
 	EstPackets uint64
 	EstBytes   uint64
-	LastSeen   time.Time
+	LastSeen   time.Duration
 	// Src and Dst are the enrichment labels resolved when the flow was
 	// created, they stay fixed for the life of the flow
 	Src Labels
 	Dst Labels
+}
+
+// BootEpoch returns the wall time CLOCK_BOOTTIME counts from, read anew to follow clock steps
+func BootEpoch() time.Time {
+	return time.Now().Add(-bootNow())
 }
 
 // RollupKey is the label tuple the Prometheus flow series are keyed by
@@ -140,7 +146,7 @@ func (e FlowEntry) counts() Counts {
 // as monotonic counters that rate() and increase() can consume
 type RollupCounters struct {
 	Counts
-	LastSeen time.Time
+	LastSeen time.Duration
 }
 
 // SamplingProbability is the share of wire packets this entry saw, 1 when

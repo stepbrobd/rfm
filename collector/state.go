@@ -18,13 +18,9 @@ type flowState struct {
 	active *list.Element
 	// intervalStart is when the not yet exported interval began, the flow's
 	// creation or the sweep that marked it, the active timeout runs from it
-	intervalStart time.Time
-	// first and last are the earliest and latest event times since the last
-	// record in unix nanoseconds, 0 before the first, events from different
-	// cpus and events sampled before a sweep but consumed after it arrive out
-	// of order, so a record spans the events it carries and never ends
-	// before it starts
-	first, last int64
+	intervalStart time.Duration
+	// first and last are the min and max event time since the last record, events arrive out of order, 0 before the first
+	first, last time.Duration
 	// sent holds the counters earlier records carried, the ones a record
 	// needs and no more
 	sent struct {
@@ -32,21 +28,14 @@ type flowState struct {
 	}
 }
 
-// seen extends the flow and its unexported interval to an event at now
-func (s *flowState) seen(now time.Time) {
-	if now.Before(s.entry.FirstSeen) {
-		s.entry.FirstSeen = now
+// seen extends the flow and its unexported interval to an event at t
+func (s *flowState) seen(t time.Duration) {
+	s.entry.FirstSeen = min(s.entry.FirstSeen, t)
+	s.entry.LastSeen = max(s.entry.LastSeen, t)
+	if s.first == 0 || t < s.first {
+		s.first = t
 	}
-	if now.After(s.entry.LastSeen) {
-		s.entry.LastSeen = now
-	}
-	n := now.UnixNano()
-	if s.first == 0 || n < s.first {
-		s.first = n
-	}
-	if n > s.last {
-		s.last = n
-	}
+	s.last = max(s.last, t)
 }
 
 // record returns the delta record for the unexported interval
@@ -74,7 +63,7 @@ func (s *flowState) pending() bool {
 }
 
 // mark records that everything up to now went out in a record
-func (s *flowState) mark(now time.Time) {
+func (s *flowState) mark(now time.Duration) {
 	s.sent.packets = s.entry.Packets
 	s.sent.ipBytes = s.entry.IPBytes
 	s.sent.estPackets = s.entry.EstPackets
@@ -103,12 +92,10 @@ type rollupState struct {
 	shown bool
 }
 
-// add accounts the counts of one event of a live flow under the tuple
-func (r *rollupState) add(d Counts, now time.Time) {
+// add accounts the counts of one event at t of a live flow under the tuple
+func (r *rollupState) add(d Counts, t time.Duration) {
 	r.Counts.add(d)
 	r.live.add(d)
-	if now.After(r.LastSeen) {
-		r.LastSeen = now
-	}
+	r.LastSeen = max(r.LastSeen, t)
 	r.shown = false
 }

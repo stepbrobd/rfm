@@ -14,6 +14,12 @@ import (
 	"ysun.co/rfm/config"
 )
 
+// at returns ev sampled at boot time t
+func at(ev FlowEvent, t time.Duration) FlowEvent {
+	ev.Tstamp = t
+	return ev
+}
+
 func TestRecord(t *testing.T) {
 	c := New(30*time.Second, nil, config.DefaultMaxFlows)
 
@@ -29,9 +35,9 @@ func TestRecord(t *testing.T) {
 		Len:     100,
 	}
 
-	now := time.Now()
-	c.Record(ev, now)
-	c.Record(ev, now)
+	now := time.Hour
+	c.Record(at(ev, now))
+	c.Record(at(ev, now))
 
 	flows := c.Flows()
 	key := ev.Key()
@@ -49,7 +55,7 @@ func TestRecord(t *testing.T) {
 
 func TestRecordCountsSegments(t *testing.T) {
 	c := New(30*time.Second, nil, config.DefaultMaxFlows)
-	now := time.Now()
+	now := time.Hour
 
 	// a GRO or GSO skb carries several wire packets in one event
 	ev := FlowEvent{
@@ -59,11 +65,11 @@ func TestRecordCountsSegments(t *testing.T) {
 		Segs:    5,
 		Len:     5270,
 	}
-	c.Record(ev, now)
+	c.Record(at(ev, now))
 
 	ev.Segs = 1
 	ev.Len = 100
-	c.Record(ev, now)
+	c.Record(at(ev, now))
 
 	entry, ok := c.Flows()[ev.Key()]
 	if !ok {
@@ -79,7 +85,7 @@ func TestRecordCountsSegments(t *testing.T) {
 
 func TestRecordDistinctFlows(t *testing.T) {
 	c := New(30*time.Second, nil, config.DefaultMaxFlows)
-	now := time.Now()
+	now := time.Hour
 
 	ev1 := FlowEvent{
 		Proto: 6, SrcPort: 1000, DstPort: 80,
@@ -96,8 +102,8 @@ func TestRecordDistinctFlows(t *testing.T) {
 		Len:     200,
 	}
 
-	c.Record(ev1, now)
-	c.Record(ev2, now)
+	c.Record(at(ev1, now))
+	c.Record(at(ev2, now))
 
 	flows := c.Flows()
 	if len(flows) != 2 {
@@ -116,17 +122,17 @@ func TestEvict(t *testing.T) {
 		Len:     100,
 	}
 
-	t0 := time.Now()
-	c.Record(ev, t0)
+	t0 := time.Hour
+	c.Record(at(ev, t0))
 
 	// before timeout: flow should survive
-	c.Evict(t0.Add(5 * time.Second))
+	c.Evict(t0 + 5*time.Second)
 	if len(c.Flows()) != 1 {
 		t.Fatal("flow evicted too early")
 	}
 
 	// after timeout: flow should be evicted
-	c.Evict(t0.Add(12 * time.Second))
+	c.Evict(t0 + 12*time.Second)
 	if len(c.Flows()) != 0 {
 		t.Fatal("stale flow not evicted")
 	}
@@ -150,12 +156,12 @@ func TestEvictKeepsFresh(t *testing.T) {
 		Len:     50,
 	}
 
-	t0 := time.Now()
-	c.Record(stale, t0)
-	c.Record(fresh, t0.Add(8*time.Second))
+	t0 := time.Hour
+	c.Record(at(stale, t0))
+	c.Record(at(fresh, t0+8*time.Second))
 
 	// at t0+11s: stale should be evicted, fresh should remain
-	c.Evict(t0.Add(12 * time.Second))
+	c.Evict(t0 + 12*time.Second)
 
 	flows := c.Flows()
 	if len(flows) != 1 {
@@ -184,12 +190,12 @@ func TestEvictUpdatedFlowKeepsFresh(t *testing.T) {
 		Len:     50,
 	}
 
-	t0 := time.Now()
-	c.Record(stale, t0)
-	c.Record(fresh, t0.Add(time.Second))
-	c.Record(stale, t0.Add(9*time.Second))
+	t0 := time.Hour
+	c.Record(at(stale, t0))
+	c.Record(at(fresh, t0+time.Second))
+	c.Record(at(stale, t0+9*time.Second))
 
-	c.Evict(t0.Add(12 * time.Second))
+	c.Evict(t0 + 12*time.Second)
 
 	flows := c.Flows()
 	if len(flows) != 1 {
@@ -353,7 +359,7 @@ func TestRunContextCancel(t *testing.T) {
 
 func TestStats(t *testing.T) {
 	c := New(30*time.Second, nil, config.DefaultMaxFlows)
-	now := time.Now()
+	now := time.Hour
 
 	ev := FlowEvent{
 		Proto: 6, SrcPort: 1000, DstPort: 80,
@@ -363,8 +369,8 @@ func TestStats(t *testing.T) {
 		Len:     100,
 	}
 
-	c.Record(ev, now)
-	c.Record(ev, now)
+	c.Record(at(ev, now))
+	c.Record(at(ev, now))
 
 	s := c.Stats()
 	if s.ActiveFlows != 1 {
@@ -397,12 +403,12 @@ func TestMaxFlows(t *testing.T) {
 		Len:     50,
 	}
 
-	t0 := time.Now()
-	c.Record(ev1, t0)
-	c.Record(ev2, t0.Add(time.Second))
+	t0 := time.Hour
+	c.Record(at(ev1, t0))
+	c.Record(at(ev2, t0+time.Second))
 
 	// table is full (max 2), ev3 should evict oldest (ev1)
-	c.Record(ev3, t0.Add(2*time.Second))
+	c.Record(at(ev3, t0+2*time.Second))
 
 	flows := c.Flows()
 	if len(flows) != 2 {
@@ -437,9 +443,9 @@ func TestMaxFlowsForcedEvictionStats(t *testing.T) {
 		Len:     200,
 	}
 
-	now := time.Now()
-	c.Record(ev1, now)
-	c.Record(ev2, now.Add(time.Second))
+	now := time.Hour
+	c.Record(at(ev1, now))
+	c.Record(at(ev2, now+time.Second))
 
 	s := c.Stats()
 	if s.ForcedEvictions != 1 {
@@ -472,11 +478,11 @@ func TestMaxFlowsUpdatedFlowStaysResident(t *testing.T) {
 		Len:     50,
 	}
 
-	t0 := time.Now()
-	c.Record(ev1, t0)
-	c.Record(ev2, t0.Add(time.Second))
-	c.Record(ev1, t0.Add(2*time.Second))
-	c.Record(ev3, t0.Add(3*time.Second))
+	t0 := time.Hour
+	c.Record(at(ev1, t0))
+	c.Record(at(ev2, t0+time.Second))
+	c.Record(at(ev1, t0+2*time.Second))
+	c.Record(at(ev3, t0+3*time.Second))
 
 	flows := c.Flows()
 	if len(flows) != 2 {
@@ -596,22 +602,12 @@ func recordKey(f ExportedFlow) FlowKey {
 	}
 }
 
-// firstSeen returns the time of the first packet a record carries
-func firstSeen(f ExportedFlow) time.Time {
-	return time.Unix(0, f.Start)
-}
-
-// lastSeen returns the time of the last packet a record carries
-func lastSeen(f ExportedFlow) time.Time {
-	return time.Unix(0, f.End)
-}
-
 func TestEvictExportsExpiredFlow(t *testing.T) {
 	exp := &mockFlowExporter{}
 	c := New(10*time.Second, nil, config.DefaultMaxFlows)
 	c.SetFlowExporter(exp)
 
-	t0 := time.Now()
+	t0 := time.Hour
 	ev := FlowEvent{
 		Ifindex: 7,
 		Dir:     0,
@@ -624,8 +620,8 @@ func TestEvictExportsExpiredFlow(t *testing.T) {
 		Len:     100,
 	}
 
-	c.Record(ev, t0)
-	c.Evict(t0.Add(11 * time.Second))
+	c.Record(at(ev, t0))
+	c.Evict(t0 + 11*time.Second)
 
 	if got := len(exp.flows); got != 1 {
 		t.Fatalf("exported flows = %d, want 1", got)
@@ -634,11 +630,11 @@ func TestEvictExportsExpiredFlow(t *testing.T) {
 	if recordKey(flow) != ev.Key() {
 		t.Fatalf("exported key = %+v, want %+v", recordKey(flow), ev.Key())
 	}
-	if !firstSeen(flow).Equal(t0) {
-		t.Fatalf("first seen = %v, want %v", firstSeen(flow), t0)
+	if flow.Start != t0 {
+		t.Fatalf("first seen = %v, want %v", flow.Start, t0)
 	}
-	if !lastSeen(flow).Equal(t0) {
-		t.Fatalf("last seen = %v, want %v", lastSeen(flow), t0)
+	if flow.End != t0 {
+		t.Fatalf("last seen = %v, want %v", flow.End, t0)
 	}
 	if flow.EndReason != FlowEndReasonIdleTimeout {
 		t.Fatalf("end reason = %d, want %d", flow.EndReason, FlowEndReasonIdleTimeout)
@@ -650,7 +646,7 @@ func TestRecordForcedEvictionExportsOldestFlow(t *testing.T) {
 	c := New(30*time.Second, nil, 1)
 	c.SetFlowExporter(exp)
 
-	t0 := time.Now()
+	t0 := time.Hour
 	ev1 := FlowEvent{
 		Proto: 6, SrcPort: 1000, DstPort: 80,
 		SrcAddr: netip.MustParseAddr("::ffff:10.0.0.1"),
@@ -666,8 +662,8 @@ func TestRecordForcedEvictionExportsOldestFlow(t *testing.T) {
 		Len:     50,
 	}
 
-	c.Record(ev1, t0)
-	c.Record(ev2, t0.Add(time.Second))
+	c.Record(at(ev1, t0))
+	c.Record(at(ev2, t0+time.Second))
 
 	if got := len(exp.flows); got != 1 {
 		t.Fatalf("exported flows = %d, want 1", got)
@@ -688,7 +684,7 @@ func TestFlushExportsRemainingFlows(t *testing.T) {
 	c := New(30*time.Second, nil, config.DefaultMaxFlows)
 	c.SetFlowExporter(exp)
 
-	t0 := time.Now()
+	t0 := time.Hour
 	ev := FlowEvent{
 		Proto: 6, SrcPort: 1000, DstPort: 80,
 		SrcAddr: netip.MustParseAddr("::ffff:10.0.0.1"),
@@ -697,7 +693,7 @@ func TestFlushExportsRemainingFlows(t *testing.T) {
 		Len:     100,
 	}
 
-	c.Record(ev, t0)
+	c.Record(at(ev, t0))
 	c.Flush(FlowEndReasonForcedEnd)
 
 	if got := len(exp.flows); got != 1 {
@@ -718,7 +714,7 @@ func TestExportErrorKeepsTheBatchGoing(t *testing.T) {
 	c := New(10*time.Second, nil, config.DefaultMaxFlows)
 	c.SetFlowExporter(exp)
 
-	t0 := time.Now()
+	t0 := time.Hour
 	ev := FlowEvent{
 		Proto: 6, SrcPort: 1000, DstPort: 80,
 		SrcAddr: netip.MustParseAddr("::ffff:10.0.0.1"),
@@ -727,10 +723,10 @@ func TestExportErrorKeepsTheBatchGoing(t *testing.T) {
 		Len:     100,
 	}
 
-	c.Record(ev, t0)
+	c.Record(at(ev, t0))
 	ev.SrcPort = 1001
-	c.Record(ev, t0)
-	c.Evict(t0.Add(11 * time.Second))
+	c.Record(at(ev, t0))
+	c.Evict(t0 + 11*time.Second)
 
 	if len(exp.flows) != 2 {
 		t.Fatalf("records handed over = %d, want both despite the failures", len(exp.flows))
@@ -739,7 +735,7 @@ func TestExportErrorKeepsTheBatchGoing(t *testing.T) {
 
 func TestEvictOrderFollowsLastSeen(t *testing.T) {
 	c := New(10*time.Second, nil, config.DefaultMaxFlows)
-	t0 := time.Now()
+	t0 := time.Hour
 
 	mk := func(port uint16) FlowEvent {
 		return FlowEvent{
@@ -753,14 +749,14 @@ func TestEvictOrderFollowsLastSeen(t *testing.T) {
 
 	// three flows, then the first one sees traffic again and becomes the
 	// freshest, the eviction sweep must take the second and third only
-	c.Record(mk(1), t0)
-	c.Record(mk(2), t0.Add(time.Second))
-	c.Record(mk(3), t0.Add(2*time.Second))
-	c.Record(mk(1), t0.Add(3*time.Second))
+	c.Record(at(mk(1), t0))
+	c.Record(at(mk(2), t0+time.Second))
+	c.Record(at(mk(3), t0+2*time.Second))
+	c.Record(at(mk(1), t0+3*time.Second))
 
 	exp := &mockFlowExporter{}
 	c.SetFlowExporter(exp)
-	c.Evict(t0.Add(12*time.Second + 500*time.Millisecond))
+	c.Evict(t0 + 12*time.Second + 500*time.Millisecond)
 
 	if got := len(exp.flows); got != 2 {
 		t.Fatalf("exported flows = %d, want 2", got)
@@ -775,7 +771,7 @@ func TestEvictOrderFollowsLastSeen(t *testing.T) {
 
 func TestRecordBatchCountsEveryEvent(t *testing.T) {
 	c := New(30*time.Second, nil, config.DefaultMaxFlows)
-	t0 := time.Now()
+	t0 := time.Hour
 
 	a := FlowEvent{
 		Proto: 6, SrcPort: 1000, DstPort: 80,
@@ -787,10 +783,7 @@ func TestRecordBatchCountsEveryEvent(t *testing.T) {
 	b := a
 	b.SrcPort = 2000
 
-	c.RecordBatch(
-		[]FlowEvent{a, b, a},
-		[]time.Time{t0, t0.Add(time.Millisecond), t0.Add(2 * time.Millisecond)},
-	)
+	c.RecordBatch([]FlowEvent{at(a, t0), at(b, t0+time.Millisecond), at(a, t0+2*time.Millisecond)})
 
 	flows := c.Flows()
 	if len(flows) != 2 {
@@ -799,7 +792,7 @@ func TestRecordBatchCountsEveryEvent(t *testing.T) {
 	if got := flows[a.Key()].Packets; got != 2 {
 		t.Fatalf("packets for a=%d want 2", got)
 	}
-	if got := flows[a.Key()].LastSeen; !got.Equal(t0.Add(2 * time.Millisecond)) {
+	if got := flows[a.Key()].LastSeen; got != t0+2*time.Millisecond {
 		t.Fatalf("last seen for a=%v want t0+2ms", got)
 	}
 	if got := flows[b.Key()].Packets; got != 1 {
@@ -811,7 +804,7 @@ func TestRecordBatchForcedEvictionExports(t *testing.T) {
 	exp := &mockFlowExporter{}
 	c := New(30*time.Second, nil, 1)
 	c.SetFlowExporter(exp)
-	t0 := time.Now()
+	t0 := time.Hour
 
 	a := FlowEvent{
 		Proto: 6, SrcPort: 1000, DstPort: 80,
@@ -824,7 +817,7 @@ func TestRecordBatchForcedEvictionExports(t *testing.T) {
 	b.SrcPort = 2000
 
 	// with room for one flow the second event forces the first one out
-	c.RecordBatch([]FlowEvent{a, b}, []time.Time{t0, t0.Add(time.Millisecond)})
+	c.RecordBatch([]FlowEvent{at(a, t0), at(b, t0+time.Millisecond)})
 
 	if got := len(exp.flows); got != 1 {
 		t.Fatalf("exported flows = %d, want 1", got)
@@ -879,7 +872,7 @@ func TestActiveTimeoutExportsIntervalRecords(t *testing.T) {
 	c.SetFlowExporter(exp)
 	c.SetActiveTimeout(10 * time.Second)
 
-	t0 := time.Now()
+	t0 := time.Hour
 	ev := FlowEvent{
 		Proto: 6, SrcPort: 1000, DstPort: 80,
 		SrcAddr: netip.MustParseAddr("::ffff:10.0.0.1"),
@@ -887,17 +880,17 @@ func TestActiveTimeoutExportsIntervalRecords(t *testing.T) {
 		Segs:    1,
 		Len:     100,
 	}
-	c.Record(ev, t0)
-	c.Record(ev, t0.Add(5*time.Second))
+	c.Record(at(ev, t0))
+	c.Record(at(ev, t0+5*time.Second))
 
 	// too early for the active timeout, nothing goes out
-	c.Evict(t0.Add(9 * time.Second))
+	c.Evict(t0 + 9*time.Second)
 	if got := len(exp.flows); got != 0 {
 		t.Fatalf("exported flows before the active timeout = %d, want 0", got)
 	}
 
 	// the interval record carries everything so far and the flow stays
-	c.Evict(t0.Add(11 * time.Second))
+	c.Evict(t0 + 11*time.Second)
 	if got := len(exp.flows); got != 1 {
 		t.Fatalf("exported flows after the active timeout = %d, want 1", got)
 	}
@@ -908,8 +901,8 @@ func TestActiveTimeoutExportsIntervalRecords(t *testing.T) {
 	if first.Packets != 2 || first.Octets != 200 {
 		t.Fatalf("interval record = %d packets %d octets, want 2 and 200", first.Packets, first.Octets)
 	}
-	if !firstSeen(first).Equal(t0) || !lastSeen(first).Equal(t0.Add(5*time.Second)) {
-		t.Fatalf("interval = %v..%v, want t0..t0+5s", firstSeen(first), lastSeen(first))
+	if first.Start != t0 || first.End != t0+5*time.Second {
+		t.Fatalf("interval = %v..%v, want t0..t0+5s", first.Start, first.End)
 	}
 	if _, ok := c.Flows()[ev.Key()]; !ok {
 		t.Fatal("flow left the table on an active export")
@@ -919,15 +912,15 @@ func TestActiveTimeoutExportsIntervalRecords(t *testing.T) {
 	}
 
 	// a quiet flow produces no second interval record
-	c.Evict(t0.Add(22 * time.Second))
+	c.Evict(t0 + 22*time.Second)
 	if got := len(exp.flows); got != 1 {
 		t.Fatalf("exported flows after a quiet interval = %d, want 1", got)
 	}
 
 	// more traffic, then idle eviction exports only the remainder over the
 	// events it carries
-	c.Record(ev, t0.Add(25*time.Second))
-	c.Evict(t0.Add(60 * time.Second))
+	c.Record(at(ev, t0+25*time.Second))
+	c.Evict(t0 + 60*time.Second)
 	if got := len(exp.flows); got != 2 {
 		t.Fatalf("exported flows after eviction = %d, want 2", got)
 	}
@@ -938,8 +931,8 @@ func TestActiveTimeoutExportsIntervalRecords(t *testing.T) {
 	if last.Packets != 1 || last.Octets != 100 {
 		t.Fatalf("final record = %d packets %d octets, want 1 and 100", last.Packets, last.Octets)
 	}
-	if !firstSeen(last).Equal(t0.Add(25*time.Second)) || !lastSeen(last).Equal(t0.Add(25*time.Second)) {
-		t.Fatalf("final interval = %v..%v, want the one event at t0+25s", firstSeen(last), lastSeen(last))
+	if last.Start != t0+25*time.Second || last.End != t0+25*time.Second {
+		t.Fatalf("final interval = %v..%v, want the one event at t0+25s", last.Start, last.End)
 	}
 }
 
@@ -949,7 +942,7 @@ func TestIntervalRecordsSpanTheirEvents(t *testing.T) {
 	c.SetFlowExporter(exp)
 	c.SetActiveTimeout(60 * time.Second)
 
-	t0 := time.Unix(1_700_000_000, 0)
+	t0 := time.Hour
 	ev := FlowEvent{
 		Proto: 6, SrcPort: 1000, DstPort: 80,
 		SrcAddr: netip.MustParseAddr("::ffff:10.0.0.1"),
@@ -958,41 +951,41 @@ func TestIntervalRecordsSpanTheirEvents(t *testing.T) {
 		Len:     100,
 	}
 	// events from different cpus reach the collector slightly out of order
-	c.Record(ev, t0.Add(time.Second))
-	c.Record(ev, t0)
-	c.Record(ev, t0.Add(10*time.Second))
-	c.Record(ev, t0.Add(9*time.Second))
-	if got := c.Flows()[ev.Key()]; !got.FirstSeen.Equal(t0) || !got.LastSeen.Equal(t0.Add(10*time.Second)) {
+	c.Record(at(ev, t0+time.Second))
+	c.Record(at(ev, t0))
+	c.Record(at(ev, t0+10*time.Second))
+	c.Record(at(ev, t0+9*time.Second))
+	if got := c.Flows()[ev.Key()]; got.FirstSeen != t0 || got.LastSeen != t0+10*time.Second {
 		t.Fatalf("flow spans %v..%v, want the earliest and latest events t0..t0+10s", got.FirstSeen, got.LastSeen)
 	}
-	c.Record(ev, t0.Add(59*time.Second))
+	c.Record(at(ev, t0+59*time.Second))
 
 	// the sweep marks the flow at its tick, then an event sampled before the
 	// tick is consumed after it
-	c.Evict(t0.Add(61 * time.Second))
-	late := t0.Add(60*time.Second + 950*time.Millisecond)
-	c.Record(ev, late)
-	c.Evict(t0.Add(121 * time.Second))
+	c.Evict(t0 + 61*time.Second)
+	late := t0 + 60*time.Second + 950*time.Millisecond
+	c.Record(at(ev, late))
+	c.Evict(t0 + 121*time.Second)
 
 	if got := len(exp.flows); got != 2 {
 		t.Fatalf("exported flows = %d, want 2", got)
 	}
 	for i, f := range exp.flows {
 		if f.End < f.Start {
-			t.Errorf("record %d ends at %v before it starts at %v", i, lastSeen(f), firstSeen(f))
+			t.Errorf("record %d ends at %v before it starts at %v", i, f.End, f.Start)
 		}
 	}
-	if first := exp.flows[0]; !firstSeen(first).Equal(t0) || !lastSeen(first).Equal(t0.Add(59*time.Second)) {
-		t.Errorf("active record spans %v..%v, want t0..t0+59s", firstSeen(first), lastSeen(first))
+	if first := exp.flows[0]; first.Start != t0 || first.End != t0+59*time.Second {
+		t.Errorf("active record spans %v..%v, want t0..t0+59s", first.Start, first.End)
 	}
-	if last := exp.flows[1]; !firstSeen(last).Equal(late) || !lastSeen(last).Equal(late) {
-		t.Errorf("idle record spans %v..%v, want the late event alone at %v", firstSeen(last), lastSeen(last), late)
+	if last := exp.flows[1]; last.Start != late || last.End != late {
+		t.Errorf("idle record spans %v..%v, want the late event alone at %v", last.Start, last.End, late)
 	}
 }
 
 func TestSweepSendsIntervalRecordsAtTheSweepNearestTheirActiveTimeout(t *testing.T) {
 	const period = 10 * time.Second
-	t0 := time.Unix(1_700_000_000, 0)
+	t0 := time.Hour
 	a := FlowEvent{
 		Proto: 6, SrcPort: 1000, DstPort: 80,
 		SrcAddr: netip.MustParseAddr("::ffff:10.0.0.1"),
@@ -1013,10 +1006,10 @@ func TestSweepSendsIntervalRecordsAtTheSweepNearestTheirActiveTimeout(t *testing
 	// ticks come a few microseconds off their schedule either way, a flow
 	// marked at one sweep is due at the next also when its tick is early
 	c, exp := newCollector()
-	c.Record(a, t0)
-	c.sweep(t0.Add(period), period)
-	c.Record(a, t0.Add(period+period/2))
-	c.sweep(t0.Add(2*period-time.Microsecond), period)
+	c.Record(at(a, t0))
+	c.sweep(t0+period, period)
+	c.Record(at(a, t0+period+period/2))
+	c.sweep(t0+2*period-time.Microsecond, period)
 	if got := len(exp.flows); got != 2 {
 		t.Fatalf("records after a tick a microsecond early = %d, want 2", got)
 	}
@@ -1025,11 +1018,11 @@ func TestSweepSendsIntervalRecordsAtTheSweepNearestTheirActiveTimeout(t *testing
 	// sweep marks, a millisecond short of its own active timeout at the next
 	// sweep it must not hold them back
 	c, exp = newCollector()
-	c.Record(a, t0)
-	c.Record(b, t0.Add(period+time.Millisecond))
-	c.sweep(t0.Add(period), period)
-	c.Record(a, t0.Add(period+period/2))
-	c.sweep(t0.Add(2*period), period)
+	c.Record(at(a, t0))
+	c.Record(at(b, t0+period+time.Millisecond))
+	c.sweep(t0+period, period)
+	c.Record(at(a, t0+period+period/2))
+	c.sweep(t0+2*period, period)
 	if got := len(exp.flows); got != 3 {
 		t.Fatalf("records = %d, want two of the flow the first sweep marked and one of the newer flow", got)
 	}
@@ -1037,7 +1030,7 @@ func TestSweepSendsIntervalRecordsAtTheSweepNearestTheirActiveTimeout(t *testing
 
 func TestSweepsKeepIntervalRecordsOneActiveTimeoutApart(t *testing.T) {
 	const eviction = 30 * time.Second
-	t0 := time.Unix(1_700_000_000, 0)
+	t0 := time.Hour
 	ev := FlowEvent{
 		Proto: 6, SrcPort: 1000, DstPort: 80,
 		SrcAddr: netip.MustParseAddr("::ffff:10.0.0.1"),
@@ -1060,11 +1053,11 @@ func TestSweepsKeepIntervalRecordsOneActiveTimeoutApart(t *testing.T) {
 
 		// the flow sees a packet before every sweep
 		var sent []time.Duration
-		for now := t0; now.Sub(t0) < 3*active+period/2; now = now.Add(period) {
-			c.Record(ev, now)
+		for now := t0; (now - t0) < 3*active+period/2; now = now + period {
+			c.Record(at(ev, now))
 			c.sweep(now, period)
 			if len(exp.flows) > len(sent) {
-				sent = append(sent, now.Sub(t0).Round(time.Millisecond))
+				sent = append(sent, (now - t0).Round(time.Millisecond))
 			}
 		}
 		want := []time.Duration{active, 2 * active, 3 * active}
@@ -1122,7 +1115,7 @@ func TestRunHonorsActiveTimeoutBelowHalfTheEvictionTimeout(t *testing.T) {
 		Segs:    1,
 		Len:     100,
 	}
-	c.Record(ev, time.Now())
+	c.Record(at(ev, bootNow()))
 
 	ctx, cancel := context.WithCancel(context.Background())
 	errCh := make(chan error, 1)
@@ -1137,8 +1130,8 @@ func TestRunHonorsActiveTimeoutBelowHalfTheEvictionTimeout(t *testing.T) {
 			select {
 			case <-ctx.Done():
 				return
-			case now := <-tick.C:
-				c.Record(ev, now)
+			case <-tick.C:
+				c.Record(at(ev, bootNow()))
 			}
 		}
 	}()
@@ -1187,13 +1180,13 @@ func TestRunWaitsForItsSweep(t *testing.T) {
 	c := New(20*time.Millisecond, nil, config.DefaultMaxFlows)
 	c.SetFlowExporter(exp)
 	// idle already, the first sweep exports it
-	c.Record(FlowEvent{
+	c.Record(at(FlowEvent{
 		Proto: 6, SrcPort: 1000, DstPort: 80,
 		SrcAddr: netip.MustParseAddr("::ffff:10.0.0.1"),
 		DstAddr: netip.MustParseAddr("::ffff:10.0.0.2"),
 		Segs:    1,
 		Len:     100,
-	}, time.Now().Add(-time.Second))
+	}, bootNow()-time.Second))
 
 	ctx, cancel := context.WithCancel(context.Background())
 	errCh := make(chan error, 1)
@@ -1243,7 +1236,7 @@ func TestSlowEnricherDoesNotStallTheCollector(t *testing.T) {
 	defer release()
 
 	c := New(30*time.Second, e, config.DefaultMaxFlows)
-	now := time.Now()
+	now := time.Hour
 	known := FlowEvent{
 		Proto: 6, SrcPort: 1000, DstPort: 80,
 		SrcAddr: netip.MustParseAddr("::ffff:10.0.0.1"),
@@ -1251,13 +1244,13 @@ func TestSlowEnricherDoesNotStallTheCollector(t *testing.T) {
 		Segs:    1,
 		Len:     100,
 	}
-	c.Record(known, now)
+	c.Record(at(known, now))
 
 	slow := known
 	slow.SrcAddr = e.slow
 	recorded := make(chan struct{})
 	go func() {
-		c.Record(slow, now)
+		c.Record(at(slow, now))
 		close(recorded)
 	}()
 	<-e.entered
@@ -1266,7 +1259,7 @@ func TestSlowEnricherDoesNotStallTheCollector(t *testing.T) {
 	// counting and the table stays readable
 	done := make(chan struct{})
 	go func() {
-		c.Record(known, now)
+		c.Record(at(known, now))
 		c.Stats()
 		c.Flows()
 		close(done)
@@ -1291,7 +1284,7 @@ func TestSlowEnricherDoesNotStallTheCollector(t *testing.T) {
 func TestRecordBatchEnrichesFlowsForcedOutWithinTheBatch(t *testing.T) {
 	e := &blockingEnricher{slow: netip.MustParseAddr("::ffff:192.0.2.1")}
 	c := New(30*time.Second, e, 1)
-	t0 := time.Now()
+	t0 := time.Hour
 
 	a := FlowEvent{
 		Proto: 6, SrcPort: 1000, DstPort: 80,
@@ -1302,11 +1295,11 @@ func TestRecordBatchEnrichesFlowsForcedOutWithinTheBatch(t *testing.T) {
 	}
 	b := a
 	b.SrcPort = 2000
-	c.Record(a, t0)
+	c.Record(at(a, t0))
 
 	// b forces a out of a table of one, then a comes back as a new flow in
 	// the same batch and still needs its labels
-	c.RecordBatch([]FlowEvent{b, a}, []time.Time{t0.Add(time.Millisecond), t0.Add(2 * time.Millisecond)})
+	c.RecordBatch([]FlowEvent{at(b, t0+time.Millisecond), at(a, t0+2*time.Millisecond)})
 
 	flows := c.Flows()
 	if len(flows) != 1 {
@@ -1326,7 +1319,7 @@ func TestEvictSkipsFullyExportedFlow(t *testing.T) {
 	c.SetFlowExporter(exp)
 	c.SetActiveTimeout(10 * time.Second)
 
-	t0 := time.Now()
+	t0 := time.Hour
 	ev := FlowEvent{
 		Proto: 17, SrcPort: 5000, DstPort: 53,
 		SrcAddr: netip.MustParseAddr("::ffff:10.0.0.1"),
@@ -1334,8 +1327,8 @@ func TestEvictSkipsFullyExportedFlow(t *testing.T) {
 		Segs:    1,
 		Len:     60,
 	}
-	c.Record(ev, t0)
-	c.Evict(t0.Add(11 * time.Second))
+	c.Record(at(ev, t0))
+	c.Evict(t0 + 11*time.Second)
 	c.Flush(FlowEndReasonForcedEnd)
 
 	if got := len(exp.flows); got != 1 {
@@ -1346,7 +1339,6 @@ func TestEvictSkipsFullyExportedFlow(t *testing.T) {
 func TestSampleRateScalesEstimatesAtRecordTime(t *testing.T) {
 	c := New(30*time.Second, nil, config.DefaultMaxFlows)
 	c.SetSampleRate(10, 0)
-	now := time.Now()
 
 	ev := FlowEvent{
 		Tstamp: 1_000,
@@ -1356,7 +1348,7 @@ func TestSampleRateScalesEstimatesAtRecordTime(t *testing.T) {
 		Segs:    1,
 		Len:     100,
 	}
-	c.Record(ev, now)
+	c.Record(ev)
 
 	// the rate doubles from boot time 5000 on, an older event still scales
 	// by 10 and a newer one by 20
@@ -1366,10 +1358,10 @@ func TestSampleRateScalesEstimatesAtRecordTime(t *testing.T) {
 	}
 	late := ev
 	late.Tstamp = 6_000
-	c.Record(late, now)
+	c.Record(late)
 	early := ev
 	early.Tstamp = 2_000
-	c.Record(early, now)
+	c.Record(early)
 
 	entry := c.Flows()[ev.Key()]
 	if entry.Packets != 3 || entry.Bytes != 300 {
@@ -1389,7 +1381,7 @@ func TestExportedRecordCarriesEstimateDelta(t *testing.T) {
 	c.SetFlowExporter(exp)
 	c.SetSampleRate(100, 0)
 
-	t0 := time.Now()
+	t0 := time.Hour
 	ev := FlowEvent{
 		Proto: 17, SrcPort: 5000, DstPort: 53,
 		SrcAddr: netip.MustParseAddr("::ffff:10.0.0.1"),
@@ -1397,8 +1389,8 @@ func TestExportedRecordCarriesEstimateDelta(t *testing.T) {
 		Segs:    1,
 		Len:     60,
 	}
-	c.Record(ev, t0)
-	c.Evict(t0.Add(time.Minute))
+	c.Record(at(ev, t0))
+	c.Evict(t0 + time.Minute)
 
 	if got := len(exp.flows); got != 1 {
 		t.Fatalf("exported flows = %d, want 1", got)
@@ -1465,7 +1457,7 @@ func rollupCounters(c *Collector) map[RollupKey]RollupCounters {
 
 func TestRollupsOutliveTheirFlows(t *testing.T) {
 	c := New(30*time.Second, nil, config.DefaultMaxFlows)
-	t0 := time.Now()
+	t0 := time.Hour
 	ev := FlowEvent{
 		Ifindex: 3, Proto: 17, SrcPort: 5000, DstPort: 53,
 		SrcAddr: netip.MustParseAddr("::ffff:10.0.0.1"),
@@ -1474,14 +1466,14 @@ func TestRollupsOutliveTheirFlows(t *testing.T) {
 		Len:     60,
 	}
 	key := RollupKey{Ifindex: 3, Proto: 17}
-	c.Record(ev, t0)
+	c.Record(at(ev, t0))
 	// the first scrape shows the tuple at zero, the second its counts
 	c.ScrapeRollups(nil)
 	c.ScrapeRollups(nil)
 
 	// the tuple stays in the scrape for RollupRetention eviction timeouts
 	// after its last packet
-	c.Evict(t0.Add(RollupRetention*30*time.Second - time.Second))
+	c.Evict(t0 + RollupRetention*30*time.Second - time.Second)
 	if len(c.Flows()) != 0 {
 		t.Fatal("idle flow not evicted")
 	}
@@ -1489,7 +1481,7 @@ func TestRollupsOutliveTheirFlows(t *testing.T) {
 		t.Fatal("rollup dropped inside the retention")
 	}
 
-	c.Evict(t0.Add(RollupRetention*30*time.Second + time.Second))
+	c.Evict(t0 + RollupRetention*30*time.Second + time.Second)
 	if _, ok := rollupCounters(c)[key]; ok {
 		t.Fatal("rollup kept past the retention")
 	}
@@ -1497,7 +1489,7 @@ func TestRollupsOutliveTheirFlows(t *testing.T) {
 
 func TestRetentionKeepsAnIdleTupleUntilAScrapeShowedItsCounts(t *testing.T) {
 	c := New(time.Second, nil, config.DefaultMaxFlows)
-	t0 := time.Now()
+	t0 := time.Hour
 	ev := FlowEvent{
 		Ifindex: 3, Proto: 17, SrcPort: 5000, DstPort: 53,
 		SrcAddr: netip.MustParseAddr("::ffff:10.0.0.1"),
@@ -1506,17 +1498,17 @@ func TestRetentionKeepsAnIdleTupleUntilAScrapeShowedItsCounts(t *testing.T) {
 		Len:     60,
 	}
 	// the first scrape shows the new tuple at zero, its packets wait for the next
-	c.Record(ev, t0)
+	c.Record(at(ev, t0))
 	c.ScrapeRollups(nil)
-	c.Record(ev, t0.Add(100*time.Millisecond))
+	c.Record(at(ev, t0+100*time.Millisecond))
 
-	c.Evict(t0.Add(2 * time.Second))
-	c.Evict(t0.Add(RollupRetention*time.Second + 3*time.Second))
+	c.Evict(t0 + 2*time.Second)
+	c.Evict(t0 + RollupRetention*time.Second + 3*time.Second)
 	if s := c.ScrapeRollups(nil); len(s) != 1 || s[0].Packets != 2 {
 		t.Fatalf("scrape past the retention = %+v, want the tuple with the 2 packets no scrape showed", s)
 	}
 
-	c.Evict(t0.Add(RollupRetention*time.Second + 4*time.Second))
+	c.Evict(t0 + RollupRetention*time.Second + 4*time.Second)
 	if s := c.ScrapeRollups(nil); len(s) != 0 {
 		t.Fatalf("scrape after the sweep = %+v, want the shown tuple gone", s)
 	}
@@ -1525,7 +1517,7 @@ func TestRetentionKeepsAnIdleTupleUntilAScrapeShowedItsCounts(t *testing.T) {
 func TestScrapeShowsANewRollupAtZeroFirst(t *testing.T) {
 	c := New(30*time.Second, nil, config.DefaultMaxFlows)
 	c.SetSampleRate(10, 0)
-	t0 := time.Now()
+	t0 := time.Hour
 	ev := FlowEvent{
 		Ifindex: 3, Proto: 6, SrcPort: 1000, DstPort: 80,
 		SrcAddr: netip.MustParseAddr("::ffff:10.0.0.1"),
@@ -1533,7 +1525,7 @@ func TestScrapeShowsANewRollupAtZeroFirst(t *testing.T) {
 		Segs:    1,
 		Len:     100,
 	}
-	c.Record(ev, t0)
+	c.Record(at(ev, t0))
 
 	scrape := func() RollupSample {
 		t.Helper()
@@ -1552,7 +1544,7 @@ func TestScrapeShowsANewRollupAtZeroFirst(t *testing.T) {
 	if s := scrape(); s.Packets != 1 || s.EstPackets != 10 || s.Bytes != 100 || s.EstBytes != 1000 {
 		t.Fatalf("second scrape = %+v, want the held packet", s)
 	}
-	c.Record(ev, t0)
+	c.Record(at(ev, t0))
 	if s := scrape(); s.Packets != 2 || s.EstPackets != 20 {
 		t.Fatalf("third scrape = %+v, want each later packet right away", s)
 	}
@@ -1701,11 +1693,11 @@ func sourceEvent(i int) FlowEvent {
 
 func TestRollupsAreCappedAtMaxFlows(t *testing.T) {
 	c := New(30*time.Second, asnPerSource{}, 100)
-	t0 := time.Now()
+	t0 := time.Hour
 
 	// a scan from many networks, one packet per source
 	for i := range 20_000 {
-		c.Record(sourceEvent(i), t0)
+		c.Record(at(sourceEvent(i), t0))
 	}
 
 	rollups := rollupCounters(c)
@@ -1729,7 +1721,7 @@ func TestRollupsAreCappedAtMaxFlows(t *testing.T) {
 func TestRollupsAccumulateAcrossFlows(t *testing.T) {
 	c := New(30*time.Second, nil, config.DefaultMaxFlows)
 	c.SetSampleRate(4, 0)
-	t0 := time.Now()
+	t0 := time.Hour
 
 	mk := func(port uint16, proto uint8) FlowEvent {
 		return FlowEvent{
@@ -1740,10 +1732,10 @@ func TestRollupsAccumulateAcrossFlows(t *testing.T) {
 			Len:     50,
 		}
 	}
-	c.Record(mk(1, 6), t0)
-	c.Record(mk(2, 6), t0)
-	c.Record(mk(2, 6), t0)
-	c.Record(mk(3, 17), t0)
+	c.Record(at(mk(1, 6), t0))
+	c.Record(at(mk(2, 6), t0))
+	c.Record(at(mk(2, 6), t0))
+	c.Record(at(mk(3, 17), t0))
 
 	rollups := rollupCounters(c)
 	if len(rollups) != 2 {
