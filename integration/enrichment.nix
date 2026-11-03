@@ -145,67 +145,12 @@ in
     };
 
   testScript = common.helpers + ''
-    import base64
-    import ipaddress
-    import struct
-
     def lookup_mmdb_asn(machine, ip: str) -> str:
       return machine.succeed(
         "mmdblookup --file \"$(cat /etc/rfm-test-asn-db)\" "
         f"--ip {ip} autonomous_system_number "
         "| grep -Eo '[0-9]+ <uint32>' | cut -d' ' -f1"
       ).strip()
-
-    def prefix_nlri(prefix: str) -> bytes:
-      net = ipaddress.ip_network(prefix, strict=True)
-      octets = (net.prefixlen + 7) // 8
-      return bytes([net.prefixlen]) + net.network_address.packed[:octets]
-
-    def bmp_route(prefix: str, origin: int, peer_addr: str, next_hop: str = "192.0.2.1") -> bytes:
-      peer = ipaddress.ip_address(peer_addr)
-      hop = ipaddress.ip_address(next_hop)
-      assert peer.version == 4
-      assert hop.version == 4
-      assert 0 <= origin <= 0xFFFF
-
-      as_path = bytes([2, 1]) + struct.pack(">H", origin)
-      path_attrs = b"".join(
-        [
-          bytes([0x40, 1, 1, 0]),
-          bytes([0x40, 2, len(as_path)]) + as_path,
-          bytes([0x40, 3, 4]) + hop.packed,
-        ]
-      )
-
-      bgp_payload = (
-        struct.pack(">H", 0)
-        + struct.pack(">H", len(path_attrs))
-        + path_attrs
-        + prefix_nlri(prefix)
-      )
-      bgp_update = b"\xff" * 16 + struct.pack(">HB", 19 + len(bgp_payload), 2) + bgp_payload
-      peer_header = b"".join(
-        [
-          bytes([0, 0x40]),
-          b"\x00" * 8,
-          b"\x00" * 12 + peer.packed,
-          struct.pack(">I", origin),
-          peer.packed,
-          b"\x00" * 8,
-        ]
-      )
-
-      return b"\x03" + struct.pack(">IB", 6 + len(peer_header) + len(bgp_update), 0) + peer_header + bgp_update
-
-    def send_bmp(machine) -> None:
-      wire = b"".join(
-        [
-          bmp_route("203.0.113.0/24", 65002, "192.0.2.2"),
-          bmp_route("198.51.100.0/24", 65003, "192.0.2.3"),
-        ]
-      )
-      payload = base64.b64encode(wire).decode()
-      machine.succeed(f"printf '%s' '{payload}' | base64 -d | nc -N 127.0.0.1 11019")
 
     start_all()
     for m in [machine1, machine2, machine3]:
@@ -230,12 +175,8 @@ in
     machine1.wait_until_succeeds("ip route show 198.51.100.0/24 | grep 192.168.1.3")
 
     # optional enrichment backends
-    # Keep the Bird topology for real routes. Feed deterministic BMP updates
-    # into rfm because Bird 3 BMP in this topology only emits EOR.
-    send_bmp(machine1)
-    machine1.wait_until_succeeds(
-      "journalctl -u rfm --no-pager | grep 'bmp route monitoring applied' | grep 'reach=1'"
-    )
+    machine1.wait_until_succeeds("rfm rib lookup --json 203.0.113.7 | grep -q '\"origin_asn\": 65002'")
+    machine1.wait_until_succeeds("rfm rib lookup --json 198.51.100.7 | grep -q '\"origin_asn\": 65003'")
 
     machine1.succeed("ping -c 2 -W 1 203.0.113.7 || true")
     machine1.succeed("ping -c 2 -W 1 198.51.100.7 || true")
