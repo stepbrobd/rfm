@@ -2,10 +2,8 @@ package probe
 
 import "errors"
 
-// ErrUnsupportedLink marks a link whose frames do not start with an ethernet
-// header at the tc hooks, such as tun, wireguard or xfrm devices, the
-// programs would read their IP header as ethernet
-var ErrUnsupportedLink = errors.New("link frames carry no ethernet header")
+// errUnsupportedLink marks a link without an ethernet header, such as tun, wireguard or xfrm
+var errUnsupportedLink = errors.New("link frames carry no ethernet header")
 
 // LinkEvent is one attach or detach done by Watch
 type LinkEvent struct {

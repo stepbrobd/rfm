@@ -17,18 +17,7 @@ type IfaceCounter struct {
 	Bytes   uint64
 }
 
-// slotFamily maps the proto of an IfaceCounter to its family in a slot
-func slotFamily(proto uint8) int {
-	switch proto {
-	case 4:
-		return 1
-	case 6:
-		return 2
-	}
-	return 0
-}
-
-// familyProto is slotFamily backwards
+// familyProto is the proto of an IfaceCounter of family fam in a slot
 func familyProto(fam int) uint8 {
 	switch fam {
 	case 1:
@@ -48,8 +37,6 @@ func slotIndex(slot int, dir uint8, fam int) uint32 {
 // first, to the ifindexes rfm_iface_slot can index, an interface without a
 // slot counts in the hash
 type slotAlloc struct {
-	// limit caps the slots handed out, tests lower it to exhaust them
-	limit      int
 	maxIfindex uint32
 	byIfindex  map[uint32]int
 	used       []bool
@@ -57,7 +44,6 @@ type slotAlloc struct {
 
 func newSlotAlloc(slots int, maxIfindex uint32) *slotAlloc {
 	return &slotAlloc{
-		limit:      slots,
 		maxIfindex: maxIfindex,
 		byIfindex:  make(map[uint32]int),
 		used:       make([]bool, slots),
@@ -74,7 +60,7 @@ func (a *slotAlloc) assign(ifindex uint32) (slot int, fresh, ok bool) {
 	if ifindex >= a.maxIfindex {
 		return 0, false, false
 	}
-	for s := 0; s < len(a.used) && s < a.limit; s++ {
+	for s := range a.used {
 		if !a.used[s] {
 			a.used[s] = true
 			a.byIfindex[ifindex] = s

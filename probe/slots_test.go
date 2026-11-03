@@ -40,21 +40,6 @@ func TestSlotAllocRefusesIfindexOutOfRange(t *testing.T) {
 	}
 }
 
-func TestSlotAllocLimit(t *testing.T) {
-	a := newSlotAlloc(4, 100)
-	a.limit = 1
-	if _, _, ok := a.assign(1); !ok {
-		t.Fatal("first assign under a limit of 1 failed")
-	}
-	if _, _, ok := a.assign(2); ok {
-		t.Fatal("second assign under a limit of 1 succeeded")
-	}
-	a.limit = 0
-	if _, _, ok := a.assign(3); ok {
-		t.Fatal("assign under a limit of 0 succeeded")
-	}
-}
-
 func TestSlotAllocRestore(t *testing.T) {
 	a := newSlotAlloc(4, 100)
 	if !a.restore(5, 2) {
@@ -89,9 +74,9 @@ func TestSlotIndexLayout(t *testing.T) {
 	if got := slotIndex(2, 1, 2); got != 2*6+3+2 {
 		t.Fatalf("slotIndex(2, 1, 2) = %d", got)
 	}
-	for _, proto := range []uint8{0, 4, 6} {
-		if got := familyProto(slotFamily(proto)); got != proto {
-			t.Fatalf("familyProto(slotFamily(%d)) = %d", proto, got)
+	for fam, proto := range []uint8{0, 4, 6} {
+		if got := familyProto(fam); got != proto {
+			t.Fatalf("familyProto(%d) = %d, want %d", fam, got, proto)
 		}
 	}
 }

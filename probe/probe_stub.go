@@ -25,10 +25,6 @@ func (p *Probe) SampleRate() (uint32, error) {
 	return 0, errUnsupported
 }
 
-func (p *Probe) IfaceStats() *ebpf.Map {
-	return nil
-}
-
 func (p *Probe) Counters() ([]IfaceCounter, error) {
 	return nil, errUnsupported
 }

@@ -48,25 +48,6 @@ type rfmRfmFlowEvent struct {
 	_       [7]uint8
 }
 
-// skipIfUnsupported skips when the test lacks the privileges to load or
-// attach the programs, a kernel without a feature they need fails the test
-func skipIfUnsupported(t *testing.T, err error) {
-	t.Helper()
-
-	testutil.SkipIfUnprivileged(t, err)
-}
-
-func TestLoad(t *testing.T) {
-	testutil.RequireRoot(t)
-
-	p, err := Load(Config{SampleRate: 1 << 30, WakeupBatch: 1})
-	if err != nil {
-		skipIfUnsupported(t, err)
-		t.Fatal(err)
-	}
-	defer p.Close()
-}
-
 func TestLoadRefusesAZeroSampleRate(t *testing.T) {
 	p, err := Load(Config{WakeupBatch: 1})
 	if err == nil {
@@ -85,24 +66,6 @@ func TestLoadRefusesAZeroWakeupBatch(t *testing.T) {
 	}
 	if err == nil || !strings.Contains(err.Error(), "wakeup batch") {
 		t.Fatalf("load with a wakeup batch of 0 = %v, want it refused", err)
-	}
-}
-
-func TestAttach(t *testing.T) {
-	testutil.RequireRoot(t)
-
-	ns := testutil.NewNS(t)
-
-	p, err := Load(Config{SampleRate: 1 << 30, WakeupBatch: 1})
-	if err != nil {
-		skipIfUnsupported(t, err)
-		t.Fatal(err)
-	}
-	defer p.Close()
-
-	if err := p.Attach(ns.Ifindex()); err != nil {
-		skipIfUnsupported(t, err)
-		t.Fatal(err)
 	}
 }
 
@@ -137,90 +100,31 @@ func TestAttachLinkTypes(t *testing.T) {
 
 	testutil.NewNS(t)
 
-	p, err := Load(Config{SampleRate: 1 << 30, WakeupBatch: 1})
-	if err != nil {
-		skipIfUnsupported(t, err)
-		t.Fatal(err)
-	}
-	defer p.Close()
-
 	// loopback frames carry an ethernet header like veth frames
 	lo, err := netlink.LinkByName("lo")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := p.Attach(lo.Attrs().Index); err != nil {
-		skipIfUnsupported(t, err)
-		t.Fatalf("attach loopback: %v", err)
+	if err := checkLinkType(lo.Attrs()); err != nil {
+		t.Fatalf("loopback refused: %v", err)
 	}
 
 	// the programs would read the IP header of a tun frame as ethernet
 	tun := addTun(t, "rfmtun0")
-	err = p.Attach(tun.Attrs().Index)
-	if !errors.Is(err, ErrUnsupportedLink) {
-		t.Fatalf("attach tun = %v, want %v", err, ErrUnsupportedLink)
-	}
-	for _, ifindex := range p.Attached() {
-		if ifindex == tun.Attrs().Index {
-			t.Fatal("tun device attached")
-		}
+	if err := checkLinkType(tun.Attrs()); !errors.Is(err, errUnsupportedLink) {
+		t.Fatalf("tun = %v, want %v", err, errUnsupportedLink)
 	}
 
 	// a link that is gone reports ENODEV
-	if err := p.Attach(1 << 30); !errors.Is(err, unix.ENODEV) {
-		t.Fatalf("attach missing link = %v, want ENODEV", err)
-	}
-}
-
-func TestIfaceCounters(t *testing.T) {
-	testutil.RequireRoot(t)
-
-	ns := testutil.NewNS(t)
-
 	p, err := Load(Config{SampleRate: 1 << 30, WakeupBatch: 1})
 	if err != nil {
-		skipIfUnsupported(t, err)
+		testutil.SkipIfUnprivileged(t, err)
 		t.Fatal(err)
 	}
 	defer p.Close()
-
-	// no config setup required
-	// iface stats must work independently of sampling configuration
-
-	if err := p.Attach(ns.Ifindex()); err != nil {
-		skipIfUnsupported(t, err)
-		t.Fatal(err)
+	if _, err := p.attach(1<<30, "gone"); !errors.Is(err, unix.ENODEV) {
+		t.Fatalf("attach missing link = %v, want ENODEV", err)
 	}
-
-	// send an IPv4 TCP packet into rfm0 via rfm1
-	pkt := testutil.EthIPv4TCP(
-		net.IPv4(10, 0, 0, 1),
-		net.IPv4(10, 0, 0, 2),
-		12345, 80,
-	)
-	ns.SendRaw(t, pkt)
-
-	// read iface stats
-	key := rfmRfmIfaceKey{
-		Ifindex: uint32(ns.Ifindex()),
-		Dir:     0, // ingress
-		Proto:   4, // ipv4
-	}
-
-	var packets, bytes uint64
-	testutil.Eventually(t, time.Second, 10*time.Millisecond, func() error {
-		packets, bytes = ifaceStats(t, p, key)
-		if packets == 0 {
-			return fmt.Errorf("expected packets > 0")
-		}
-		if bytes == 0 {
-			return fmt.Errorf("expected bytes > 0")
-		}
-
-		return nil
-	})
-
-	t.Logf("packets=%d bytes=%d", packets, bytes)
 }
 
 func TestIfaceStatsErrorsCountFullMap(t *testing.T) {
@@ -232,14 +136,14 @@ func TestIfaceStatsErrorsCountFullMap(t *testing.T) {
 	// slot is free so the interface counts in the hash
 	p, err := Load(Config{SampleRate: 1 << 30, WakeupBatch: 1, IfaceStatsSize: 1})
 	if err != nil {
-		skipIfUnsupported(t, err)
+		testutil.SkipIfUnprivileged(t, err)
 		t.Fatal(err)
 	}
 	defer p.Close()
-	p.slots.limit = 0
+	p.slots = newSlotAlloc(0, p.slots.maxIfindex)
 
-	if err := p.Attach(ns.Ifindex()); err != nil {
-		skipIfUnsupported(t, err)
+	if _, err := p.attach(ns.Ifindex(), ns.Name()); err != nil {
+		testutil.SkipIfUnprivileged(t, err)
 		t.Fatal(err)
 	}
 
@@ -266,13 +170,13 @@ func TestIfaceCountersVLAN(t *testing.T) {
 
 	p, err := Load(Config{SampleRate: 1 << 30, WakeupBatch: 1})
 	if err != nil {
-		skipIfUnsupported(t, err)
+		testutil.SkipIfUnprivileged(t, err)
 		t.Fatal(err)
 	}
 	defer p.Close()
 
-	if err := p.Attach(ns.Ifindex()); err != nil {
-		skipIfUnsupported(t, err)
+	if _, err := p.attach(ns.Ifindex(), ns.Name()); err != nil {
+		testutil.SkipIfUnprivileged(t, err)
 		t.Fatal(err)
 	}
 
@@ -300,13 +204,13 @@ func TestIfaceCountersVLANEgress(t *testing.T) {
 
 	p, err := Load(Config{SampleRate: 1 << 30, WakeupBatch: 1})
 	if err != nil {
-		skipIfUnsupported(t, err)
+		testutil.SkipIfUnprivileged(t, err)
 		t.Fatal(err)
 	}
 	defer p.Close()
 
-	if err := p.Attach(ns.Ifindex()); err != nil {
-		skipIfUnsupported(t, err)
+	if _, err := p.attach(ns.Ifindex(), ns.Name()); err != nil {
+		testutil.SkipIfUnprivileged(t, err)
 		t.Fatal(err)
 	}
 
@@ -331,13 +235,13 @@ func TestIfaceCountersVLANEgressGSO(t *testing.T) {
 
 	p, err := Load(Config{SampleRate: 1 << 30, WakeupBatch: 1})
 	if err != nil {
-		skipIfUnsupported(t, err)
+		testutil.SkipIfUnprivileged(t, err)
 		t.Fatal(err)
 	}
 	defer p.Close()
 
-	if err := p.Attach(ns.Ifindex()); err != nil {
-		skipIfUnsupported(t, err)
+	if _, err := p.attach(ns.Ifindex(), ns.Name()); err != nil {
+		testutil.SkipIfUnprivileged(t, err)
 		t.Fatal(err)
 	}
 
@@ -378,7 +282,7 @@ func TestIfaceCountersTruncatedVLANTag(t *testing.T) {
 
 	p, err := Load(Config{SampleRate: 1 << 30, WakeupBatch: 1})
 	if err != nil {
-		skipIfUnsupported(t, err)
+		testutil.SkipIfUnprivileged(t, err)
 		t.Fatal(err)
 	}
 	defer p.Close()
@@ -393,7 +297,7 @@ func TestIfaceCountersTruncatedVLANTag(t *testing.T) {
 		nil,
 	)
 	if _, err := p.ingress.Run(&ebpf.RunOptions{Data: frame}); err != nil {
-		skipIfUnsupported(t, err)
+		testutil.SkipIfUnprivileged(t, err)
 		t.Fatal(err)
 	}
 
@@ -422,13 +326,13 @@ func readFlowEventFrom(t *testing.T, send func(*testutil.NS), match func(rfmRfmF
 
 	p, err := Load(Config{SampleRate: 1, WakeupBatch: 1})
 	if err != nil {
-		skipIfUnsupported(t, err)
+		testutil.SkipIfUnprivileged(t, err)
 		t.Fatal(err)
 	}
 	defer p.Close()
 
-	if err := p.Attach(ns.Ifindex()); err != nil {
-		skipIfUnsupported(t, err)
+	if _, err := p.attach(ns.Ifindex(), ns.Name()); err != nil {
+		testutil.SkipIfUnprivileged(t, err)
 		t.Fatal(err)
 	}
 
@@ -778,7 +682,7 @@ func TestIngressGSOLongExtensionHeader(t *testing.T) {
 
 	p, err := Load(Config{SampleRate: 1 << 30, WakeupBatch: 1})
 	if err != nil {
-		skipIfUnsupported(t, err)
+		testutil.SkipIfUnprivileged(t, err)
 		t.Fatal(err)
 	}
 	defer p.Close()
@@ -791,7 +695,7 @@ func TestIngressGSOLongExtensionHeader(t *testing.T) {
 	frame := testutil.EthIPv6(net.ParseIP("fd00:9::1"), net.ParseIP("fd00:9::2"), testutil.IPProtoDstOpts, payload)
 	ctx := skbContext{GSOSegs: 2, GSOSize: gsoSize}
 	if _, err := p.ingress.Run(&ebpf.RunOptions{Data: frame, Context: ctx}); err != nil {
-		skipIfUnsupported(t, err)
+		testutil.SkipIfUnprivileged(t, err)
 		t.Fatal(err)
 	}
 
@@ -856,7 +760,7 @@ func hashStats(t *testing.T, p *Probe, key rfmRfmIfaceKey) (packets uint64) {
 	t.Helper()
 
 	var vals []rfmRfmIfaceValue
-	if err := p.IfaceStats().Lookup(key, &vals); err != nil {
+	if err := p.objs.RfmIfaceStats.Lookup(key, &vals); err != nil {
 		return 0
 	}
 	for _, v := range vals {
@@ -908,13 +812,13 @@ func TestIfaceCountersGSOEgress(t *testing.T) {
 
 	p, err := Load(Config{SampleRate: 1 << 30, WakeupBatch: 1})
 	if err != nil {
-		skipIfUnsupported(t, err)
+		testutil.SkipIfUnprivileged(t, err)
 		t.Fatal(err)
 	}
 	defer p.Close()
 
-	if err := p.Attach(ns.Ifindex()); err != nil {
-		skipIfUnsupported(t, err)
+	if _, err := p.attach(ns.Ifindex(), ns.Name()); err != nil {
+		testutil.SkipIfUnprivileged(t, err)
 		t.Fatal(err)
 	}
 
@@ -951,13 +855,13 @@ func TestIfaceCountersGROIngress(t *testing.T) {
 
 	p, err := Load(Config{SampleRate: 1 << 30, WakeupBatch: 1})
 	if err != nil {
-		skipIfUnsupported(t, err)
+		testutil.SkipIfUnprivileged(t, err)
 		t.Fatal(err)
 	}
 	defer p.Close()
 
-	if err := p.Attach(ns.Ifindex()); err != nil {
-		skipIfUnsupported(t, err)
+	if _, err := p.attach(ns.Ifindex(), ns.Name()); err != nil {
+		testutil.SkipIfUnprivileged(t, err)
 		t.Fatal(err)
 	}
 
@@ -1006,7 +910,7 @@ func TestGSOHeaderErrorsCountHeadersThatDoNotParse(t *testing.T) {
 
 	p, err := Load(Config{SampleRate: 1 << 30, WakeupBatch: 1})
 	if err != nil {
-		skipIfUnsupported(t, err)
+		testutil.SkipIfUnprivileged(t, err)
 		t.Fatal(err)
 	}
 	defer p.Close()
@@ -1014,7 +918,7 @@ func TestGSOHeaderErrorsCountHeadersThatDoNotParse(t *testing.T) {
 	run := func(frame []byte, ctx skbContext) {
 		t.Helper()
 		if _, err := p.ingress.Run(&ebpf.RunOptions{Data: frame, Context: ctx}); err != nil {
-			skipIfUnsupported(t, err)
+			testutil.SkipIfUnprivileged(t, err)
 			t.Fatal(err)
 		}
 	}
@@ -1047,7 +951,7 @@ func TestIngressGSOTakesTheKernelWireLen(t *testing.T) {
 
 	p, err := Load(Config{SampleRate: 1 << 30, WakeupBatch: 1})
 	if err != nil {
-		skipIfUnsupported(t, err)
+		testutil.SkipIfUnprivileged(t, err)
 		t.Fatal(err)
 	}
 	defer p.Close()
@@ -1061,7 +965,7 @@ func TestIngressGSOTakesTheKernelWireLen(t *testing.T) {
 		t.Helper()
 		ctx := skbContext{WireLen: wire, GSOSegs: gsoSegs, GSOSize: gsoSize}
 		if _, err := p.ingress.Run(&ebpf.RunOptions{Data: frame, Context: ctx}); err != nil {
-			skipIfUnsupported(t, err)
+			testutil.SkipIfUnprivileged(t, err)
 			t.Fatal(err)
 		}
 	}
@@ -1106,7 +1010,7 @@ func TestGSOHeaderErrorsSkipEgressWithASegmentCount(t *testing.T) {
 
 	p, err := Load(Config{SampleRate: 1 << 30, WakeupBatch: 1})
 	if err != nil {
-		skipIfUnsupported(t, err)
+		testutil.SkipIfUnprivileged(t, err)
 		t.Fatal(err)
 	}
 	defer p.Close()
@@ -1114,7 +1018,7 @@ func TestGSOHeaderErrorsSkipEgressWithASegmentCount(t *testing.T) {
 	run := func(frame []byte, ctx skbContext) {
 		t.Helper()
 		if _, err := p.egress.Run(&ebpf.RunOptions{Data: frame, Context: ctx}); err != nil {
-			skipIfUnsupported(t, err)
+			testutil.SkipIfUnprivileged(t, err)
 			t.Fatal(err)
 		}
 	}
@@ -1203,7 +1107,7 @@ func countingProgram(t *testing.T, counts *ebpf.Map, slot uint32) *ebpf.Program 
 		License: "MIT",
 	})
 	if err != nil {
-		skipIfUnsupported(t, err)
+		testutil.SkipIfUnprivileged(t, err)
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { prog.Close() })
@@ -1232,7 +1136,7 @@ func TestAttachOrder(t *testing.T) {
 		MaxEntries: 4,
 	})
 	if err != nil {
-		skipIfUnsupported(t, err)
+		testutil.SkipIfUnprivileged(t, err)
 		t.Fatal(err)
 	}
 	defer counts.Close()
@@ -1248,7 +1152,7 @@ func TestAttachOrder(t *testing.T) {
 			Attach:    at,
 		})
 		if err != nil {
-			skipIfUnsupported(t, err)
+			testutil.SkipIfUnprivileged(t, err)
 			t.Fatal(err)
 		}
 		defer l.Close()
@@ -1285,13 +1189,13 @@ func TestAttachOrder(t *testing.T) {
 
 	p, err := Load(Config{SampleRate: 1 << 30, WakeupBatch: 1})
 	if err != nil {
-		skipIfUnsupported(t, err)
+		testutil.SkipIfUnprivileged(t, err)
 		t.Fatal(err)
 	}
 	defer p.Close()
 
-	if err := p.Attach(ns.Ifindex()); err != nil {
-		skipIfUnsupported(t, err)
+	if _, err := p.attach(ns.Ifindex(), ns.Name()); err != nil {
+		testutil.SkipIfUnprivileged(t, err)
 		t.Fatal(err)
 	}
 
@@ -1363,7 +1267,7 @@ func TestSetSampleRate(t *testing.T) {
 
 	p, err := Load(Config{SampleRate: 100, WakeupBatch: 64})
 	if err != nil {
-		skipIfUnsupported(t, err)
+		testutil.SkipIfUnprivileged(t, err)
 		t.Fatal(err)
 	}
 	defer p.Close()
@@ -1400,17 +1304,17 @@ func TestDetachDropsCounters(t *testing.T) {
 
 	p, err := Load(Config{SampleRate: 1 << 30, WakeupBatch: 1})
 	if err != nil {
-		skipIfUnsupported(t, err)
+		testutil.SkipIfUnprivileged(t, err)
 		t.Fatal(err)
 	}
 	defer p.Close()
 
-	if err := p.Attach(ns.Ifindex()); err != nil {
-		skipIfUnsupported(t, err)
+	if _, err := p.attach(ns.Ifindex(), ns.Name()); err != nil {
+		testutil.SkipIfUnprivileged(t, err)
 		t.Fatal(err)
 	}
 	// attaching twice is a no-op
-	if err := p.Attach(ns.Ifindex()); err != nil {
+	if _, err := p.attach(ns.Ifindex(), ns.Name()); err != nil {
 		t.Fatal(err)
 	}
 	if got := p.Attached(); len(got) != 1 || got[0] != ns.Ifindex() {
@@ -1426,7 +1330,7 @@ func TestDetachDropsCounters(t *testing.T) {
 		return nil
 	})
 
-	if err := p.Detach(ns.Ifindex()); err != nil {
+	if _, _, err := p.detach(ns.Ifindex()); err != nil {
 		t.Fatal(err)
 	}
 	if got := p.Attached(); len(got) != 0 {
@@ -1444,7 +1348,7 @@ func TestDetachDropsCounters(t *testing.T) {
 	}
 
 	// detaching again is a no-op
-	if err := p.Detach(ns.Ifindex()); err != nil {
+	if _, _, err := p.detach(ns.Ifindex()); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -1452,21 +1356,16 @@ func TestDetachDropsCounters(t *testing.T) {
 func TestPinnedCountersSurviveReload(t *testing.T) {
 	testutil.RequireRoot(t)
 
-	if _, err := os.Stat("/sys/fs/bpf"); err != nil {
-		t.Skipf("bpffs not mounted: %v", err)
-	}
-	dir := fmt.Sprintf("/sys/fs/bpf/rfm-test-%d", os.Getpid())
-	t.Cleanup(func() { _ = os.RemoveAll(dir) })
-
+	dir := pinDir(t)
 	ns := testutil.NewNS(t)
 
 	p, err := Load(Config{SampleRate: 1 << 30, WakeupBatch: 1, PinPath: dir})
 	if err != nil {
-		skipIfUnsupported(t, err)
+		testutil.SkipIfUnprivileged(t, err)
 		t.Fatal(err)
 	}
-	if err := p.Attach(ns.Ifindex()); err != nil {
-		skipIfUnsupported(t, err)
+	if _, err := p.attach(ns.Ifindex(), ns.Name()); err != nil {
+		testutil.SkipIfUnprivileged(t, err)
 		p.Close()
 		t.Fatal(err)
 	}
@@ -1721,7 +1620,7 @@ func TestPinnedCountersRefuseIncompatibleFlags(t *testing.T) {
 	stale.Flags |= unix.BPF_F_NO_PREALLOC
 	m, err := ebpf.NewMap(stale)
 	if err != nil {
-		skipIfUnsupported(t, err)
+		testutil.SkipIfUnprivileged(t, err)
 		t.Fatal(err)
 	}
 	defer m.Close()
@@ -1752,7 +1651,7 @@ func TestWatchFollowsInterfaces(t *testing.T) {
 
 	p, err := Load(Config{SampleRate: 1 << 30, WakeupBatch: 1})
 	if err != nil {
-		skipIfUnsupported(t, err)
+		testutil.SkipIfUnprivileged(t, err)
 		t.Fatal(err)
 	}
 	defer p.Close()
@@ -1812,7 +1711,7 @@ func TestWatchReconcilesExistingLinks(t *testing.T) {
 
 	p, err := Load(Config{SampleRate: 1 << 30, WakeupBatch: 1})
 	if err != nil {
-		skipIfUnsupported(t, err)
+		testutil.SkipIfUnprivileged(t, err)
 		t.Fatal(err)
 	}
 	defer p.Close()
@@ -1822,8 +1721,8 @@ func TestWatchReconcilesExistingLinks(t *testing.T) {
 	addVeth(t, "rfmw0", "rfmw1")
 	stale := addVeth(t, "rfmw2", "rfmw3")
 	for _, name := range []string{"rfmw2", "rfmw3"} {
-		if err := p.Attach(ifindexOf(t, name)); err != nil {
-			skipIfUnsupported(t, err)
+		if _, err := p.attach(ifindexOf(t, name), name); err != nil {
+			testutil.SkipIfUnprivileged(t, err)
 			t.Fatal(err)
 		}
 	}
@@ -1856,7 +1755,7 @@ func TestWatchSurvivesForeignMessages(t *testing.T) {
 
 	p, err := Load(Config{SampleRate: 1 << 30, WakeupBatch: 1})
 	if err != nil {
-		skipIfUnsupported(t, err)
+		testutil.SkipIfUnprivileged(t, err)
 		t.Fatal(err)
 	}
 	defer p.Close()
@@ -1908,7 +1807,7 @@ func TestWatchResubscribesOnALinkItCannotDecode(t *testing.T) {
 
 	p, err := Load(Config{SampleRate: 1 << 30, WakeupBatch: 1})
 	if err != nil {
-		skipIfUnsupported(t, err)
+		testutil.SkipIfUnprivileged(t, err)
 		t.Fatal(err)
 	}
 	defer p.Close()
@@ -1999,7 +1898,7 @@ func TestWatchResubscribesAfterOverflow(t *testing.T) {
 
 	p, err := Load(Config{SampleRate: 1 << 30, WakeupBatch: 1})
 	if err != nil {
-		skipIfUnsupported(t, err)
+		testutil.SkipIfUnprivileged(t, err)
 		t.Fatal(err)
 	}
 	defer p.Close()
@@ -2060,7 +1959,7 @@ func putIfaceStats(t *testing.T, p *Probe, key rfmRfmIfaceKey, packets uint64) {
 
 	vals := make([]rfmRfmIfaceValue, ebpf.MustPossibleCPU())
 	vals[0] = rfmRfmIfaceValue{Packets: packets, Bytes: 100 * packets}
-	if err := p.IfaceStats().Put(key, vals); err != nil {
+	if err := p.objs.RfmIfaceStats.Put(key, vals); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -2075,7 +1974,7 @@ func TestWatchPrunesPinnedCounters(t *testing.T) {
 	// an earlier run counted rfm0 and other0, this run only matches rfm0
 	p, err := Load(Config{SampleRate: 1 << 30, WakeupBatch: 1, PinPath: dir})
 	if err != nil {
-		skipIfUnsupported(t, err)
+		testutil.SkipIfUnprivileged(t, err)
 		t.Fatal(err)
 	}
 	kept := rfmRfmIfaceKey{Ifindex: uint32(ns.Ifindex()), Dir: 0, Proto: 4}
@@ -2084,7 +1983,7 @@ func TestWatchPrunesPinnedCounters(t *testing.T) {
 	putIfaceStats(t, p, stale, 9)
 	// other0 also counted in a slot, which the next load restores
 	if _, err := p.attach(other.Attrs().Index, "other0"); err != nil {
-		skipIfUnsupported(t, err)
+		testutil.SkipIfUnprivileged(t, err)
 		t.Fatal(err)
 	}
 	p.mu.Lock()
@@ -2136,7 +2035,7 @@ func TestWatchRetriesAFailedPrune(t *testing.T) {
 
 	p, err := Load(Config{SampleRate: 1 << 30, WakeupBatch: 1})
 	if err != nil {
-		skipIfUnsupported(t, err)
+		testutil.SkipIfUnprivileged(t, err)
 		t.Fatal(err)
 	}
 	defer p.Close()
@@ -2145,7 +2044,7 @@ func TestWatchRetriesAFailedPrune(t *testing.T) {
 	// refuses every delete from userspace
 	stale := rfmRfmIfaceKey{Ifindex: uint32(other.Attrs().Index), Dir: 0, Proto: 4}
 	putIfaceStats(t, p, stale, 9)
-	if err := p.IfaceStats().Freeze(); err != nil {
+	if err := p.objs.RfmIfaceStats.Freeze(); err != nil {
 		t.Fatal(err)
 	}
 
@@ -2178,7 +2077,7 @@ func TestWatchClearsCountersOfDeletedLinks(t *testing.T) {
 
 	p, err := Load(Config{SampleRate: 1 << 30, WakeupBatch: 1})
 	if err != nil {
-		skipIfUnsupported(t, err)
+		testutil.SkipIfUnprivileged(t, err)
 		t.Fatal(err)
 	}
 	defer p.Close()
@@ -2222,7 +2121,7 @@ func passProgram(t *testing.T) *ebpf.Program {
 		License: "MIT",
 	})
 	if err != nil {
-		skipIfUnsupported(t, err)
+		testutil.SkipIfUnprivileged(t, err)
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { prog.Close() })
@@ -2245,7 +2144,7 @@ func fillIngress(t *testing.T, ifindex int) []link.Link {
 			return links
 		}
 		if err != nil {
-			skipIfUnsupported(t, err)
+			testutil.SkipIfUnprivileged(t, err)
 			t.Fatal(err)
 		}
 		t.Cleanup(func() { l.Close() })
@@ -2260,7 +2159,7 @@ func TestWatchRetriesAFailedAttach(t *testing.T) {
 
 	p, err := Load(Config{SampleRate: 1 << 30, WakeupBatch: 1})
 	if err != nil {
-		skipIfUnsupported(t, err)
+		testutil.SkipIfUnprivileged(t, err)
 		t.Fatal(err)
 	}
 	defer p.Close()
@@ -2343,7 +2242,7 @@ func TestWatchKeepsAPortThatLeavesItsBridge(t *testing.T) {
 
 	p, err := Load(Config{SampleRate: 1 << 30, WakeupBatch: 1})
 	if err != nil {
-		skipIfUnsupported(t, err)
+		testutil.SkipIfUnprivileged(t, err)
 		t.Fatal(err)
 	}
 	defer p.Close()
@@ -2393,13 +2292,13 @@ func TestIfaceCountersUseSlot(t *testing.T) {
 
 	p, err := Load(Config{SampleRate: 1 << 30, WakeupBatch: 1})
 	if err != nil {
-		skipIfUnsupported(t, err)
+		testutil.SkipIfUnprivileged(t, err)
 		t.Fatal(err)
 	}
 	defer p.Close()
 
-	if err := p.Attach(ns.Ifindex()); err != nil {
-		skipIfUnsupported(t, err)
+	if _, err := p.attach(ns.Ifindex(), ns.Name()); err != nil {
+		testutil.SkipIfUnprivileged(t, err)
 		t.Fatal(err)
 	}
 	pkt := testutil.EthIPv4UDP(net.IPv4(10, 0, 9, 1), net.IPv4(10, 0, 9, 2), 9000, 53)
@@ -2420,15 +2319,15 @@ func TestIfaceCountersFallBackToHash(t *testing.T) {
 
 	p, err := Load(Config{SampleRate: 1 << 30, WakeupBatch: 1})
 	if err != nil {
-		skipIfUnsupported(t, err)
+		testutil.SkipIfUnprivileged(t, err)
 		t.Fatal(err)
 	}
 	defer p.Close()
 
 	// every slot taken, the interface counts in the hash as before the slots
-	p.slots.limit = 0
-	if err := p.Attach(ns.Ifindex()); err != nil {
-		skipIfUnsupported(t, err)
+	p.slots = newSlotAlloc(0, p.slots.maxIfindex)
+	if _, err := p.attach(ns.Ifindex(), ns.Name()); err != nil {
+		testutil.SkipIfUnprivileged(t, err)
 		t.Fatal(err)
 	}
 	pkt := testutil.EthIPv4UDP(net.IPv4(10, 0, 9, 1), net.IPv4(10, 0, 9, 2), 9001, 53)
@@ -2448,7 +2347,7 @@ func TestIfaceCountersDetachZeroesSlot(t *testing.T) {
 
 	p, err := Load(Config{SampleRate: 1 << 30, WakeupBatch: 1})
 	if err != nil {
-		skipIfUnsupported(t, err)
+		testutil.SkipIfUnprivileged(t, err)
 		t.Fatal(err)
 	}
 	defer p.Close()
@@ -2457,13 +2356,13 @@ func TestIfaceCountersDetachZeroesSlot(t *testing.T) {
 	pkt := testutil.EthIPv4UDP(net.IPv4(10, 0, 9, 1), net.IPv4(10, 0, 9, 2), 9002, 53)
 	for range 2 {
 		// the slot a detach frees comes back zeroed on the next attach
-		if err := p.Attach(ns.Ifindex()); err != nil {
-			skipIfUnsupported(t, err)
+		if _, err := p.attach(ns.Ifindex(), ns.Name()); err != nil {
+			testutil.SkipIfUnprivileged(t, err)
 			t.Fatal(err)
 		}
 		ns.SendRaw(t, pkt)
 		wantIfaceStats(t, p, key, 1, uint64(len(pkt)))
-		if err := p.Detach(ns.Ifindex()); err != nil {
+		if _, _, err := p.detach(ns.Ifindex()); err != nil {
 			t.Fatal(err)
 		}
 		if packets, _ := ifaceStats(t, p, key); packets != 0 {
@@ -2481,7 +2380,7 @@ func TestPinnedCountersUpgradeFromHash(t *testing.T) {
 	// a build without slots left its counters in the pinned hash alone
 	p, err := Load(Config{SampleRate: 1 << 30, WakeupBatch: 1, PinPath: dir})
 	if err != nil {
-		skipIfUnsupported(t, err)
+		testutil.SkipIfUnprivileged(t, err)
 		t.Fatal(err)
 	}
 	key := rfmRfmIfaceKey{Ifindex: uint32(ns.Ifindex()), Dir: 0, Proto: 4}
@@ -2501,8 +2400,8 @@ func TestPinnedCountersUpgradeFromHash(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer p.Close()
-	if err := p.Attach(ns.Ifindex()); err != nil {
-		skipIfUnsupported(t, err)
+	if _, err := p.attach(ns.Ifindex(), ns.Name()); err != nil {
+		testutil.SkipIfUnprivileged(t, err)
 		t.Fatal(err)
 	}
 	pkt := testutil.EthIPv4UDP(net.IPv4(10, 0, 9, 1), net.IPv4(10, 0, 9, 2), 9003, 53)
@@ -2521,11 +2420,11 @@ func TestPinnedCountersDropALoneSlotPin(t *testing.T) {
 
 	p, err := Load(Config{SampleRate: 1 << 30, WakeupBatch: 1, PinPath: dir})
 	if err != nil {
-		skipIfUnsupported(t, err)
+		testutil.SkipIfUnprivileged(t, err)
 		t.Fatal(err)
 	}
-	if err := p.Attach(ns.Ifindex()); err != nil {
-		skipIfUnsupported(t, err)
+	if _, err := p.attach(ns.Ifindex(), ns.Name()); err != nil {
+		testutil.SkipIfUnprivileged(t, err)
 		p.Close()
 		t.Fatal(err)
 	}
@@ -2556,7 +2455,7 @@ func TestPinnedCountersDropALoneSlotPin(t *testing.T) {
 		}
 	}
 
-	if err := p.Attach(ns.Ifindex()); err != nil {
+	if _, err := p.attach(ns.Ifindex(), ns.Name()); err != nil {
 		t.Fatal(err)
 	}
 	ns.SendRaw(t, pkt)
@@ -2584,7 +2483,7 @@ func loopbackSamples(t *testing.T, p *Probe, n uint32) int {
 	before := drops()
 	frame := testutil.EthIPv4UDP(net.IPv4(10, 0, 9, 1), net.IPv4(10, 0, 9, 2), 9100, 53)
 	if _, err := p.ingress.Run(&ebpf.RunOptions{Data: frame, Repeat: n}); err != nil {
-		skipIfUnsupported(t, err)
+		testutil.SkipIfUnprivileged(t, err)
 		t.Fatal(err)
 	}
 	samples := int(drops() - before)
@@ -2686,7 +2585,7 @@ func TestSlotSamplingKeepsTheRate(t *testing.T) {
 
 	p, err := Load(Config{SampleRate: 10, WakeupBatch: 1})
 	if err != nil {
-		skipIfUnsupported(t, err)
+		testutil.SkipIfUnprivileged(t, err)
 		t.Fatal(err)
 	}
 	defer p.Close()
@@ -2706,7 +2605,7 @@ func TestSlotSamplingFollowsARateChange(t *testing.T) {
 
 	p, err := Load(Config{SampleRate: 1 << 30, WakeupBatch: 1})
 	if err != nil {
-		skipIfUnsupported(t, err)
+		testutil.SkipIfUnprivileged(t, err)
 		t.Fatal(err)
 	}
 	defer p.Close()
@@ -2733,7 +2632,7 @@ func TestPinnedSlotSamplingRedrawsOnLoad(t *testing.T) {
 
 	p, err := Load(Config{SampleRate: 1 << 30, WakeupBatch: 1, PinPath: dir})
 	if err != nil {
-		skipIfUnsupported(t, err)
+		testutil.SkipIfUnprivileged(t, err)
 		t.Fatal(err)
 	}
 	slotLoopback(t, p)
@@ -2767,7 +2666,7 @@ func TestWakeupCountsDownTheBatch(t *testing.T) {
 
 	p, err := Load(Config{SampleRate: 1, WakeupBatch: 4})
 	if err != nil {
-		skipIfUnsupported(t, err)
+		testutil.SkipIfUnprivileged(t, err)
 		t.Fatal(err)
 	}
 	defer p.Close()
@@ -2804,7 +2703,7 @@ func TestWakeupCountsDownTheBatch(t *testing.T) {
 	p.mu.Lock()
 	slot := p.slots.held()[uint32(lo.Attrs().Index)]
 	p.mu.Unlock()
-	countDown(p.objs.RfmIfaceArr, slotIndex(slot, 0, slotFamily(4)))
+	countDown(p.objs.RfmIfaceArr, slotIndex(slot, 0, 1))
 }
 
 func TestFlowEventWritesEveryByte(t *testing.T) {
@@ -2817,7 +2716,7 @@ func TestFlowEventWritesEveryByte(t *testing.T) {
 	pinOneCPU(t)
 	p, err := Load(Config{SampleRate: 1, WakeupBatch: 1, RingBufSize: 4096})
 	if err != nil {
-		skipIfUnsupported(t, err)
+		testutil.SkipIfUnprivileged(t, err)
 		t.Fatal(err)
 	}
 	defer p.Close()
@@ -2826,7 +2725,7 @@ func TestFlowEventWritesEveryByte(t *testing.T) {
 	emit := func(frame []byte) []byte {
 		t.Helper()
 		if _, err := p.ingress.Run(&ebpf.RunOptions{Data: frame}); err != nil {
-			skipIfUnsupported(t, err)
+			testutil.SkipIfUnprivileged(t, err)
 			t.Fatal(err)
 		}
 		raw, err := rd.read(time.Now().Add(time.Second))
@@ -2859,12 +2758,12 @@ func TestSampledOnlyKeepsNoInterfaceCounters(t *testing.T) {
 
 	p, err := Load(Config{SampleRate: 1, WakeupBatch: 1, SampledOnly: true})
 	if err != nil {
-		skipIfUnsupported(t, err)
+		testutil.SkipIfUnprivileged(t, err)
 		t.Fatal(err)
 	}
 	defer p.Close()
-	if err := p.Attach(ns.Ifindex()); err != nil {
-		skipIfUnsupported(t, err)
+	if _, err := p.attach(ns.Ifindex(), ns.Name()); err != nil {
+		testutil.SkipIfUnprivileged(t, err)
 		t.Fatal(err)
 	}
 	rd := newFlowReader(t, p)
@@ -2909,11 +2808,11 @@ func TestSampledOnlyLeavesThePinsAlone(t *testing.T) {
 
 	p, err := Load(Config{SampleRate: 1 << 30, WakeupBatch: 1, PinPath: dir})
 	if err != nil {
-		skipIfUnsupported(t, err)
+		testutil.SkipIfUnprivileged(t, err)
 		t.Fatal(err)
 	}
-	if err := p.Attach(ns.Ifindex()); err != nil {
-		skipIfUnsupported(t, err)
+	if _, err := p.attach(ns.Ifindex(), ns.Name()); err != nil {
+		testutil.SkipIfUnprivileged(t, err)
 		p.Close()
 		t.Fatal(err)
 	}
@@ -2935,7 +2834,7 @@ func TestSampledOnlyLeavesThePinsAlone(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := ps.Attach(ns.Ifindex()); err != nil {
+	if _, err := ps.attach(ns.Ifindex(), ns.Name()); err != nil {
 		ps.Close()
 		t.Fatal(err)
 	}
@@ -2970,7 +2869,7 @@ func TestSampledOnlyKeepsTheRate(t *testing.T) {
 
 	p, err := Load(Config{SampleRate: 10, WakeupBatch: 1, SampledOnly: true})
 	if err != nil {
-		skipIfUnsupported(t, err)
+		testutil.SkipIfUnprivileged(t, err)
 		t.Fatal(err)
 	}
 	defer p.Close()

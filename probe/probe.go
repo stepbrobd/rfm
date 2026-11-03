@@ -16,7 +16,6 @@ import (
 	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/link"
 	"github.com/vishvananda/netlink"
-	"golang.org/x/sys/unix"
 )
 
 // ifaceLinks are the two tcx links of one attached interface
@@ -353,17 +352,7 @@ func (p *Probe) Attached() []int {
 	return out
 }
 
-// Detach removes the programs from ifindex and drops its counters, so a
-// recreated interface starts from zero under its new index, Watch detaches
-// the links that go itself and only tests call Detach
-// detaching an interface that is not attached is not an error
-func (p *Probe) Detach(ifindex int) error {
-	_, _, err := p.detach(ifindex)
-	return err
-}
-
-// detach is Detach reporting the name the interface was attached under and
-// whether it was attached
+// detach removes the programs from ifindex and drops its counters, reporting its attach name and whether it was attached
 func (p *Probe) detach(ifindex int) (string, bool, error) {
 	p.mu.Lock()
 	l, ok := p.links[ifindex]
@@ -470,10 +459,6 @@ func nextGen(gen uint32) uint32 {
 	return gen
 }
 
-func (p *Probe) IfaceStats() *ebpf.Map {
-	return p.objs.RfmIfaceStats
-}
-
 // Counters returns the traffic the programs counted per interface,
 // direction and family, summed over CPUs and over the counter slot of the
 // interface and its hash entries, which hold what it counted without a slot,
@@ -577,43 +562,16 @@ func (p *Probe) FlowDrops() *ebpf.Map {
 	return p.objs.RfmFlowDrops
 }
 
-// Attach installs both programs on ifindex as TCX links, Watch attaches the
-// matching links itself and only tests call Attach
-// the ingress program is anchored at the head of the TCX chain and the egress
-// program at its tail, so the counters see every frame the interface received
-// before another program can drop or redirect it and every frame that is
-// about to leave after other programs had their say, both counted as wire
-// packets after segmentation, an egress frame before the qdisc, which may
-// still drop it
-// a link without an ethernet header is refused with ErrUnsupportedLink and a
-// link that does not exist with an error matching unix.ENODEV
-func (p *Probe) Attach(ifindex int) error {
-	l, err := netlink.LinkByIndex(ifindex)
-	if errors.As(err, new(netlink.LinkNotFoundError)) {
-		return fmt.Errorf("look up link %d: %w", ifindex, unix.ENODEV)
-	}
-	if err != nil {
-		return fmt.Errorf("look up link %d: %w", ifindex, err)
-	}
-	if err := checkLinkType(l.Attrs()); err != nil {
-		return err
-	}
-	_, err = p.attach(ifindex, l.Attrs().Name)
-	return err
-}
-
-// checkLinkType refuses a link whose frames do not start with an ethernet
-// header at the tc hooks, loopback frames carry one as well
+// checkLinkType refuses a link without an ethernet header at the tc hooks
 func checkLinkType(attrs *netlink.LinkAttrs) error {
 	switch attrs.EncapType {
 	case "ether", "loopback":
 		return nil
 	}
-	return fmt.Errorf("link type %s: %w", attrs.EncapType, ErrUnsupportedLink)
+	return fmt.Errorf("link type %s: %w", attrs.EncapType, errUnsupportedLink)
 }
 
-// attach is Attach reporting whether the interface was newly attached, name
-// is kept for the detach event
+// attach installs both programs on ifindex, keeps name for the detach event and reports whether it newly attached them
 func (p *Probe) attach(ifindex int, name string) (bool, error) {
 	p.mu.Lock()
 	_, attached := p.links[ifindex]
@@ -627,6 +585,7 @@ func (p *Probe) attach(ifindex int, name string) (bool, error) {
 		return false, err
 	}
 
+	// rfm runs first on the ingress tcx chain and last on the egress one
 	ing, err := link.AttachTCX(link.TCXOptions{
 		Interface: ifindex,
 		Program:   p.ingress,
