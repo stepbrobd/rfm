@@ -163,7 +163,7 @@ func TestScrapeSeriesMatchFlowsAndRollups(t *testing.T) {
 	want := map[id]float64{}
 	keyOf := func(ifindex uint32, dir, proto uint8, src, dst collector.Labels) string {
 		return labelString(map[string]string{
-			"ifname": "if" + strconv.Itoa(int(ifindex)), "direction": dirString(dir), "proto": strconv.Itoa(int(proto)),
+			"ifname": "if" + strconv.Itoa(int(ifindex)), "direction": collector.Direction(dir), "proto": strconv.Itoa(int(proto)),
 			"src_asn": formatASN(src.ASN), "dst_asn": formatASN(dst.ASN), "src_city": src.City, "dst_city": dst.City,
 		})
 	}

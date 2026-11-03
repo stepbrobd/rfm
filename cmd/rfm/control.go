@@ -136,7 +136,7 @@ func (h *controlHandler) FlowsTop(n int, by string) ([]ctl.FlowRow, error) {
 		key, entry := f.Key, f.FlowEntry
 		rows[i] = ctl.FlowRow{
 			Interface:  names.name(int(key.Ifindex)),
-			Direction:  direction(key.Dir),
+			Direction:  collector.Direction(key.Dir),
 			Proto:      key.Proto,
 			Src:        key.SrcAddr.Unmap(),
 			Dst:        key.DstAddr.Unmap(),
@@ -227,11 +227,4 @@ func ctlRoute(r rib.Route) ctl.Route {
 		out.LargeCommunities = append(out.LargeCommunities, fmt.Sprintf("%d:%d:%d", c.GlobalAdmin, c.LocalData1, c.LocalData2))
 	}
 	return out
-}
-
-func direction(dir uint8) string {
-	if dir == 0 {
-		return "ingress"
-	}
-	return "egress"
 }

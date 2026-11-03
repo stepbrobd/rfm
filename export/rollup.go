@@ -30,7 +30,7 @@ type tupleLabels struct {
 func newTupleLabels(ifname string, k collector.RollupKey) *tupleLabels {
 	l := &tupleLabels{ifname: ifname}
 	l.values = [len(flowLabelNames)]string{
-		dirString(k.Dir),
+		collector.Direction(k.Dir),
 		formatASN(k.Dst.ASN),
 		validLabel(k.Dst.City),
 		validLabel(ifname),

@@ -388,14 +388,6 @@ func familyString(proto uint8) string {
 	}
 }
 
-// dirString returns the human-readable direction label
-func dirString(dir uint8) string {
-	if dir == 0 {
-		return "ingress"
-	}
-	return "egress"
-}
-
 // formatASN formats an ASN as a string, returning empty string for zero
 func formatASN(asn uint32) string {
 	if asn == 0 {

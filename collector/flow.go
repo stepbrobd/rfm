@@ -76,6 +76,14 @@ type FlowKey struct {
 	DstPort uint16
 }
 
+// Direction returns the name of a Dir value
+func Direction(dir uint8) string {
+	if dir == 0 {
+		return "ingress"
+	}
+	return "egress"
+}
+
 // FlowEntry holds aggregated counters for a single flow
 // Packets and Bytes count what was sampled, EstPackets and EstBytes scale
 // every event by the sample rate in force when it was sampled, so they stay
