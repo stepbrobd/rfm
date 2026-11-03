@@ -298,6 +298,17 @@ rfm_count(__u32 ifindex, __u8 dir, __u8 iface_proto, __u32 segs, __u32 len)
 	return sval;
 }
 
+// out of line, the rare parse keeps the context off the per packet path
+static __noinline __u32 rfm_seg_hdr_len(struct __sk_buff *skb, void *l3,
+					void *end, __u16 eth_proto,
+					__u32 l3_off)
+{
+	struct sk_buff *k = bpf_cast_to_kern_ctx(skb);
+	return BPF_CORE_READ_BITFIELD(k, encapsulation) ?
+		       rfm_tunnel_hdr_len(skb, k) :
+		       rfm_hdr_len(skb, l3, end, eth_proto, l3_off);
+}
+
 // TC_ACT_OK would end the tcx chain, every exit returns TCX_NEXT
 // sampled_only is constant per entry point, clang specializes each
 static __always_inline int rfm_tc(struct __sk_buff *skb, __u8 dir,
@@ -363,11 +374,8 @@ static __always_inline int rfm_tc(struct __sk_buff *skb, __u8 dir,
 		__u32 hdr_len = 0;
 		if ((dir == RFM_DIR_INGRESS && segs > 1 && !ingress_wire) ||
 		    segs == 0) {
-			struct sk_buff *k = bpf_cast_to_kern_ctx(skb);
-			hdr_len = BPF_CORE_READ_BITFIELD(k, encapsulation) ?
-					  rfm_tunnel_hdr_len(skb, k) :
-					  rfm_hdr_len(skb, l3, end, eth_proto,
-						      l3_off);
+			hdr_len = rfm_seg_hdr_len(skb, l3, end, eth_proto,
+						  l3_off);
 			if (!hdr_len) {
 				__u32 err_key = 0;
 				__u64 *errs = bpf_map_lookup_elem(
