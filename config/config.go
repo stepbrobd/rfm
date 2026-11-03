@@ -162,14 +162,8 @@ type RIBConfig struct {
 	BMP BMPConfig `toml:"bmp"`
 }
 
-// Load reads the TOML config file at path, fills in the defaults and
-// validates it
-func Load(path string) (*Config, error) {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return nil, fmt.Errorf("reading config: %w", err)
-	}
-
+// Parse decodes a TOML config, fills in the defaults and validates it
+func Parse(data []byte) (*Config, error) {
 	cfg := &Config{Agent: AgentConfig{
 		BPF:        BPFConfig{SampleRate: 100, RingBufSize: 262144, WakeupBatch: 64, MaxSampleRate: 1000},
 		Collector:  CollectorConfig{MaxFlows: DefaultMaxFlows, EvictionTimeout: 30 * time.Second, ActiveTimeout: time.Minute},

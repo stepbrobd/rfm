@@ -2,7 +2,6 @@ package config
 
 import (
 	"os"
-	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -10,18 +9,8 @@ import (
 	"time"
 )
 
-func writeTOML(t *testing.T, content string) string {
-	t.Helper()
-	dir := t.TempDir()
-	path := filepath.Join(dir, "config.toml")
-	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	return path
-}
-
 func TestLoadFull(t *testing.T) {
-	path := writeTOML(t, `
+	data := []byte(`
 	[agent]
 	interfaces = ["eth0", "tailscale0"]
 
@@ -46,7 +35,7 @@ eviction_timeout = "10s"
 	port = 11019
 	`)
 
-	cfg, err := Load(path)
+	cfg, err := Parse(data)
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
@@ -87,12 +76,12 @@ eviction_timeout = "10s"
 }
 
 func TestLoadDefaults(t *testing.T) {
-	path := writeTOML(t, `
+	data := []byte(`
 [agent]
 interfaces = ["eth0"]
 `)
 
-	cfg, err := Load(path)
+	cfg, err := Parse(data)
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
@@ -127,7 +116,7 @@ interfaces = ["eth0"]
 }
 
 func TestLoadRIBBMPDefaultsHost(t *testing.T) {
-	path := writeTOML(t, `
+	data := []byte(`
 [agent]
 interfaces = ["eth0"]
 
@@ -135,7 +124,7 @@ interfaces = ["eth0"]
 port = 11019
 `)
 
-	cfg, err := Load(path)
+	cfg, err := Parse(data)
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
@@ -149,7 +138,7 @@ port = 11019
 }
 
 func TestLoadRIBBMPDefaultsPort(t *testing.T) {
-	path := writeTOML(t, `
+	data := []byte(`
 [agent]
 interfaces = ["eth0"]
 
@@ -157,7 +146,7 @@ interfaces = ["eth0"]
 host = "127.0.0.1"
 `)
 
-	cfg, err := Load(path)
+	cfg, err := Parse(data)
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
@@ -171,7 +160,7 @@ host = "127.0.0.1"
 }
 
 func TestLoadIPFIXDefaultsHost(t *testing.T) {
-	path := writeTOML(t, `
+	data := []byte(`
 [agent]
 interfaces = ["eth0"]
 
@@ -179,7 +168,7 @@ interfaces = ["eth0"]
 port = 4739
 `)
 
-	cfg, err := Load(path)
+	cfg, err := Parse(data)
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
@@ -193,7 +182,7 @@ port = 4739
 }
 
 func TestLoadIPFIXDefaultsPort(t *testing.T) {
-	path := writeTOML(t, `
+	data := []byte(`
 [agent]
 interfaces = ["eth0"]
 
@@ -201,7 +190,7 @@ interfaces = ["eth0"]
 host = "127.0.0.1"
 `)
 
-	cfg, err := Load(path)
+	cfg, err := Parse(data)
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
@@ -215,7 +204,7 @@ host = "127.0.0.1"
 }
 
 func TestLoadIPFIXBind(t *testing.T) {
-	path := writeTOML(t, `
+	data := []byte(`
 [agent]
 interfaces = ["eth0"]
 
@@ -228,7 +217,7 @@ host = "192.0.2.20"
 port = 0
 `)
 
-	cfg, err := Load(path)
+	cfg, err := Parse(data)
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
@@ -242,33 +231,33 @@ port = 0
 }
 
 func TestLoadMissingInterfaces(t *testing.T) {
-	path := writeTOML(t, `
+	data := []byte(`
 [agent]
 
 [agent.bpf]
 sample_rate = 100
 `)
 
-	_, err := Load(path)
+	_, err := Parse(data)
 	if err == nil {
 		t.Fatal("expected error for missing interfaces")
 	}
 }
 
 func TestLoadEmptyInterfaces(t *testing.T) {
-	path := writeTOML(t, `
+	data := []byte(`
 [agent]
 interfaces = []
 `)
 
-	_, err := Load(path)
+	_, err := Parse(data)
 	if err == nil {
 		t.Fatal("expected error for empty interfaces")
 	}
 }
 
 func TestLoadBadSampleRate(t *testing.T) {
-	path := writeTOML(t, `
+	data := []byte(`
 [agent]
 interfaces = ["eth0"]
 
@@ -276,21 +265,21 @@ interfaces = ["eth0"]
 sample_rate = 0
 `)
 
-	_, err := Load(path)
+	_, err := Parse(data)
 	if err == nil {
 		t.Fatal("expected error for sample_rate=0")
 	}
 }
 
 func TestLoadWakeupBatch(t *testing.T) {
-	path := writeTOML(t, `
+	data := []byte(`
 [agent]
 interfaces = ["eth0"]
 
 [agent.bpf]
 wakeup_batch = 256
 `)
-	cfg, err := Load(path)
+	cfg, err := Parse(data)
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
@@ -300,14 +289,14 @@ wakeup_batch = 256
 }
 
 func TestLoadIfaceStatsSize(t *testing.T) {
-	path := writeTOML(t, `
+	data := []byte(`
 [agent]
 interfaces = ["eth0"]
 
 [agent.bpf]
 iface_stats_size = 8192
 `)
-	cfg, err := Load(path)
+	cfg, err := Parse(data)
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
@@ -317,11 +306,11 @@ iface_stats_size = 8192
 }
 
 func TestLoadIfaceStatsSizeDefault(t *testing.T) {
-	path := writeTOML(t, `
+	data := []byte(`
 [agent]
 interfaces = ["eth0"]
 `)
-	cfg, err := Load(path)
+	cfg, err := Parse(data)
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
@@ -331,33 +320,33 @@ interfaces = ["eth0"]
 }
 
 func TestLoadNegativeIfaceStatsSize(t *testing.T) {
-	path := writeTOML(t, `
+	data := []byte(`
 [agent]
 interfaces = ["eth0"]
 
 [agent.bpf]
 iface_stats_size = -1
 `)
-	if _, err := Load(path); err == nil {
+	if _, err := Parse(data); err == nil {
 		t.Fatal("expected error for negative iface_stats_size")
 	}
 }
 
 func TestLoadZeroWakeupBatch(t *testing.T) {
-	path := writeTOML(t, `
+	data := []byte(`
 [agent]
 interfaces = ["eth0"]
 
 [agent.bpf]
 wakeup_batch = 0
 `)
-	if _, err := Load(path); err == nil {
+	if _, err := Parse(data); err == nil {
 		t.Fatal("expected error for wakeup_batch = 0")
 	}
 }
 
 func TestLoadRingBufSizeMustBePowerOfTwo(t *testing.T) {
-	path := writeTOML(t, `
+	data := []byte(`
 [agent]
 interfaces = ["eth0"]
 
@@ -365,14 +354,14 @@ interfaces = ["eth0"]
 ring_buf_size = 12345
 `)
 
-	_, err := Load(path)
+	_, err := Parse(data)
 	if err == nil {
 		t.Fatal("expected error for non-power-of-two ring_buf_size")
 	}
 }
 
 func TestLoadAdaptiveSampling(t *testing.T) {
-	path := writeTOML(t, `
+	data := []byte(`
 [agent]
 interfaces = ["eth0"]
 
@@ -382,7 +371,7 @@ adaptive_sampling = true
 max_sample_rate = 640
 `)
 
-	cfg, err := Load(path)
+	cfg, err := Parse(data)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -395,7 +384,7 @@ max_sample_rate = 640
 }
 
 func TestLoadControlSocket(t *testing.T) {
-	path := writeTOML(t, `
+	data := []byte(`
 [agent]
 interfaces = ["eth0"]
 
@@ -403,7 +392,7 @@ interfaces = ["eth0"]
 socket = "/run/rfm/rfm.sock"
 `)
 
-	cfg, err := Load(path)
+	cfg, err := Parse(data)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -413,12 +402,12 @@ socket = "/run/rfm/rfm.sock"
 }
 
 func TestLoadControlSocketDefaultsOff(t *testing.T) {
-	path := writeTOML(t, `
+	data := []byte(`
 [agent]
 interfaces = ["eth0"]
 `)
 
-	cfg, err := Load(path)
+	cfg, err := Parse(data)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -428,7 +417,7 @@ interfaces = ["eth0"]
 }
 
 func TestLoadPinPath(t *testing.T) {
-	path := writeTOML(t, `
+	data := []byte(`
 [agent]
 interfaces = ["eth0"]
 
@@ -436,7 +425,7 @@ interfaces = ["eth0"]
 pin_path = "/sys/fs/bpf/rfm"
 `)
 
-	cfg, err := Load(path)
+	cfg, err := Parse(data)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -446,11 +435,11 @@ pin_path = "/sys/fs/bpf/rfm"
 }
 
 func TestLoadSampledOnly(t *testing.T) {
-	path := writeTOML(t, `
+	data := []byte(`
 [agent]
 interfaces = ["eth0"]
 `)
-	cfg, err := Load(path)
+	cfg, err := Parse(data)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -458,14 +447,14 @@ interfaces = ["eth0"]
 		t.Fatal("sampled_only = true, want false by default")
 	}
 
-	path = writeTOML(t, `
+	data = []byte(`
 [agent]
 interfaces = ["eth0"]
 
 [agent.bpf]
 sampled_only = true
 `)
-	if cfg, err = Load(path); err != nil {
+	if cfg, err = Parse(data); err != nil {
 		t.Fatal(err)
 	}
 	if !cfg.Agent.BPF.SampledOnly {
@@ -474,12 +463,12 @@ sampled_only = true
 }
 
 func TestLoadAdaptiveSamplingDefaults(t *testing.T) {
-	path := writeTOML(t, `
+	data := []byte(`
 [agent]
 interfaces = ["eth0"]
 `)
 
-	cfg, err := Load(path)
+	cfg, err := Parse(data)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -492,7 +481,7 @@ interfaces = ["eth0"]
 }
 
 func TestLoadMaxSampleRateBelowSampleRate(t *testing.T) {
-	path := writeTOML(t, `
+	data := []byte(`
 [agent]
 interfaces = ["eth0"]
 
@@ -500,7 +489,7 @@ interfaces = ["eth0"]
 sample_rate = 2000
 `)
 
-	if _, err := Load(path); err == nil {
+	if _, err := Parse(data); err == nil {
 		t.Fatal("expected error for max_sample_rate below sample_rate")
 	}
 }
@@ -509,15 +498,15 @@ func TestLoadRingBufSizeMustBePageMultiple(t *testing.T) {
 	// a power of two below the page size passes the power of two check but
 	// the kernel would still refuse it
 	size := os.Getpagesize() / 2
-	path := writeTOML(t, `
+	data := []byte(`
 [agent]
 interfaces = ["eth0"]
 
 [agent.bpf]
-ring_buf_size = `+strconv.Itoa(size)+`
+ring_buf_size = ` + strconv.Itoa(size) + `
 `)
 
-	_, err := Load(path)
+	_, err := Parse(data)
 	if err == nil {
 		t.Fatal("expected error for ring_buf_size below the page size")
 	}
@@ -527,7 +516,7 @@ ring_buf_size = `+strconv.Itoa(size)+`
 }
 
 func TestLoadActiveTimeout(t *testing.T) {
-	path := writeTOML(t, `
+	data := []byte(`
 [agent]
 interfaces = ["eth0"]
 
@@ -535,7 +524,7 @@ interfaces = ["eth0"]
 active_timeout = "2m"
 `)
 
-	cfg, err := Load(path)
+	cfg, err := Parse(data)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -545,12 +534,12 @@ active_timeout = "2m"
 }
 
 func TestLoadActiveTimeoutDefault(t *testing.T) {
-	path := writeTOML(t, `
+	data := []byte(`
 [agent]
 interfaces = ["eth0"]
 `)
 
-	cfg, err := Load(path)
+	cfg, err := Parse(data)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -560,7 +549,7 @@ interfaces = ["eth0"]
 }
 
 func TestLoadActiveTimeoutZeroDisables(t *testing.T) {
-	path := writeTOML(t, `
+	data := []byte(`
 [agent]
 interfaces = ["eth0"]
 
@@ -568,7 +557,7 @@ interfaces = ["eth0"]
 active_timeout = "0s"
 `)
 
-	cfg, err := Load(path)
+	cfg, err := Parse(data)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -578,7 +567,7 @@ active_timeout = "0s"
 }
 
 func TestLoadSubSecondActiveTimeout(t *testing.T) {
-	path := writeTOML(t, `
+	data := []byte(`
 [agent]
 interfaces = ["eth0"]
 
@@ -586,13 +575,13 @@ interfaces = ["eth0"]
 active_timeout = "500ms"
 `)
 
-	if _, err := Load(path); err == nil {
+	if _, err := Parse(data); err == nil {
 		t.Fatal("expected error for sub-second active_timeout")
 	}
 }
 
 func TestLoadBadEvictionTimeout(t *testing.T) {
-	path := writeTOML(t, `
+	data := []byte(`
 [agent]
 interfaces = ["eth0"]
 
@@ -600,14 +589,14 @@ interfaces = ["eth0"]
 eviction_timeout = "notaduration"
 `)
 
-	_, err := Load(path)
+	_, err := Parse(data)
 	if err == nil {
 		t.Fatal("expected error for unparseable eviction_timeout")
 	}
 }
 
 func TestLoadSubSecondEvictionTimeout(t *testing.T) {
-	path := writeTOML(t, `
+	data := []byte(`
 [agent]
 interfaces = ["eth0"]
 
@@ -615,7 +604,7 @@ interfaces = ["eth0"]
 eviction_timeout = "1ns"
 `)
 
-	_, err := Load(path)
+	_, err := Parse(data)
 	if err == nil {
 		t.Fatal("expected error for sub-second eviction_timeout")
 	}
@@ -623,15 +612,15 @@ eviction_timeout = "1ns"
 
 func TestLoadBadPort(t *testing.T) {
 	for _, port := range []int{0, -1, 70000} {
-		path := writeTOML(t, `
+		data := []byte(`
 [agent]
 interfaces = ["eth0"]
 
 [agent.prometheus]
-port = `+strconv.Itoa(port)+`
+port = ` + strconv.Itoa(port) + `
 `)
 
-		_, err := Load(path)
+		_, err := Parse(data)
 		if err == nil {
 			t.Fatalf("expected error for port=%d", port)
 		}
@@ -640,16 +629,16 @@ port = `+strconv.Itoa(port)+`
 
 func TestLoadBadIPFIXPort(t *testing.T) {
 	for _, port := range []int{-1, 70000} {
-		path := writeTOML(t, `
+		data := []byte(`
 [agent]
 interfaces = ["eth0"]
 
 [agent.ipfix]
 host = "127.0.0.1"
-port = `+strconv.Itoa(port)+`
+port = ` + strconv.Itoa(port) + `
 `)
 
-		_, err := Load(path)
+		_, err := Parse(data)
 		if err == nil {
 			t.Fatalf("expected error for ipfix port=%d", port)
 		}
@@ -658,7 +647,7 @@ port = `+strconv.Itoa(port)+`
 
 func TestLoadBadIPFIXBindPort(t *testing.T) {
 	for _, port := range []int{-1, 70000} {
-		path := writeTOML(t, `
+		data := []byte(`
 [agent]
 interfaces = ["eth0"]
 
@@ -668,10 +657,10 @@ port = 4739
 
 [agent.ipfix.bind]
 host = "127.0.0.1"
-port = `+strconv.Itoa(port)+`
+port = ` + strconv.Itoa(port) + `
 `)
 
-		_, err := Load(path)
+		_, err := Parse(data)
 		if err == nil {
 			t.Fatalf("expected error for ipfix.bind.port=%d", port)
 		}
@@ -679,7 +668,7 @@ port = `+strconv.Itoa(port)+`
 }
 
 func TestLoadIPFIXTemplateRefreshAndODID(t *testing.T) {
-	path := writeTOML(t, `
+	data := []byte(`
 [agent]
 interfaces = ["eth0"]
 
@@ -690,7 +679,7 @@ template_refresh = "30s"
 observation_domain_id = 42
 `)
 
-	cfg, err := Load(path)
+	cfg, err := Parse(data)
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
@@ -703,12 +692,12 @@ observation_domain_id = 42
 }
 
 func TestLoadIPFIXDefaultsTemplateRefreshAndODID(t *testing.T) {
-	path := writeTOML(t, `
+	data := []byte(`
 [agent]
 interfaces = ["eth0"]
 `)
 
-	cfg, err := Load(path)
+	cfg, err := Parse(data)
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
@@ -721,7 +710,7 @@ interfaces = ["eth0"]
 }
 
 func TestLoadIPFIXQueueDefaults(t *testing.T) {
-	path := writeTOML(t, `
+	data := []byte(`
 [agent]
 interfaces = ["eth0"]
 
@@ -729,7 +718,7 @@ interfaces = ["eth0"]
 host = "127.0.0.1"
 `)
 
-	cfg, err := Load(path)
+	cfg, err := Parse(data)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -743,7 +732,7 @@ host = "127.0.0.1"
 }
 
 func TestLoadIPFIXQueueFloor(t *testing.T) {
-	path := writeTOML(t, `
+	data := []byte(`
 [agent]
 interfaces = ["eth0"]
 
@@ -754,7 +743,7 @@ max_flows = 100
 host = "127.0.0.1"
 `)
 
-	cfg, err := Load(path)
+	cfg, err := Parse(data)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -767,21 +756,21 @@ func TestLoadMaxFlowsMustBePositive(t *testing.T) {
 	// the flow table, the label tuples and the ipfix queue are all sized by
 	// max_flows, none of them has an unlimited size
 	for _, n := range []int{0, -1} {
-		path := writeTOML(t, `
+		data := []byte(`
 [agent]
 interfaces = ["eth0"]
 
 [agent.collector]
-max_flows = `+strconv.Itoa(n)+`
+max_flows = ` + strconv.Itoa(n) + `
 `)
-		if _, err := Load(path); err == nil || !strings.Contains(err.Error(), "max_flows must be > 0") {
+		if _, err := Parse(data); err == nil || !strings.Contains(err.Error(), "max_flows must be > 0") {
 			t.Fatalf("max_flows = %d: %v, want it refused", n, err)
 		}
 	}
 }
 
 func TestLoadIPFIXMaxMessageSize(t *testing.T) {
-	path := writeTOML(t, `
+	data := []byte(`
 [agent]
 interfaces = ["eth0"]
 
@@ -790,7 +779,7 @@ host = "127.0.0.1"
 max_message_size = 512
 `)
 
-	cfg, err := Load(path)
+	cfg, err := Parse(data)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -805,15 +794,15 @@ func TestLoadBadIPFIXMaxMessageSize(t *testing.T) {
 		"max_message_size = 64",
 		"max_message_size = 70000",
 	} {
-		path := writeTOML(t, `
+		data := []byte(`
 [agent]
 interfaces = ["eth0"]
 
 [agent.ipfix]
 host = "127.0.0.1"
-`+body+`
+` + body + `
 `)
-		if _, err := Load(path); err == nil {
+		if _, err := Parse(data); err == nil {
 			t.Fatalf("expected error for %s", body)
 		}
 	}
@@ -823,22 +812,22 @@ func TestLoadIPFIXMaxMessageSizeFloor(t *testing.T) {
 	// the sender puts at least one record in a message, with the template
 	// of its family when that is due, so a smaller limit cannot hold
 	for size, ok := range map[int]bool{MinIPFIXMaxMessageSize - 1: false, MinIPFIXMaxMessageSize: true} {
-		path := writeTOML(t, `
+		data := []byte(`
 [agent]
 interfaces = ["eth0"]
 
 [agent.ipfix]
 host = "127.0.0.1"
-max_message_size = `+strconv.Itoa(size)+`
+max_message_size = ` + strconv.Itoa(size) + `
 `)
-		if _, err := Load(path); (err == nil) != ok {
+		if _, err := Parse(data); (err == nil) != ok {
 			t.Fatalf("max_message_size = %d: %v, want accepted %v", size, err, ok)
 		}
 	}
 }
 
 func TestLoadBadIPFIXTemplateRefresh(t *testing.T) {
-	path := writeTOML(t, `
+	data := []byte(`
 [agent]
 interfaces = ["eth0"]
 
@@ -846,13 +835,13 @@ interfaces = ["eth0"]
 template_refresh = "notaduration"
 `)
 
-	if _, err := Load(path); err == nil {
+	if _, err := Parse(data); err == nil {
 		t.Fatal("expected error for unparseable template_refresh")
 	}
 }
 
 func TestLoadSubSecondIPFIXTemplateRefresh(t *testing.T) {
-	path := writeTOML(t, `
+	data := []byte(`
 [agent]
 interfaces = ["eth0"]
 
@@ -860,13 +849,13 @@ interfaces = ["eth0"]
 template_refresh = "100ms"
 `)
 
-	if _, err := Load(path); err == nil {
+	if _, err := Parse(data); err == nil {
 		t.Fatal("expected error for sub-second template_refresh")
 	}
 }
 
 func TestLoadZeroIPFIXObservationDomainID(t *testing.T) {
-	path := writeTOML(t, `
+	data := []byte(`
 [agent]
 interfaces = ["eth0"]
 
@@ -874,13 +863,13 @@ interfaces = ["eth0"]
 observation_domain_id = 0
 `)
 
-	if _, err := Load(path); err == nil {
+	if _, err := Parse(data); err == nil {
 		t.Fatal("expected error for observation_domain_id = 0")
 	}
 }
 
 func TestLoadIPFIXBindWithoutCollector(t *testing.T) {
-	path := writeTOML(t, `
+	data := []byte(`
 [agent]
 interfaces = ["eth0"]
 
@@ -888,16 +877,9 @@ interfaces = ["eth0"]
 host = "127.0.0.1"
 `)
 
-	_, err := Load(path)
+	_, err := Parse(data)
 	if err == nil {
 		t.Fatal("expected error for ipfix.bind without collector")
-	}
-}
-
-func TestLoadNonexistentFile(t *testing.T) {
-	_, err := Load("/tmp/does-not-exist-rfm-config.toml")
-	if err == nil {
-		t.Fatal("expected error for nonexistent file")
 	}
 }
 
@@ -946,25 +928,25 @@ func TestUnmatchedPatterns(t *testing.T) {
 }
 
 func TestLoadUnknownKey(t *testing.T) {
-	path := writeTOML(t, `
+	data := []byte(`
 [agent]
 interfaces = ["eth0"]
 
 [agent.bpf]
 sample_rte = 1
 `)
-	_, err := Load(path)
+	_, err := Parse(data)
 	if err == nil {
 		t.Fatal("expected error for unknown key sample_rte")
 	}
 }
 
 func TestLoadInvalidInterfaceRegex(t *testing.T) {
-	path := writeTOML(t, `
+	data := []byte(`
 [agent]
 interfaces = ["["]
 `)
-	if _, err := Load(path); err == nil {
+	if _, err := Parse(data); err == nil {
 		t.Fatal("expected error for invalid interface regex")
 	}
 }

@@ -16,7 +16,7 @@ import (
 )
 
 // testIPFIXConfig returns an IPFIXConfig with sane defaults filled in
-// the agent gets these from config.Load, but tests construct the config directly
+// the agent gets these from config.Parse, but tests construct the config directly
 func testIPFIXConfig(host string, port int) config.IPFIXConfig {
 	return config.IPFIXConfig{
 		Host:                host,

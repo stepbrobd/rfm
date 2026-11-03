@@ -95,13 +95,13 @@ func (p kernelProbe) Events() (collector.Reader, error) {
 // runAgent runs the agent the file at path configures until ctx is done
 func runAgent(ctx context.Context, path string, deps agentDeps) error {
 	started := time.Now()
-	cfg, err := config.Load(path)
-	if err != nil {
-		return err
-	}
 	cfgText, err := os.ReadFile(path)
 	if err != nil {
 		return fmt.Errorf("reading config: %w", err)
+	}
+	cfg, err := config.Parse(cfgText)
+	if err != nil {
+		return err
 	}
 
 	// the watcher attaches the interfaces, those up now from its first link
@@ -176,6 +176,7 @@ func runAgent(ctx context.Context, path string, deps agentDeps) error {
 		if err != nil {
 			return fmt.Errorf("init ipfix exporter: %w", err)
 		}
+		defer ipfixExp.Close()
 		c.SetFlowExporter(ipfixExp)
 		if cfg.Agent.IPFIX.Bind.Enabled() {
 			log.Info("ipfix exporter", "addr", cfg.Agent.IPFIX.Addr(), "bind", cfg.Agent.IPFIX.Bind.Addr())
