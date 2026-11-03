@@ -41,10 +41,6 @@ Current scope:
 - Unix socket control plane with birdc style subcommands
 - NixOS module and VM tests
 
-Planned:
-
-- XDP firewall fast path features?
-
 RFM daemon (`rfm agent`) loads eBPF programs, collects flow events in userspace,
 and serves Prometheus metrics over HTTP.
 
@@ -601,8 +597,8 @@ Screenshot from
 
 ![IPFIX](grafana/ipfix.jpg)
 
-The provided dashboard example is intentionally a starting point, not a finished
-observability product. The current dashboard covers the basic operational views:
+The bundled dashboard is a starting point and a reference layout for the metrics
+RFM exports. Its panels show:
 
 - aggregate ingress and egress traffic
 - per-interface traffic breakdown
@@ -610,16 +606,13 @@ observability product. The current dashboard covers the basic operational views:
 - ASN and city summaries
 - collector health and error panels
 
-The exporter already exposes enough structure to build more visualizations than
-the bundled dashboard currently shows. The shipped dashboard should be treated
-as a reference layout for the current metric set, not as the limit of what can
-be derived from RFM data in Grafana.
-
 ## CLI
 
-`rfm agent` runs the daemon and `rfm version` prints the version. The other
-subcommands talk to a running agent over its control socket (`--socket`, default
-`/run/rfm/rfm.sock`) and print tables, or JSON with `--json`:
+`rfm agent` runs the daemon, `rfm version` prints the version and
+`rfm completion <shell>` prints a completion script for bash, zsh, fish or
+PowerShell. The other subcommands talk to a running agent over its control
+socket (`--socket`, default `/run/rfm/rfm.sock`) and print tables, or JSON with
+`--json`:
 
 - `rfm status`: version, uptime, attached interfaces, sample rate, flow table
   with ring drops, forced evictions and folded flows, IPFIX with the records
@@ -712,16 +705,14 @@ information that most small deployments never query. Operators who need TCP flag
 analysis, QoS-aware accounting, or deep header inspection should consider ntopng
 or pmacct (or other solutions) instead.
 
-Prometheus flow gauges only includes (intentionally) enrichment labels
-(interface, direction, protocol, ASN, city). Source and destination ports are
-not included as Prometheus labels. With `max_flows` defaulting to 65536 and
-ephemeral source ports ranging from 32768 to 60999, adding port labels would
-create maybe 10k+ unique time series per scrape interval, most of which are seen
-once and never again. This kind of high cardinality churn is expensive for
-Prometheus to ingest and store. Port level flow records are available through
-IPFIX push path, where a downstream collector (goflow2 or similar, or flow
-collector platforms with IPFIX support like Cloudflare Magic Network Monitoring)
-is better suited to handle them.
+The Prometheus flow metrics carry only the enrichment labels (interface,
+direction, protocol, ASN, city) on purpose and leave out source and destination
+ports. With port labels, a flow from each new ephemeral source port (32768 to
+60999 by default on Linux) would start its own series, up to `max_flows` (65536
+by default) per scrape, and most of them would appear once. This kind of high
+cardinality churn is expensive for Prometheus to ingest and store. Port level
+flow records go out over IPFIX instead, to a collector built to store them, such
+as goflow2 or Cloudflare Magic Network Monitoring.
 
 ## Comparison
 
