@@ -17,18 +17,13 @@
 #define NEXTHDR_AUTH 51
 #define NEXTHDR_DEST 60
 
-// RFM_IPV6_EXTHDRS bounds the IPv6 extension header walk, RFC 8200 orders
-// at most six of them in front of the upper layer header
+// rfc 8200 puts at most six extension headers before the upper layer header
 #define RFM_IPV6_EXTHDRS 6
 
-// RFM_SEG_HDR_MIN is the smallest network and transport header a segment
-// carries, IPv4 and UDP
+// smallest network and transport header of a segment, ipv4 and udp
 #define RFM_SEG_HDR_MIN 28
 
-// RFM_DIRECT_OFF_MAX bounds the network header length up to which the
-// transport header is read straight from the linear data, the verifier then
-// checks a single bounded offset, a longer chain of extension headers or a
-// transport header outside the linear data takes bpf_skb_load_bytes
+// longest network header read directly, one bounded offset for the verifier
 #define RFM_DIRECT_OFF_MAX 255
 
 struct rfm_vlan_hdr {
@@ -36,9 +31,6 @@ struct rfm_vlan_hdr {
 	__u16 encap_proto;
 };
 
-// rfm_cfg is set by Load before the programs attach and its rate by
-// SetSampleRate at run time, a global is a direct load where a map needs a
-// lookup call
 struct rfm_config rfm_cfg;
 
 struct {
@@ -48,9 +40,7 @@ struct {
 	__type(value, struct rfm_iface_value);
 } rfm_iface_stats SEC(".maps");
 
-// rfm_iface_slot holds 1 + the counter slot userspace assigned an ifindex,
-// 0 for none, an array lookup the verifier inlines where the hash needs a
-// helper call and a key hash on every packet
+// 1 + the counter slot of an ifindex, 0 for none
 struct {
 	__uint(type, BPF_MAP_TYPE_ARRAY);
 	__uint(max_entries, RFM_SLOT_IFINDEX_MAX);
@@ -58,8 +48,7 @@ struct {
 	__type(value, __u32);
 } rfm_iface_slot SEC(".maps");
 
-// rfm_iface_arr holds the counters of the slotted interfaces at
-// slot * 2 * RFM_FAMILIES + dir * RFM_FAMILIES + family
+// counters at slot * 2 * RFM_FAMILIES + dir * RFM_FAMILIES + family
 struct {
 	__uint(type, BPF_MAP_TYPE_PERCPU_ARRAY);
 	__uint(max_entries, RFM_SLOTS * 2 * RFM_FAMILIES);
@@ -75,8 +64,7 @@ struct {
 	__type(value, struct rfm_slot_value);
 } rfm_cpu_draw SEC(".maps");
 
-// rfm_iface_errors counts the counter updates rfm_iface_stats refused, a
-// full map is the usual cause and leaves the traffic of the new key uncounted
+// counter updates rfm_iface_stats refused
 struct {
 	__uint(type, BPF_MAP_TYPE_PERCPU_ARRAY);
 	__uint(max_entries, 1);
@@ -84,10 +72,7 @@ struct {
 	__type(value, __u64);
 } rfm_iface_errors SEC(".maps");
 
-// rfm_gso_hdr_errors counts the GSO skbs whose headers rfm_hdr_len cannot
-// parse where the counts need them, an ingress one is counted without the
-// header bytes of its extra segments, and either is one packet when it
-// carries no segment count
+// gso skbs counted without the header size their counts needed
 struct {
 	__uint(type, BPF_MAP_TYPE_PERCPU_ARRAY);
 	__uint(max_entries, 1);
@@ -95,9 +80,7 @@ struct {
 	__type(value, __u64);
 } rfm_gso_hdr_errors SEC(".maps");
 
-// rfm_flow_rings holds a ring per CPU, Load sizes it to the possible CPUs
-// and puts the rings in, a program reserves in the ring of the CPU it runs
-// on, so the CPUs never contend for one ring's lock
+// a ring per possible CPU, indexed by CPU id, filled by Load
 struct {
 	__uint(type, BPF_MAP_TYPE_ARRAY_OF_MAPS);
 	__uint(max_entries, 1);
@@ -116,29 +99,19 @@ struct {
 	__type(value, __u64);
 } rfm_flow_drops SEC(".maps");
 
-// the IPv4 IHL and the TCP data offset are read as nibbles of whole bytes,
-// bpfgen compiles the bpfel and the bpfeb object against one vmlinux.h, and
-// the iphdr and tcphdr bitfields of that header fit only one byte order
+// one vmlinux.h serves both byte orders, its bitfields fit only one
 static __always_inline __u32 rfm_ipv4_hdr_len(struct iphdr *ip)
 {
 	return (__u32)(*(__u8 *)ip & 0x0f) << 2;
 }
 
-// off_byte is byte 12 of the TCP header
-static __always_inline __u32 rfm_tcp_hdr_len(__u8 off_byte)
+static __always_inline __u32 rfm_tcp_hdr_len(__u8 doff_byte)
 {
-	return (__u32)(off_byte >> 4) << 2;
+	return (__u32)(doff_byte >> 4) << 2;
 }
 
-// rfm_l4 returns the offset of the upper layer header from the IP header at
-// l3, which sits l3_off bytes into the packet, IPv6 extension headers
-// included, and 0 when the IP header cannot be read
-// proto is set to the upper layer protocol and later_frag to whether the
-// packet is a later fragment, which carries no transport header, a chain of
-// more than RFM_IPV6_EXTHDRS extension headers or one that ends early leaves
-// proto at the extension header the walk stopped at
-// the walk reads through bpf_skb_load_bytes, a packet pointer at a variable
-// offset would have the verifier track every combination of header lengths
+// rfm_l4 returns the upper layer offset from l3, 0 when the ip header is short
+// a helper walk, variable packet offsets would multiply verifier states
 static __always_inline __u32 rfm_l4(struct __sk_buff *skb, void *l3, void *end,
 				    __u32 l3_off, __u16 eth_proto, __u8 *proto,
 				    bool *later_frag)
@@ -170,26 +143,26 @@ static __always_inline __u32 rfm_l4(struct __sk_buff *skb, void *l3, void *end,
 		    next != NEXTHDR_DEST)
 			break;
 
-		// the first byte of every extension header names the next
-		// header and the second holds the length, the fragment header
-		// keeps its offset in the top 13 bits of bytes 2 and 3
-		__u8 h[4];
-		if (bpf_skb_load_bytes(skb, l3_off + off, h, sizeof(h)))
+		struct {
+			__u8 next, len;
+			__u8 frag_off[2];
+		} h;
+		if (bpf_skb_load_bytes(skb, l3_off + off, &h, sizeof(h)))
 			break;
 
 		__u8 cur = next;
-		next = h[0];
+		next = h.next;
 		if (cur == NEXTHDR_FRAGMENT) {
 			off += 8;
-			// only the first fragment goes on to the transport header
-			if (h[2] || (h[3] & 0xf8)) {
+			// only the first fragment carries the transport header
+			if (h.frag_off[0] || (h.frag_off[1] & 0xf8)) {
 				*later_frag = true;
 				break;
 			}
 		} else if (cur == NEXTHDR_AUTH) {
-			off += ((__u32)h[1] + 2) << 2;
+			off += ((__u32)h.len + 2) << 2;
 		} else {
-			off += ((__u32)h[1] + 1) << 3;
+			off += ((__u32)h.len + 1) << 3;
 		}
 	}
 
@@ -197,11 +170,7 @@ static __always_inline __u32 rfm_l4(struct __sk_buff *skb, void *l3, void *end,
 	return off;
 }
 
-// rfm_hdr_len returns the L2 + L3 + L4 header size of the frame, the same
-// quantity qdisc_pkt_len_init() uses to reconstruct the on-wire length of a
-// GSO skb, and 0 when the headers cannot be parsed
-// l2_len covers ethernet plus the VLAN tags in the frame, l3 points at the IP
-// header, and the L3 size includes the IPv6 extension headers GRO merges
+// rfm_hdr_len is the header size of each segment, 0 when it does not parse
 static __always_inline __u32 rfm_hdr_len(struct __sk_buff *skb, void *l3,
 					 void *end, __u16 eth_proto,
 					 __u32 l2_len)
@@ -215,14 +184,14 @@ static __always_inline __u32 rfm_hdr_len(struct __sk_buff *skb, void *l3,
 		return 0;
 
 	if (proto == IPPROTO_TCP) {
-		__u8 off_byte;
+		__u8 doff_byte;
 		__u8 *doff = l3 + l3_len + 12;
 		if (l3_len <= RFM_DIRECT_OFF_MAX && (void *)(doff + 1) <= end)
-			off_byte = *doff;
+			doff_byte = *doff;
 		else if (bpf_skb_load_bytes(skb, l2_len + l3_len + 12,
-					    &off_byte, 1))
+					    &doff_byte, 1))
 			return 0;
-		return l2_len + l3_len + rfm_tcp_hdr_len(off_byte);
+		return l2_len + l3_len + rfm_tcp_hdr_len(doff_byte);
 	}
 	if (proto == IPPROTO_UDP)
 		return l2_len + l3_len + sizeof(struct udphdr);
@@ -231,8 +200,6 @@ static __always_inline __u32 rfm_hdr_len(struct __sk_buff *skb, void *l3,
 	return l2_len + l3_len;
 }
 
-// rfm_hash_count adds a packet of an interface without a counter slot to its
-// hash entry, inserting it when it is new
 static __always_inline void
 rfm_hash_count(__u32 ifindex, __u8 dir, __u8 iface_proto, __u32 segs, __u32 len)
 {
@@ -257,15 +224,13 @@ rfm_hash_count(__u32 ifindex, __u8 dir, __u8 iface_proto, __u32 segs, __u32 len)
 	}
 }
 
-// rfm_gap draws the packets to skip before the next sample, uniform from 0
-// to 2 * n - 2, so the gap to that sample has a mean of n
+// rfm_gap draws a skip uniform from 0 to 2n - 2, a gap of mean n to the sample
 static __always_inline __u64 rfm_gap(__u32 n)
 {
 	return ((__u64)bpf_get_prandom_u32() * (2 * (__u64)n - 1)) >> 32;
 }
 
-// rfm_take reports whether the skip count of s samples this packet, drawing
-// the gap again when the rate changed since it was drawn and after a sample
+// rfm_take redraws after a sample and when the rate gen changed
 static __always_inline bool rfm_take(struct rfm_slot_value *s, __u32 rate)
 {
 	__u32 gen = rfm_cfg.gen;
@@ -281,8 +246,6 @@ static __always_inline bool rfm_take(struct rfm_slot_value *s, __u32 rate)
 	return true;
 }
 
-// rfm_count adds the packet to the counters of its interface, in its counter
-// slot when it has one and in the hash otherwise, and returns the slot entry
 static __always_inline struct rfm_slot_value *
 rfm_count(__u32 ifindex, __u8 dir, __u8 iface_proto, __u32 segs, __u32 len)
 {
@@ -323,8 +286,7 @@ static __always_inline int rfm_tc(struct __sk_buff *skb, __u8 dir,
 	void *data = (void *)(long)skb->data;
 	void *end = (void *)(long)skb->data_end;
 
-	// a frame whose L2 header runs past the linear data is still counted,
-	// as family other with eth_proto 0
+	// a frame shorter than its l2 header counts as family other
 	__u16 eth_proto = 0;
 	__u8 iface_proto = 0;
 	void *l3 = data + sizeof(struct ethhdr);
@@ -382,8 +344,7 @@ static __always_inline int rfm_tc(struct __sk_buff *skb, __u8 dir,
 					(*errs)++;
 			}
 		}
-		// drivers that pass gso frames up unverified leave gso_segs 0
-		// (SKB_GSO_DODGY), derive it from the payload like the kernel
+		// SKB_GSO_DODGY leaves gso_segs 0, derive it like the kernel
 		if (segs == 0 && hdr_len && len > hdr_len)
 			segs = (len - hdr_len + skb->gso_size - 1) /
 			       skb->gso_size;
