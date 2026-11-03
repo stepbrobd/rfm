@@ -1,10 +1,13 @@
 #!/usr/bin/env nu
 
 # Multi-queue kernel-pktgen generator (run on the TRAFFIC node). Drives many UDP
-# flows out a real NIC across T TX queues toward a DUT. clone_skb=0 so each
-# packet is rebuilt and the UDP source port varies (UDPSRC_RND) -> the DUT's
-# hardware RSS spreads the flows across its RX queues. Reports achieved
-# aggregate pps. For a sustained flood run detached with a large --count.
+# flows out a real NIC across T TX queues toward a DUT. clone_skb=0 by default
+# so each packet is rebuilt and the UDP source port varies (UDPSRC_RND) -> the
+# DUT's hardware RSS spreads the flows across its RX queues. On gros that caps
+# the aggregate near 1.9 Mpps whatever the thread count, --clone resends each
+# skb that many times and --burst batches the doorbell (xmit_more) for a higher
+# rate, at the cost of runs of one source port. Reports achieved aggregate pps.
+# For a sustained flood run detached with a large --count.
 
 const LIB = path self | path dirname | path join "lib.nu"
 use $LIB *
@@ -18,6 +21,8 @@ def main [
   --count: int = 5000000         # packets per thread
   --flows: int = 1000            # distinct UDP source ports
   --rate: int = 0                # per-device Mbit/s cap, 0 = unlimited
+  --clone: int = 0               # clone_skb, sends of one skb before a rebuild
+  --burst: int = 1               # packets per doorbell
 ] {
     ^modprobe pktgen
     let spmin = 10000
@@ -27,7 +32,7 @@ def main [
     pg $"($env.PG)/kpktgend_($i)" $"add_device ($iface)@($i)"
     let d = $"($env.PG)/($iface)@($i)"
     pg $d $"count ($count)"
-    pg $d "clone_skb 0"
+    pg $d $"clone_skb ($clone)"
     pg $d $"pkt_size ($size)"
     pg $d "delay 0"
     pg $d $"dst ($dst)"
@@ -37,6 +42,7 @@ def main [
     pg $d $"udp_src_min ($spmin)"
     pg $d $"udp_src_max ($spmax)"
     pg $d "flag UDPSRC_RND"
+    if $burst > 1 { pg $d $"burst ($burst)" }
     if $rate > 0 { pg $d $"rate ($rate)" }
   }
     pg $"($env.PG)/pgctrl" "start"
