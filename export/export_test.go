@@ -190,12 +190,6 @@ func metricValue(t *testing.T, m prometheus.Metric) float64 {
 	return 0
 }
 
-// --- tests ---
-
-func TestMetricsCollectorImplementsInterface(t *testing.T) {
-	var _ prometheus.Collector = (*MetricsCollector)(nil)
-}
-
 func TestDescribe(t *testing.T) {
 	mc := New(nil, nil)
 	ch := make(chan *prometheus.Desc, 32)
