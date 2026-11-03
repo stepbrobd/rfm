@@ -70,7 +70,7 @@ func (f *fakeHandler) RIBSummary() (RIB, error) {
 	if !f.rib {
 		return RIB{}, errors.New("rib not configured")
 	}
-	return RIB{PrefixesV4: 1, Routes: 1, Peers: 1}, nil
+	return RIB{PrefixesV4: 1, Routes: 1, Views: 1}, nil
 }
 
 func (f *fakeHandler) SetSampleRate(rate uint32) error {

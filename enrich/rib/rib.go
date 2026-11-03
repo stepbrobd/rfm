@@ -60,9 +60,9 @@ type LargeCommunity struct {
 	LocalData2  uint32
 }
 
-// Peer keys a view, the routes one speaker monitors of one peer before or
-// after policy
-type Peer struct {
+// View is the key of a view, the routes one speaker monitors of one peer
+// before or after policy
+type View struct {
 	Speaker       netip.Addr
 	Address       netip.Addr
 	Distinguisher uint64
@@ -93,16 +93,16 @@ type Route struct {
 	Truncated bool
 }
 
-// Peer returns the view this route belongs to
-func (r Route) Peer() Peer {
-	return Peer{Speaker: r.Speaker, Address: r.PeerAddress, Distinguisher: r.PeerDistinguisher, PostPolicy: r.PostPolicy}
+// View returns the view this route belongs to
+func (r Route) View() View {
+	return View{Speaker: r.Speaker, Address: r.PeerAddress, Distinguisher: r.PeerDistinguisher, PostPolicy: r.PostPolicy}
 }
 
 // view holds the routes of one view, keyed by prefix in a trie of its own
 // with ADD-PATH a view holds several paths for a prefix, routes keeps the
 // one with the lowest path id, which the view serves, and more the others
 type view struct {
-	peer   Peer
+	peer   View
 	routes bart.Table[viewRoute]
 	more   map[netip.Prefix][]viewRoute
 }
@@ -152,9 +152,9 @@ type routeMetaState struct {
 }
 
 // update is a batch of RIB changes
-// Reach routes carry their own peer, Withdraw paths are withdrawn from Peer
+// Reach routes carry their own peer, Withdraw paths are withdrawn from View
 type update struct {
-	Peer     Peer
+	View     View
 	Reach    []Route
 	Withdraw []withdrawal
 }
@@ -171,8 +171,8 @@ type Summary struct {
 	PrefixesV4 int
 	PrefixesV6 int
 	Routes     int
-	// Peers counts the views with at least one route, see Peer
-	Peers int
+	// Views counts the views with at least one route, see View
+	Views int
 }
 
 // table keeps the routes of every view in a trie of its own and the route
@@ -183,7 +183,7 @@ type table struct {
 	best bart.Table[bestRoute]
 	// views holds the views with at least one route, order holds the same
 	// views by preference, see betterPeer
-	views    map[Peer]*view
+	views    map[View]*view
 	order    []*view
 	routes   int
 	faults   atomic.Uint64
@@ -202,7 +202,7 @@ type table struct {
 
 func newTable() *table {
 	return &table{
-		views:     make(map[Peer]*view),
+		views:     make(map[View]*view),
 		metas:     make(map[uint64]*routeMetaState),
 		metaKeys:  make(map[routeMetaKey]uint64),
 		nextMeta:  1,
@@ -216,7 +216,7 @@ func (t *table) apply(u update) {
 	defer t.mu.Unlock()
 
 	for _, w := range u.Withdraw {
-		if v := t.views[u.Peer]; v != nil {
+		if v := t.views[u.View]; v != nil {
 			t.deleteRoute(w.Prefix.Masked(), w.PathID, v)
 		}
 	}
@@ -228,7 +228,7 @@ func (t *table) apply(u update) {
 // removePeer withdraws every route of the view peer, releasing mu every
 // removeChunk routes for the readers, which find the view's route for a
 // prefix through best until the walk gets to it
-func (t *table) removePeer(peer Peer) {
+func (t *table) removePeer(peer View) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
@@ -259,7 +259,7 @@ func (t *table) removePeer(peer Peer) {
 // peer up and peer down concern the BGP session, which feeds both views, and
 // a speaker need not set the L flag of their per peer header to match the
 // routes, BIRD always sends them as pre policy
-func (t *table) removePeerViews(peer Peer) {
+func (t *table) removePeerViews(peer View) {
 	for _, post := range []bool{false, true} {
 		peer.PostPolicy = post
 		t.removePeer(peer)
@@ -316,12 +316,12 @@ func (t *table) summary() Summary {
 		PrefixesV4: t.best.Size4(),
 		PrefixesV6: t.best.Size6(),
 		Routes:     t.routes,
-		Peers:      len(t.views),
+		Views:      len(t.views),
 	}
 }
 
 // holds reports whether the table holds a route of peer
-func (t *table) holds(peer Peer) bool {
+func (t *table) holds(peer View) bool {
 	t.mu.RLock()
 	defer t.mu.RUnlock()
 
@@ -356,8 +356,8 @@ type Server struct {
 	// within maxViews, and are nil while empty, see release
 	viewsMu  sync.Mutex
 	sessions map[*session]struct{}
-	owners   map[Peer]*session
-	stale    map[Peer]time.Time
+	owners   map[View]*session
+	stale    map[View]time.Time
 	// staleGrace overrides the default grace period and clock the time
 	// source, for tests
 	staleGrace time.Duration
@@ -417,10 +417,10 @@ func (s *Server) apply(sess *session, u update) {
 	defer s.viewsMu.Unlock()
 
 	s.table.apply(u)
-	view := u.Peer
+	view := u.View
 	if s.table.holds(view) {
 		if s.owners == nil {
-			s.owners = make(map[Peer]*session)
+			s.owners = make(map[View]*session)
 		}
 		s.owners[view] = sess
 	} else {
@@ -433,7 +433,7 @@ func (s *Server) apply(sess *session, u update) {
 
 // release returns nil for an empty map, since a map keeps the room of the
 // most entries it held, and a nil map reads and deletes as an empty one
-func release[V any](m map[Peer]V) map[Peer]V {
+func release[V any](m map[View]V) map[View]V {
 	if len(m) == 0 {
 		return nil
 	}
@@ -442,7 +442,7 @@ func release[V any](m map[Peer]V) map[Peer]V {
 
 // peerChanged withdraws both views of peer on peer up and peer down, after
 // a peer up the speaker announces them again, so neither ages out
-func (s *Server) peerChanged(peer Peer) {
+func (s *Server) peerChanged(peer View) {
 	s.viewsMu.Lock()
 	defer s.viewsMu.Unlock()
 
@@ -467,7 +467,7 @@ func (s *Server) sessionEnded(sess *session) {
 		if owner == sess {
 			delete(s.owners, view)
 			if s.stale == nil {
-				s.stale = make(map[Peer]time.Time)
+				s.stale = make(map[View]time.Time)
 			}
 			s.stale[view] = now
 		}
@@ -685,7 +685,7 @@ func (s *Server) handleConn(conn net.Conn) {
 
 	// addPath holds the decode options of at most maxViews peers whose peer
 	// up shows ADD-PATH, nil for one whose peer up did not parse
-	addPath := make(map[Peer][]*bgp.MarshallingOption)
+	addPath := make(map[View][]*bgp.MarshallingOption)
 	var overflow bool
 	options := func(h bmp.BMPPeerHeader) []*bgp.MarshallingOption {
 		peer := peerFromHeader(sess.speaker, h)
@@ -903,8 +903,8 @@ func (s *Server) isClosing() bool {
 	}
 }
 
-func peerFromHeader(speaker netip.Addr, h bmp.BMPPeerHeader) Peer {
-	peer := Peer{Speaker: speaker, Distinguisher: h.PeerDistinguisher, PostPolicy: h.IsPostPolicy()}
+func peerFromHeader(speaker netip.Addr, h bmp.BMPPeerHeader) View {
+	peer := View{Speaker: speaker, Distinguisher: h.PeerDistinguisher, PostPolicy: h.IsPostPolicy()}
 	if addr, ok := netip.AddrFromSlice(h.PeerAddress); ok {
 		peer.Address = addr.Unmap()
 	}
@@ -928,10 +928,10 @@ func updateFromBMP(speaker netip.Addr, msg *bmp.BMPMessage) (update, bool) {
 
 	attrs := routeAttrs(updateMsg.PathAttributes, msg.PeerHeader.Flags&bmp.BMP_PEER_FLAG_TWO_AS != 0)
 
-	out := update{Peer: peerFromHeader(speaker, msg.PeerHeader)}
+	out := update{View: peerFromHeader(speaker, msg.PeerHeader)}
 	reach := func(nlri bgp.AddrPrefixInterface) {
 		if prefix, ok := prefixFromNLRI(nlri); ok {
-			route := attrs.route(prefix, out.Peer, msg.PeerHeader.PeerAS)
+			route := attrs.route(prefix, out.View, msg.PeerHeader.PeerAS)
 			route.PathID = nlri.PathIdentifier()
 			out.Reach = append(out.Reach, route)
 		}
@@ -1026,7 +1026,7 @@ func (t *table) insertRoute(route Route) {
 		return
 	}
 
-	v := t.views[route.Peer()]
+	v := t.views[route.View()]
 	var head viewRoute
 	var held bool
 	if v != nil {
@@ -1043,7 +1043,7 @@ func (t *table) insertRoute(route Route) {
 		return
 	}
 	if v == nil {
-		v = &view{peer: route.Peer()}
+		v = &view{peer: route.View()}
 		t.addView(v)
 	}
 
@@ -1239,7 +1239,7 @@ func (t *table) dropView(v *view) {
 
 // betterPeer orders the views totally, post policy first, which keeps the
 // view that wins a prefix the same across updates
-func betterPeer(a, b Peer) bool {
+func betterPeer(a, b View) bool {
 	if a.PostPolicy != b.PostPolicy {
 		return a.PostPolicy
 	}
@@ -1438,7 +1438,7 @@ func isConfed(seg bgp.AsPathParamInterface) bool {
 }
 
 // route shares the attribute slices with the other routes of the update
-func (a attrs) route(prefix netip.Prefix, peer Peer, peerASN uint32) Route {
+func (a attrs) route(prefix netip.Prefix, peer View, peerASN uint32) Route {
 	return Route{
 		Prefix:            prefix,
 		OriginASN:         a.originASN,

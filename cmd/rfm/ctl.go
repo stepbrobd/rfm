@@ -90,7 +90,7 @@ func printStatus(w io.Writer, st ctl.Status) {
 	}
 	if st.RIB != nil {
 		fmt.Fprintf(tw, "rib\t%s, %d ipv4 and %d ipv6 prefixes, %d routes in %d views\n",
-			st.RIB.Listen, st.RIB.PrefixesV4, st.RIB.PrefixesV6, st.RIB.Routes, st.RIB.Peers)
+			st.RIB.Listen, st.RIB.PrefixesV4, st.RIB.PrefixesV6, st.RIB.Routes, st.RIB.Views)
 	}
 	tw.Flush()
 }
@@ -244,7 +244,7 @@ var ribSummaryCmd = &cobra.Command{
 			return nil
 		}
 		fmt.Fprintf(cmd.OutOrStdout(), "%s: %d ipv4 and %d ipv6 prefixes, %d routes in %d views\n",
-			s.Listen, s.PrefixesV4, s.PrefixesV6, s.Routes, s.Peers)
+			s.Listen, s.PrefixesV4, s.PrefixesV6, s.Routes, s.Views)
 		return nil
 	},
 }

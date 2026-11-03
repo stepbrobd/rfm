@@ -66,7 +66,7 @@ func (f *fakeControl) RIBLookup(addr netip.Addr) (ctl.Route, bool, error) {
 }
 
 func (f *fakeControl) RIBSummary() (ctl.RIB, error) {
-	return ctl.RIB{Listen: "[::1]:11019", PrefixesV4: 12, PrefixesV6: 3, Routes: 15, Peers: 1}, nil
+	return ctl.RIB{Listen: "[::1]:11019", PrefixesV4: 12, PrefixesV6: 3, Routes: 15, Views: 1}, nil
 }
 
 // SetSampleRate refuses rates above 1000 with an error of its own, the
@@ -209,6 +209,10 @@ func TestCLIRIB(t *testing.T) {
 	out, err = runCLI(t, sock, "rib", "summary")
 	if err != nil || !strings.Contains(out, "12 ipv4 and 3 ipv6 prefixes, 15 routes in 1 views") {
 		t.Fatalf("rib summary = %q err=%v", out, err)
+	}
+	out, err = runCLI(t, sock, "rib", "summary", "--json")
+	if err != nil || !strings.Contains(out, `"views": 1`) {
+		t.Fatalf("rib summary --json = %q err=%v, want the views counted as views", out, err)
 	}
 }
 

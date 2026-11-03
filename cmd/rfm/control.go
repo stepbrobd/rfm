@@ -184,7 +184,7 @@ func (h *controlHandler) RIBSummary() (ctl.RIB, error) {
 		PrefixesV4: s.PrefixesV4,
 		PrefixesV6: s.PrefixesV6,
 		Routes:     s.Routes,
-		Peers:      s.Peers,
+		Views:      s.Views,
 	}, nil
 }
 
