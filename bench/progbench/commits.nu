@@ -110,7 +110,8 @@ def main [
     }
     let base = $objs.0.sha
     let table = $rows | each {|r|
-        let b = $rows | where sha == $base and prog == $r.prog and frame == $r.frame and n == $r.n | first
+        # a program the baseline lacks has no change to show
+        let b = $rows | where sha == $base and prog == $r.prog and frame == $r.frame and n == $r.n
         {
             sha: $r.sha
             prog: $r.prog
@@ -118,8 +119,8 @@ def main [
             n: $r.n
             median: ($r.median | math round --precision 1)
             min: ($r.min | math round --precision 1)
-            d_median: ($r.median - $b.median | math round --precision 1)
-            d_min: ($r.min - $b.min | math round --precision 1)
+            d_median: (if ($b | is-empty) { null } else { $r.median - $b.0.median | math round --precision 1 })
+            d_min: (if ($b | is-empty) { null } else { $r.min - $b.0.min | math round --precision 1 })
         }
     }
     print ($table | sort-by n prog frame sha | to md --pretty)

@@ -101,7 +101,7 @@ func main() {
 	attach := flag.String("attach", "", "attach to this interface under external traffic instead of test runs, -obj none measures with nothing attached")
 	warmup := flag.Duration("warmup", 5*time.Second, "settle time before the window, with -attach")
 	window := flag.Duration("window", 20*time.Second, "measurement window, with -attach")
-	acc := flag.String("accuracy", "", "K:M runs K flows of exactly M packets each through the ingress program, cycling the flows, and reports the sampled estimates against that ground truth")
+	acc := flag.String("accuracy", "", "K:M runs K flows of exactly M packets each through rfm_tc_ingress or the one ingress program -progs names, cycling the flows, and reports the sampled estimates against that ground truth")
 	flag.Parse()
 
 	if *obj == "" || *label == "" {
@@ -120,7 +120,11 @@ func main() {
 	kernel := unix.ByteSliceToString(uts.Release[:])
 
 	if *acc != "" {
-		if err := accuracy(*obj, *label, *acc, uint32(*n), uint32(*ringOrder), kernel); err != nil {
+		prog := "rfm_tc_ingress"
+		if *progs != "auto" {
+			prog = *progs
+		}
+		if err := accuracy(*obj, *label, prog, *acc, uint32(*n), uint32(*ringOrder), kernel); err != nil {
 			fail(err)
 		}
 		return
@@ -423,7 +427,7 @@ func entryPoints(obj string) ([]string, error) {
 		return nil, err
 	}
 	var names []string
-	for _, name := range []string{"rfm_tc_ingress", "rfm_xdp", "rfm_tc_egress"} {
+	for _, name := range []string{"rfm_tc_ingress", "rfm_xdp", "rfm_tc_egress", "rfm_tc_ingress_sampled", "rfm_tc_egress_sampled"} {
 		if _, ok := spec.Programs[name]; ok {
 			names = append(names, name)
 		}

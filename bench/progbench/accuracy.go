@@ -24,6 +24,7 @@ const srcPortOff = 48
 
 type accuracyResult struct {
 	Label     string  `json:"label"`
+	Prog      string  `json:"prog"`
 	Order     string  `json:"order"`
 	N         uint32  `json:"n"`
 	Flows     int     `json:"flows"`
@@ -40,11 +41,11 @@ type accuracyResult struct {
 	Kernel    string  `json:"kernel"`
 }
 
-// accuracy feeds the ingress program K flows of exactly M packets each, one
+// accuracy feeds the ingress program prog K flows of exactly M packets each, one
 // test run per packet, with the flows interleaved round robin as the
 // sequential pktgen ports of accuracy.nu produce or each sent as one burst,
 // then reads every event from the ring and scales each flow's samples by N
-func accuracy(obj, label, km string, n, ringOrder uint32, kernel string) error {
+func accuracy(obj, label, prog, km string, n, ringOrder uint32, kernel string) error {
 	parts := strings.Split(km, ":")
 	if len(parts) < 2 || len(parts) > 3 || (len(parts) == 3 && parts[2] != "burst") {
 		return fmt.Errorf("-accuracy wants K:M or K:M:burst, got %q", km)
@@ -64,11 +65,11 @@ func accuracy(obj, label, km string, n, ringOrder uint32, kernel string) error {
 	if err != nil {
 		return err
 	}
-	if _, ok := spec.Programs["rfm_tc_ingress"]; !ok {
-		return errors.New("no rfm_tc_ingress program")
+	if _, ok := spec.Programs[prog]; !ok {
+		return fmt.Errorf("no %s program", prog)
 	}
 	for name := range spec.Programs {
-		if name != "rfm_tc_ingress" {
+		if name != prog {
 			delete(spec.Programs, name)
 		}
 	}
@@ -93,7 +94,7 @@ func accuracy(obj, label, km string, n, ringOrder uint32, kernel string) error {
 			return err
 		}
 	}
-	prog := coll.Programs["rfm_tc_ingress"]
+	p := coll.Programs[prog]
 
 	const portBase = 10000
 	frames := make([]frame, k)
@@ -108,7 +109,7 @@ func accuracy(obj, label, km string, n, ringOrder uint32, kernel string) error {
 	if burst {
 		for i := range frames {
 			for range m {
-				if _, _, err := testRun(prog.FD(), frames[i], 1, true); err != nil {
+				if _, _, err := testRun(p.FD(), frames[i], 1, true); err != nil {
 					return err
 				}
 			}
@@ -116,7 +117,7 @@ func accuracy(obj, label, km string, n, ringOrder uint32, kernel string) error {
 	} else {
 		for range m {
 			for i := range frames {
-				if _, _, err := testRun(prog.FD(), frames[i], 1, true); err != nil {
+				if _, _, err := testRun(p.FD(), frames[i], 1, true); err != nil {
 					return err
 				}
 			}
@@ -159,7 +160,7 @@ func accuracy(obj, label, km string, n, ringOrder uint32, kernel string) error {
 	if burst {
 		order = "burst"
 	}
-	res := accuracyResult{Label: label, Order: order, N: n, Flows: k, M: m, Events: events, Drops: drops(coll), Kernel: kernel}
+	res := accuracyResult{Label: label, Prog: prog, Order: order, N: n, Flows: k, M: m, Events: events, Drops: drops(coll), Kernel: kernel}
 	var covered int
 	var sum, sumAbs float64
 	rel := make([]float64, k)
