@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"net/netip"
 	"os"
 	"strings"
@@ -293,7 +294,7 @@ func TestScrapeSurvivesAnInterfaceNameThatIsNotUTF8(t *testing.T) {
 		Len:     60,
 	})
 	mc := New(src, c)
-	mc.resolveIfname = func(uint32) string { return "d\xff" }
+	mc.links = func() ([]net.Interface, error) { return []net.Interface{{Index: 7, Name: "d\xff"}}, nil }
 	reg := prometheus.NewRegistry()
 	reg.MustRegister(mc)
 
@@ -323,54 +324,37 @@ func TestScrapeSurvivesAnInterfaceNameThatIsNotUTF8(t *testing.T) {
 	}
 }
 
-func TestCollectCachesIfnames(t *testing.T) {
+func TestCollectListsTheLinksOncePerScrape(t *testing.T) {
 	src := &mockProbe{
 		counters: []probe.IfaceCounter{
 			{Ifindex: 7, Dir: 0, Proto: 4, Packets: 10, Bytes: 1000},
-			{Ifindex: 7, Dir: 1, Proto: 6, Packets: 5, Bytes: 500},
+			{Ifindex: 8, Dir: 1, Proto: 6, Packets: 5, Bytes: 500},
 		},
 	}
-
 	c := collector.New(time.Minute, nil, config.DefaultMaxFlows)
 	c.Record(collector.FlowEvent{
-		Ifindex: 7,
-		Dir:     0,
-		Proto:   6,
+		Ifindex: 7, Proto: 6, SrcPort: 1000, DstPort: 80,
 		SrcAddr: netip.MustParseAddr("10.0.0.1"),
 		DstAddr: netip.MustParseAddr("10.0.0.2"),
-		SrcPort: 1000,
-		DstPort: 80,
 		Segs:    1,
 		Len:     100,
 	})
-	c.Record(collector.FlowEvent{
-		Ifindex: 7,
-		Dir:     1,
-		Proto:   17,
-		SrcAddr: netip.MustParseAddr("10.0.0.3"),
-		DstAddr: netip.MustParseAddr("10.0.0.4"),
-		SrcPort: 2000,
-		DstPort: 53,
-		Segs:    1,
-		Len:     200,
-	})
 
 	mc := New(src, c)
-	calls := make(map[uint32]int)
-	mc.resolveIfname = func(ifindex uint32) string {
-		calls[ifindex]++
-		return fmt.Sprintf("if-%d", ifindex)
+	var dumps int
+	mc.links = func() ([]net.Interface, error) {
+		dumps++
+		return []net.Interface{{Index: 7, Name: "eth0"}, {Index: 8, Name: "eth1"}}, nil
 	}
 
-	// one resolve per scrape however many series mention the interface,
-	// a second scrape resolves again so a renamed interface shows up
+	// one dump names every interface of a scrape, the next scrape dumps again to see renames
 	collectMetrics(t, mc)
-	if got := calls[7]; got != 1 {
-		t.Fatalf("ifname resolver calls for ifindex 7 = %d, want 1", got)
+	if dumps != 1 {
+		t.Fatalf("link dumps in one scrape = %d, want 1", dumps)
 	}
 	collectMetrics(t, mc)
-	if got := calls[7]; got != 2 {
-		t.Fatalf("ifname resolver calls after two scrapes = %d, want 2", got)
+	if dumps != 2 {
+		t.Fatalf("link dumps in two scrapes = %d, want 2", dumps)
 	}
 }
 

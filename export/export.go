@@ -1,7 +1,6 @@
 package export
 
 import (
-	"fmt"
 	"net"
 	"strconv"
 	"sync"
@@ -182,13 +181,15 @@ type Probe interface {
 
 // MetricsCollector reads the probe's counters and the collector's label tuples at scrape time
 type MetricsCollector struct {
-	probe         Probe
-	col           *collector.Collector
-	ipfix         func() IPFIXStats
-	mu            sync.Mutex
-	bpfMapErr     uint64
-	ifnames       map[uint32]string
-	resolveIfname func(uint32) string
+	probe     Probe
+	col       *collector.Collector
+	ipfix     func() IPFIXStats
+	mu        sync.Mutex
+	bpfMapErr uint64
+	// ifnames names the interfaces from one link dump per scrape, nil before it
+	ifnames map[uint32]string
+	// links lists the links of the host, net.Interfaces outside tests
+	links func() ([]net.Interface, error)
 	// ifaceErrs and gsoErrs are the last error counts the probe reported
 	ifaceErrs    uint64
 	gsoErrs      uint64
@@ -226,10 +227,9 @@ func (mc *MetricsCollector) AddErrors(subsystem string, count func() uint64) {
 // New creates a MetricsCollector, p and c may be nil
 func New(p Probe, c *collector.Collector) *MetricsCollector {
 	return &MetricsCollector{
-		probe:         p,
-		col:           c,
-		ifnames:       make(map[uint32]string),
-		resolveIfname: ifnameFromIndex,
+		probe: p,
+		col:   c,
+		links: net.Interfaces,
 	}
 }
 
@@ -242,11 +242,9 @@ func (mc *MetricsCollector) Describe(ch chan<- *prometheus.Desc) {
 
 // Collect sends all current metric values to ch
 func (mc *MetricsCollector) Collect(ch chan<- prometheus.Metric) {
-	// interfaces come and go and an index can be reused under another
-	// name, so names are resolved once per scrape rather than cached for
-	// the life of the process
+	// an index can come back under another name
 	mc.mu.Lock()
-	clear(mc.ifnames)
+	mc.ifnames = nil
 	mc.mu.Unlock()
 
 	mc.collectIfaceStats(ch)
@@ -356,35 +354,25 @@ func (mc *MetricsCollector) collectIfaceStats(ch chan<- prometheus.Metric) {
 	}
 }
 
+// ifname names ifindex from the link dump of this scrape, an index without a link shows as its number
 func (mc *MetricsCollector) ifname(ifindex uint32) string {
 	mc.mu.Lock()
+	defer mc.mu.Unlock()
+
+	if mc.ifnames == nil {
+		links, err := mc.links()
+		if err != nil {
+			log.Error("scrape list links", "err", err)
+		}
+		mc.ifnames = make(map[uint32]string, len(links))
+		for _, l := range links {
+			mc.ifnames[uint32(l.Index)] = l.Name
+		}
+	}
 	if name, ok := mc.ifnames[ifindex]; ok {
-		mc.mu.Unlock()
 		return name
 	}
-	mc.mu.Unlock()
-
-	name := mc.resolveIfname(ifindex)
-
-	mc.mu.Lock()
-	if cached, ok := mc.ifnames[ifindex]; ok {
-		mc.mu.Unlock()
-		return cached
-	}
-	mc.ifnames[ifindex] = name
-	mc.mu.Unlock()
-
-	return name
-}
-
-// ifnameFromIndex resolves an interface index to a name, falling back
-// to the string representation of the index
-func ifnameFromIndex(ifindex uint32) string {
-	iface, err := net.InterfaceByIndex(int(ifindex))
-	if err != nil {
-		return fmt.Sprintf("%d", ifindex)
-	}
-	return iface.Name
+	return strconv.FormatUint(uint64(ifindex), 10)
 }
 
 // familyString maps BPF iface stats proto (IP version) to a label

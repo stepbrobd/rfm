@@ -1,6 +1,7 @@
 package export
 
 import (
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/netip"
@@ -111,9 +112,8 @@ func drainCollect(mc *MetricsCollector) []prometheus.Metric {
 
 func TestScrapeDoesNotRebuildEverySeries(t *testing.T) {
 	mc := New(nil, smallFleetCollector(t))
-	// a real lookup dumps every link of the host, which allocates by the
-	// number of interfaces
-	mc.resolveIfname = func(uint32) string { return "eth0" }
+	// a real dump allocates by the number of links of the host
+	mc.links = func() ([]net.Interface, error) { return []net.Interface{{Index: 2, Name: "eth0"}}, nil }
 	series := len(drainCollect(mc))
 	if series < 5000 {
 		t.Fatalf("series = %d, want the about 5000 of the shape", series)
@@ -141,7 +141,9 @@ func TestScrapeSeriesMatchFlowsAndRollups(t *testing.T) {
 	c.Record(other)
 
 	mc := New(nil, c)
-	mc.resolveIfname = func(ifindex uint32) string { return "if" + strconv.Itoa(int(ifindex)) }
+	mc.links = func() ([]net.Interface, error) {
+		return []net.Interface{{Index: 2, Name: "if2"}, {Index: 3, Name: "if3"}}, nil
+	}
 	drainCollect(mc)
 
 	type id struct {
@@ -196,7 +198,7 @@ func TestScrapeFollowsInterfaceRenames(t *testing.T) {
 	mc := New(nil, c)
 
 	name := "eth0"
-	mc.resolveIfname = func(uint32) string { return name }
+	mc.links = func() ([]net.Interface, error) { return []net.Interface{{Index: 2, Name: name}}, nil }
 	ifnames := func() map[string]bool {
 		seen := map[string]bool{}
 		for _, m := range drainCollect(mc) {
