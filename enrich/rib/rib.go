@@ -311,12 +311,7 @@ type Server struct {
 	parseErrors      atomic.Uint64
 	sessionsRejected atomic.Uint64
 
-	// viewsMu guards what ages out the views of ended sessions, and holds
-	// off sessions while a stale view goes so none announces it meanwhile
-	// sessions are the open sessions, owners the open session that last
-	// announced each view, and stale the views whose session ended
-	// owners and stale hold only views the table holds, which keeps them
-	// within maxViews, and are nil while empty, see release
+	// viewsMu guards sessions, owners and stale
 	viewsMu  sync.Mutex
 	sessions map[*session]struct{}
 	owners   map[View]*session
@@ -350,12 +345,7 @@ func (s *Server) sessionOpened(conn net.Conn) *session {
 	return sess
 }
 
-// apply applies update and, while the table holds its view, records that
-// sess announces the view, which makes it current again
-// a view the update emptied or the table turned away has nothing to age
-// out, and an update without routes, such as an End-of-RIB marker, changes
-// nothing, the update runs under viewsMu so purgeStale cannot remove the
-// view between the update and the record
+// apply holds viewsMu, purgeStale cannot drop the view between the update and the record
 func (s *Server) apply(sess *session, u update) {
 	if len(u.Reach) == 0 && len(u.Withdraw) == 0 {
 		return
@@ -629,8 +619,7 @@ func (s *Server) handleConn(conn net.Conn) {
 	var messages, parseErrors int
 	var appliedLogged bool
 
-	// addPath holds the decode options of at most maxViews peers whose peer
-	// up shows ADD-PATH, nil for one whose peer up did not parse
+	// addPath holds the ADD-PATH decode options of at most maxViews peers, nil for one whose peer up did not parse
 	addPath := make(map[View][]*bgp.MarshallingOption)
 	var overflow bool
 	options := func(h bmp.BMPPeerHeader) []*bgp.MarshallingOption {
@@ -638,8 +627,7 @@ func (s *Server) handleConn(conn net.Conn) {
 		peer.PostPolicy = false
 		return addPath[peer]
 	}
-	// undecodable reports whether path ids the session cannot tell from
-	// prefixes may lead the updates of the peer of h
+	// undecodable reports whether path ids the session cannot tell from prefixes may lead the updates of the peer of h
 	undecodable := func(h bmp.BMPPeerHeader) bool {
 		peer := peerFromHeader(sess.speaker, h)
 		peer.PostPolicy = false
@@ -730,15 +718,7 @@ func (s *Server) handleConn(conn net.Conn) {
 	log.Info("bmp session closed", "remote", conn.RemoteAddr(), "messages", messages, "parse_errors", parseErrors)
 }
 
-// salvage returns what a message that failed to parse still offers, and
-// whether the routes of an update must be withdrawn instead of installed
-// RFC 7606 has a receiver discard a malformed attribute that does not
-// change the route, or treat the update as a withdraw of every route it
-// carries, gobgp returns the update it decoded with an error that says
-// which, any other update error leaves nothing to trust
-// gobgp returns nothing when the body of a peer up or peer down does not
-// parse, but the per peer header in front of it still names the peer, and
-// that is all those two need
+// salvage keeps what RFC 7606 lets a receiver keep of a malformed update, and the peer header of a peer up or down whose body failed
 func salvage(data []byte, msg *bmp.BMPMessage, err error) (*bmp.BMPMessage, bool) {
 	if len(data) >= bmp.BMP_HEADER_SIZE+bmp.BMP_PEER_HEADER_SIZE && data[0] == bmp.BMP_VERSION {
 		switch typ := data[5]; typ {
@@ -787,13 +767,7 @@ var errBMPLength = errors.New("bmp message length out of bounds")
 // one RFC 7854 defines
 var errBMPVersion = errors.New("unsupported bmp version")
 
-// splitBMP frames BMP messages like bmp.SplitBMP but fails on a version
-// other than 3 and on a length shorter than the common header or longer
-// than the scanner buffers
-// SplitBMP hands back an empty token for a zero length, which the scanner
-// returns forever without reading again, waits for more data after a
-// header of another version, and waits for the rest of a message that
-// cannot fit until the buffer limit ends the session
+// splitBMP is bmp.SplitBMP failing on a bad version or length where SplitBMP would wait or spin
 func splitBMP(data []byte, atEOF bool) (int, []byte, error) {
 	if len(data) > 0 && data[0] != bmp.BMP_VERSION {
 		return 0, nil, fmt.Errorf("%w %d, rfm reads version %d from rfc 7854", errBMPVersion, data[0], bmp.BMP_VERSION)
@@ -1330,11 +1304,7 @@ func routeAttrs(pathAttrs []bgp.PathAttributeInterface, twoByteAS bool) attrs {
 	return out
 }
 
-// mergeAS4Path rebuilds the path of a route from the legacy format as RFC
-// 6793 section 4.2.3 does, AS4_PATH holds the tail of the path and AS_PATH
-// gives the leading ASNs that AS4_PATH lacks together with confederation
-// segments next to them, an AS4_PATH that counts more ASNs than AS_PATH is
-// ignored
+// mergeAS4Path follows RFC 6793 section 4.2.3
 func mergeAS4Path(asPath []bgp.AsPathParamInterface, as4Path []*bgp.As4PathParam) []bgp.AsPathParamInterface {
 	var tail []bgp.AsPathParamInterface
 	for _, seg := range as4Path {
@@ -1490,12 +1460,7 @@ func otherFamily(attr bgp.PathAttributeInterface) bool {
 	return true
 }
 
-// prefixFromNLRI returns the prefix of a unicast NLRI
-// the RIB models the global table, so VPN routes, which belong to a VRF,
-// and every other family are skipped, as are the routes of a VRF peer, see
-// vrfRoutes, and an ipv4 mapped ipv6 prefix stays ipv6
-// because unmapping it would leave more prefix bits than address bits
-// multicast NLRI come in the types of unicast ones, otherFamily skips them
+// prefixFromNLRI returns the prefix of a unicast NLRI, an ipv4 mapped one stays ipv6 since unmapping leaves more bits than the address has
 func prefixFromNLRI(nlri bgp.AddrPrefixInterface) (netip.Prefix, bool) {
 	var ip net.IP
 	var bits uint8

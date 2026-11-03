@@ -19,8 +19,7 @@ import (
 // replacement on disk, the tests shorten it
 var reloadInterval = time.Minute
 
-// Open opens the configured databases and reopens a file an updater renamed
-// over the old one, it returns nil, nil when none is configured
+// Open opens the configured databases and reopens a file an updater renamed over the old one, nil when none is configured
 func Open(cfg config.MMDBConfig) (*Enricher, error) {
 	if cfg.ASNDB == "" && cfg.CityDB == "" {
 		return nil, nil

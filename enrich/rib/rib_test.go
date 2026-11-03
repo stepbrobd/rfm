@@ -1279,8 +1279,6 @@ func TestTableHeapPerRouteWithUniqueAttributes(t *testing.T) {
 	}
 	runtime.KeepAlive(tab)
 
-	// a route with a 64 ASN path and 256 communities of each kind took
-	// 13 KiB, so 160k of them filled 2 GiB, a fiftieth of maxRoutes
 	perRoute := (int64(after.HeapAlloc) - int64(before.HeapAlloc)) / n
 	t.Logf("heap per route: %d bytes", perRoute)
 	if perRoute > 2<<10 {
@@ -1965,8 +1963,6 @@ func TestTableHeapPerPrefix(t *testing.T) {
 	}
 	runtime.KeepAlive(tab)
 
-	// a full table is about 1.25M prefixes, at the 983 bytes a prefix took
-	// with a map per prefix that is 1.2 GB on a 2 GB router
 	perPrefix := (int64(after.HeapAlloc) - int64(before.HeapAlloc)) / n
 	t.Logf("heap per prefix: %d bytes", perPrefix)
 	if perPrefix > 256 {
