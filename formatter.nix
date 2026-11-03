@@ -10,6 +10,7 @@
   nixfmt-tree,
   nufmt,
   ruff,
+  stdenv,
   taplo,
   ty,
 }:
@@ -18,6 +19,12 @@ writeShellScriptBin "formatter" ''
   pushd "$(${lib.getExe git} rev-parse --show-toplevel)" > /dev/null
   set -eoux pipefail
   shopt -s globstar
+  export PATH=${
+    lib.makeBinPath [
+      go
+      stdenv.cc
+    ]
+  }:$PATH
 
   ${lib.getExe deno} fmt .
   ${lib.getExe nixfmt-tree} .
@@ -29,7 +36,6 @@ writeShellScriptBin "formatter" ''
 
   ${lib.getExe go} fix ./...
   ${lib.getExe go} fmt ./...
-  ${lib.getExe go} generate ./...
   ${lib.getExe go} mod tidy
   ${lib.getExe go} test -race ./...
   ${lib.getExe go} vet ./...
