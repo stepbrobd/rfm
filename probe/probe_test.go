@@ -975,6 +975,61 @@ func TestGSOHeaderErrorsCountHeadersThatDoNotParse(t *testing.T) {
 	}
 }
 
+func TestIngressGSOTakesTheKernelWireLen(t *testing.T) {
+	testutil.RequireRoot(t)
+
+	testutil.NewNS(t)
+
+	p, err := Load(Config{WakeupBatch: 1})
+	if err != nil {
+		skipIfUnsupported(t, err)
+		t.Fatal(err)
+	}
+	defer p.Close()
+	lo, err := netlink.LinkByName("lo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	key := rfmRfmIfaceKey{Ifindex: uint32(lo.Attrs().Index), Dir: 0, Proto: 4}
+
+	run := func(frame []byte, wire uint32) {
+		t.Helper()
+		ctx := skbContext{WireLen: wire, GSOSegs: gsoSegs, GSOSize: gsoSize}
+		if _, err := p.objs.RfmTcIngress.Run(&ebpf.RunOptions{Data: frame, Context: ctx}); err != nil {
+			skipIfUnsupported(t, err)
+			t.Fatal(err)
+		}
+	}
+	frame := gsoFrame(4900)
+	netLen := uint32(len(frame) - testutil.EthHdrLen)
+	segHdr := uint32(gsoHdrLen - testutil.EthHdrLen)
+	// what the kernel leaves in wire_len from 6.19, the network length
+	// plus the network and transport header of every extra segment
+	kernelWire := netLen + (gsoSegs-1)*segHdr
+
+	// a wire_len of 0 leaves the test run's own length, as an older kernel
+	// leaves the skb's, the header parse and the kernel's wire_len count
+	// the same wire bytes
+	run(frame, 0)
+	wantIfaceStats(t, p, key, gsoSegs, gsoWire)
+	run(frame, kernelWire)
+	wantIfaceStats(t, p, key, 2*gsoSegs, 2*gsoWire)
+
+	// with the kernel's wire_len the headers are not parsed, an ihl of 4
+	// that does not parse costs nothing
+	frame[testutil.EthHdrLen] = 0x44
+	run(frame, kernelWire)
+	if n, err := p.GSOHeaderErrors(); err != nil || n != 0 {
+		t.Fatalf("gso header errors = %d, %v, want none with the kernel's wire_len", n, err)
+	}
+	wantIfaceStats(t, p, key, 3*gsoSegs, 3*gsoWire)
+	// without it they are, and one that does not parse is counted
+	run(frame, 0)
+	if n, err := p.GSOHeaderErrors(); err != nil || n != 1 {
+		t.Fatalf("gso header errors = %d, %v, want 1 without the kernel's wire_len", n, err)
+	}
+}
+
 func TestGSOHeaderErrorsSkipEgressWithASegmentCount(t *testing.T) {
 	testutil.RequireRoot(t)
 

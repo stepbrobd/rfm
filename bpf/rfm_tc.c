@@ -21,6 +21,10 @@
 // at most six of them in front of the upper layer header
 #define RFM_IPV6_EXTHDRS 6
 
+// RFM_SEG_HDR_MIN is the smallest network and transport header a segment
+// carries, IPv4 and UDP
+#define RFM_SEG_HDR_MIN 28
+
 struct rfm_vlan_hdr {
 	__u16 tci;
 	__u16 encap_proto;
@@ -296,10 +300,21 @@ static __always_inline int rfm_tc(struct __sk_buff *skb, __u8 dir)
 	__u32 segs = 1;
 	if (skb->gso_size && iface_proto) {
 		segs = skb->gso_segs;
-		// egress takes its bytes from wire_len, so only ingress and an
-		// skb without a segment count need the header size
+		// from 6.19 the kernel adds the header bytes of the extra
+		// segments to wire_len before the ingress hook too, counted
+		// from the network header, an older kernel or an skb without a
+		// transport header leaves it within a few tag bytes of the
+		// network length, short of a smallest IPv4 and UDP header for
+		// each extra segment
+		bool ingress_wire =
+			dir == RFM_DIR_INGRESS && segs > 1 &&
+			skb->wire_len >=
+				len - l3_off + (segs - 1) * RFM_SEG_HDR_MIN;
+		// egress and such an ingress skb take their bytes from wire_len,
+		// the rest and an skb without a segment count need the header
+		// size
 		__u32 hdr_len = 0;
-		if (dir == RFM_DIR_INGRESS || segs == 0) {
+		if ((dir == RFM_DIR_INGRESS && !ingress_wire) || segs == 0) {
 			hdr_len = rfm_hdr_len(skb, l3, end, eth_proto, l3_off);
 			if (!hdr_len) {
 				__u32 err_key = 0;
@@ -320,6 +335,8 @@ static __always_inline int rfm_tc(struct __sk_buff *skb, __u8 dir)
 			// qdisc_pkt_len_init() already added the header bytes
 			// of every extra segment before the egress hook ran
 			len = skb->wire_len;
+		else if (ingress_wire)
+			len = skb->wire_len + segs * l3_off;
 		else
 			len += (segs - 1) * hdr_len;
 	}
