@@ -9,7 +9,6 @@ import (
 	"net"
 	"net/netip"
 	"slices"
-	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -36,7 +35,7 @@ const (
 	// attributes, labels need only the origin, which the route keeps apart,
 	// and a lookup shows the leading part of a longer list on a route
 	// marked truncated, a route whose attributes no other route shares then
-	// holds about 3 KiB of heap however long they are
+	// holds under 2 KiB of heap however long they are
 	maxPathLen     = 32
 	maxCommunities = 32
 	// maxRoutes bounds the routes the RIB keeps, six views of a full table
@@ -129,28 +128,21 @@ type bestRoute struct {
 	originASSet bool
 }
 
+// routeMeta is what a route keeps besides its prefix, origin and view
 type routeMeta struct {
-	ASPath            []uint32
-	Communities       []uint32
-	LargeCommunities  []LargeCommunity
-	Speaker           netip.Addr
-	PeerASN           uint32
-	PeerAddress       netip.Addr
-	PeerDistinguisher uint64
-	PostPolicy        bool
-	Truncated         bool
+	ASPath           []uint32
+	Communities      []uint32
+	LargeCommunities []LargeCommunity
+	PeerASN          uint32
+	Truncated        bool
 }
 
 type routeMetaKey struct {
-	ASPath            string
-	Communities       string
-	LargeCommunities  string
-	Speaker           netip.Addr
-	PeerASN           uint32
-	PeerAddress       netip.Addr
-	PeerDistinguisher uint64
-	PostPolicy        bool
-	Truncated         bool
+	ASPath           string
+	Communities      string
+	LargeCommunities string
+	PeerASN          uint32
+	Truncated        bool
 }
 
 type routeMetaState struct {
@@ -292,7 +284,7 @@ func (t *table) lookup(addr netip.Addr) (Route, bool) {
 		t.fault("best credits a view with a prefix it does not hold", prefix)
 		return Route{}, false
 	}
-	return t.route(prefix, value)
+	return t.route(prefix, best.view, value)
 }
 
 // enrich labels nothing from a default route, its origin is the upstream
@@ -1260,12 +1252,16 @@ func betterPeer(a, b Peer) bool {
 	return a.Speaker.Less(b.Speaker)
 }
 
-func (t *table) route(prefix netip.Prefix, value viewRoute) (Route, bool) {
+func (t *table) route(prefix netip.Prefix, v *view, value viewRoute) (Route, bool) {
 	route := Route{
-		Prefix:      prefix,
-		OriginASN:   value.originASN,
-		OriginASSet: value.originASSet,
-		PathID:      value.pathID,
+		Prefix:            prefix,
+		OriginASN:         value.originASN,
+		OriginASSet:       value.originASSet,
+		Speaker:           v.peer.Speaker,
+		PeerAddress:       v.peer.Address,
+		PeerDistinguisher: v.peer.Distinguisher,
+		PostPolicy:        v.peer.PostPolicy,
+		PathID:            value.pathID,
 	}
 	if value.metaID == 0 {
 		return route, true
@@ -1281,11 +1277,7 @@ func (t *table) route(prefix netip.Prefix, value viewRoute) (Route, bool) {
 	route.ASPath = routeMeta.ASPath
 	route.Communities = routeMeta.Communities
 	route.LargeCommunities = routeMeta.LargeCommunities
-	route.Speaker = routeMeta.Speaker
 	route.PeerASN = routeMeta.PeerASN
-	route.PeerAddress = routeMeta.PeerAddress
-	route.PeerDistinguisher = routeMeta.PeerDistinguisher
-	route.PostPolicy = routeMeta.PostPolicy
 	route.Truncated = routeMeta.Truncated
 	return route, true
 }
@@ -1445,14 +1437,15 @@ func isConfed(seg bgp.AsPathParamInterface) bool {
 	return false
 }
 
+// route shares the attribute slices with the other routes of the update
 func (a attrs) route(prefix netip.Prefix, peer Peer, peerASN uint32) Route {
 	return Route{
 		Prefix:            prefix,
 		OriginASN:         a.originASN,
 		OriginASSet:       a.originASSet,
-		ASPath:            append([]uint32(nil), a.asPath...),
-		Communities:       append([]uint32(nil), a.communities...),
-		LargeCommunities:  append([]LargeCommunity(nil), a.largeCommunities...),
+		ASPath:            a.asPath,
+		Communities:       a.communities,
+		LargeCommunities:  a.largeCommunities,
 		Speaker:           peer.Speaker,
 		PeerASN:           peerASN,
 		PeerAddress:       peer.Address,
@@ -1461,37 +1454,22 @@ func (a attrs) route(prefix netip.Prefix, peer Peer, peerASN uint32) Route {
 	}
 }
 
-// meta returns what the table keeps of r besides its prefix and origin, the
-// leading maxPathLen ASNs of its path and maxCommunities communities and
-// large communities each, and whether that cut any of them
+// meta returns the leading maxPathLen ASNs and maxCommunities communities of each kind of r without a copy, and whether that cut any
 func (r Route) meta() routeMeta {
 	return routeMeta{
-		ASPath:            leading(r.ASPath, maxPathLen),
-		Communities:       leading(r.Communities, maxCommunities),
-		LargeCommunities:  leading(r.LargeCommunities, maxCommunities),
-		Speaker:           r.Speaker,
-		PeerASN:           r.PeerASN,
-		PeerAddress:       r.PeerAddress,
-		PeerDistinguisher: r.PeerDistinguisher,
-		PostPolicy:        r.PostPolicy,
-		Truncated:         len(r.ASPath) > maxPathLen || len(r.Communities) > maxCommunities || len(r.LargeCommunities) > maxCommunities,
+		ASPath:           r.ASPath[:min(len(r.ASPath), maxPathLen)],
+		Communities:      r.Communities[:min(len(r.Communities), maxCommunities)],
+		LargeCommunities: r.LargeCommunities[:min(len(r.LargeCommunities), maxCommunities)],
+		PeerASN:          r.PeerASN,
+		Truncated:        len(r.ASPath) > maxPathLen || len(r.Communities) > maxCommunities || len(r.LargeCommunities) > maxCommunities,
 	}
-}
-
-// leading returns a copy of at most the first n values of s
-func leading[T any](s []T, n int) []T {
-	return append([]T(nil), s[:min(len(s), n)]...)
 }
 
 func (m routeMeta) empty() bool {
 	return len(m.ASPath) == 0 &&
 		len(m.Communities) == 0 &&
 		len(m.LargeCommunities) == 0 &&
-		!m.Speaker.IsValid() &&
-		m.PeerASN == 0 &&
-		!m.PeerAddress.IsValid() &&
-		m.PeerDistinguisher == 0 &&
-		!m.PostPolicy
+		m.PeerASN == 0
 }
 
 func (m routeMeta) clone() routeMeta {
@@ -1503,15 +1481,11 @@ func (m routeMeta) clone() routeMeta {
 
 func (m routeMeta) key() routeMetaKey {
 	return routeMetaKey{
-		ASPath:            encodeUint32s(m.ASPath),
-		Communities:       encodeUint32s(m.Communities),
-		LargeCommunities:  encodeLargeCommunities(m.LargeCommunities),
-		Speaker:           m.Speaker,
-		PeerASN:           m.PeerASN,
-		PeerAddress:       m.PeerAddress,
-		PeerDistinguisher: m.PeerDistinguisher,
-		PostPolicy:        m.PostPolicy,
-		Truncated:         m.Truncated,
+		ASPath:           encodeUint32s(m.ASPath),
+		Communities:      encodeUint32s(m.Communities),
+		LargeCommunities: encodeLargeCommunities(m.LargeCommunities),
+		PeerASN:          m.PeerASN,
+		Truncated:        m.Truncated,
 	}
 }
 
@@ -1593,15 +1567,16 @@ func prefixFromNLRI(nlri bgp.AddrPrefixInterface) (netip.Prefix, bool) {
 	return prefix, true
 }
 
+// encodeUint32s writes values 4 bytes each into one string
 func encodeUint32s(values []uint32) string {
 	if len(values) == 0 {
 		return ""
 	}
 
 	var b strings.Builder
+	b.Grow(4 * len(values))
 	for _, value := range values {
-		b.WriteString(strconv.FormatUint(uint64(value), 10))
-		b.WriteByte(',')
+		writeUint32(&b, value)
 	}
 	return b.String()
 }
@@ -1612,13 +1587,17 @@ func encodeLargeCommunities(values []LargeCommunity) string {
 	}
 
 	var b strings.Builder
+	b.Grow(12 * len(values))
 	for _, value := range values {
-		b.WriteString(strconv.FormatUint(uint64(value.GlobalAdmin), 10))
-		b.WriteByte(':')
-		b.WriteString(strconv.FormatUint(uint64(value.LocalData1), 10))
-		b.WriteByte(':')
-		b.WriteString(strconv.FormatUint(uint64(value.LocalData2), 10))
-		b.WriteByte(',')
+		writeUint32(&b, value.GlobalAdmin)
+		writeUint32(&b, value.LocalData1)
+		writeUint32(&b, value.LocalData2)
 	}
 	return b.String()
+}
+
+func writeUint32(b *strings.Builder, value uint32) {
+	var buf [4]byte
+	binary.LittleEndian.PutUint32(buf[:], value)
+	b.Write(buf[:])
 }

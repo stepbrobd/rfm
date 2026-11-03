@@ -1238,8 +1238,80 @@ func TestTableHeapPerRouteWithUniqueAttributes(t *testing.T) {
 	// 13 KiB, so 160k of them filled 2 GiB, a fiftieth of maxRoutes
 	perRoute := (int64(after.HeapAlloc) - int64(before.HeapAlloc)) / n
 	t.Logf("heap per route: %d bytes", perRoute)
-	if perRoute > 4<<10 {
-		t.Fatalf("heap per route = %d bytes, want at most 4 KiB", perRoute)
+	if perRoute > 2<<10 {
+		t.Fatalf("heap per route = %d bytes, want at most 2 KiB", perRoute)
+	}
+}
+
+func TestTableHeapPerRouteWithSharedAttributes(t *testing.T) {
+	const n = 256
+
+	// the prefixes of one update share its long path and communities
+	route := uniqueAttrsRoute(0, 64, 256)
+	var largeCommunities []*bgp.LargeCommunity
+	for _, c := range route.LargeCommunities {
+		largeCommunities = append(largeCommunities, bgp.NewLargeCommunity(c.GlobalAdmin, c.LocalData1, c.LocalData2))
+	}
+	nlri := make([]*bgp.IPAddrPrefix, n)
+	for i := range nlri {
+		nlri[i] = bgp.NewIPAddrPrefix(24, netip.AddrFrom4([4]byte{198, 18, byte(i), 0}).String())
+	}
+	peer := bmp.NewBMPPeerHeader(bmp.BMP_PEER_TYPE_GLOBAL, 0, 0, "192.0.2.1", 64496, "192.0.2.1", 0)
+	msg := bmp.NewBMPRouteMonitoring(*peer, bgp.NewBGPUpdateMessage(nil, []bgp.PathAttributeInterface{
+		bgp.NewPathAttributeOrigin(0),
+		bgp.NewPathAttributeAsPath([]bgp.AsPathParamInterface{bgp.NewAs4PathParam(bgp.BGP_ASPATH_ATTR_TYPE_SEQ, route.ASPath)}),
+		bgp.NewPathAttributeNextHop("192.0.2.1"),
+		bgp.NewPathAttributeCommunities(route.Communities),
+		bgp.NewPathAttributeLargeCommunities(largeCommunities),
+	}, nlri))
+
+	tab := newTable()
+	apply := func() {
+		t.Helper()
+		u, ok := updateFromBMP(netip.Addr{}, msg)
+		if !ok || len(u.Reach) != n {
+			t.Fatalf("update = %d routes ok=%v, want %d", len(u.Reach), ok, n)
+		}
+		tab.apply(u)
+	}
+	apply()
+
+	var before, after runtime.MemStats
+	runtime.ReadMemStats(&before)
+	apply()
+	runtime.ReadMemStats(&after)
+
+	// the table holds the attributes since the first update, the second
+	// costs a route its place in the update and the key that finds them
+	perRoute := (after.TotalAlloc - before.TotalAlloc) / n
+	t.Logf("heap allocated per route: %d bytes", perRoute)
+	if perRoute > 2<<10 {
+		t.Fatalf("heap allocated per route = %d bytes, want at most 2 KiB", perRoute)
+	}
+	if got := len(tab.metas); got != 1 {
+		t.Fatalf("metadata entries = %d, want 1", got)
+	}
+}
+
+func TestTableSharesMetadataAcrossPolicyViews(t *testing.T) {
+	tab := newTable()
+	route := Route{
+		Prefix:      netip.MustParsePrefix("203.0.113.0/24"),
+		OriginASN:   64496,
+		ASPath:      []uint32{64501, 64496},
+		PeerASN:     64501,
+		PeerAddress: netip.MustParseAddr("192.0.2.2"),
+	}
+	post := route
+	post.PostPolicy = true
+	tab.apply(update{Reach: []Route{route, post}})
+
+	if got := len(tab.metas); got != 1 {
+		t.Fatalf("metadata entries = %d, want the two views of the peer to share 1", got)
+	}
+	got, ok := tab.lookup(netip.MustParseAddr("203.0.113.1"))
+	if !ok || got.PeerAddress != route.PeerAddress || !got.PostPolicy || got.PeerASN != 64501 {
+		t.Fatalf("Lookup = %+v ok=%v, want the post policy view of 192.0.2.2", got, ok)
 	}
 }
 
@@ -1919,14 +1991,15 @@ func (m ribModel) check(t *testing.T, tab *table, probes []netip.Addr, step int)
 
 	var want Summary
 	prefixes := make(map[netip.Prefix]struct{})
-	metas := make(map[[2]any]struct{})
-	for peer, routes := range m {
+	// the views share the metadata of a path
+	metas := make(map[uint32]struct{})
+	for _, routes := range m {
 		want.Peers++
 		for prefix, paths := range routes {
 			prefixes[prefix] = struct{}{}
 			for _, origin := range paths {
 				want.Routes++
-				metas[[2]any{peer, origin}] = struct{}{}
+				metas[origin] = struct{}{}
 			}
 		}
 	}
@@ -2162,9 +2235,9 @@ func TestRemovePeerDropsOnlyThatPeer(t *testing.T) {
 	b := Peer{Address: netip.MustParseAddr("192.0.2.2")}
 
 	tab.apply(update{Reach: []Route{
-		{Prefix: netip.MustParsePrefix("203.0.113.0/24"), OriginASN: 1, PeerAddress: a.Address},
-		{Prefix: netip.MustParsePrefix("198.51.100.0/24"), OriginASN: 2, PeerAddress: a.Address},
-		{Prefix: netip.MustParsePrefix("198.51.100.0/24"), OriginASN: 3, PeerAddress: b.Address},
+		{Prefix: netip.MustParsePrefix("203.0.113.0/24"), OriginASN: 1, ASPath: []uint32{1}, PeerAddress: a.Address},
+		{Prefix: netip.MustParsePrefix("198.51.100.0/24"), OriginASN: 2, ASPath: []uint32{2}, PeerAddress: a.Address},
+		{Prefix: netip.MustParsePrefix("198.51.100.0/24"), OriginASN: 3, ASPath: []uint32{3}, PeerAddress: b.Address},
 	}})
 
 	tab.removePeer(a)
