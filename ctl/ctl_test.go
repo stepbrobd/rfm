@@ -229,6 +229,27 @@ func TestListenReplacesStaleSocket(t *testing.T) {
 	}
 }
 
+func TestListenCreatesTheSocketForTheOwnerAlone(t *testing.T) {
+	// a umask that masks nothing would leave the socket open to every user
+	defer syscall.Umask(syscall.Umask(0))
+	sock := filepath.Join(t.TempDir(), "rfm.sock")
+	srv, err := Listen(sock, &fakeHandler{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer srv.Close()
+	fi, err := os.Lstat(sock)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if mode := fi.Mode().Perm(); mode != 0o600 {
+		t.Fatalf("socket mode = %v, want 0600", mode)
+	}
+	if umask := syscall.Umask(0); umask != 0 {
+		t.Fatalf("umask after Listen = %#o, want the 0 it found", umask)
+	}
+}
+
 func TestListenRefusesLiveSocket(t *testing.T) {
 	c := startServer(t, &fakeHandler{rate: 10})
 

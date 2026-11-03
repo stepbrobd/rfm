@@ -47,7 +47,11 @@ func Listen(path string, handler Handler) (*Server, error) {
 	if err := removeStale(path); err != nil {
 		return nil, err
 	}
+	// bind gives the socket 0777 less the umask, it is 0600 before a client
+	// can connect
+	umask := syscall.Umask(0o177)
 	ln, err := net.ListenUnix("unix", &net.UnixAddr{Name: path, Net: "unix"})
+	syscall.Umask(umask)
 	if err != nil {
 		return nil, fmt.Errorf("listen control socket %q: %w", path, err)
 	}
@@ -57,12 +61,7 @@ func Listen(path string, handler Handler) (*Server, error) {
 		ln.Close()
 		return nil, fmt.Errorf("stat control socket %q: %w", path, err)
 	}
-	s := &Server{handler: handler, listener: ln, path: path, created: created}
-	if err := os.Chmod(path, 0o600); err != nil {
-		s.close()
-		return nil, fmt.Errorf("chmod control socket %q: %w", path, err)
-	}
-	return s, nil
+	return &Server{handler: handler, listener: ln, path: path, created: created}, nil
 }
 
 // removeStale unlinks a socket at path that no process listens on and
