@@ -26,10 +26,10 @@ in
 
     # multi-interface verification
     machine1.succeed("ping -c 5 127.0.0.1")
-    time.sleep(1)
+    machine1.succeed("ping -c 1 192.168.1.2")
     metrics1 = machine1.succeed("curl -sf http://localhost:9669/metrics")
     require_positive(metrics1, "rfm_interface_rx_packets_total", ifname="lo", family="ipv4")
     require_positive(metrics1, "rfm_interface_tx_packets_total", ifname="lo", family="ipv4")
-    assert 'ifname="eth1"' in metrics1, "missing eth1 interface in metrics"
+    require_positive(metrics1, "rfm_interface_tx_packets_total", ifname="eth1", family="ipv4")
   '';
 }

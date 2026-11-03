@@ -100,7 +100,7 @@ in
     # the flow leaves the table after the eviction timeout, which the
     # rankings over the dashboard range must not notice
     machine1.wait_until_succeeds(
-      f"! curl -sf http://localhost:9669/metrics | grep -q 'rfm_flow_bytes{{.*dst_asn=\"{dst_asn}\"'"
+      f"curl -sf http://localhost:9669/metrics -o /tmp/metrics && ! grep -q 'rfm_flow_bytes{{.*dst_asn=\"{dst_asn}\"' /tmp/metrics"
     )
 
     # every query of the dashboard is valid and finds the series it names
