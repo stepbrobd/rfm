@@ -57,7 +57,7 @@ func TestCFlags(t *testing.T) {
 			source: "testdata/without.bpf.c",
 			cfg:    config{"x86", "x86_64"},
 			want: []string{
-				"-O2", "-g", "-Wall", "-Wno-missing-declarations",
+				"-O2", "-mcpu=v3", "-g", "-Wall", "-Wno-missing-declarations",
 				"-Itestdata/include",
 				"-Itestdata/include/vmlinux/x86_64",
 				"-D__TARGET_ARCH_x86",
@@ -69,7 +69,7 @@ func TestCFlags(t *testing.T) {
 			cfg:    config{"arm64", "aarch64"},
 			extra:  []string{"-I/usr/include/bpf"},
 			want: []string{
-				"-O2", "-g", "-Wall", "-Wno-missing-declarations",
+				"-O2", "-mcpu=v3", "-g", "-Wall", "-Wno-missing-declarations",
 				"-Itestdata/include",
 				"-Itestdata/include/vmlinux/aarch64",
 				"-D__TARGET_ARCH_arm64",

@@ -143,6 +143,9 @@ func cflags(source string, cfg config, extra []string) []string {
 	incdir := filepath.Join(filepath.Dir(source), "include")
 	flags := []string{
 		"-O2",
+		// bpf2go passes -mcpu=v1 first, a later -mcpu wins, v3 gives 32 bit
+		// ALU ops and jumps that every kernel with tcx (6.6) supports
+		"-mcpu=v3",
 		"-g",
 		"-Wall",
 		"-Wno-missing-declarations",
