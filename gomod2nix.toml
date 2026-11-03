@@ -86,12 +86,16 @@ schema = 3
     hash = 'sha256-79URDDFenmGc9JZu+5AXHToMrtTREHb3BC84b/gym9Q='
 
   [mod.'github.com/oschwald/maxminddb-golang/v2']
-    version = 'v2.8.0'
-    hash = 'sha256-nditYeqToC1q/Jdp/qAmg8thqg437x0taMLvW3z8zfA='
+    version = 'v2.9.0'
+    hash = 'sha256-tGPVa3Z2aIriqq12AfcVIdaBInk1WeY0LoGZ+hnr9NQ='
 
   [mod.'github.com/osrg/gobgp/v3']
     version = 'v3.37.0'
     hash = 'sha256-okiSm28hYGLaO/v69lUFjIzvNBPHFZ9yrlSdhpfYc1c='
+
+  [mod.'github.com/pandatix/go-abnf']
+    version = 'v0.5.5'
+    hash = 'sha256-HTxLPMqTr7q4SRTXBEBtXfNpOENm0e0EJh6zFn22hQQ='
 
   [mod.'github.com/prometheus/client_golang']
     version = 'v1.25.0'
@@ -102,12 +106,12 @@ schema = 3
     hash = 'sha256-uYXpFkXMT4AXWJShrCRnu51vhGQAuAU3LFQhhGVJ+74='
 
   [mod.'github.com/prometheus/common']
-    version = 'v0.72.1'
-    hash = 'sha256-0HGlQuuDqW7bp7NNSa5Wp+jh98T6rwpB1n1fzjEhgQQ='
+    version = 'v0.73.1'
+    hash = 'sha256-giSwpD4bQweEAr8IaaQB/gDF9IT/6WtDNQrcAjHFR9U='
 
   [mod.'github.com/prometheus/procfs']
-    version = 'v0.22.0'
-    hash = 'sha256-TRwVHKgW4NnPuC6Me38OD57ccM8AfnS7IxtcAx2TAH4='
+    version = 'v0.23.0'
+    hash = 'sha256-AuXjd9KvroBvb7lCYt8+E2n4Hd6Y4+RrCtUz5b6qm6s='
 
   [mod.'github.com/rivo/uniseg']
     version = 'v0.4.7'
@@ -134,12 +138,12 @@ schema = 3
     hash = 'sha256-M19FDSqpQyzU5VyKkDIx0Hc5KFNQfB9CyOnm+DKNwcU='
 
   [mod.'github.com/xo/terminfo']
-    version = 'v1.2.0'
-    hash = 'sha256-cLY+3xdncFQA7wPfh21Pex3Q9LA7dhRe+IyH0x6bQfM='
+    version = 'v1.3.0'
+    hash = 'sha256-pBQq9ERdY99za4EYTc0y3oZ6hVVBZIF6UJOtUEDVMRQ='
 
   [mod.'golang.org/x/exp']
-    version = 'v0.0.0-20261013213113-2ab7f3cbc5fb'
-    hash = 'sha256-S9ExpSd6yddUf1zDT/aZS9GekJu97q/wLHMUjPF2fB8='
+    version = 'v0.0.0-20261014143641-f0251eb4aa3e'
+    hash = 'sha256-PLzyWDt9Ni7Qdd6uHw7avHSJxdSc+VEzf5JG9gFCywo='
 
   [mod.'golang.org/x/sys']
     version = 'v0.49.0'
