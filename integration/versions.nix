@@ -9,7 +9,6 @@ let
     "linuxPackages_7_2"
   ];
 
-  # "linuxPackages_7_0" -> "k70"
   nodeName = attr: "k" + std.replaceStrings [ "_" ] [ "" ] (std.removePrefix "linuxPackages_" attr);
 
   mkNode =
@@ -18,7 +17,6 @@ let
     {
       imports = [ (common.mkBase "192.168.1.10") ];
 
-      # the actual integetration test lesgoooo
       boot.kernelPackages = std.mkForce pkgs.${attr};
 
       services.rfm = {
@@ -37,7 +35,6 @@ in
 {
   name = "rfm-versions";
 
-  # enableDebugHook = true;
   inherit (common) interactive;
 
   nodes = std.listToAttrs (

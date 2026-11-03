@@ -21,6 +21,11 @@ const (
 	ethP8021AD = 0x88A8
 )
 
+const (
+	ipProtoTCP = 6
+	ipProtoUDP = 17
+)
+
 // IPv6 next header values of the extension headers
 const (
 	IPProtoHopOpts  = 0
@@ -60,7 +65,7 @@ func addVLANTag(payload []byte, tci, inner uint16) []byte {
 func ipv4(proto uint8, src, dst net.IP, payload []byte) []byte {
 	total := IPv4HdrLen + len(payload)
 	hdr := make([]byte, total)
-	hdr[0] = 0x45 // version=4, ihl=5
+	hdr[0] = 4<<4 | IPv4HdrLen/4
 	binary.BigEndian.PutUint16(hdr[2:4], uint16(total))
 	hdr[8] = 64 // ttl
 	hdr[9] = proto
@@ -173,7 +178,7 @@ func ipv4Fragment(proto uint8, src, dst net.IP, id uint16, offsetBytes uint16, m
 
 	total := IPv4HdrLen + len(payload)
 	hdr := make([]byte, total)
-	hdr[0] = 0x45 // version=4, ihl=5
+	hdr[0] = 4<<4 | IPv4HdrLen/4
 	binary.BigEndian.PutUint16(hdr[2:4], uint16(total))
 	binary.BigEndian.PutUint16(hdr[4:6], id)
 
@@ -194,7 +199,7 @@ func ipv4Fragment(proto uint8, src, dst net.IP, id uint16, offsetBytes uint16, m
 // EthIPv4TCPWithOptions builds an eth+ipv4+tcp frame with IP options
 func EthIPv4TCPWithOptions(srcIP, dstIP net.IP, srcPort, dstPort uint16, options []byte) []byte {
 	tcp := TCP(srcPort, dstPort)
-	ip := ipv4WithOptions(6, srcIP, dstIP, options, tcp)
+	ip := ipv4WithOptions(ipProtoTCP, srcIP, dstIP, options, tcp)
 	return Eth(
 		defaultDstMAC(),
 		defaultSrcMAC(),
@@ -206,7 +211,7 @@ func EthIPv4TCPWithOptions(srcIP, dstIP net.IP, srcPort, dstPort uint16, options
 // EthIPv4TCP builds a complete eth+ipv4+tcp frame
 func EthIPv4TCP(srcIP, dstIP net.IP, srcPort, dstPort uint16) []byte {
 	tcp := TCP(srcPort, dstPort)
-	ip := ipv4(6, srcIP, dstIP, tcp) // proto 6 = TCP
+	ip := ipv4(ipProtoTCP, srcIP, dstIP, tcp)
 	return Eth(
 		defaultDstMAC(),
 		defaultSrcMAC(),
@@ -219,7 +224,7 @@ func EthIPv4TCP(srcIP, dstIP net.IP, srcPort, dstPort uint16) []byte {
 // the frame may exceed the link MTU, which is what a GSO skb looks like
 func EthIPv4TCPPayload(srcIP, dstIP net.IP, srcPort, dstPort uint16, payload []byte) []byte {
 	tcp := append(TCP(srcPort, dstPort), payload...)
-	ip := ipv4(6, srcIP, dstIP, tcp)
+	ip := ipv4(ipProtoTCP, srcIP, dstIP, tcp)
 	return Eth(
 		defaultDstMAC(),
 		defaultSrcMAC(),
@@ -231,7 +236,7 @@ func EthIPv4TCPPayload(srcIP, dstIP net.IP, srcPort, dstPort uint16, payload []b
 // EthVLANIPv4TCP builds an 802.1Q tagged eth+ipv4+tcp frame
 func EthVLANIPv4TCP(srcIP, dstIP net.IP, srcPort, dstPort uint16, tci uint16) []byte {
 	tcp := TCP(srcPort, dstPort)
-	ip := ipv4(6, srcIP, dstIP, tcp)
+	ip := ipv4(ipProtoTCP, srcIP, dstIP, tcp)
 	return Eth(
 		defaultDstMAC(),
 		defaultSrcMAC(),
@@ -243,7 +248,7 @@ func EthVLANIPv4TCP(srcIP, dstIP net.IP, srcPort, dstPort uint16, tci uint16) []
 // EthIPv4UDP builds a complete eth+ipv4+udp frame
 func EthIPv4UDP(srcIP, dstIP net.IP, srcPort, dstPort uint16) []byte {
 	udp := UDP(srcPort, dstPort)
-	ip := ipv4(17, srcIP, dstIP, udp) // proto 17 = UDP
+	ip := ipv4(ipProtoUDP, srcIP, dstIP, udp)
 	return Eth(
 		defaultDstMAC(),
 		defaultSrcMAC(),
@@ -254,7 +259,7 @@ func EthIPv4UDP(srcIP, dstIP net.IP, srcPort, dstPort uint16) []byte {
 
 // EthIPv4UDPFragment builds an eth+ipv4 fragment frame for UDP traffic
 func EthIPv4UDPFragment(srcIP, dstIP net.IP, id uint16, offsetBytes uint16, more bool, payload []byte) []byte {
-	ip := ipv4Fragment(17, srcIP, dstIP, id, offsetBytes, more, payload)
+	ip := ipv4Fragment(ipProtoUDP, srcIP, dstIP, id, offsetBytes, more, payload)
 	return Eth(
 		defaultDstMAC(),
 		defaultSrcMAC(),
@@ -266,7 +271,7 @@ func EthIPv4UDPFragment(srcIP, dstIP net.IP, id uint16, offsetBytes uint16, more
 // EthIPv6TCP builds a complete eth+ipv6+tcp frame
 func EthIPv6TCP(srcIP, dstIP net.IP, srcPort, dstPort uint16) []byte {
 	tcp := TCP(srcPort, dstPort)
-	ip := ipv6(6, srcIP, dstIP, tcp) // proto 6 = TCP
+	ip := ipv6(ipProtoTCP, srcIP, dstIP, tcp)
 	return Eth(
 		defaultDstMAC(),
 		defaultSrcMAC(),
@@ -289,7 +294,7 @@ func EthIPv6(srcIP, dstIP net.IP, next uint8, payload []byte) []byte {
 // EthQinQIPv6UDP builds an 802.1ad + 802.1Q tagged eth+ipv6+udp frame
 func EthQinQIPv6UDP(srcIP, dstIP net.IP, srcPort, dstPort uint16, outerTCI, innerTCI uint16) []byte {
 	udp := UDP(srcPort, dstPort)
-	ip := ipv6(17, srcIP, dstIP, udp)
+	ip := ipv6(ipProtoUDP, srcIP, dstIP, udp)
 	vlan := addVLANTag(ip, innerTCI, ethPIPv6)
 	return Eth(
 		defaultDstMAC(),
@@ -302,7 +307,7 @@ func EthQinQIPv6UDP(srcIP, dstIP net.IP, srcPort, dstPort uint16, outerTCI, inne
 // EthIPv6UDP builds a complete eth+ipv6+udp frame
 func EthIPv6UDP(srcIP, dstIP net.IP, srcPort, dstPort uint16) []byte {
 	udp := UDP(srcPort, dstPort)
-	ip := ipv6(17, srcIP, dstIP, udp) // proto 17 = UDP
+	ip := ipv6(ipProtoUDP, srcIP, dstIP, udp)
 	return Eth(
 		defaultDstMAC(),
 		defaultSrcMAC(),

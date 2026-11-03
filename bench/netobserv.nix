@@ -17,7 +17,6 @@ buildGoModule (finalAttrs: {
     hash = "sha256-XuPMiBb1udd95wVMRtrh/988ucJhCn9L80VChemfL7Q=";
   };
 
-  # use in-tree vendor as is
   vendorHash = null;
 
   env.CGO_ENABLED = 0;

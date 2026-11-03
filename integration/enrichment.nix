@@ -6,7 +6,6 @@ in
 {
   name = "rfm-enrichment";
 
-  # enableDebugHook = true;
   inherit (common) interactive;
 
   nodes.machine1 =

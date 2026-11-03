@@ -9,8 +9,6 @@ let
 
   configFile = toml.generate "rfm.toml" cfg.settings;
 
-  # a port the unit listens on or sends from, it holds no
-  # CAP_NET_BIND_SERVICE for one below 1024
   boundPort = std.types.ints.between 1024 65535;
 in
 {
@@ -89,8 +87,6 @@ in
                       description = "Keep no exact interface counters, a packet the sampling draw passes over then costs only the draw. The interface metrics go away, the flow metrics stay.";
                     };
 
-                    # the unit opens the mount root to its user and creates
-                    # the pin directory in it, nothing deeper
                     pin_path = std.mkOption {
                       type = std.types.strMatching "(/sys/fs/bpf/[^/]+)?";
                       default = "/sys/fs/bpf/rfm";
@@ -204,8 +200,6 @@ in
                 default = { };
                 type = std.types.submodule {
                   options = {
-                    # the agent cannot write outside its runtime directory
-                    # and does not create directories for the socket
                     socket = std.mkOption {
                       type = std.types.strMatching "(/run/rfm/[^/]+)?";
                       default = "/run/rfm/rfm.sock";
@@ -279,8 +273,6 @@ in
   config = std.mkIf cfg.enable {
     environment.systemPackages = [ cfg.package ];
 
-    # the agent runs as its own user with just the three capabilities the
-    # bpf verifier, tcx attach and map access need, root is not required
     users.users.rfm = {
       isSystemUser = true;
       group = "rfm";
@@ -292,16 +284,8 @@ in
       description = "Router Flow Monitor agent";
       after = [ "network.target" ];
       wantedBy = [ "multi-user.target" ];
-      # a start fails while a listen address or an mmdb file is not there
-      # yet, so the unit retries every few seconds without a start limit
-      # instead of giving up within a second, a matched interface that is
-      # not there yet is attached once it appears
       startLimitIntervalSec = 0;
       serviceConfig = {
-        # systemd mounts bpffs with mode 0700, which the agent's user cannot
-        # traverse, so the mount root is opened to 0711 (traverse only) and
-        # the pin directory prepared as root before the agent drops to its
-        # own user, pinned objects keep their own 0600 mode
         ExecStartPre = std.optionals (cfg.settings.agent.bpf.pin_path != "") [
           "+${pkgs.coreutils}/bin/chmod 0711 ${std.dirOf cfg.settings.agent.bpf.pin_path}"
           "+${pkgs.coreutils}/bin/install -d -m 0750 -o rfm -g rfm ${cfg.settings.agent.bpf.pin_path}"
@@ -342,8 +326,6 @@ in
         RestrictSUIDSGID = true;
         RestrictNamespaces = true;
         SystemCallArchitectures = "native";
-        # unix for the control socket, inet for ipfix, bmp and metrics,
-        # netlink for interface discovery
         RestrictAddressFamilies = [
           "AF_UNIX"
           "AF_INET"

@@ -15,13 +15,11 @@ import (
 
 // virtio_net_hdr values understood by AF_PACKET sockets with PACKET_VNET_HDR
 const (
-	virtioNetHdrLen        = 10
-	virtioNetHdrNeedsCsum  = 1
-	virtioNetHdrGSOTCPv4   = 1
-	virtioNetHdrGSOTCPv6   = 4
-	tcpChecksumOffset      = 16
-	packetVNetHdrSockopt   = unix.PACKET_VNET_HDR
-	packetVNetHdrSockLevel = unix.SOL_PACKET
+	virtioNetHdrLen       = 10
+	virtioNetHdrNeedsCsum = 1
+	virtioNetHdrGSOTCPv4  = 1
+	virtioNetHdrGSOTCPv6  = 4
+	tcpChecksumOffset     = 16
 )
 
 // virtioNetHdr is struct virtio_net_hdr, AF_PACKET sockets use the legacy
@@ -67,7 +65,6 @@ func NewNS(t *testing.T) *NS {
 		t.Fatal(err)
 	}
 
-	// register cleanup early so failures below still restore ns
 	t.Cleanup(func() {
 		netns.Set(orig)
 		ns.Close()
@@ -75,7 +72,6 @@ func NewNS(t *testing.T) *NS {
 		runtime.UnlockOSThread()
 	})
 
-	// create veth pair inside the namespace
 	veth := &netlink.Veth{
 		LinkAttrs: netlink.LinkAttrs{Name: "rfm0"},
 		PeerName:  "rfm1",
@@ -85,7 +81,6 @@ func NewNS(t *testing.T) *NS {
 		t.Fatal(err)
 	}
 
-	// bring both ends up
 	for _, name := range []string{"rfm0", "rfm1", "lo"} {
 		l, err := netlink.LinkByName(name)
 		if err != nil {
@@ -183,7 +178,7 @@ func (n *NS) SendGSO(t *testing.T, ifname string, pkt []byte, hdrLen, gsoSize ui
 	}
 	defer syscall.Close(fd)
 
-	if err := syscall.SetsockoptInt(fd, packetVNetHdrSockLevel, packetVNetHdrSockopt, 1); err != nil {
+	if err := syscall.SetsockoptInt(fd, unix.SOL_PACKET, unix.PACKET_VNET_HDR, 1); err != nil {
 		t.Fatalf("PACKET_VNET_HDR: %v", err)
 	}
 

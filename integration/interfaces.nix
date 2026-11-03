@@ -6,7 +6,6 @@ in
 {
   name = "rfm-interfaces";
 
-  # enableDebugHook = true;
   inherit (common) interactive;
 
   nodes = { inherit (common) machine1 machine2; };
@@ -17,7 +16,6 @@ in
       m.wait_for_unit("rfm.service")
       m.wait_for_open_port(9669)
 
-    # TCX program verification (bpftool, not tc filter)
     machine1.succeed("bpftool net show | grep rfm_tc_ingress")
     machine1.succeed("bpftool net show | grep rfm_tc_egress")
 

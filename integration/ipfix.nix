@@ -6,7 +6,6 @@ in
 {
   name = "rfm-ipfix";
 
-  # enableDebugHook = true;
   inherit (common) interactive;
 
   nodes = { inherit (common) machine1 machine2; };

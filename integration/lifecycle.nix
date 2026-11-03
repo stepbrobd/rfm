@@ -5,8 +5,6 @@
 let
   common = import ./lib { inherit inputs std; };
 
-  # whether the module takes these agent settings, evaluated on its own and
-  # forced deeply, the nixos options it sets take no part in that
   accepts =
     agent:
     (std.tryEval (
@@ -27,10 +25,6 @@ let
         true
     )).success;
 
-  # the defaults, zero ports as the fleet runs them, which keep ipfix and
-  # bmp at their defaults or off and the ipfix source port ephemeral, other
-  # names where the socket and the pin may live, and the lowest ports the
-  # unit can bind next to a collector port below them, which it only sends to
   honored = [
     { }
     {
@@ -59,9 +53,6 @@ let
     }
   ];
 
-  # a socket outside the runtime directory, a pin outside the bpffs mount
-  # root, a misspelled key, a port the agent rejects and ports below 1024,
-  # which the unit cannot bind without CAP_NET_BIND_SERVICE
   unhonored = [
     { control.socket = "/run/rfm.sock"; }
     { control.socket = "/run/rfm/ctl/rfm.sock"; }
@@ -83,7 +74,6 @@ in
 {
   name = "rfm-lifecycle";
 
-  # enableDebugHook = true;
   inherit (common) interactive;
 
   nodes = {
@@ -94,8 +84,6 @@ in
       machine4
       ;
 
-    # the asn database is written after boot, as geoipupdate's first run
-    # waits for network-online.target and rfm does not
     machine5 =
       { pkgs, ... }:
       {
@@ -111,8 +99,6 @@ in
           };
         };
 
-        # restarts faster than the default limit of five starts in ten
-        # seconds allows, which only a unit without a start limit survives
         systemd.services.rfm.serviceConfig.RestartSec = std.mkForce "100ms";
       };
 

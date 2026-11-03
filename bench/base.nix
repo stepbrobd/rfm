@@ -66,7 +66,6 @@
       nushell
       zsh
 
-      # rfm
       inputs.self.packages.${pkgs.stdenv.hostPlatform.system}.default
 
       bcc
@@ -89,8 +88,8 @@
       softflowd
       tcpreplay
 
-      (callPackage ./hsflowd.nix { }) # in kernel sampling (EPCAP/TCX + PSAMPLE)
-      (callPackage ./netobserv.nix { }) # in kernel per CPU hash aggregation
+      (callPackage ./hsflowd.nix { })
+      (callPackage ./netobserv.nix { })
     ];
   };
 

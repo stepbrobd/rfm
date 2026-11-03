@@ -17,7 +17,6 @@ buildGoApplication (
       toSource {
         root = ./.;
         fileset = unions [
-          # code
           ./bpf
           ./cmd
           ./collector
@@ -27,7 +26,6 @@ buildGoApplication (
           ./export
           ./probe
           ./testutil
-          # meta
           ./go.mod
           ./go.sum
           ./gomod2nix.toml
@@ -39,9 +37,6 @@ buildGoApplication (
 
     subPackages = [ "cmd/rfm" ];
 
-    # the default check hook takes its package list from subPackages, which
-    # would test cmd/rfm alone, so every package is tested here and the
-    # tests that need root skip themselves in the sandbox
     checkPhase = ''
       runHook preCheck
       go test -p "$NIX_BUILD_CORES" ./...

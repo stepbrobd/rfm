@@ -6,7 +6,6 @@ in
 {
   name = "rfm-accounting";
 
-  # enableDebugHook = true;
   inherit (common) interactive;
 
   nodes = { inherit (common) machine3 machine4; };
@@ -32,8 +31,7 @@ in
     paths = [(machine3, "tx"), (machine4, "rx"), (machine4, "tx"), (machine3, "rx")]
     before = [(iface_counters(m, "eth1", d), ipv4_counters(m, d)) for m, d in paths]
 
-    # 10 echo requests and 10 replies of 542 bytes on the wire, a 500 byte
-    # payload behind 8 bytes of icmp, 20 of ipv4 and 14 of ethernet
+    wire = 14 + 20 + 8 + 500
     machine3.succeed("ping -c 10 -i 0.2 -s 500 192.168.1.4")
     time.sleep(2)
 
@@ -48,8 +46,8 @@ in
 
       # and the ipv4 series holds the echo traffic, no more and no less
       pkts, octets = (a - b for a, b in zip(ipv4_after, ipv4_before))
-      assert (pkts, octets) == (10, 10 * 542), (
-        f"{m.name} {d} ipv4: {pkts} pkts {octets} bytes, expected 10 pkts {10 * 542} bytes"
+      assert (pkts, octets) == (10, 10 * wire), (
+        f"{m.name} {d} ipv4: {pkts} pkts {octets} bytes, expected 10 pkts {10 * wire} bytes"
       )
   '';
 }

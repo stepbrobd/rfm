@@ -6,14 +6,11 @@ in
 {
   name = "rfm-dashboard";
 
-  # enableDebugHook = true;
   inherit (common) interactive;
 
   nodes = {
     inherit (common) machine2;
 
-    # prometheus scrapes the agent every second, and the agent evicts a flow
-    # after five idle seconds
     machine1 = {
       imports = [ common.machine1 ];
 

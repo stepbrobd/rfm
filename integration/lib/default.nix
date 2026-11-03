@@ -1,7 +1,6 @@
 { inputs, std }:
 
 let
-  # shared base config for all machines
   mkBase =
     ip:
     { pkgs, ... }:
@@ -59,10 +58,8 @@ in
       };
   };
 
-  # shared python helpers prepended to test scripts
   helpers = std.readFile ./helpers.py;
 
-  # each machine have different config to cover more code paths
   machine1 =
     { pkgs, ... }:
     {
@@ -144,7 +141,6 @@ in
 
   machine4 = {
     imports = [ (mkBase "192.168.1.4") ];
-    # single interface, sample every packet, bind to specific address
     services.rfm = {
       enable = true;
       settings.agent = {

@@ -32,12 +32,7 @@ def require_positive(metrics: str, name: str, **labels: str) -> list[float]:
   return vals
 
 def iface_counters(machine, ifname: str, direction: str = "rx") -> tuple[int, int, int, int]:
-  """rfm and kernel counters of ifname in one direction, read back to back.
-
-  direction is rx or tx. Returns (rfm packets, rfm bytes, kernel packets,
-  kernel bytes) so a test can compare deltas of the exact per-CPU counters
-  against the NIC statistics.
-  """
+  """rfm and kernel packets and bytes of ifname in direction rx or tx, read back to back."""
   out = machine.succeed(
     "curl -sf http://localhost:9669/metrics; echo ---; "
     f"cat /sys/class/net/{ifname}/statistics/{direction}_packets "

@@ -27,8 +27,8 @@ stdenv.mkDerivation (finalAttrs: {
   dontConfigure = true;
 
   env.FEATURES = lib.concatStringsSep " " [
-    "EPCAP" # eBPF/TCX sampling
-    "PSAMPLE" # kernel psample
+    "EPCAP"
+    "PSAMPLE"
   ];
 
   enableParallelBuilding = true;
