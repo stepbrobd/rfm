@@ -11,6 +11,18 @@
 const LIB = path self | path dirname | path join "lib.nu"
 use $LIB *
 
+# the IPv4 address n above a
+def ip-add [a: string, n: int] {
+    let o = $a | split row "." | each {|x| $x | into int }
+    let v = (($o.0 * 16777216) + ($o.1 * 65536) + ($o.2 * 256) + $o.3 + $n)
+    [
+        ($v // 16777216 mod 256)
+        ($v // 65536 mod 256)
+        ($v // 256 mod 256)
+        ($v mod 256)
+    ] | each {|x| $x | into string } | str join "."
+}
+
 def main [
   --iface: string = "ens3f0np0"  # generator NIC
   --dst: string                  # DUT IP
@@ -22,6 +34,11 @@ def main [
   --rate: int = 0                # per-device Mbit/s cap, 0 = unlimited
   --clone: int = 0               # clone_skb, sends of one skb before a rebuild
   --burst: int = 1               # packets per doorbell
+  --srcips: int = 1              # distinct IPv4 source addresses from --srcbase, flows are --flows times this
+  --srcbase: string = "10.200.0.1" # first IPv4 source address of a --srcips range
+  --dst6: string = ""            # DUT IPv6 address, sends IPv6 in place of IPv4 when set
+  --src6: string = ""            # generator IPv6 source address for --dst6
+  --vlan: int = -1               # 802.1Q VLAN id of every frame, -1 sends untagged
 ] {
     ^modprobe pktgen
     let spmin = 10000
@@ -41,7 +58,18 @@ def main [
     pg $d $"clone_skb ($clone)"
     pg $d $"pkt_size ($size)"
     pg $d "delay 0"
-    pg $d $"dst ($dst)"
+    if ($dst6 | is-empty) {
+        pg $d $"dst ($dst)"
+    } else {
+        pg $d $"dst6 ($dst6)"
+        pg $d $"src6 ($src6)"
+    }
+    if $srcips > 1 {
+        pg $d $"src_min ($srcbase)"
+        pg $d $"src_max (ip-add $srcbase ($srcips - 1))"
+        pg $d "flag IPSRC_RND"
+    }
+    if $vlan >= 0 { pg $d $"vlan_id ($vlan)" }
     pg $d $"dst_mac ($dstmac)"
     # each thread owns tx queue i, threads that share a queue serialize on its lock
     pg $d $"queue_map_min ($i)"
@@ -62,7 +90,7 @@ def main [
     {
         threads: $threads
         size: $size
-        flows: $flows
+        flows: ($flows * $srcips)
         agg_pps: $pps
     }
 }
