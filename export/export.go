@@ -86,6 +86,11 @@ var (
 		"Number of active flows in the collector.",
 		nil, nil,
 	)
+	descCreatedFlows = prometheus.NewDesc(
+		"rfm_collector_created_flows_total",
+		"Total flows created in the flow table, a flow that returns after its eviction counts again.",
+		nil, nil,
+	)
 	descDroppedEvents = prometheus.NewDesc(
 		"rfm_collector_dropped_events_total",
 		"Total flow events dropped by the ring buffer.",
@@ -158,6 +163,7 @@ var (
 		descFlowSampledBytesTotal,
 		descFlowSampledPacketsTotal,
 		descActiveFlows,
+		descCreatedFlows,
 		descDroppedEvents,
 		descForcedEvictions,
 		descFoldedFlows,
@@ -292,6 +298,7 @@ func (mc *MetricsCollector) Collect(ch chan<- prometheus.Metric) {
 		ch <- prometheus.MustNewConstMetric(descSampleRate, prometheus.GaugeValue, float64(mc.col.SampleRate()))
 		stats := mc.col.Stats()
 		ch <- prometheus.MustNewConstMetric(descActiveFlows, prometheus.GaugeValue, float64(stats.ActiveFlows))
+		ch <- prometheus.MustNewConstMetric(descCreatedFlows, prometheus.CounterValue, float64(stats.CreatedFlows))
 		ch <- prometheus.MustNewConstMetric(descDroppedEvents, prometheus.CounterValue, float64(stats.DroppedEvents))
 		ch <- prometheus.MustNewConstMetric(descForcedEvictions, prometheus.CounterValue, float64(stats.ForcedEvictions))
 		ch <- prometheus.MustNewConstMetric(descFoldedFlows, prometheus.CounterValue, float64(stats.FoldedFlows))

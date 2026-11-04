@@ -219,6 +219,7 @@ func TestDescribe(t *testing.T) {
 		"rfm_flow_sampled_bytes_total",
 		"rfm_flow_sampled_packets_total",
 		"rfm_collector_active_flows",
+		"rfm_collector_created_flows_total",
 		"rfm_collector_dropped_events_total",
 		"rfm_collector_forced_evictions_total",
 		"rfm_collector_folded_flows_total",
@@ -257,6 +258,7 @@ func TestCollectHealth(t *testing.T) {
 	vals := collectAll(t, mc)
 
 	assertGauge(t, vals, "rfm_collector_active_flows", 1)
+	assertCounter(t, vals, "rfm_collector_created_flows_total", 1)
 	assertCounter(t, vals, "rfm_collector_dropped_events_total", 0)
 	assertCounter(t, vals, "rfm_collector_forced_evictions_total", 0)
 }
