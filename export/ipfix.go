@@ -611,8 +611,7 @@ func (e *IPFIXExporter) countSendError(err error, records uint64, now time.Time)
 
 // errnoName returns the symbolic errno behind err, or "other"
 func errnoName(err error) string {
-	var errno syscall.Errno
-	if errors.As(err, &errno) {
+	if errno, ok := errors.AsType[syscall.Errno](err); ok {
 		if name := unix.ErrnoName(errno); name != "" {
 			return name
 		}
