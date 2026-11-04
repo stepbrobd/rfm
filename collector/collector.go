@@ -846,6 +846,16 @@ func (c *Collector) Run(ctx context.Context, rd Reader) error {
 // as one error and is skipped, an event that fails to decode counts as one and
 // is skipped while the others of its record are kept
 func (c *Collector) appendSamples(batch []sample, raw []byte) []sample {
+	// a load without a stage writes every event as a record of its own
+	if len(raw) == wireFlowEventSize {
+		batch = append(batch, sample{})
+		if err := batch[len(batch)-1].decode(raw); err != nil {
+			log.Error("decode flow event", "err", err, "event", 0, "events", 1)
+			c.ringBufErrs.Add(1)
+			return batch[:len(batch)-1]
+		}
+		return batch
+	}
 	n, err := recordEvents(raw)
 	if err != nil {
 		log.Error("decode flow event record", "err", err)
