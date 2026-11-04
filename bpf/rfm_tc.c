@@ -255,6 +255,9 @@ rfm_hash_count(__u32 ifindex, __u8 dir, __u8 iface_proto, __u32 segs, __u32 len)
 // rfm_gap draws a skip uniform from 0 to 2n - 2, a gap of mean n to the sample
 static __always_inline __u64 rfm_gap(__u32 n)
 {
+	// at rate 1 the gap is always 0, the draw is skipped
+	if (n <= 1)
+		return 0;
 	return ((__u64)bpf_get_prandom_u32() * (2 * (__u64)n - 1)) >> 32;
 }
 
