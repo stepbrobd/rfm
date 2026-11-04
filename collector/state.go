@@ -5,25 +5,26 @@ import (
 	"time"
 )
 
-// flowState is a live flow and what its earlier records carried
+// flowState is a live flow and what its earlier records carried, the fields
+// an event touches come first and span two cache lines at most offsets
 type flowState struct {
-	key    FlowKey
-	entry  FlowEntry
 	elem   *list.Element
 	rollup *rollupState
+	// first and last are the min and max event time since the last record, events arrive out of order, 0 before the first
+	first, last time.Duration
+	entry       FlowEntry
 
 	// active is the position in the fifo of pending active timeout exports
 	active *list.Element
 	// intervalStart is when the not yet exported interval began, the flow's
 	// creation or the sweep that marked it, the active timeout runs from it
 	intervalStart time.Duration
-	// first and last are the min and max event time since the last record, events arrive out of order, 0 before the first
-	first, last time.Duration
 	// sent holds the counters earlier records carried, the ones a record
 	// needs and no more
 	sent struct {
 		packets, ipBytes, estPackets uint64
 	}
+	key FlowKey
 }
 
 // seen extends the flow and its unexported interval to an event at t
@@ -69,24 +70,25 @@ func (s *flowState) mark(now time.Duration) {
 	s.first, s.last = 0, 0
 }
 
-// rollupState is one label tuple with the counters a scrape exposes
+// rollupState is one label tuple with the counters a scrape exposes, the
+// fields an event touches come first and span two cache lines
 type rollupState struct {
 	Counts
+	// live sums the counts of the live flows under the tuple
+	live     Counts
 	lastSeen time.Duration
-	key      RollupKey
+	// shown is set while the last scrape showed every count of the tuple,
+	// only then may it be dropped without losing counts nobody saw
+	shown bool
+	// exposed is set once a scrape showed the tuple, at zero the first time
+	exposed bool
+	key     RollupKey
 	// id tells this life of the tuple apart from any other
 	id uint64
-	// live sums the counts of the live flows under the tuple
-	live Counts
 	// flows counts the live flows that count under the tuple
 	flows int
 	// idle is the position in the collector's idle list while flows is 0
 	idle *list.Element
-	// exposed is set once a scrape showed the tuple, at zero the first time
-	exposed bool
-	// shown is set while the last scrape showed every count of the tuple,
-	// only then may it be dropped without losing counts nobody saw
-	shown bool
 }
 
 // add accounts the counts of one event at t of a live flow under the tuple
