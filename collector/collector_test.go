@@ -300,37 +300,6 @@ func TestRunDroppedEvents(t *testing.T) {
 	}
 }
 
-func TestRunMovesEventStampsIntoBootTime(t *testing.T) {
-	ev := FlowEvent{
-		Tstamp: 5 * time.Second, Ifindex: 1, Proto: 6, SrcPort: 1000, DstPort: 80,
-		SrcAddr: netip.MustParseAddr("::ffff:10.0.0.1"),
-		DstAddr: netip.MustParseAddr("::ffff:10.0.0.2"),
-		Segs:    1,
-		Len:     100,
-	}
-	mr := &mockReader{events: [][]byte{encodeWireEvent(ev)}}
-	c := New(time.Hour, nil, config.DefaultMaxFlows)
-	ctx, cancel := context.WithCancel(context.Background())
-	errCh := make(chan error, 1)
-	go func() { errCh <- c.Run(ctx, mr) }()
-
-	deadline := time.Now().Add(5 * time.Second)
-	for len(c.Flows()) == 0 {
-		if time.Now().After(deadline) {
-			cancel()
-			t.Fatal("the event was not recorded")
-		}
-		time.Sleep(time.Millisecond)
-	}
-	cancel()
-	<-errCh
-
-	// the programs stamp with the coarse monotonic clock, the table holds boot times
-	if got, want := c.Flows()[ev.Key()].FirstSeen, ev.Tstamp+suspended(); got != want {
-		t.Fatalf("first seen %v, want %v", got, want)
-	}
-}
-
 // liveDropsReader holds no events and reports the drops a test stores
 type liveDropsReader struct{ drops atomic.Uint64 }
 

@@ -753,8 +753,6 @@ func (c *Collector) Run(ctx context.Context, rd Reader) error {
 	batch := make([]sample, 0, readBatch)
 	// a table at its cap evicts a flow for each new one, one buffer holds the records of a batch after batch
 	var expired []ExportedFlow
-	// the programs stamp events with the coarse monotonic clock, the offset to boot time is read again only after a resume or a clock step
-	start, sus := time.Now(), suspendOffset{read: suspended}
 	for {
 		if ctx.Err() != nil {
 			return ctx.Err()
@@ -769,19 +767,16 @@ func (c *Collector) Run(ctx context.Context, rd Reader) error {
 			return fmt.Errorf("read event: %w", err)
 		}
 
-		// one offset turns a batch into boot time
-		now := time.Now()
-		off := sus.at(clockSkew(start, now))
-		batch = c.appendSample(batch[:0], raw, off)
+		batch = c.appendSample(batch[:0], raw)
 
 		// a past deadline drains the rings without blocking
-		rd.SetDeadline(now)
+		rd.SetDeadline(time.Now())
 		for len(batch) < readBatch {
 			raw, err := rd.ReadRawEvent()
 			if err != nil {
 				break
 			}
-			batch = c.appendSample(batch, raw, off)
+			batch = c.appendSample(batch, raw)
 		}
 
 		if len(batch) > 0 {
@@ -790,15 +785,13 @@ func (c *Collector) Run(ctx context.Context, rd Reader) error {
 	}
 }
 
-// appendSample decodes raw onto batch in place with its stamp moved by off into boot time, a record that fails to decode is counted and skipped
-func (c *Collector) appendSample(batch []sample, raw []byte, off time.Duration) []sample {
+// appendSample decodes raw onto batch in place, a record that fails to decode is counted and skipped
+func (c *Collector) appendSample(batch []sample, raw []byte) []sample {
 	batch = append(batch, sample{})
-	s := &batch[len(batch)-1]
-	if err := s.decode(raw); err != nil {
+	if err := batch[len(batch)-1].decode(raw); err != nil {
 		log.Error("decode flow event", "err", err, "raw_len", len(raw))
 		c.ringBufErrs.Add(1)
 		return batch[:len(batch)-1]
 	}
-	s.tstamp += off
 	return batch
 }

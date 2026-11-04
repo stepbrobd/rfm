@@ -48,8 +48,7 @@ const (
 )
 
 // DecodeFlowEvent decodes one ring buffer record and refuses an event the
-// probe does not emit, so the methods of FlowEvent can rely on its fields,
-// the coarse monotonic stamp of the record becomes boot time
+// probe does not emit, so the methods of FlowEvent can rely on its fields
 func DecodeFlowEvent(raw []byte) (FlowEvent, error) {
 	if len(raw) < wireFlowEventSize {
 		return FlowEvent{}, fmt.Errorf("short flow event: %d < %d bytes", len(raw), wireFlowEventSize)
@@ -57,7 +56,7 @@ func DecodeFlowEvent(raw []byte) (FlowEvent, error) {
 
 	ne := binary.NativeEndian
 	ev := FlowEvent{
-		Tstamp:  time.Duration(ne.Uint64(raw[offTstamp:])) + suspended(),
+		Tstamp:  time.Duration(ne.Uint64(raw[offTstamp:])),
 		Ifindex: ne.Uint32(raw[offIfindex:]),
 		Dir:     raw[offDirL2] >> dirShift,
 		Proto:   raw[offProto],

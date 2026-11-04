@@ -457,7 +457,7 @@ static __always_inline int rfm_tc(struct __sk_buff *skb, __u8 dir,
 	}
 
 	// ring memory holds older records, every byte is written
-	ev->tstamp = bpf_ktime_get_coarse_ns();
+	ev->tstamp = bpf_ktime_get_boot_ns();
 	ev->ifindex = skb->ifindex;
 	ev->proto = proto;
 	ev->dir_l2 = RFM_DIR_L2(dir, l2_len);
