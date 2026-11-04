@@ -92,6 +92,9 @@ func Load(cfg Config) (*Probe, error) {
 		if err := spec.Variables[stageEvents].Set(cfg.StageEvents); err != nil {
 			return nil, fmt.Errorf("set stage events: %w", err)
 		}
+	} else {
+		// no loaded program reads a stage, one stage in a plain array spares the one of every possible CPU
+		spec.Maps[cpuStage].Type = ebpf.Array
 	}
 
 	if cfg.IfaceStatsSize > 0 {
@@ -230,8 +233,9 @@ const (
 	pinArr   = "rfm_iface_arr"
 )
 
-// the flush timers and the record size of the stage programs, and the program that checks the kernel takes their timers
+// the stages of the stage programs, their flush timers and record size, and the program that checks the kernel takes their timers
 const (
+	cpuStage    = "rfm_cpu_stage"
 	stageTimers = "rfm_stage_timers"
 	stageEvents = "rfm_stage_events"
 	stageProbe  = "rfm_stage_probe"

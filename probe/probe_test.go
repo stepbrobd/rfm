@@ -3110,10 +3110,17 @@ var stageModes = []struct {
 	{"sampled only egress", true, true},
 }
 
-// stageOf returns the stage of cpu
+// stageOf returns the stage of cpu, a load without a stage keeps one stage for every cpu in a plain array
 func stageOf(t *testing.T, p *Probe, cpu int) rfmRfmStage {
 	t.Helper()
 
+	if p.objs.RfmCpuStage.Type() == ebpf.Array {
+		var st rfmRfmStage
+		if err := p.objs.RfmCpuStage.Lookup(uint32(0), &st); err != nil {
+			t.Fatal(err)
+		}
+		return st
+	}
 	var vals []rfmRfmStage
 	if err := p.objs.RfmCpuStage.Lookup(uint32(0), &vals); err != nil {
 		t.Fatal(err)
@@ -3224,6 +3231,10 @@ func TestStageOfOneEventWritesEveryEventAtOnce(t *testing.T) {
 	}
 	if len(raw) != eventSize {
 		t.Fatalf("record of %d bytes, want one event of %d", len(raw), eventSize)
+	}
+	// without a stage the map keeps one stage in a plain array, which no program touches
+	if typ := p.objs.RfmCpuStage.Type(); typ != ebpf.Array {
+		t.Fatalf("stage map of a load of one event a record is a %v, want a plain array", typ)
 	}
 	if st := stageOf(t, p, cpu); st.N != 0 || st.Armed != 0 || st.Ready != 0 {
 		t.Fatalf("stage of a load of one event a record holds %d events, armed at %d, ready %d, want it untouched", st.N, st.Armed, st.Ready)
