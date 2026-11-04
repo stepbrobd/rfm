@@ -46,7 +46,7 @@ in
                 type = std.types.submodule {
                   options = {
                     sample_rate = std.mkOption {
-                      type = std.types.ints.positive;
+                      type = std.types.ints.between 1 4294967295;
                       default = 100;
                       description = "Sample 1 in N skbs for flow events, an event carries every wire packet of its skb.";
                     };
@@ -58,9 +58,9 @@ in
                     };
 
                     wakeup_batch = std.mkOption {
-                      type = std.types.ints.unsigned;
+                      type = std.types.ints.u32;
                       default = 0;
-                      description = "Force a ring buffer wakeup every N flow events a CPU submits over all its interfaces, 0 derives a quarter of the events the ring holds. At most half of them, and a ring_buf_size of 0 grows to hold twice a set batch.";
+                      description = "Force a ring buffer wakeup every N flow events a CPU submits over all its interfaces, 0 derives a quarter of the events the ring holds. At most half of them, and a ring_buf_size of 0 grows to hold twice a set batch, up to 64 MiB.";
                     };
 
                     iface_stats_size = std.mkOption {
@@ -82,7 +82,7 @@ in
                     };
 
                     max_sample_rate = std.mkOption {
-                      type = std.types.ints.positive;
+                      type = std.types.ints.between 1 4294967295;
                       default = 1000;
                       description = "Upper bound for the adaptive sample rate and for any rate set with `rfm set sample-rate`.";
                     };
@@ -175,7 +175,7 @@ in
                     };
 
                     observation_domain_id = std.mkOption {
-                      type = std.types.ints.positive;
+                      type = std.types.ints.between 1 4294967295;
                       default = 1;
                       description = "IPFIX observation domain id used in exported messages.";
                     };
