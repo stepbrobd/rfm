@@ -29,8 +29,7 @@ Current scope:
   counters across restarts when pinned in bpffs
 - Optionally enriches flows in userspace with BMP/RIB data, MMDB data, or both,
   the MMDB files are re-opened when an updater replaces them
-- Exports Prometheus metrics, gauges over the live table and monotonic counters
-  per label tuple
+- Exports Prometheus metrics with monotonic flow counters per label tuple
 - Optionally exports flows to one UDP IPFIX collector, on eviction and as
   interval records on an active timeout, from a bounded queue that packs records
   into sized messages
@@ -101,10 +100,10 @@ rate there without reloading the programs.
    `active_timeout` while it stays in the table.
 4. At scrape time, the Prometheus exporter reads the BPF interface counters
    directly and copies the label tuples the collector keeps current, without
-   walking the flow table. A tuple gives gauges summed over its live flows and
-   monotonic counters per interface, direction, protocol, and enrichment labels
-   (ASN, city) that never reset when flows are evicted. With no enrichment
-   configured, those labels stay empty and the agent still runs normally.
+   walking the flow table. A tuple gives monotonic counters per interface,
+   direction, protocol, and enrichment labels (ASN, city) that never reset when
+   flows are evicted. With no enrichment configured, those labels stay empty and
+   the agent still runs normally.
 5. When IPFIX is enabled, flow records are queued for a sender that packs them
    into messages no larger than `max_message_size`, refreshes templates, and
    sends. Every record carries the sampled packets and their IP bytes since the
@@ -512,27 +511,19 @@ These counters can read above the statistics of a guest NIC. virtio_net counts a
 TSO frame it sends, or a GSO frame the host hands up, as one packet, and macb
 and ena leave the ethernet header out of their received bytes.
 
-Flow gauges over the live flow table (rolled up by enrichment labels), which a
-label tuple without live flows leaves out:
+Flow counters rolled up by enrichment labels, which never reset when flows are
+evicted and therefore work with `rate()` and `increase()`:
 
-- `rfm_flow_bytes{ifname, direction, proto, src_asn, dst_asn, src_city, dst_city}`
-- `rfm_flow_packets{ifname, direction, proto, src_asn, dst_asn, src_city, dst_city}`
-- `rfm_flow_sampled_bytes{ifname, direction, proto, src_asn, dst_asn, src_city, dst_city}`
-- `rfm_flow_sampled_packets{ifname, direction, proto, src_asn, dst_asn, src_city, dst_city}`
+- `rfm_flow_bytes_total{ifname, direction, proto, src_asn, dst_asn, src_city, dst_city}`
+- `rfm_flow_packets_total{ifname, direction, proto, src_asn, dst_asn, src_city, dst_city}`
+- `rfm_flow_sampled_bytes_total{ifname, direction, proto, src_asn, dst_asn, src_city, dst_city}`
+- `rfm_flow_sampled_packets_total{ifname, direction, proto, src_asn, dst_asn, src_city, dst_city}`
 
-Flow counters with the same labels, which never reset when flows are evicted and
-therefore work with `rate()` and `increase()`:
-
-- `rfm_flow_bytes_total`
-- `rfm_flow_packets_total`
-- `rfm_flow_sampled_bytes_total`
-- `rfm_flow_sampled_packets_total`
-
-`rfm_flow_bytes` and `rfm_flow_bytes_total` are estimates of wire bytes, every
-event scaled by the sample rate in force when it was sampled. The `sampled`
-variants are the raw sampled values before scaling. Per direction, this ratio is
-the sampling error in production plus the events the ring buffer dropped, with
-the frames that are not IP left out because they never reach the flow series:
+`rfm_flow_bytes_total` is an estimate of wire bytes, every event scaled by the
+sample rate in force when it was sampled. The `sampled` variants are the raw
+sampled values before scaling. Per direction, this ratio is the sampling error
+in production plus the events the ring buffer dropped, with the frames that are
+not IP left out because they never reach the flow series:
 
 ```promql
 sum(increase(rfm_flow_bytes_total{direction="ingress"}[1h]))
@@ -561,6 +552,7 @@ Sampling:
 Collector health:
 
 - `rfm_collector_active_flows`
+- `rfm_collector_created_flows_total`
 - `rfm_collector_dropped_events_total`
 - `rfm_collector_forced_evictions_total`
 - `rfm_collector_folded_flows_total`
