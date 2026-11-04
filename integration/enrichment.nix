@@ -186,8 +186,8 @@ in
     )
 
     google_asn = lookup_mmdb_asn(machine1, "8.8.8.8")
-    wait_for_positive_metric(machine1, "rfm_flow_packets", ifname="eth1", direction="egress", dst_asn="65002")
-    wait_for_positive_metric(machine1, "rfm_flow_packets", ifname="eth1", direction="egress", dst_asn="65003")
-    wait_for_positive_metric(machine1, "rfm_flow_packets", ifname="eth1", direction="egress", dst_asn=google_asn)
+    wait_for_positive_metric(machine1, "rfm_flow_packets_total", ifname="eth1", direction="egress", dst_asn="65002")
+    wait_for_positive_metric(machine1, "rfm_flow_packets_total", ifname="eth1", direction="egress", dst_asn="65003")
+    wait_for_positive_metric(machine1, "rfm_flow_packets_total", ifname="eth1", direction="egress", dst_asn=google_asn)
   '';
 }

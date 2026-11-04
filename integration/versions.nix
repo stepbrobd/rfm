@@ -97,7 +97,7 @@ in
         assert_rx_matches_nic(a, b, "10.42.0.2")
 
         a.succeed(f"ping -6 -c 5 fd00::{b_ip.split('.')[3]}")
-        wait_for_positive_metric(b, "rfm_flow_packets", ifname="eth1", direction="ingress", proto="58")
+        wait_for_positive_metric(b, "rfm_flow_packets_total", ifname="eth1", direction="ingress", proto="58")
 
         for m in (a, b):
           m.shutdown()
