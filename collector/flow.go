@@ -159,18 +159,6 @@ func (c *Counts) add(o Counts) {
 	c.EstBytes += o.EstBytes
 }
 
-func (c *Counts) sub(o Counts) {
-	c.Packets -= o.Packets
-	c.Bytes -= o.Bytes
-	c.EstPackets -= o.EstPackets
-	c.EstBytes -= o.EstBytes
-}
-
-// counts returns the entry's counters without the IP bytes
-func (e FlowEntry) counts() Counts {
-	return Counts{Packets: e.Packets, Bytes: e.Bytes, EstPackets: e.EstPackets, EstBytes: e.EstBytes}
-}
-
 // Stats holds collector-level statistics
 type Stats struct {
 	ActiveFlows     uint64

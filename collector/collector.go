@@ -395,11 +395,10 @@ func (c *Collector) attachLocked(r *rollupState) {
 	r.flows++
 }
 
-// detachLocked takes a live flow with entry e off r, a tuple without live
-// flows becomes a candidate for retention and for making room
+// detachLocked takes a live flow off r, a tuple without live flows becomes
+// a candidate for retention and for making room
 // it must be called with mu held
-func (c *Collector) detachLocked(r *rollupState, e FlowEntry) {
-	r.live.sub(e.counts())
+func (c *Collector) detachLocked(r *rollupState) {
 	r.flows--
 	if r.flows == 0 {
 		r.idle = c.idleRollups.PushBack(r)
@@ -417,8 +416,7 @@ func (c *Collector) dropRollupLocked(r *rollupState) {
 // removeLocked drops the flow in slot r from the table, its slot is cleared
 // it must be called with mu held
 func (c *Collector) removeLocked(r flowRef) {
-	state := c.flows.at(r)
-	c.detachLocked(state.rollup, state.entry)
+	c.detachLocked(c.flows.at(r).rollup)
 	c.flows.remove(r)
 }
 
@@ -583,10 +581,6 @@ type RollupSample struct {
 	ID uint64
 	// Counts are the monotonic counters of the tuple
 	Counts
-	// Flows is the number of live flows under the tuple, Live sums their
-	// counts, the gauges of a tuple without live flows are not exported
-	Flows int
-	Live  Counts
 }
 
 // ScrapeRollups appends every tuple to buf, a tuple's first scrape shows its counters at zero
@@ -595,7 +589,7 @@ func (c *Collector) ScrapeRollups(buf []RollupSample) []RollupSample {
 	defer c.mu.Unlock()
 
 	for k, r := range c.rollups {
-		s := RollupSample{Key: k, ID: r.id, Flows: r.flows, Live: r.live}
+		s := RollupSample{Key: k, ID: r.id}
 		if r.exposed {
 			s.Counts = r.Counts
 			r.shown = true
@@ -646,7 +640,7 @@ func (c *Collector) Flush(reason uint8) {
 			if state.pending() {
 				expired = append(expired, state.record(reason))
 			}
-			c.detachLocked(state.rollup, state.entry)
+			c.detachLocked(state.rollup)
 		}
 	}
 	c.flows = newFlowTable()

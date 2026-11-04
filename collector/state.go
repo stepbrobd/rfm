@@ -74,11 +74,9 @@ func (s *flowState) mark(now time.Duration) {
 }
 
 // rollupState is one label tuple with the counters a scrape exposes, the
-// fields an event touches come first and span two cache lines
+// fields an event touches come first and fit in one cache line
 type rollupState struct {
 	Counts
-	// live sums the counts of the live flows under the tuple
-	live     Counts
 	lastSeen time.Duration
 	// shown is set while the last scrape showed every count of the tuple,
 	// only then may it be dropped without losing counts nobody saw
@@ -97,7 +95,6 @@ type rollupState struct {
 // add accounts the counts of one event at t of a live flow under the tuple
 func (r *rollupState) add(d Counts, t time.Duration) {
 	r.Counts.add(d)
-	r.live.add(d)
 	r.lastSeen = max(r.lastSeen, t)
 	r.shown = false
 }
