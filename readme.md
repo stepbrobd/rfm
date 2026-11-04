@@ -95,8 +95,10 @@ rate there without reloading the programs.
    error and skipped.
 3. Flows are evicted after a configurable idle timeout. Under high load, when
    the flow table is full, the flow with the oldest last-seen timestamp is
-   forcibly evicted. A flow that keeps going is exported as an interval record
-   every `active_timeout` while it stays in the table.
+   forcibly evicted. An event moves its flow in that order at most once per 1/32
+   of the idle timeout, so the order and the idle sweep hold to within that
+   slack. A flow that keeps going is exported as an interval record every
+   `active_timeout` while it stays in the table.
 4. At scrape time, the Prometheus exporter reads the BPF interface counters
    directly and copies the label tuples the collector keeps current, without
    walking the flow table. A tuple gives gauges summed over its live flows and
@@ -288,10 +290,10 @@ attached nor keeps retrying.
 
 `max_flows` (int, default 65536): Maximum number of active flows held in memory.
 Must be greater than 0. When the table is full, the flow that went longest
-without an event is forcibly evicted and, with IPFIX enabled, exported with
-flowEndReason 0x05. The same number limits the room for new label tuples with
-enrichment labels in the flow metrics, see
-[Prometheus metrics](#prometheus-metrics).
+without an event, to within 1/32 of the eviction timeout, is forcibly evicted
+and, with IPFIX enabled, exported with flowEndReason 0x05. The same number
+limits the room for new label tuples with enrichment labels in the flow metrics,
+see [Prometheus metrics](#prometheus-metrics).
 
 `eviction_timeout` (string, default "30s"): How long a flow can be idle before
 eviction. Accepts any Go duration string (e.g. "10s", "1m", "2s"). Minimum value
