@@ -77,11 +77,12 @@ rate there without reloading the programs.
    them. A VLAN tag the kernel holds in the skb rather than in the frame adds
    its 4 bytes to every wire packet. Sampled IP skbs, 1 in N on average (see
    `sample_rate`), emit a flow event to the ring buffer of their CPU carrying
-   the same wire packet and byte counts. Non-initial IPv4 and IPv6 fragments
-   keep the IP protocol but export `src_port=0` and `dst_port=0` because later
-   fragments do not carry the transport header. With `sampled_only` the programs
-   draw the sample first, parse only the skbs it selects, and keep no interface
-   counters.
+   the same wire packet and byte counts, or with `stage_events` above 1 to a
+   per-CPU stage that goes to the ring as one record. Non-initial IPv4 and IPv6
+   fragments keep the IP protocol but export `src_port=0` and `dst_port=0`
+   because later fragments do not carry the transport header. With
+   `sampled_only` the programs draw the sample first, parse only the skbs it
+   selects, and keep no interface counters.
 2. The userspace collector reads the per-CPU ring buffers as one stream, taking
    up to 64 records from one ring buffer before it moves to the next nonempty
    one. It scales each event by the sample rate that was in force when it was
@@ -289,6 +290,19 @@ for a rate set with `rfm set sample-rate`. Must be at least `sample_rate`.
 draw the sample before parsing and parse only the skbs it selects. The
 `rfm_interface_*` metrics disappear and the flow metrics stay. A change takes
 effect at the next start.
+
+`stage_events` (uint32, default 1): Sampled events each CPU gathers before it
+writes them to its ring buffer as one record. `1` writes every event as a record
+of its own. From 2 to 32 the programs keep up to that many events of a CPU in a
+per-CPU stage and write them as one record of 56 bytes per event, which takes
+one ring buffer write and its lock per record in place of one per event. A stage
+that does not fill is written by a timer of its CPU 10 milliseconds after the
+timer was armed, so an event waits at most that long before the collector can
+read it. With a stage, `wakeup_batch` counts the events a CPU writes over all
+its interfaces together. More than 1 needs `bpf_timer_start` to take
+`BPF_F_TIMER_CPU_PIN`, which Linux 6.7 and later do on kernels without
+PREEMPT_RT, and the agent refuses to start otherwise. A change takes effect at
+the next start.
 
 `pin_path` (string, default ""): A bpffs directory where the interface counters
 are pinned. A restart or upgrade reuses the pinned maps, so the counters stay
