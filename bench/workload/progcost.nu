@@ -52,7 +52,7 @@ def prog-cost [iface: string, secs: int] {
             $dc / $dr | math round --precision 2
         } else { 0.0 }
     )
-    let ans = (
+    let avg_ns = (
         if $dc > 0 {
             $dt / $dc | math round --precision 0
         } else { 0 }
@@ -62,7 +62,7 @@ def prog-cost [iface: string, secs: int] {
         prog_runs: $dc
         rx_pkts: $dr
         runs_per_rx: $rpr
-        avg_ns_in_prog: $ans
+        avg_ns_in_prog: $avg_ns
     }
 }
 
