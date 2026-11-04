@@ -753,6 +753,8 @@ func (c *Collector) Run(ctx context.Context, rd Reader) error {
 	batch := make([]sample, 0, readBatch)
 	// a table at its cap evicts a flow for each new one, one buffer holds the records of a batch after batch
 	var expired []ExportedFlow
+	// the programs stamp events with the coarse monotonic clock, the offset to boot time is read again only after a resume or a clock step
+	start, sus := time.Now(), suspendOffset{read: suspended}
 	for {
 		if ctx.Err() != nil {
 			return ctx.Err()
@@ -767,12 +769,13 @@ func (c *Collector) Run(ctx context.Context, rd Reader) error {
 			return fmt.Errorf("read event: %w", err)
 		}
 
-		// the programs stamp events with the coarse monotonic clock, one reading of the offset turns a batch into boot time
-		off := suspended()
+		// one offset turns a batch into boot time
+		now := time.Now()
+		off := sus.at(clockSkew(start, now))
 		batch = c.appendSample(batch[:0], raw, off)
 
 		// a past deadline drains the rings without blocking
-		rd.SetDeadline(time.Now())
+		rd.SetDeadline(now)
 		for len(batch) < readBatch {
 			raw, err := rd.ReadRawEvent()
 			if err != nil {
