@@ -1,6 +1,7 @@
 {
   lib,
   writeShellScriptBin,
+  buildGoLatestModule,
   deno,
   git,
   go_latest,
@@ -15,6 +16,9 @@
   ty,
 }:
 
+let
+  staticcheck = go-tools.override { buildGoModule = buildGoLatestModule; };
+in
 writeShellScriptBin "formatter" ''
   set -eoux pipefail
   pushd "$(${lib.getExe git} rev-parse --show-toplevel)" > /dev/null
@@ -39,7 +43,7 @@ writeShellScriptBin "formatter" ''
   ${lib.getExe go_latest} mod tidy
   ${lib.getExe go_latest} test -race ./...
   ${lib.getExe go_latest} vet ./...
-  ${lib.getExe' go-tools "staticcheck"} ./...
+  ${lib.getExe' staticcheck "staticcheck"} ./...
   ${lib.getExe' gomod2nix "gomod2nix"}
 
   ${lib.getExe' llvmPackages.clang-tools "clang-format"} -i $(${lib.getExe git} ls-files '*.c' '*.h' ':!bpf/include/vmlinux')
