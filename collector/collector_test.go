@@ -1618,9 +1618,9 @@ func rollupCounters(c *Collector) map[RollupKey]Counts {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
-	snap := make(map[RollupKey]Counts, len(c.rollups))
-	for k, r := range c.rollups {
-		snap[k] = r.Counts
+	snap := make(map[RollupKey]Counts, c.rollups.len())
+	for r := range c.rollups.all() {
+		snap[r.key] = r.Counts
 	}
 	return snap
 }
@@ -1918,5 +1918,40 @@ func TestRollupsAccumulateAcrossFlows(t *testing.T) {
 	udp := rollups[RollupKey{Ifindex: 3, Dir: 0, Proto: 17}]
 	if udp.Packets != 1 || udp.EstBytes != 200 {
 		t.Fatalf("udp rollup = %+v, want 1 packet 200 estimated bytes", udp)
+	}
+}
+
+func TestChurnThroughLabeledTuplesAllocatesNothing(t *testing.T) {
+	// two flows per source through a table with room for one, so every event
+	// evicts a flow, idles its tuple and takes the tuple back for the new flow
+	const sources = 4 * readBatch
+	c := New(time.Hour, asnPerSource{}, sources)
+	batches := make([][]sample, 2*sources/readBatch)
+	for i := range 2 * sources {
+		ev := at(sourceEvent(i%sources), time.Hour)
+		ev.SrcPort += uint16(i / sources)
+		var s sample
+		s.from(&ev)
+		batches[i/readBatch] = append(batches[i/readBatch], s)
+	}
+	var buf recordBuf
+	// a first pass grows the tables, their maps and the buffer
+	for _, batch := range batches {
+		c.record(batch, nil, &buf)
+	}
+
+	next := 0
+	allocs := testing.AllocsPerRun(10*len(batches), func() {
+		c.record(batches[next%len(batches)], nil, &buf)
+		next++
+	})
+	if allocs != 0 {
+		t.Fatalf("a batch of new labeled flows allocates %v times, want none once the tables have grown", allocs)
+	}
+	if got, want := c.Stats().ForcedEvictions, uint64((len(batches)+next)*readBatch-sources); got != want {
+		t.Fatalf("forced evictions = %d, want %d, one per event past the first table", got, want)
+	}
+	if n, folded := c.rollups.len(), c.Stats().FoldedFlows; n != sources || folded != 0 {
+		t.Fatalf("tuples = %d with %d folded flows, want one per source and none folded", n, folded)
 	}
 }

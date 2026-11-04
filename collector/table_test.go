@@ -3,6 +3,7 @@ package collector
 import (
 	"reflect"
 	"testing"
+	"time"
 	"unsafe"
 )
 
@@ -80,7 +81,7 @@ func TestFlowTableMovesAFlowToTheBackOfOneList(t *testing.T) {
 func TestFlowTableKeepsNothingOfARemovedFlowAlive(t *testing.T) {
 	tab := newFlowTable()
 	f := tableFlow(1)
-	f.rollup = &rollupState{}
+	f.rollup = 7
 	f.entry.Src = Labels{City: "x"}
 	r := tab.add(tableID(1), f)
 	tab.remove(r)
@@ -126,5 +127,100 @@ func TestFlowTableSlotsAreLineAlignedAndItsIndexPointerFree(t *testing.T) {
 	// an index without pointers is one the garbage collector never scans
 	if typ := reflect.TypeFor[map[flowID]flowRef](); hasPointers(typ.Key()) || hasPointers(typ.Elem()) {
 		t.Fatal("the index of the flow table holds pointers")
+	}
+}
+
+// rollupKey returns a distinct tuple key for each i
+func rollupKey(i int) RollupKey {
+	return RollupKey{Ifindex: 1, Proto: 6, Src: Labels{ASN: uint32(i), City: "x"}}
+}
+
+// idleOrder returns the idle tuples from the one idle the longest on
+func idleOrder(t *rollupTable) []rollupRef {
+	var rs []rollupRef
+	for r := t.front(); r != 0; r = t.at(r).links.next {
+		rs = append(rs, r)
+	}
+	return rs
+}
+
+func TestRollupTableListsIdleTuplesInTheOrderTheyWentIdle(t *testing.T) {
+	tab := newRollupTable()
+	a := tab.add(rollupKey(1))
+	b := tab.add(rollupKey(2))
+	c := tab.add(rollupKey(3))
+	// a new tuple waits in the idle list for its first flow
+	if got, want := idleOrder(&tab), []rollupRef{a, b, c}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("idle list of new tuples is %v, want %v", got, want)
+	}
+	tab.unlink(b)
+	tab.unlink(a)
+	tab.unlink(c)
+	if tab.front() != 0 {
+		t.Fatalf("idle list holds %v once every tuple has a flow", idleOrder(&tab))
+	}
+	tab.pushBack(c)
+	tab.pushBack(a)
+	tab.pushBack(b)
+	tab.unlink(a)
+	if got, want := idleOrder(&tab), []rollupRef{c, b}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("idle list is %v, want %v", got, want)
+	}
+}
+
+func TestRollupTableReusesTheSlotOfADroppedTuple(t *testing.T) {
+	tab := newRollupTable()
+	a := tab.add(rollupKey(1))
+	b := tab.add(rollupKey(2))
+	tab.drop(a)
+	c := tab.add(rollupKey(3))
+
+	if c != a {
+		t.Fatalf("new tuple took slot %d, want the freed slot %d", c, a)
+	}
+	if _, ok := tab.get(rollupKey(1)); ok {
+		t.Fatal("the dropped tuple is still in the index")
+	}
+	if got, ok := tab.get(rollupKey(3)); !ok || got != c {
+		t.Fatalf("get of the new tuple = %d %v, want %d true", got, ok, c)
+	}
+	// the slot holds a new life of a tuple, with an id of its own
+	if s := tab.at(c); s.key != rollupKey(3) || s.id != 3 || s.Counts != (Counts{}) {
+		t.Fatalf("reused slot holds %+v, want a fresh tuple under the new key with id 3", *s)
+	}
+	if got, want := idleOrder(&tab), []rollupRef{b, c}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("idle list is %v, want %v", got, want)
+	}
+	if tab.len() != 2 {
+		t.Fatalf("len = %d, want 2", tab.len())
+	}
+}
+
+func TestRollupTableKeepsNothingOfADroppedTupleAlive(t *testing.T) {
+	tab := newRollupTable()
+	r := tab.add(rollupKey(1))
+	tab.at(r).add(Counts{Packets: 1}, time.Second)
+	tab.drop(r)
+
+	// a free slot holds only its link to the next free slot
+	s := *tab.at(r)
+	s.links = rollupLinks{}
+	if s != (rollupState{}) {
+		t.Fatalf("dropped tuple left %+v in its slot", s)
+	}
+}
+
+func TestRollupTableSlotsAreLineAlignedAndItsIndexValuesPointerFree(t *testing.T) {
+	// a slot of two cache lines starts every tuple of a chunk on a line, and
+	// the fields an event touches fit in the first
+	if size := unsafe.Sizeof(rollupState{}); size != 128 {
+		t.Fatalf("rollupState is %d bytes, want 128", size)
+	}
+	if end := unsafe.Offsetof(rollupState{}.shown) + 1; end > 64 {
+		t.Fatalf("the fields an event touches end at byte %d, past the first line", end)
+	}
+	// the labels of the key hold strings, the slots the index names do not
+	if hasPointers(reflect.TypeFor[map[RollupKey]rollupRef]().Elem()) {
+		t.Fatal("the index of the rollup table holds pointers in its values")
 	}
 }

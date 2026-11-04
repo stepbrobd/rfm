@@ -23,7 +23,7 @@ const (
 	activeList
 )
 
-// tableChunkBits sets the slots of a chunk, 1024 slots of 256 bytes
+// tableChunkBits sets the slots of a chunk, 1024 slots of 256 bytes for flows and of 128 for tuples
 const tableChunkBits = 10
 
 const tableChunk = 1 << tableChunkBits
@@ -131,6 +131,120 @@ func (t *flowTable) unlink(l int, r flowRef) {
 // all yields every flow, in no fixed order
 func (t *flowTable) all() iter.Seq[*flowState] {
 	return func(yield func(*flowState) bool) {
+		for _, r := range t.index {
+			if !yield(t.at(r)) {
+				return
+			}
+		}
+	}
+}
+
+// rollupRef names a slot of the rollup table, 0 names none
+type rollupRef uint32
+
+// rollupLinks are the neighbors of a tuple in the idle list of the rollup table
+type rollupLinks struct {
+	prev, next rollupRef
+}
+
+// rollupTable holds the label tuples in chunks that never move and names each by its slot, so a new tuple costs no allocation once the table has grown and a tuple going idle costs none
+type rollupTable struct {
+	index  map[RollupKey]rollupRef
+	chunks []*[tableChunk]rollupState
+	// idle lists every tuple without live flows by when it lost its last one, oldest first, a new tuple waits there for its first flow
+	idle struct{ head, tail rollupRef }
+	// free heads the slots of dropped tuples, linked through their next links
+	free rollupRef
+	// next is the first slot never handed out, slot 0 stays unused so that 0 names none
+	next rollupRef
+	// ids counts the tuples ever made, the newest has the count as its id
+	ids uint64
+}
+
+func newRollupTable() rollupTable {
+	return rollupTable{index: make(map[RollupKey]rollupRef), next: 1}
+}
+
+// at returns the tuple in slot r
+func (t *rollupTable) at(r rollupRef) *rollupState {
+	return &t.chunks[r>>tableChunkBits][r&(tableChunk-1)]
+}
+
+// len returns the number of tuples
+func (t *rollupTable) len() int {
+	return len(t.index)
+}
+
+// get returns the slot of the tuple under k
+func (t *rollupTable) get(k RollupKey) (rollupRef, bool) {
+	r, ok := t.index[k]
+	return r, ok
+}
+
+// add stores a new tuple under k as the newest idle tuple and returns its slot
+func (t *rollupTable) add(k RollupKey) rollupRef {
+	r := t.free
+	if r != 0 {
+		t.free = t.at(r).links.next
+	} else {
+		if int(t.next>>tableChunkBits) == len(t.chunks) {
+			t.chunks = append(t.chunks, new([tableChunk]rollupState))
+		}
+		r = t.next
+		t.next++
+	}
+	t.ids++
+	*t.at(r) = rollupState{key: k, id: t.ids}
+	t.index[k] = r
+	t.pushBack(r)
+	return r
+}
+
+// drop takes the idle tuple in slot r out of the table and clears the slot, so it keeps nothing of the tuple alive
+func (t *rollupTable) drop(r rollupRef) {
+	s := t.at(r)
+	t.unlink(r)
+	delete(t.index, s.key)
+	*s = rollupState{}
+	s.links.next = t.free
+	t.free = r
+}
+
+// front returns the tuple idle the longest, 0 when none is idle
+func (t *rollupTable) front() rollupRef {
+	return t.idle.head
+}
+
+// pushBack makes the tuple in slot r the newest idle tuple
+func (t *rollupTable) pushBack(r rollupRef) {
+	tail := t.idle.tail
+	t.at(r).links = rollupLinks{prev: tail}
+	if tail == 0 {
+		t.idle.head = r
+	} else {
+		t.at(tail).links.next = r
+	}
+	t.idle.tail = r
+}
+
+// unlink takes the tuple in slot r out of the idle list
+func (t *rollupTable) unlink(r rollupRef) {
+	ln := t.at(r).links
+	if ln.prev == 0 {
+		t.idle.head = ln.next
+	} else {
+		t.at(ln.prev).links.next = ln.next
+	}
+	if ln.next == 0 {
+		t.idle.tail = ln.prev
+	} else {
+		t.at(ln.next).links.prev = ln.prev
+	}
+}
+
+// all yields every tuple, in no fixed order
+func (t *rollupTable) all() iter.Seq[*rollupState] {
+	return func(yield func(*rollupState) bool) {
 		for _, r := range t.index {
 			if !yield(t.at(r)) {
 				return

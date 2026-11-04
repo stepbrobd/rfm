@@ -1,7 +1,6 @@
 package collector
 
 import (
-	"container/list"
 	"context"
 	"errors"
 	"fmt"
@@ -26,16 +25,13 @@ type Collector struct {
 	lruSlack time.Duration
 	// live is the reader of a running Run, a scrape reads the ring drops from it
 	live Reader
-	// rollups are the label tuples of the flow series, rollupLocked caps the labeled ones
-	rollups   map[RollupKey]*rollupState
-	rollupIDs uint64
-	// idleRollups lists the tuples without live flows, longest idle first
-	idleRollups *list.List
-	timeout     time.Duration
-	active      time.Duration
-	enricher    Enricher
-	exporter    FlowExporter
-	maxFlows    int
+	// rollups holds the label tuples of the flow series, rollupLocked caps the labeled ones
+	rollups  rollupTable
+	timeout  time.Duration
+	active   time.Duration
+	enricher Enricher
+	exporter FlowExporter
+	maxFlows int
 	// rates lists the sample rates by the boot time they took effect, oldest first
 	rates []rateChange
 
@@ -56,14 +52,13 @@ type Collector struct {
 // New creates a collector that evicts flows idle for timeout and holds at most maxFlows flows, enricher may be nil
 func New(timeout time.Duration, enricher Enricher, maxFlows int) *Collector {
 	return &Collector{
-		flows:       newFlowTable(),
-		rollups:     make(map[RollupKey]*rollupState),
-		idleRollups: list.New(),
-		timeout:     timeout,
-		lruSlack:    timeout / lruSlackParts,
-		enricher:    enricher,
-		maxFlows:    maxFlows,
-		rates:       []rateChange{{rate: 1}},
+		flows:    newFlowTable(),
+		rollups:  newRollupTable(),
+		timeout:  timeout,
+		lruSlack: timeout / lruSlackParts,
+		enricher: enricher,
+		maxFlows: maxFlows,
+		rates:    []rateChange{{rate: 1}},
 	}
 }
 
@@ -201,12 +196,22 @@ func (c *Collector) RecordBatch(evs []FlowEvent) {
 	for i := range evs {
 		batch[i].from(&evs[i])
 	}
-	c.record(batch, evs, nil)
+	c.record(batch, evs, &recordBuf{})
 }
 
-// record records batch like RecordBatch, evs holds the events batch came from when the caller had them, the records of the flows it evicts go out through expired, which it returns empty for the next batch
-func (c *Collector) record(batch []sample, evs []FlowEvent, expired []ExportedFlow) []ExportedFlow {
-	var unresolved []int
+// recordBuf holds what recording a batch needs besides its events, Run keeps one across batches so a batch allocates nothing once the buffers have grown
+type recordBuf struct {
+	// expired holds the records of the flows the batch evicts
+	expired []ExportedFlow
+	// unresolved holds the positions of the events whose new flows wait for labels, pairs their addresses
+	unresolved []int
+	pairs      []addrPair
+	labels     map[addrPair]labelPair
+}
+
+// record records batch like RecordBatch, evs holds the events batch came from when the caller had them
+func (c *Collector) record(batch []sample, evs []FlowEvent, buf *recordBuf) {
+	buf.unresolved = buf.unresolved[:0]
 
 	c.mu.Lock()
 	// a run of events of one flow, as the ring of a bulk transfer holds, looks the flow up once
@@ -219,31 +224,34 @@ func (c *Collector) record(batch []sample, evs []FlowEvent, expired []ExportedFl
 			continue
 		}
 		var ok bool
-		if expired, last, ok = c.recordLocked(s, eventAt(evs, i), nil, expired); !ok {
-			unresolved = append(unresolved, i)
+		if buf.expired, last, ok = c.recordLocked(s, eventAt(evs, i), nil, buf.expired); !ok {
+			buf.unresolved = append(buf.unresolved, i)
 		}
 	}
 	exp := c.exporter
 	c.mu.Unlock()
 
-	if len(unresolved) > 0 {
-		pairs := make([]addrPair, len(unresolved))
-		for j, i := range unresolved {
+	if len(buf.unresolved) > 0 {
+		buf.pairs = buf.pairs[:0]
+		for _, i := range buf.unresolved {
 			key := newKey(&batch[i], eventAt(evs, i))
-			pairs[j] = addrPair{key.SrcAddr, key.DstAddr}
+			buf.pairs = append(buf.pairs, addrPair{key.SrcAddr, key.DstAddr})
 		}
-		labels := c.enrich(pairs)
+		if buf.labels == nil {
+			buf.labels = make(map[addrPair]labelPair, len(buf.pairs))
+		}
+		c.enrich(buf.pairs, buf.labels)
 
 		c.mu.Lock()
-		for _, i := range unresolved {
-			expired, _, _ = c.recordLocked(&batch[i], eventAt(evs, i), labels, expired)
+		for _, i := range buf.unresolved {
+			buf.expired, _, _ = c.recordLocked(&batch[i], eventAt(evs, i), buf.labels, buf.expired)
 		}
 		exp = c.exporter
 		c.mu.Unlock()
 	}
 
-	c.exportFlows(exp, expired)
-	return expired[:0]
+	c.exportFlows(exp, buf.expired)
+	buf.expired = buf.expired[:0]
 }
 
 // eventAt returns the event at i of evs, nil when the batch came without its events
@@ -272,16 +280,15 @@ type labelPair struct {
 	src, dst Labels
 }
 
-// enrich looks up the labels of pairs, it must be called without mu held
-func (c *Collector) enrich(pairs []addrPair) map[addrPair]labelPair {
-	labels := make(map[addrPair]labelPair, len(pairs))
+// enrich looks up the labels of pairs into labels, which it empties first, it must be called without mu held
+func (c *Collector) enrich(pairs []addrPair, labels map[addrPair]labelPair) {
+	clear(labels)
 	for _, p := range pairs {
 		if _, ok := labels[p]; !ok {
 			src, dst := c.enricher.Enrich(p.src, p.dst)
 			labels[p] = labelPair{src, dst}
 		}
 	}
-	return labels
 }
 
 // recordLocked records s and appends the record of a flow it evicts to expired, it returns the slot of the flow of s, ok is false when its new flow has no labels yet
@@ -312,7 +319,7 @@ func (c *Collector) recordLocked(s *sample, ev *FlowEvent, labels map[addrPair]l
 
 	rollup := c.rollupLocked(RollupKey{Ifindex: key.Ifindex, Dir: key.Dir, Proto: key.Proto, Src: src, Dst: dst})
 	c.attachLocked(rollup)
-	rollup.add(d, now)
+	c.rollups.at(rollup).add(d, now)
 
 	c.created++
 	r := c.flows.add(s.id, &flowState{
@@ -354,63 +361,53 @@ func (c *Collector) hitLocked(r flowRef, now time.Duration, d Counts, ipBytes ui
 	state.entry.EstPackets += d.EstPackets
 	state.entry.EstBytes += d.EstBytes
 	state.seen(now)
-	state.rollup.add(d, now)
+	c.rollups.at(state.rollup).add(d, now)
 	if now-state.queued >= c.lruSlack {
 		state.queued = now
 		c.flows.moveToBack(lruList, r)
 	}
 }
 
-// rollupLocked returns the tuple of a new flow, at the cap an idle shown tuple makes room or the flow folds
-func (c *Collector) rollupLocked(rk RollupKey) *rollupState {
-	if r, ok := c.rollups[rk]; ok {
+// rollupLocked returns the slot of the tuple of a new flow, at the cap an idle shown tuple makes room or the flow folds
+func (c *Collector) rollupLocked(rk RollupKey) rollupRef {
+	if r, ok := c.rollups.get(rk); ok {
 		return r
 	}
 	labeled := rk.Src != (Labels{}) || rk.Dst != (Labels{})
-	if labeled && len(c.rollups) >= c.maxFlows {
-		front := c.idleRollups.Front()
-		if front != nil && front.Value.(*rollupState).shown {
-			c.dropRollupLocked(front.Value.(*rollupState))
+	if labeled && c.rollups.len() >= c.maxFlows {
+		front := c.rollups.front()
+		if front != 0 && c.rollups.at(front).shown {
+			c.rollups.drop(front)
 		} else {
 			c.folded.Add(1)
 			rk = RollupKey{Ifindex: rk.Ifindex, Dir: rk.Dir, Proto: rk.Proto}
-			if r, ok := c.rollups[rk]; ok {
+			if r, ok := c.rollups.get(rk); ok {
 				return r
 			}
 		}
 	}
-	c.rollupIDs++
-	r := &rollupState{key: rk, id: c.rollupIDs}
-	c.rollups[rk] = r
-	return r
+	return c.rollups.add(rk)
 }
 
-// attachLocked counts a new live flow under r
+// attachLocked counts a new live flow under the tuple in slot r, which leaves the idle list if it had none
 // it must be called with mu held
-func (c *Collector) attachLocked(r *rollupState) {
-	if r.idle != nil {
-		c.idleRollups.Remove(r.idle)
-		r.idle = nil
+func (c *Collector) attachLocked(r rollupRef) {
+	t := c.rollups.at(r)
+	if t.flows == 0 {
+		c.rollups.unlink(r)
 	}
-	r.flows++
+	t.flows++
 }
 
-// detachLocked takes a live flow off r, a tuple without live flows becomes
-// a candidate for retention and for making room
+// detachLocked takes a live flow off the tuple in slot r, a tuple without
+// live flows becomes a candidate for retention and for making room
 // it must be called with mu held
-func (c *Collector) detachLocked(r *rollupState) {
-	r.flows--
-	if r.flows == 0 {
-		r.idle = c.idleRollups.PushBack(r)
+func (c *Collector) detachLocked(r rollupRef) {
+	t := c.rollups.at(r)
+	t.flows--
+	if t.flows == 0 {
+		c.rollups.pushBack(r)
 	}
-}
-
-// dropRollupLocked removes an idle tuple, its series leaves the scrape
-// it must be called with mu held
-func (c *Collector) dropRollupLocked(r *rollupState) {
-	c.idleRollups.Remove(r.idle)
-	r.idle = nil
-	delete(c.rollups, r.key)
 }
 
 // removeLocked drops the flow in slot r from the table, its slot is cleared
@@ -465,14 +462,13 @@ func (c *Collector) sweep(now, period time.Duration) {
 		c.removeLocked(r)
 	}
 
-	// idle tuples are in the order they lost their last flow
+	// idle tuples are in the order they lost their last flow, a dropped one leaves the scrape
 	stale := now - RollupRetention*c.timeout
-	for front := c.idleRollups.Front(); front != nil; front = c.idleRollups.Front() {
-		r := front.Value.(*rollupState)
-		if r.lastSeen >= stale || !r.shown {
+	for r := c.rollups.front(); r != 0; r = c.rollups.front() {
+		if t := c.rollups.at(r); t.lastSeen >= stale || !t.shown {
 			break
 		}
-		c.dropRollupLocked(r)
+		c.rollups.drop(r)
 	}
 
 	if c.active > 0 {
@@ -588,8 +584,8 @@ func (c *Collector) ScrapeRollups(buf []RollupSample) []RollupSample {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	for k, r := range c.rollups {
-		s := RollupSample{Key: k, ID: r.id}
+	for r := range c.rollups.all() {
+		s := RollupSample{Key: r.key, ID: r.id}
 		if r.exposed {
 			s.Counts = r.Counts
 			r.shown = true
@@ -750,8 +746,8 @@ func (c *Collector) Run(ctx context.Context, rd Reader) error {
 	})
 
 	batch := make([]sample, 0, readBatch)
-	// a table at its cap evicts a flow for each new one, one buffer holds the records of a batch after batch
-	var expired []ExportedFlow
+	// a table at its cap evicts a flow for each new one, one buffer holds the records and the labels of batch after batch
+	var buf recordBuf
 	for {
 		if ctx.Err() != nil {
 			return ctx.Err()
@@ -779,7 +775,7 @@ func (c *Collector) Run(ctx context.Context, rd Reader) error {
 		}
 
 		if len(batch) > 0 {
-			expired = c.record(batch, nil, expired)
+			c.record(batch, nil, &buf)
 		}
 	}
 }

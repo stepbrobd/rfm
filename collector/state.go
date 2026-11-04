@@ -1,14 +1,12 @@
 package collector
 
-import (
-	"container/list"
-	"time"
-)
+import "time"
 
 // flowState is a live flow and what its earlier records carried, the fields
 // an event touches come first and span two cache lines of its slot
 type flowState struct {
-	rollup *rollupState
+	// rollup is the slot of the flow's tuple in the rollup table
+	rollup rollupRef
 	// first and last are the min and max event time since the last record, events arrive out of order, 0 before the first
 	first, last time.Duration
 	// queued is the event time the flow last moved to the back of the lru
@@ -74,7 +72,7 @@ func (s *flowState) mark(now time.Duration) {
 }
 
 // rollupState is one label tuple with the counters a scrape exposes, the
-// fields an event touches come first and fit in one cache line
+// fields an event touches come first and fit in the first cache line of its slot
 type rollupState struct {
 	Counts
 	lastSeen time.Duration
@@ -83,13 +81,13 @@ type rollupState struct {
 	shown bool
 	// exposed is set once a scrape showed the tuple, at zero the first time
 	exposed bool
-	key     RollupKey
-	// id tells this life of the tuple apart from any other
-	id uint64
+	// links holds the place of the tuple in the idle list while flows is 0
+	links rollupLinks
 	// flows counts the live flows that count under the tuple
 	flows int
-	// idle is the position in the collector's idle list while flows is 0
-	idle *list.Element
+	key   RollupKey
+	// id tells this life of the tuple apart from any other
+	id uint64
 }
 
 // add accounts the counts of one event at t of a live flow under the tuple
