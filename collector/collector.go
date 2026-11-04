@@ -19,6 +19,8 @@ type Collector struct {
 	mu sync.RWMutex
 	// flows holds the live flows, its lru is approximate across cpus
 	flows flowTable
+	// hash is the table hash of a flow id, keyed when the collector is made and fixed from then on
+	hash func(*flowID) uint64
 	// created counts every flow added to flows, a flush leaves it as it is
 	created uint64
 	// lruSlack is how much event time passes before an event moves its flow to the back of the lru again
@@ -53,6 +55,7 @@ type Collector struct {
 func New(timeout time.Duration, enricher Enricher, maxFlows int) *Collector {
 	return &Collector{
 		flows:    newFlowTable(),
+		hash:     newFlowHash().sum,
 		rollups:  newRollupTable(),
 		timeout:  timeout,
 		lruSlack: timeout / lruSlackParts,
@@ -213,20 +216,27 @@ type recordBuf struct {
 func (c *Collector) record(batch []sample, evs []FlowEvent, buf *recordBuf) {
 	buf.unresolved = buf.unresolved[:0]
 
+	// a loop of its own hashes the ids before the lock, so no lookup under the lock waits on a hash
+	for i := range batch {
+		batch[i].hash = c.hash(&batch[i].id)
+	}
+
 	c.mu.Lock()
-	// a run of events of one flow, as the ring of a bulk transfer holds, looks the flow up once
+	// a run of events of one flow, as the ring of a bulk transfer holds, looks the flow up once, the hashes tell most events of other flows apart
 	var last flowRef
 	for i := range batch {
 		s := &batch[i]
-		if last != 0 && s.id == batch[i-1].id {
-			d, ipBytes := c.countsLocked(s)
-			c.hitLocked(last, s.tstamp, d, ipBytes)
-			continue
+		if last == 0 || s.hash != batch[i-1].hash || !s.id.equal(&batch[i-1].id) {
+			var found bool
+			if last, found = c.flows.get(s.hash, &s.id); !found {
+				var ok bool
+				if buf.expired, last, ok = c.addLocked(s, eventAt(evs, i), nil, buf.expired); !ok {
+					buf.unresolved = append(buf.unresolved, i)
+				}
+				continue
+			}
 		}
-		var ok bool
-		if buf.expired, last, ok = c.recordLocked(s, eventAt(evs, i), nil, buf.expired); !ok {
-			buf.unresolved = append(buf.unresolved, i)
-		}
+		c.hitLocked(last, s)
 	}
 	exp := c.exporter
 	c.mu.Unlock()
@@ -243,8 +253,14 @@ func (c *Collector) record(batch []sample, evs []FlowEvent, buf *recordBuf) {
 		c.enrich(buf.pairs, buf.labels)
 
 		c.mu.Lock()
+		// an earlier event of the batch can have added the flow
 		for _, i := range buf.unresolved {
-			buf.expired, _, _ = c.recordLocked(&batch[i], eventAt(evs, i), buf.labels, buf.expired)
+			s := &batch[i]
+			if r, found := c.flows.get(s.hash, &s.id); found {
+				c.hitLocked(r, s)
+			} else {
+				buf.expired, _, _ = c.addLocked(s, eventAt(evs, i), buf.labels, buf.expired)
+			}
 		}
 		exp = c.exporter
 		c.mu.Unlock()
@@ -291,15 +307,10 @@ func (c *Collector) enrich(pairs []addrPair, labels map[addrPair]labelPair) {
 	}
 }
 
-// recordLocked records s and appends the record of a flow it evicts to expired, it returns the slot of the flow of s, ok is false when its new flow has no labels yet
-func (c *Collector) recordLocked(s *sample, ev *FlowEvent, labels map[addrPair]labelPair, expired []ExportedFlow) (_ []ExportedFlow, _ flowRef, ok bool) {
+// addLocked adds the flow of s, which the table does not hold, and appends the record of a flow it evicts to expired, it returns the slot of the new flow, ok is false when the flow has no labels yet
+func (c *Collector) addLocked(s *sample, ev *FlowEvent, labels map[addrPair]labelPair, expired []ExportedFlow) (_ []ExportedFlow, _ flowRef, ok bool) {
 	now := s.tstamp
 	d, ipBytes := c.countsLocked(s)
-
-	if r, found := c.flows.get(&s.id); found {
-		c.hitLocked(r, now, d, ipBytes)
-		return expired, r, true
-	}
 
 	key := newKey(s, ev)
 	var lp labelPair
@@ -322,8 +333,9 @@ func (c *Collector) recordLocked(s *sample, ev *FlowEvent, labels map[addrPair]l
 	c.rollups.at(rollup).add(d, now)
 
 	c.created++
-	r := c.flows.add(s.id, &flowState{
-		key: key,
+	r := c.flows.add(&flowState{
+		id:   s.id,
+		hash: s.hash,
 		entry: FlowEntry{
 			FirstSeen:  now,
 			Packets:    d.Packets,
@@ -341,6 +353,10 @@ func (c *Collector) recordLocked(s *sample, ev *FlowEvent, labels map[addrPair]l
 		last:          now,
 		queued:        now,
 	})
+	// an event of RecordBatch can name an address in a form the id does not keep, the listings show the form it named
+	if ev != nil && key != s.id.key() {
+		c.flows.keepKey(r, key)
+	}
 	return expired, r, true
 }
 
@@ -352,8 +368,10 @@ func (c *Collector) countsLocked(s *sample) (Counts, uint64) {
 	return Counts{Packets: packets, Bytes: bytes, EstPackets: packets * rate, EstBytes: bytes * rate}, bytes - packets*uint64(s.l2Len)
 }
 
-// hitLocked adds the counts of an event at now to the flow in slot r, which moves to the back of the lru at most once per lruSlack
-func (c *Collector) hitLocked(r flowRef, now time.Duration, d Counts, ipBytes uint64) {
+// hitLocked adds the counts of s to the flow in slot r, which moves to the back of the lru at most once per lruSlack
+func (c *Collector) hitLocked(r flowRef, s *sample) {
+	now := s.tstamp
+	d, ipBytes := c.countsLocked(s)
 	state := c.flows.at(r)
 	state.entry.Packets += d.Packets
 	state.entry.Bytes += d.Bytes
@@ -503,8 +521,8 @@ func (c *Collector) Flows() map[FlowKey]FlowEntry {
 	defer c.mu.RUnlock()
 
 	snap := make(map[FlowKey]FlowEntry, c.flows.len())
-	for state := range c.flows.all() {
-		snap[state.key] = state.entry
+	for r, state := range c.flows.all() {
+		snap[c.flows.key(r)] = state.entry
 	}
 	return snap
 }
@@ -549,17 +567,17 @@ func (c *Collector) TopFlows(n int, byPackets bool) []Flow {
 			i = last
 		}
 	}
-	for state := range c.flows.all() {
+	for r, state := range c.flows.all() {
 		switch {
 		case len(top) < n:
-			top = append(top, Flow{state.key, state.entry})
+			top = append(top, Flow{c.flows.key(r), state.entry})
 			if len(top) == n {
 				for i := n/2 - 1; i >= 0; i-- {
 					down(i)
 				}
 			}
 		case ahead(&state.entry, &top[0].FlowEntry):
-			top[0] = Flow{state.key, state.entry}
+			top[0] = Flow{c.flows.key(r), state.entry}
 			down(0)
 		}
 	}
@@ -632,7 +650,7 @@ func (c *Collector) Flush(reason uint8) {
 	c.mu.Lock()
 	if c.flows.len() > 0 {
 		expired = make([]ExportedFlow, 0, c.flows.len())
-		for state := range c.flows.all() {
+		for _, state := range c.flows.all() {
 			if state.pending() {
 				expired = append(expired, state.record(reason))
 			}

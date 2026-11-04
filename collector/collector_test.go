@@ -1,6 +1,7 @@
 package collector
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"net/netip"
@@ -1953,5 +1954,138 @@ func TestChurnThroughLabeledTuplesAllocatesNothing(t *testing.T) {
 	}
 	if n, folded := c.rollups.len(), c.Stats().FoldedFlows; n != sources || folded != 0 {
 		t.Fatalf("tuples = %d with %d folded flows, want one per source and none folded", n, folded)
+	}
+}
+
+func TestCollidingHashesRecordLikeDistinctOnes(t *testing.T) {
+	// thirteen sources on five ports through a table of eight with runs,
+	// sweeps and interval records, the enricher sends every new flow through
+	// the second pass
+	t0 := time.Hour
+	var batches [][]sample
+	var batch []sample
+	for i := range 400 {
+		ev := at(sourceEvent(i%13), t0+time.Duration(i)*time.Millisecond)
+		ev.SrcPort += uint16(i % 5)
+		ev.Len += uint32(i)
+		// every seventh event comes in a run of three
+		n := 1
+		if i%7 == 0 {
+			n = 3
+		}
+		for range n {
+			var s sample
+			s.from(&ev)
+			batch = append(batch, s)
+			if len(batch) == readBatch {
+				batches = append(batches, batch)
+				batch = nil
+			}
+		}
+	}
+	batches = append(batches, batch)
+
+	type result struct {
+		records, flushed []ExportedFlow
+		flows            map[FlowKey]FlowEntry
+		top              []Flow
+		stats            Stats
+		overflowed       int
+	}
+	run := func(hash func(*flowID) uint64) result {
+		exp := &mockFlowExporter{}
+		c := New(100*time.Millisecond, asnPerSource{}, 8)
+		c.hash = hash
+		c.SetFlowExporter(exp)
+		c.SetActiveTimeout(50 * time.Millisecond)
+		var res result
+		var buf recordBuf
+		for _, b := range batches {
+			c.record(b, nil, &buf)
+			res.overflowed = max(res.overflowed, len(c.flows.overflow))
+			c.Evict(b[len(b)-1].tstamp)
+		}
+		res.flows, res.top, res.records = c.Flows(), c.TopFlows(4, false), exp.flows
+		exp.flows = nil
+		c.Flush(FlowEndReasonForcedEnd)
+		res.flushed = exp.flows
+		slices.SortFunc(res.flushed, func(a, b ExportedFlow) int {
+			return cmp.Or(slices.Compare(a.SrcAddr[:], b.SrcAddr[:]), cmp.Compare(a.SrcPort, b.SrcPort))
+		})
+		res.stats = c.Stats()
+		return res
+	}
+
+	want := run(newFlowHash().sum)
+	if want.overflowed != 0 || len(want.records) == 0 || want.stats.ForcedEvictions == 0 {
+		t.Fatalf("keyed hash put %d flows in overflow and exported %d records with %d forced out, want none, some and some", want.overflowed, len(want.records), want.stats.ForcedEvictions)
+	}
+	for name, hash := range map[string]func(*flowID) uint64{
+		"one hash for every flow":    func(*flowID) uint64 { return 1 },
+		"one hash per source parity": func(id *flowID) uint64 { return uint64(id.addrs[15] & 1) },
+	} {
+		got := run(hash)
+		if got.overflowed == 0 {
+			t.Fatalf("%s: no flow went to overflow", name)
+		}
+		got.overflowed = want.overflowed
+		if !reflect.DeepEqual(got, want) {
+			t.Fatalf("%s: recorded %+v, want %+v as with distinct hashes", name, got, want)
+		}
+	}
+}
+
+func TestFlowsShowTheAddressFormTheirEventNamed(t *testing.T) {
+	exp := &mockFlowExporter{}
+	c := New(30*time.Second, nil, config.DefaultMaxFlows)
+	c.SetFlowExporter(exp)
+	t0 := time.Hour
+	v4 := FlowEvent{
+		Ifindex: 1, Proto: 17, SrcPort: 1, DstPort: 2, Segs: 1, Len: 100,
+		SrcAddr: netip.MustParseAddr("192.0.2.1"), DstAddr: netip.MustParseAddr("198.51.100.1"),
+	}
+	mapped := v4
+	mapped.SrcAddr, mapped.DstAddr = netip.AddrFrom16(v4.SrcAddr.As16()), netip.AddrFrom16(v4.DstAddr.As16())
+	zoned := v4
+	zoned.SrcAddr, zoned.DstAddr = netip.MustParseAddr("fe80::1%eth0"), netip.MustParseAddr("fe80::2")
+	bare := zoned
+	bare.SrcAddr = netip.MustParseAddr("fe80::1")
+	invalid := v4
+	invalid.SrcAddr, invalid.DstAddr = netip.Addr{}, netip.Addr{}
+	v6 := v4
+	v6.SrcAddr, v6.DstAddr = netip.MustParseAddr("2001:db8::1"), netip.MustParseAddr("2001:db8::2")
+
+	// a 4 byte address and its mapped form name one flow, and so do a zoned
+	// address and the bare one, each listed in the form of the event that made it
+	c.RecordBatch([]FlowEvent{at(v4, t0), at(mapped, t0), at(zoned, t0), at(bare, t0), at(invalid, t0), at(v6, t0)})
+	c.Record(at(mapped, t0))
+	flows := c.Flows()
+	want := map[FlowKey]uint64{v4.Key(): 3, zoned.Key(): 2, invalid.Key(): 1, v6.Key(): 1}
+	if len(flows) != len(want) {
+		t.Fatalf("flows = %v, want the keys of %v", flows, want)
+	}
+	for k, packets := range want {
+		if got, ok := flows[k]; !ok || got.Packets != packets {
+			t.Fatalf("flow %+v = %+v (listed %v), want %d packets", k, got, ok, packets)
+		}
+	}
+	for _, f := range c.TopFlows(len(want), true) {
+		if got, ok := flows[f.Key]; !ok || got != f.FlowEntry {
+			t.Fatalf("top flow %+v is not listed as Flows lists it", f.Key)
+		}
+	}
+
+	// a record carries the 16 byte form whatever form its event named
+	c.Flush(FlowEndReasonForcedEnd)
+	records := make(map[FlowKey]bool)
+	for _, f := range exp.flows {
+		records[recordKey(f)] = true
+	}
+	invalid16 := invalid.Key()
+	invalid16.SrcAddr, invalid16.DstAddr = netip.IPv6Unspecified(), netip.IPv6Unspecified()
+	for _, k := range []FlowKey{mapped.Key(), bare.Key(), invalid16, v6.Key()} {
+		if !records[k] {
+			t.Fatalf("records %v, want one under %+v", records, k)
+		}
 	}
 }

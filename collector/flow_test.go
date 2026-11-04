@@ -1,9 +1,11 @@
 package collector
 
 import (
+	"math/rand/v2"
 	"net/netip"
 	"reflect"
 	"testing"
+	"unsafe"
 )
 
 // hasPointers reports whether a value of typ holds a pointer the garbage
@@ -110,6 +112,64 @@ func TestFlowIDRoundTrips(t *testing.T) {
 	} {
 		if other.id() == base.id() {
 			t.Fatalf("%+v and %+v share an id", other, base)
+		}
+	}
+}
+
+func TestFlowIDEqualComparesEveryByte(t *testing.T) {
+	// an id without padding has every byte in some field
+	if size := unsafe.Sizeof(flowID{}); size != 42 {
+		t.Fatalf("flowID is %d bytes, want 42", size)
+	}
+	base := FlowKey{
+		Ifindex: 0x01020304, Dir: 1, Proto: 6,
+		SrcAddr: netip.MustParseAddr("2001:db8::1"), DstAddr: netip.MustParseAddr("2001:db8::2"),
+		SrcPort: 0x0506, DstPort: 0x0708,
+	}.id()
+	same := base
+	if !base.equal(&same) {
+		t.Fatal("an id differs from its copy")
+	}
+	for i := range unsafe.Sizeof(base) {
+		other := base
+		(*[unsafe.Sizeof(flowID{})]byte)(unsafe.Pointer(&other))[i] ^= 0x80
+		if base.equal(&other) || other.equal(&base) {
+			t.Fatalf("ids that differ in byte %d compare equal", i)
+		}
+	}
+}
+
+func TestFlowHashKeepsStructuredIDsApart(t *testing.T) {
+	// the ids traffic has, sources of one network on few ports, both
+	// directions of each, where symmetric ports make a flow and its reverse
+	// differ only by swapped addresses, and ipv6 sources
+	dst := netip.MustParseAddr("::ffff:198.51.100.7")
+	var ids []flowID
+	for i := range 1 << 14 {
+		src := netip.AddrFrom16(netip.AddrFrom4([4]byte{10, 0, byte(i >> 8), byte(i)}).As16())
+		for _, port := range []uint16{53, 443, uint16(1024 + i)} {
+			k := FlowKey{Ifindex: 2, Proto: 17, SrcAddr: src, DstAddr: dst, SrcPort: port, DstPort: 53}
+			ids = append(ids, k.id())
+			k.SrcAddr, k.DstAddr, k.SrcPort, k.DstPort = k.DstAddr, k.SrcAddr, k.DstPort, k.SrcPort
+			ids = append(ids, k.id())
+		}
+		v6 := netip.AddrFrom16([16]byte{0x20, 0x01, 0x0d, 0xb8, 14: byte(i >> 8), 15: byte(i)})
+		ids = append(ids, FlowKey{Ifindex: 3, Dir: 1, Proto: 6, SrcAddr: v6, DstAddr: dst, SrcPort: 443, DstPort: 443}.id())
+	}
+	// fixed keys keep the test the same on every run
+	for seed := range uint64(3) {
+		rng := rand.New(rand.NewPCG(seed, 1))
+		var k flowHash
+		for i := range k {
+			k[i] = rng.Uint64()
+		}
+		seen := make(map[uint64]int, len(ids))
+		for i := range ids {
+			h := k.sum(&ids[i])
+			if j, ok := seen[h]; ok {
+				t.Fatalf("keys %d: %+v and %+v share hash %#x", seed, ids[j].key(), ids[i].key(), h)
+			}
+			seen[h] = i
 		}
 	}
 }

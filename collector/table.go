@@ -28,9 +28,14 @@ const tableChunkBits = 10
 
 const tableChunk = 1 << tableChunkBits
 
-// flowTable holds the flows in chunks that never move and names each by its slot, so a flow costs no allocation once the table has grown and the map holds no pointers
+// flowTable holds the flows in chunks that never move and names each by its slot, so a flow costs no allocation once the table has grown and its index holds no pointers
 type flowTable struct {
-	index  map[flowID]flowRef
+	// index names each flow under the table hash of its id, but for a flow whose hash it already gives to another
+	index map[uint64]flowRef
+	// overflow names by id the flows whose hash the index gave to another flow, which takes a collision of 64 bit hashes
+	overflow map[flowID]flowRef
+	// keys holds the key of a flow whose event named an address in a form its id does not keep, 4 byte, zoned or invalid, events from the rings never do
+	keys   map[flowRef]FlowKey
 	chunks []*[tableChunk]flowState
 	lists  [2]flowList
 	// free heads the slots of removed flows, linked through their lru links
@@ -40,7 +45,7 @@ type flowTable struct {
 }
 
 func newFlowTable() flowTable {
-	return flowTable{index: make(map[flowID]flowRef), next: 1}
+	return flowTable{index: make(map[uint64]flowRef), overflow: make(map[flowID]flowRef), keys: make(map[flowRef]FlowKey), next: 1}
 }
 
 // at returns the flow in slot r
@@ -50,17 +55,23 @@ func (t *flowTable) at(r flowRef) *flowState {
 
 // len returns the number of flows
 func (t *flowTable) len() int {
-	return len(t.index)
+	return len(t.index) + len(t.overflow)
 }
 
-// get returns the slot of the flow under id, which it takes by pointer so the map hashes the id in place and not a fresh copy
-func (t *flowTable) get(id *flowID) (flowRef, bool) {
-	r, ok := t.index[*id]
+// get returns the slot of the flow under id, whose hash is h, the id it compares sits on the lines a hit goes on to update
+func (t *flowTable) get(h uint64, id *flowID) (flowRef, bool) {
+	if r, ok := t.index[h]; ok && t.at(r).id.equal(id) {
+		return r, true
+	}
+	if len(t.overflow) == 0 {
+		return 0, false
+	}
+	r, ok := t.overflow[*id]
 	return r, ok
 }
 
-// add stores s under id as the newest flow of both lists and returns its slot
-func (t *flowTable) add(id flowID, s *flowState) flowRef {
+// add stores s, which carries its id and its hash, as the newest flow of both lists and returns its slot
+func (t *flowTable) add(s *flowState) flowRef {
 	r := t.free
 	if r != 0 {
 		t.free = t.at(r).links[lruList].next
@@ -72,10 +83,29 @@ func (t *flowTable) add(id flowID, s *flowState) flowRef {
 		t.next++
 	}
 	*t.at(r) = *s
-	t.index[id] = r
+	if _, taken := t.index[s.hash]; taken {
+		t.overflow[s.id] = r
+	} else {
+		t.index[s.hash] = r
+	}
 	t.pushBack(lruList, r)
 	t.pushBack(activeList, r)
 	return r
+}
+
+// keepKey makes key the one a listing shows for the flow in slot r, it names the flow's id in a form the id does not keep
+func (t *flowTable) keepKey(r flowRef, key FlowKey) {
+	t.keys[r] = key
+}
+
+// key returns the key of the flow in slot r as its event named it
+func (t *flowTable) key(r flowRef) FlowKey {
+	if len(t.keys) != 0 {
+		if k, ok := t.keys[r]; ok {
+			return k
+		}
+	}
+	return t.at(r).id.key()
 }
 
 // remove takes the flow in slot r out of the table and clears the slot, so it keeps nothing of the flow alive
@@ -83,7 +113,15 @@ func (t *flowTable) remove(r flowRef) {
 	s := t.at(r)
 	t.unlink(lruList, r)
 	t.unlink(activeList, r)
-	delete(t.index, s.key.id())
+	// the index names the flow under its hash unless the flow is in overflow
+	if len(t.overflow) != 0 && t.index[s.hash] != r {
+		delete(t.overflow, s.id)
+	} else {
+		delete(t.index, s.hash)
+	}
+	if len(t.keys) != 0 {
+		delete(t.keys, r)
+	}
 	*s = flowState{}
 	s.links[lruList].next = t.free
 	t.free = r
@@ -128,11 +166,16 @@ func (t *flowTable) unlink(l int, r flowRef) {
 	}
 }
 
-// all yields every flow, in no fixed order
-func (t *flowTable) all() iter.Seq[*flowState] {
-	return func(yield func(*flowState) bool) {
+// all yields every flow with its slot, in no fixed order
+func (t *flowTable) all() iter.Seq2[flowRef, *flowState] {
+	return func(yield func(flowRef, *flowState) bool) {
 		for _, r := range t.index {
-			if !yield(t.at(r)) {
+			if !yield(r, t.at(r)) {
+				return
+			}
+		}
+		for _, r := range t.overflow {
+			if !yield(r, t.at(r)) {
 				return
 			}
 		}

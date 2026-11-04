@@ -2,6 +2,8 @@ package collector
 
 import (
 	"encoding/binary"
+	"math/bits"
+	"math/rand/v2"
 	"net/netip"
 	"time"
 )
@@ -103,6 +105,43 @@ func (id *flowID) key() FlowKey {
 		SrcPort: ne.Uint16(id.ports[:]),
 		DstPort: ne.Uint16(id.ports[2:]),
 	}
+}
+
+// equal reports whether id and o name the same flow, arrays of 16 bytes
+// compare inline where == on the id calls memequal
+func (id *flowID) equal(o *flowID) bool {
+	return [16]byte(id.addrs[:16]) == [16]byte(o.addrs[:16]) && [16]byte(id.addrs[16:]) == [16]byte(o.addrs[16:]) &&
+		id.ports == o.ports && id.ifindex == o.ifindex && id.dir == o.dir && id.proto == o.proto
+}
+
+// flowHash keys the table hash of a flow id, drawn at random so that which
+// ids collide cannot be chosen from outside, a product is symmetric and the
+// products combine by xor, so every operand takes a key of its own or a flow
+// and its reverse would collide
+type flowHash [6]uint64
+
+func newFlowHash() *flowHash {
+	var k flowHash
+	for i := range k {
+		k[i] = rand.Uint64()
+	}
+	return &k
+}
+
+// sum returns the hash of id, three products of two of its words each folded to 64 bits
+func (k *flowHash) sum(id *flowID) uint64 {
+	ne := binary.NativeEndian
+	src0, src1 := ne.Uint64(id.addrs[0:]), ne.Uint64(id.addrs[8:])
+	dst0, dst1 := ne.Uint64(id.addrs[16:]), ne.Uint64(id.addrs[24:])
+	ports := uint64(ne.Uint32(id.ports[:])) | uint64(ne.Uint32(id.ifindex[:]))<<32
+	last := uint64(id.dir) | uint64(id.proto)<<8
+	return fold(src0^k[0], src1^k[1]) ^ fold(dst0^k[2], dst1^k[3]) ^ fold(ports^k[4], last^k[5])
+}
+
+// fold returns the 128 bit product of a and b folded to 64 bits
+func fold(a, b uint64) uint64 {
+	hi, lo := bits.Mul64(a, b)
+	return hi ^ lo
 }
 
 // Direction returns the name of a Dir value

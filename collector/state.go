@@ -1,10 +1,15 @@
 package collector
 
-import "time"
+import (
+	"encoding/binary"
+	"time"
+)
 
 // flowState is a live flow and what its earlier records carried, the fields
 // an event touches come first and span two cache lines of its slot
 type flowState struct {
+	// id is the flow's key in the table, a lookup compares it on the lines the event then updates
+	id flowID
 	// rollup is the slot of the flow's tuple in the rollup table
 	rollup rollupRef
 	// first and last are the min and max event time since the last record, events arrive out of order, 0 before the first
@@ -23,9 +28,10 @@ type flowState struct {
 	sent struct {
 		packets, ipBytes, estPackets uint64
 	}
-	key FlowKey
+	// hash is the table hash of id, the index lets go of the flow by it
+	hash uint64
 	// pad fills the slot to four cache lines, so every slot of a chunk starts on a line
-	_ [8]byte
+	_ [24]byte
 }
 
 // seen extends the flow and its unexported interval to an event at t
@@ -38,21 +44,23 @@ func (s *flowState) seen(t time.Duration) {
 	s.last = max(s.last, t)
 }
 
-// record returns the delta record for the unexported interval
+// record returns the delta record for the unexported interval, its addresses
+// in the 16 byte form the id keeps
 func (s *flowState) record(reason uint8) ExportedFlow {
+	ne := binary.NativeEndian
 	return ExportedFlow{
-		SrcAddr:    s.key.SrcAddr.As16(),
-		DstAddr:    s.key.DstAddr.As16(),
+		SrcAddr:    [16]byte(s.id.addrs[:16]),
+		DstAddr:    [16]byte(s.id.addrs[16:]),
 		Start:      s.first,
 		End:        s.last,
 		Packets:    s.entry.Packets - s.sent.packets,
 		Octets:     s.entry.IPBytes - s.sent.ipBytes,
 		EstPackets: s.entry.EstPackets - s.sent.estPackets,
-		Ifindex:    s.key.Ifindex,
-		SrcPort:    s.key.SrcPort,
-		DstPort:    s.key.DstPort,
-		Dir:        s.key.Dir,
-		Proto:      s.key.Proto,
+		Ifindex:    ne.Uint32(s.id.ifindex[:]),
+		SrcPort:    ne.Uint16(s.id.ports[:]),
+		DstPort:    ne.Uint16(s.id.ports[2:]),
+		Dir:        s.id.dir,
+		Proto:      s.id.proto,
 		EndReason:  reason,
 	}
 }

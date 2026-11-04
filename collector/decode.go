@@ -87,14 +87,16 @@ func checkCounts(segs uint16, l2Len uint8, wire uint32) error {
 	return nil
 }
 
-// sample is one record as the run loop decodes it, 64 bytes, its table key
-// is written at decode so the lookup a batch later reads it from memory
+// sample is one record as the run loop decodes it, its table key is written
+// at decode so the lookup a batch later reads it from memory
 type sample struct {
 	tstamp time.Duration
-	len    uint32
-	segs   uint16
-	l2Len  uint8
-	id     flowID
+	// hash is the table hash of id, record takes it before it locks the table
+	hash  uint64
+	len   uint32
+	segs  uint16
+	l2Len uint8
+	id    flowID
 }
 
 // decode fills s from one ring buffer record and refuses what DecodeFlowEvent refuses
