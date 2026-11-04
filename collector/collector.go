@@ -206,11 +206,9 @@ func (c *Collector) record(batch []sample, evs []FlowEvent) {
 
 	c.mu.Lock()
 	for i := range batch {
-		ended, evicted, ok := c.recordLocked(&batch[i], eventAt(evs, i), nil)
-		if !ok {
+		var ok bool
+		if expired, ok = c.recordLocked(&batch[i], eventAt(evs, i), nil, expired); !ok {
 			unresolved = append(unresolved, i)
-		} else if evicted {
-			expired = append(expired, ended)
 		}
 	}
 	exp := c.exporter
@@ -226,9 +224,7 @@ func (c *Collector) record(batch []sample, evs []FlowEvent) {
 
 		c.mu.Lock()
 		for _, i := range unresolved {
-			if ended, evicted, _ := c.recordLocked(&batch[i], eventAt(evs, i), labels); evicted {
-				expired = append(expired, ended)
-			}
+			expired, _ = c.recordLocked(&batch[i], eventAt(evs, i), labels, expired)
 		}
 		exp = c.exporter
 		c.mu.Unlock()
@@ -275,8 +271,8 @@ func (c *Collector) enrich(pairs []addrPair) map[addrPair]labelPair {
 	return labels
 }
 
-// recordLocked records s, ok is false when its new flow has no labels yet
-func (c *Collector) recordLocked(s *sample, ev *FlowEvent, labels map[addrPair]labelPair) (ended ExportedFlow, evicted, ok bool) {
+// recordLocked records s and appends the record of a flow it evicts to expired, ok is false when its new flow has no labels yet
+func (c *Collector) recordLocked(s *sample, ev *FlowEvent, labels map[addrPair]labelPair, expired []ExportedFlow) (_ []ExportedFlow, ok bool) {
 	now := s.tstamp
 	packets := uint64(s.segs)
 	bytes := uint64(s.len)
@@ -293,7 +289,7 @@ func (c *Collector) recordLocked(s *sample, ev *FlowEvent, labels map[addrPair]l
 		state.seen(now)
 		state.rollup.add(d, now)
 		c.lru.MoveToBack(state.elem)
-		return ExportedFlow{}, false, true
+		return expired, true
 	}
 
 	key := newKey(s, ev)
@@ -301,13 +297,15 @@ func (c *Collector) recordLocked(s *sample, ev *FlowEvent, labels map[addrPair]l
 	if c.enricher != nil {
 		var resolved bool
 		if lp, resolved = labels[addrPair{key.SrcAddr, key.DstAddr}]; !resolved {
-			return ExportedFlow{}, false, false
+			return expired, false
 		}
 	}
 	src, dst := lp.src, lp.dst
 
 	if len(c.flows) >= c.maxFlows {
-		ended, evicted = c.evictOldestLocked(FlowEndReasonLackOfResources)
+		if ended, evicted := c.evictOldestLocked(FlowEndReasonLackOfResources); evicted {
+			expired = append(expired, ended)
+		}
 	}
 
 	rollup := c.rollupLocked(RollupKey{Ifindex: key.Ifindex, Dir: key.Dir, Proto: key.Proto, Src: src, Dst: dst})
@@ -335,7 +333,7 @@ func (c *Collector) recordLocked(s *sample, ev *FlowEvent, labels map[addrPair]l
 	state.elem = c.lru.PushBack(state)
 	state.active = c.activeQueue.PushBack(state)
 	c.flows[s.id] = state
-	return ended, evicted, true
+	return expired, true
 }
 
 // rollupLocked returns the tuple of a new flow, at the cap an idle shown tuple makes room or the flow folds
