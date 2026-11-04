@@ -199,12 +199,11 @@ func (c *Collector) RecordBatch(evs []FlowEvent) {
 	for i := range evs {
 		batch[i].from(&evs[i])
 	}
-	c.record(batch, evs)
+	c.record(batch, evs, nil)
 }
 
-// record records batch like RecordBatch, evs holds the events batch came from when the caller had them
-func (c *Collector) record(batch []sample, evs []FlowEvent) {
-	var expired []ExportedFlow
+// record records batch like RecordBatch, evs holds the events batch came from when the caller had them, the records of the flows it evicts go out through expired, which it returns empty for the next batch
+func (c *Collector) record(batch []sample, evs []FlowEvent, expired []ExportedFlow) []ExportedFlow {
 	var unresolved []int
 
 	c.mu.Lock()
@@ -242,6 +241,7 @@ func (c *Collector) record(batch []sample, evs []FlowEvent) {
 	}
 
 	c.exportFlows(exp, expired)
+	return expired[:0]
 }
 
 // eventAt returns the event at i of evs, nil when the batch came without its events
@@ -751,6 +751,8 @@ func (c *Collector) Run(ctx context.Context, rd Reader) error {
 	})
 
 	batch := make([]sample, 0, readBatch)
+	// a table at its cap evicts a flow for each new one, one buffer holds the records of a batch after batch
+	var expired []ExportedFlow
 	for {
 		if ctx.Err() != nil {
 			return ctx.Err()
@@ -780,7 +782,7 @@ func (c *Collector) Run(ctx context.Context, rd Reader) error {
 		}
 
 		if len(batch) > 0 {
-			c.record(batch, nil)
+			expired = c.record(batch, nil, expired)
 		}
 	}
 }

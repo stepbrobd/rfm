@@ -1023,6 +1023,47 @@ func TestRunRecordsBurstInOneBatch(t *testing.T) {
 	<-errCh
 }
 
+func TestRunExportsTheFlowsEveryBatchEvicts(t *testing.T) {
+	// a full table evicts a flow for each new one, batch after batch through the same buffer
+	const n = 5*readBatch + 3
+	events := make([][]byte, n)
+	for i := range events {
+		events[i] = encodeWireEvent(FlowEvent{
+			Tstamp:  time.Hour + time.Duration(i)*time.Millisecond,
+			Ifindex: 1, Proto: 17, SrcPort: uint16(1000 + i), DstPort: 53,
+			SrcAddr: netip.MustParseAddr("::ffff:10.0.0.1"),
+			DstAddr: netip.MustParseAddr("::ffff:10.0.0.2"),
+			Segs:    1,
+			Len:     100,
+		})
+	}
+	exp := &mockFlowExporter{}
+	c := New(time.Hour, nil, 2)
+	c.SetFlowExporter(exp)
+	ctx, cancel := context.WithCancel(context.Background())
+	errCh := make(chan error, 1)
+	go func() { errCh <- c.Run(ctx, &mockReader{events: events}) }()
+
+	deadline := time.Now().Add(time.Second)
+	for c.Stats().ForcedEvictions < n-2 {
+		if time.Now().After(deadline) {
+			t.Fatalf("forced evictions = %d, want %d", c.Stats().ForcedEvictions, n-2)
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	cancel()
+	<-errCh
+
+	if len(exp.flows) != n-2 {
+		t.Fatalf("exported %d records, want %d", len(exp.flows), n-2)
+	}
+	for i, f := range exp.flows {
+		if f.SrcPort != uint16(1000+i) || f.Packets != 1 || f.EndReason != FlowEndReasonLackOfResources {
+			t.Fatalf("record %d is port %d with %d packets and reason %d, want port %d with 1 packet out of room", i, f.SrcPort, f.Packets, f.EndReason, 1000+i)
+		}
+	}
+}
+
 func TestActiveTimeoutExportsIntervalRecords(t *testing.T) {
 	exp := &mockFlowExporter{}
 	c := New(30*time.Second, nil, config.DefaultMaxFlows)
