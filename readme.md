@@ -91,7 +91,11 @@ rate there without reloading the programs.
    clock does not move, and the IPFIX exporter and `rfm flows` convert them to
    wall clock time. Enrichment labels are resolved once when a flow is created
    and stay with it. An event that fails to decode is counted as a `ring_buffer`
-   error and skipped.
+   error and skipped. When reading and recording keep the collector's loop busy
+   for 85% of a 100 millisecond window, the loop hands batches of up to 1024
+   events to a second goroutine that records them, so the agent can use more
+   than one core, and it records inline again once the two together use less
+   than half a core.
 3. Flows are evicted after a configurable idle timeout. Under high load, when
    the flow table is full, the flow with the oldest last-seen timestamp is
    forcibly evicted. An event moves its flow in that order at most once per 1/32
