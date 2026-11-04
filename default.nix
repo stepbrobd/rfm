@@ -1,6 +1,7 @@
 {
   lib,
   buildGoApplication,
+  go_latest,
   goflow2,
   installShellFiles,
   versionCheckHook,
@@ -34,6 +35,8 @@ buildGoApplication (
       };
 
     modules = ./gomod2nix.toml;
+
+    go = go_latest;
 
     subPackages = [ "cmd/rfm" ];
 

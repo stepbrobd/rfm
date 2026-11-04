@@ -3,7 +3,7 @@
   mkShell,
   bpftools,
   deno,
-  go,
+  go_latest,
   go-tools,
   goflow2,
   gomod2nix,
@@ -20,7 +20,7 @@
 mkShell {
   packages = [
     deno
-    go
+    go_latest
     go-tools
     goflow2
     gomod2nix

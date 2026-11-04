@@ -3,7 +3,7 @@
   writeShellScriptBin,
   deno,
   git,
-  go,
+  go_latest,
   go-tools,
   gomod2nix,
   llvmPackages,
@@ -21,7 +21,7 @@ writeShellScriptBin "formatter" ''
   shopt -s globstar
   export PATH=${
     lib.makeBinPath [
-      go
+      go_latest
       stdenv.cc
     ]
   }:$PATH
@@ -34,11 +34,11 @@ writeShellScriptBin "formatter" ''
   ${lib.getExe ruff} check --fix --unsafe-fixes --preview .
   ${lib.getExe ty} check --fix --error all .
 
-  ${lib.getExe go} fix ./...
-  ${lib.getExe go} fmt ./...
-  ${lib.getExe go} mod tidy
-  ${lib.getExe go} test -race ./...
-  ${lib.getExe go} vet ./...
+  ${lib.getExe go_latest} fix ./...
+  ${lib.getExe go_latest} fmt ./...
+  ${lib.getExe go_latest} mod tidy
+  ${lib.getExe go_latest} test -race ./...
+  ${lib.getExe go_latest} vet ./...
   ${lib.getExe' go-tools "staticcheck"} ./...
   ${lib.getExe' gomod2nix "gomod2nix"}
 
