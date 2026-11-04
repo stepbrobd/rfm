@@ -22,7 +22,9 @@ const HP = "/sys/kernel/mm/hugepages/hugepages-2048kB/nr_hugepages"
 
 # remove every orphan rtemap hugepage file a prior testpmd left behind
 def clear-rtemap [] {
-    ls /dev/hugepages 2>/dev/null
+    # nushell has no 2> redirect, ls would take it for a second path and fail
+    if not ("/dev/hugepages" | path exists) { return }
+    ls /dev/hugepages
     | where {|f| ($f.name | path basename) | str starts-with "rtemap_"}
     | each {|f| rm -f $f.name }
     | ignore
