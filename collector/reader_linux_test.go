@@ -100,6 +100,55 @@ func BenchmarkRingReader(b *testing.B) {
 	}
 }
 
+// BenchmarkRingReaderSparse times ReadRawEvent per record when 8 of 64 rings hold 4 records each, as for a reader that keeps up with the CPUs a NIC interrupts
+func BenchmarkRingReaderSparse(b *testing.B) {
+	if os.Geteuid() != 0 {
+		b.Skip("requires root privileges")
+	}
+
+	const n, live, depth = 64, 8, 4
+	rings := make([]*ebpf.Map, n)
+	for i := range rings {
+		ring, err := ebpf.NewMap(&ebpf.MapSpec{Type: ebpf.RingBuf, MaxEntries: 1 << 16})
+		if err != nil {
+			b.Fatal(err)
+		}
+		defer ring.Close()
+		rings[i] = ring
+	}
+	drops, err := ebpf.NewMap(&ebpf.MapSpec{Type: ebpf.PerCPUArray, KeySize: 4, ValueSize: 8, MaxEntries: 1})
+	if err != nil {
+		b.Fatal(err)
+	}
+	defer drops.Close()
+	var progs []*ebpf.Program
+	for i := 0; i < n; i += n / live {
+		progs = append(progs, ringProducer(b, rings[i], int32(i)))
+	}
+	rd, err := NewReader(rings, drops)
+	if err != nil {
+		b.Fatal(err)
+	}
+	defer rd.Close()
+
+	frame := make([]byte, 64)
+	b.ResetTimer()
+	for left := b.N; left > 0; left -= live * depth {
+		b.StopTimer()
+		for _, prog := range progs {
+			if _, err := prog.Run(&ebpf.RunOptions{Data: frame, Repeat: depth}); err != nil {
+				b.Fatal(err)
+			}
+		}
+		b.StartTimer()
+		for range live * depth {
+			if _, err := rd.ReadRawEvent(); err != nil {
+				b.Fatal(err)
+			}
+		}
+	}
+}
+
 // testRings returns n rings of 64 KiB, a drop counter and a reader over them
 func testRings(t *testing.T, n int) ([]*ebpf.Map, Reader) {
 	t.Helper()
@@ -162,6 +211,70 @@ func TestRingReaderTakesTurnsAcrossRings(t *testing.T) {
 	}
 	if turn := slices.Index(marks, 3); turn != readBatch || marks[turn+1] != 3 || marks[turn+2] != 1 {
 		t.Fatalf("marks %v, want %d of the first ring, both of the third, then the rest of the first", marks, readBatch)
+	}
+}
+
+func TestRingReaderReadsAcrossTheRingEnd(t *testing.T) {
+	rings, rd := testRings(t, 1)
+
+	// 800 records of 72 bytes per round wrap the 64 KiB ring in the second round, one record across its end
+	rd.SetDeadline(time.Now())
+	for round := range 5 {
+		produce(t, rings[0], int32(round), 800)
+		for i := range 800 {
+			raw, err := rd.ReadRawEvent()
+			if err != nil {
+				t.Fatalf("round %d record %d: %v", round, i, err)
+			}
+			if mark := binary.NativeEndian.Uint64(raw); len(raw) != 64 || mark != uint64(round) {
+				t.Fatalf("round %d record %d: %d bytes marked %d, want 64 marked %d", round, i, len(raw), mark, round)
+			}
+		}
+		if _, err := rd.ReadRawEvent(); !errors.Is(err, os.ErrDeadlineExceeded) {
+			t.Fatalf("round %d: read past the records = %v, want the deadline", round, err)
+		}
+	}
+}
+
+func TestRingReaderSkipsDiscardedRecords(t *testing.T) {
+	rings, rd := testRings(t, 1)
+
+	// reserve then discard a record, which leaves a header with the discard bit in the ring
+	prog, err := ebpf.NewProgram(&ebpf.ProgramSpec{
+		Type: ebpf.SchedCLS,
+		Instructions: asm.Instructions{
+			asm.LoadMapPtr(asm.R1, rings[0].FD()),
+			asm.Mov.Imm(asm.R2, 64),
+			asm.Mov.Imm(asm.R3, 0),
+			asm.FnRingbufReserve.Call(),
+			asm.JEq.Imm(asm.R0, 0, "out"),
+			asm.Mov.Reg(asm.R1, asm.R0),
+			asm.Mov.Imm(asm.R2, 0),
+			asm.FnRingbufDiscard.Call(),
+			asm.Mov.Imm(asm.R0, 0).WithSymbol("out"),
+			asm.Return(),
+		},
+		License: "GPL",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer prog.Close()
+	if _, err := prog.Run(&ebpf.RunOptions{Data: make([]byte, 64), Repeat: 3}); err != nil {
+		t.Fatal(err)
+	}
+	produce(t, rings[0], 7, 1)
+
+	rd.SetDeadline(time.Now())
+	raw, err := rd.ReadRawEvent()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if mark := binary.NativeEndian.Uint64(raw); mark != 7 {
+		t.Fatalf("mark = %d, want 7 past the discarded records", mark)
+	}
+	if _, err := rd.ReadRawEvent(); !errors.Is(err, os.ErrDeadlineExceeded) {
+		t.Fatalf("read past the records = %v, want the deadline", err)
 	}
 }
 
