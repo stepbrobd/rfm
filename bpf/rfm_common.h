@@ -40,7 +40,7 @@ struct rfm_slot_value {
 // dir_l2 holds the direction in its top bit and the l2 header of each wire packet in the low 7
 #define RFM_DIR_L2(dir, l2_len) ((__u8)((dir) << 7 | (l2_len)))
 
-// len and segs count the wire bytes and packets
+// len and segs count the wire bytes and packets, tstamp is CLOCK_MONOTONIC_COARSE and the collector adds the time the host spent suspended
 struct rfm_flow_event {
 	__u64 tstamp;
 	__u32 ifindex;

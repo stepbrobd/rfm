@@ -49,6 +49,8 @@ func TestDecodeFlowEvent(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// the record carries a coarse monotonic stamp, the event a boot time
+	want.Tstamp += suspended()
 	if got != want {
 		t.Fatalf("got %+v, want %+v", got, want)
 	}
@@ -115,7 +117,7 @@ func TestSampleDecodeMatchesDecodeFlowEvent(t *testing.T) {
 		if err := s.decode(raw); err != nil {
 			t.Fatal(err)
 		}
-		if s.tstamp != want.Tstamp || s.len != want.Len || s.segs != want.Segs || s.l2Len != want.L2Len {
+		if s.tstamp+suspended() != want.Tstamp || s.len != want.Len || s.segs != want.Segs || s.l2Len != want.L2Len {
 			t.Fatalf("sample counts %+v, want those of %+v", s, want)
 		}
 		if s.id != want.Key().id() || s.id.key() != want.Key() {

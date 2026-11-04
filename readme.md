@@ -87,8 +87,10 @@ rate there without reloading the programs.
    up to 64 records from one ring buffer before it moves to the next nonempty
    one. It scales each event by the sample rate that was in force when it was
    sampled and aggregates flows into an in-memory table keyed by
-   `(ifindex, direction, protocol, src/dst address, src/dst port)`. The table
-   keeps the `CLOCK_BOOTTIME` timestamps of the events, which a step of the wall
+   `(ifindex, direction, protocol, src/dst address, src/dst port)`. The programs
+   stamp each event with the coarse monotonic clock, which ticks once a jiffy (1
+   ms at `HZ=1000`), and the collector adds the time the host spent suspended,
+   so the table keeps `CLOCK_BOOTTIME` timestamps, which a step of the wall
    clock does not move, and the IPFIX exporter and `rfm flows` convert them to
    wall clock time. Enrichment labels are resolved once when a flow is created
    and stay with it. An event that fails to decode is counted as a `ring_buffer`
