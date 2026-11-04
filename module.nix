@@ -59,7 +59,7 @@ in
 
                     wakeup_batch = std.mkOption {
                       type = std.types.ints.positive;
-                      default = 64;
+                      default = 1024;
                       description = "Force a ring buffer wakeup every N flow events a CPU submits, counted per interface, direction and family for an interface with a counter slot.";
                     };
 

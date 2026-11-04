@@ -18,7 +18,7 @@ interfaces = ["eth0"]
 func TestParse(t *testing.T) {
 	defaults := Config{Agent: AgentConfig{
 		Interfaces: []string{"eth0"},
-		BPF:        BPFConfig{SampleRate: 100, RingBufSize: 262144, WakeupBatch: 64, MaxSampleRate: 1000},
+		BPF:        BPFConfig{SampleRate: 100, RingBufSize: 262144, WakeupBatch: 1024, MaxSampleRate: 1000},
 		Collector:  CollectorConfig{MaxFlows: 65536, EvictionTimeout: 30 * time.Second, ActiveTimeout: time.Minute},
 		// the queue holds a sweep of a full table
 		IPFIX:      IPFIXConfig{TemplateRefresh: time.Minute, ObservationDomainID: 1, QueueSize: 65536, MaxMessageSize: 1200},

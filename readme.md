@@ -150,7 +150,7 @@ interfaces = ["eth0", "enp.*"]
 [agent.bpf]
 sample_rate = 100
 ring_buf_size = 262144
-wakeup_batch = 64
+wakeup_batch = 1024
 adaptive_sampling = false
 max_sample_rate = 1000
 pin_path = "/sys/fs/bpf/rfm"
@@ -232,7 +232,7 @@ take this size times the CPU count. Must be greater than 0, a power of two, and
 a multiple of the page size. Invalid values are rejected at config load time.
 Larger buffers reduce the chance of dropped events under burst traffic.
 
-`wakeup_batch` (uint32, default 64): The BPF program flags ring buffer submits
+`wakeup_batch` (uint32, default 1024): The BPF program flags ring buffer submits
 with `BPF_RB_NO_WAKEUP` and forces a wakeup once every N submits on each CPU.
 For an interface with a counter slot the count runs per interface, direction and
 family. The collector drains every ring buffer on any wakeup. Lower values

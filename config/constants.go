@@ -20,8 +20,8 @@ const (
 	defaultSampleRate = 100
 	// defaultRingBufSize is 256 KiB, a power of two and a whole number of pages
 	defaultRingBufSize = 256 << 10
-	// defaultWakeupBatch wakes the reader once every 64 events of a slot entry, or of a cpu for an interface without a slot
-	defaultWakeupBatch = 64
+	// defaultWakeupBatch wakes the reader once every 1024 events of a slot entry, or of a cpu for an interface without a slot
+	defaultWakeupBatch = 1024
 	// defaultMaxSampleRate caps the adaptive and the set rate at 1 in 1000
 	defaultMaxSampleRate = 1000
 	// defaultEvictionTimeout ends a flow idle for 30 s
