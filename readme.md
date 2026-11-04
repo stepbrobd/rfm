@@ -235,7 +235,7 @@ CPU. The agent creates one ring buffer per possible CPU, and together they take
 this size times the CPU count. `0` derives it from `sample_rate`: 256 KiB at 1
 in 1, half as much for each doubling of the rate, and 64 KiB from 1 in 4 on, so
 a ring holds about as long a burst of one CPU's packets up to 1 in 4, and its
-batch of 256 events keeps the wakeups of a busy CPU few at higher rates. The
+batch of 512 events keeps the wakeups of a busy CPU few at higher rates. The
 derived size is never below the page size. A set size must be a power of two and
 a multiple of the page size, and invalid values are rejected at config load
 time. Larger buffers reduce the chance of dropped events under burst traffic.
@@ -250,12 +250,12 @@ interface, direction and family of the CPU, as its ring buffer does. The
 collector drains every ring buffer on any wakeup. Lower values reduce flow event
 delivery latency at the cost of more userspace wakeups. Higher values amortize
 wakeups, and an event submitted without one waits for the collector's 100
-millisecond read deadline at most. `0` derives a quarter of the events the ring
-holds, at 64 bytes an event, 1024 for a ring of 256 KiB. A set batch must be at
-most half of them, since a batch that fills the ring leaves the collector no
-room to catch up after the wakeup. A set batch with `ring_buf_size` at 0 doubles
-the derived ring until it holds twice the batch, up to 64 MiB, past which a
-batch above 524288 events is refused.
+millisecond read deadline at most. `0` derives half of the events the ring
+holds, at 64 bytes an event, 2048 for a ring of 256 KiB. A set batch must be at
+most that half, which leaves the collector the other half of the ring to catch
+up in after the wakeup. A set batch with `ring_buf_size` at 0 doubles the
+derived ring until it holds twice the batch, up to 64 MiB, past which a batch
+above 524288 events is refused.
 
 `iface_stats_size` (int, default 0): Override the BPF iface stats hash map
 capacity, in keys. Up to `iface_slots` attached interfaces with an ifindex below

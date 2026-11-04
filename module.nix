@@ -60,7 +60,7 @@ in
                     wakeup_batch = std.mkOption {
                       type = std.types.ints.u32;
                       default = 0;
-                      description = "Force a ring buffer wakeup every N flow events a CPU submits over all its interfaces, 0 derives a quarter of the events the ring holds. At most half of them, and a ring_buf_size of 0 grows to hold twice a set batch, up to 64 MiB.";
+                      description = "Force a ring buffer wakeup every N flow events a CPU submits over all its interfaces, 0 derives half of the events the ring holds, the most a set batch may be, and a ring_buf_size of 0 grows to hold twice a set batch, up to 64 MiB.";
                     };
 
                     iface_stats_size = std.mkOption {
