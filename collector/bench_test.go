@@ -36,38 +36,19 @@ func (r *cycleReader) SetDeadline(time.Time)          {}
 func (r *cycleReader) DroppedEvents() (uint64, error) { return 0, nil }
 func (r *cycleReader) Close() error                   { return nil }
 
+// BenchmarkRun records on the run loop's goroutine, so an op is the cost of
+// one event, the handoff cases let a recorder take the batches off the loop,
+// so an op is the time one event adds to a saturated run
 func BenchmarkRun(b *testing.B) {
-	for _, enricher := range []Enricher{nil, asnPerSource{}} {
-		// four times the flows the table holds evict its oldest flow on every event
-		for _, flows := range []int{1000, config.DefaultMaxFlows, 4 * config.DefaultMaxFlows} {
-			name := fmt.Sprintf("flows=%d", flows)
-			if enricher != nil {
-				name += "/enricher"
+	for _, handoff := range []bool{false, true} {
+		for _, enricher := range []Enricher{nil, asnPerSource{}} {
+			// four times the flows the table holds evict its oldest flow on every event
+			for _, flows := range []int{1000, config.DefaultMaxFlows, 4 * config.DefaultMaxFlows} {
+				if handoff && (enricher != nil || flows != 1000) {
+					continue
+				}
+				benchmarkRun(b, flows, enricher, handoff)
 			}
-			b.Run(name, func(b *testing.B) {
-				events := make([][]byte, flows)
-				for i := range events {
-					events[i] = encodeWireEvent(FlowEvent{
-						Tstamp:  bootNow(),
-						Ifindex: 1,
-						Proto:   6,
-						SrcAddr: netip.AddrFrom4([4]byte{10, 0, byte(i >> 8), byte(i)}),
-						DstAddr: netip.MustParseAddr("10.1.0.1"),
-						SrcPort: uint16(1024 + i%60000),
-						DstPort: 443,
-						Segs:    1,
-						Len:     1500,
-					})
-				}
-				c := New(time.Hour, enricher, config.DefaultMaxFlows)
-				ctx, cancel := context.WithCancel(context.Background())
-				rd := &cycleReader{events: events, n: b.N, cancel: cancel}
-				b.ReportAllocs()
-				b.ResetTimer()
-				if err := c.Run(ctx, rd); err != context.Canceled {
-					b.Fatal(err)
-				}
-			})
 		}
 	}
 }
@@ -121,4 +102,41 @@ func runEvents(b *testing.B, c *Collector, events [][]byte, n int) {
 	if err := c.Run(ctx, &cycleReader{events: events, n: n, cancel: cancel}); err != context.Canceled {
 		b.Fatal(err)
 	}
+}
+
+func benchmarkRun(b *testing.B, flows int, enricher Enricher, handoff bool) {
+	name := fmt.Sprintf("flows=%d", flows)
+	if enricher != nil {
+		name += "/enricher"
+	}
+	if handoff {
+		name += "/handoff"
+	}
+	b.Run(name, func(b *testing.B) {
+		events := make([][]byte, flows)
+		for i := range events {
+			events[i] = encodeWireEvent(FlowEvent{
+				Tstamp:  bootNow(),
+				Ifindex: 1,
+				Proto:   6,
+				SrcAddr: netip.AddrFrom4([4]byte{10, 0, byte(i >> 8), byte(i)}),
+				DstAddr: netip.MustParseAddr("10.1.0.1"),
+				SrcPort: uint16(1024 + i%60000),
+				DstPort: 443,
+				Segs:    1,
+				Len:     1500,
+			})
+		}
+		c := New(time.Hour, enricher, config.DefaultMaxFlows)
+		if !handoff {
+			c.handoffAt = 2
+		}
+		ctx, cancel := context.WithCancel(context.Background())
+		rd := &cycleReader{events: events, n: b.N, cancel: cancel}
+		b.ReportAllocs()
+		b.ResetTimer()
+		if err := c.Run(ctx, rd); err != context.Canceled {
+			b.Fatal(err)
+		}
+	})
 }

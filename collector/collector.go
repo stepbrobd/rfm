@@ -34,6 +34,10 @@ type Collector struct {
 	enricher Enricher
 	exporter FlowExporter
 	maxFlows int
+	// handoffAt is the busy share of a window from which the run loop hands its batches to a recorder goroutine
+	handoffAt float64
+	// handoffs counts the recorders the run loop started, only the loop writes it
+	handoffs int
 	// rates lists the sample rates by the boot time they took effect, oldest first
 	rates []rateChange
 
@@ -54,14 +58,15 @@ type Collector struct {
 // New creates a collector that evicts flows idle for timeout and holds at most maxFlows flows, enricher may be nil
 func New(timeout time.Duration, enricher Enricher, maxFlows int) *Collector {
 	return &Collector{
-		flows:    newFlowTable(),
-		hash:     newFlowHash().sum,
-		rollups:  newRollupTable(),
-		timeout:  timeout,
-		lruSlack: timeout / lruSlackParts,
-		enricher: enricher,
-		maxFlows: maxFlows,
-		rates:    []rateChange{{rate: 1}},
+		flows:     newFlowTable(),
+		hash:      newFlowHash().sum,
+		rollups:   newRollupTable(),
+		timeout:   timeout,
+		lruSlack:  timeout / lruSlackParts,
+		enricher:  enricher,
+		maxFlows:  maxFlows,
+		handoffAt: handoffLoad,
+		rates:     []rateChange{{rate: 1}},
 	}
 }
 
@@ -763,14 +768,42 @@ func (c *Collector) Run(ctx context.Context, rd Reader) error {
 		}
 	})
 
-	batch := make([]sample, 0, readBatch)
+	// room for a handed off batch, so no append grows it
+	batch := make([]sample, 0, handoffBatch)
 	// a table at its cap evicts a flow for each new one, one buffer holds the records and the labels of batch after batch
 	var buf recordBuf
+	// h records the batches while the loop alone cannot keep up, nil while the loop records inline
+	var h *handoff
+	defer func() {
+		if h != nil {
+			h.stop()
+		}
+	}()
+	var load loadMeter
+	// first is when the batch in hand got its first record, zero between batches
+	var first time.Time
 	for {
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
-		rd.SetDeadline(time.Now().Add(readDeadline))
+		now := time.Now()
+		if !first.IsZero() {
+			load.busy += now.Sub(first)
+			first = time.Time{}
+		}
+		if due, share := load.due(now, h); due {
+			switch {
+			case h == nil && share >= c.handoffAt:
+				log.Debug("hand batches to a recorder", "busy", share)
+				h = c.startHandoff()
+				c.handoffs++
+			case h != nil && share < inlineLoad:
+				log.Debug("record batches inline", "busy", share)
+				h.stop()
+				h = nil
+			}
+		}
+		rd.SetDeadline(now.Add(readDeadline))
 		raw, err := rd.ReadRawEvent()
 		if err != nil {
 			if errors.Is(err, os.ErrDeadlineExceeded) {
@@ -779,12 +812,16 @@ func (c *Collector) Run(ctx context.Context, rd Reader) error {
 			c.ringBufErrs.Add(1)
 			return fmt.Errorf("read event: %w", err)
 		}
-
+		first = time.Now()
 		batch = c.appendSample(batch[:0], raw)
 
 		// a past deadline drains the rings without blocking
-		rd.SetDeadline(time.Now())
-		for len(batch) < readBatch {
+		rd.SetDeadline(first)
+		limit := readBatch
+		if h != nil {
+			limit = handoffBatch
+		}
+		for len(batch) < limit {
 			raw, err := rd.ReadRawEvent()
 			if err != nil {
 				break
@@ -792,7 +829,11 @@ func (c *Collector) Run(ctx context.Context, rd Reader) error {
 			batch = c.appendSample(batch, raw)
 		}
 
-		if len(batch) > 0 {
+		switch {
+		case len(batch) == 0:
+		case h != nil:
+			batch = h.hand(batch)
+		default:
 			c.record(batch, nil, &buf)
 		}
 	}
