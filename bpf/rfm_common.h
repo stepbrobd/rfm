@@ -37,20 +37,25 @@ struct rfm_slot_value {
 	__u32 wake;
 };
 
-// len and segs count the wire bytes and packets, l2_len the l2 header of each
+// dir_l2 holds the direction in its top bit and the l2 header of each wire packet in the low 7
+#define RFM_DIR_L2(dir, l2_len) ((__u8)((dir) << 7 | (l2_len)))
+
+// len and segs count the wire bytes and packets
 struct rfm_flow_event {
 	__u64 tstamp;
 	__u32 ifindex;
-	__u8 dir;
 	__u8 proto;
+	__u8 dir_l2;
 	__u16 segs;
 	__u8 src_addr[16];
 	__u8 dst_addr[16];
 	__u16 src_port;
 	__u16 dst_port;
 	__u32 len;
-	__u8 l2_len;
-	__u8 _pad[7];
 };
+
+// with the 8 byte ring header a record fills one cache line
+_Static_assert(sizeof(struct rfm_flow_event) == 56,
+	       "rfm_flow_event is not 56 bytes");
 
 #endif

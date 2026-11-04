@@ -456,8 +456,8 @@ static __always_inline int rfm_tc(struct __sk_buff *skb, __u8 dir,
 	// ring memory holds older records, every byte is written
 	ev->tstamp = bpf_ktime_get_boot_ns();
 	ev->ifindex = skb->ifindex;
-	ev->dir = dir;
 	ev->proto = proto;
+	ev->dir_l2 = RFM_DIR_L2(dir, l2_len);
 	ev->segs = segs > 0xffff ? 0xffff : segs;
 	if (eth_proto == ETH_P_IP) {
 		struct iphdr *ip = l3;
@@ -478,8 +478,6 @@ static __always_inline int rfm_tc(struct __sk_buff *skb, __u8 dir,
 	ev->src_port = bpf_ntohs(ports[0]);
 	ev->dst_port = bpf_ntohs(ports[1]);
 	ev->len = len;
-	ev->l2_len = l2_len;
-	__builtin_memset(ev->_pad, 0, sizeof(ev->_pad));
 
 	// wake the reader once every wakeup_batch events, Load refuses 0
 	__u64 flags = BPF_RB_NO_WAKEUP;

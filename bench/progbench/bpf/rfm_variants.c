@@ -296,10 +296,9 @@ static __always_inline int rfm_emit(struct __sk_buff *skb, __u8 dir, void *l3,
 	struct rfm_flow_event ev = {
 		.tstamp = bpf_ktime_get_boot_ns(),
 		.ifindex = skb->ifindex,
-		.dir = dir,
+		.dir_l2 = RFM_DIR_L2(dir, l2_len),
 		.segs = segs > 0xffff ? 0xffff : segs,
 		.len = len,
-		.l2_len = l2_len,
 	};
 
 	if (eth_proto == ETH_P_IP) {
@@ -551,10 +550,9 @@ static __always_inline int rfm_emit_xdp(struct xdp_md *ctx, void *l3, void *end,
 	struct rfm_flow_event ev = {
 		.tstamp = bpf_ktime_get_boot_ns(),
 		.ifindex = ctx->ingress_ifindex,
-		.dir = RFM_DIR_INGRESS,
+		.dir_l2 = RFM_DIR_L2(RFM_DIR_INGRESS, l3_off),
 		.segs = 1,
 		.len = len,
-		.l2_len = l3_off,
 	};
 	__u32 l4_off;
 

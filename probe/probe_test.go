@@ -2773,8 +2773,8 @@ func TestFlowEventWritesEveryByte(t *testing.T) {
 
 	testutil.NewNS(t)
 
-	// a ring of one page wraps after 57 records of 72 bytes, one CPU puts
-	// every record in its ring
+	// a ring of one page holds 64 records of 64 bytes, one CPU puts every
+	// record in its ring
 	pinOneCPU(t)
 	p, err := Load(Config{SampleRate: 1, WakeupBatch: 1, RingBufSize: 4096})
 	if err != nil {
@@ -2799,7 +2799,7 @@ func TestFlowEventWritesEveryByte(t *testing.T) {
 
 	// records with every address byte set fill the whole ring, then IPv4
 	// records written over them must leave the zero prefix of the mapped
-	// addresses and the padding zero
+	// addresses
 	ones := net.IP(bytes.Repeat([]byte{0xff}, 16))
 	for range 64 {
 		emit(testutil.EthIPv6UDP(ones, ones, 0xffff, 0xffff))
@@ -2807,7 +2807,7 @@ func TestFlowEventWritesEveryByte(t *testing.T) {
 	zero := make([]byte, 10)
 	for i := range 64 {
 		rec := emit(testutil.EthIPv4UDP(net.IPv4(10, 0, 9, 1), net.IPv4(10, 0, 9, 2), 9200, 53))
-		if !bytes.Equal(rec[16:26], zero) || !bytes.Equal(rec[32:42], zero) || !bytes.Equal(rec[57:64], zero[:7]) {
+		if !bytes.Equal(rec[16:26], zero) || !bytes.Equal(rec[32:42], zero) {
 			t.Fatalf("ipv4 record %d keeps bytes of an older record: % x", i, rec)
 		}
 	}

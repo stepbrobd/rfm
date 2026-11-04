@@ -25,24 +25,23 @@ func TestDecodeFlowEvent(t *testing.T) {
 	wire := wireFlowEvent{
 		Tstamp:  uint64(want.Tstamp),
 		Ifindex: want.Ifindex,
-		Dir:     want.Dir,
 		Proto:   want.Proto,
+		DirL2:   want.Dir<<dirShift | want.L2Len,
 		SrcAddr: want.SrcAddr.As16(),
 		DstAddr: want.DstAddr.As16(),
 		SrcPort: want.SrcPort,
 		DstPort: want.DstPort,
 		Segs:    want.Segs,
 		Len:     want.Len,
-		L2Len:   want.L2Len,
 	}
 
 	var buf bytes.Buffer
 	if err := binary.Write(&buf, binary.NativeEndian, &wire); err != nil {
 		t.Fatal(err)
 	}
-	// struct rfm_flow_event is padded to a multiple of its 8 byte alignment
-	if buf.Len() != 64 {
-		t.Fatalf("wire event is %d bytes, want the 64 of struct rfm_flow_event", buf.Len())
+	// with the 8 byte ring header a record of struct rfm_flow_event fills one cache line
+	if buf.Len() != 56 {
+		t.Fatalf("wire event is %d bytes, want the 56 of struct rfm_flow_event", buf.Len())
 	}
 
 	got, err := DecodeFlowEvent(buf.Bytes())
@@ -61,8 +60,8 @@ func TestDecodeFlowEventShort(t *testing.T) {
 		t.Fatal("expected error for short input")
 	}
 
-	if _, err := DecodeFlowEvent(make([]byte, 56)); err == nil {
-		t.Fatal("expected error for an event without the l2 length")
+	if _, err := DecodeFlowEvent(make([]byte, 55)); err == nil {
+		t.Fatal("expected error for an event without its last byte")
 	}
 }
 
@@ -88,15 +87,14 @@ func encodeWireEvent(ev FlowEvent) []byte {
 	wire := wireFlowEvent{
 		Tstamp:  uint64(ev.Tstamp),
 		Ifindex: ev.Ifindex,
-		Dir:     ev.Dir,
 		Proto:   ev.Proto,
+		DirL2:   ev.Dir<<dirShift | ev.L2Len,
 		SrcAddr: ev.SrcAddr.As16(),
 		DstAddr: ev.DstAddr.As16(),
 		SrcPort: ev.SrcPort,
 		DstPort: ev.DstPort,
 		Segs:    ev.Segs,
 		Len:     ev.Len,
-		L2Len:   ev.L2Len,
 	}
 	var buf bytes.Buffer
 	binary.Write(&buf, binary.NativeEndian, &wire)

@@ -209,16 +209,14 @@ type wireFlowEvent struct {
 	_       structs.HostLayout
 	Tstamp  uint64
 	Ifindex uint32
-	Dir     uint8
 	Proto   uint8
+	DirL2   uint8
 	Segs    uint16
 	SrcAddr [16]uint8
 	DstAddr [16]uint8
 	SrcPort uint16
 	DstPort uint16
 	Len     uint32
-	L2Len   uint8
-	_       [7]uint8
 }
 
 // rawTCPEvent is one sampled ingress TCP packet of size bytes, its zero
@@ -228,7 +226,7 @@ func rawTCPEvent(t *testing.T, ifindex int, src, dst string, srcPort, dstPort ui
 	ev := wireFlowEvent{
 		Ifindex: uint32(ifindex), Proto: 6, Segs: 1,
 		SrcAddr: netip.MustParseAddr(src).As16(), DstAddr: netip.MustParseAddr(dst).As16(),
-		SrcPort: srcPort, DstPort: dstPort, Len: size, L2Len: 14,
+		SrcPort: srcPort, DstPort: dstPort, Len: size, DirL2: 14,
 	}
 	raw, err := binary.Append(nil, binary.NativeEndian, ev)
 	if err != nil {

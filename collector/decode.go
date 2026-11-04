@@ -17,31 +17,34 @@ type wireFlowEvent struct {
 	_       structs.HostLayout
 	Tstamp  uint64
 	Ifindex uint32
-	Dir     uint8
 	Proto   uint8
+	DirL2   uint8
 	Segs    uint16
 	SrcAddr [16]uint8
 	DstAddr [16]uint8
 	SrcPort uint16
 	DstPort uint16
 	Len     uint32
-	L2Len   uint8
-	_       [7]uint8
 }
 
 // binary.Decode walks the struct by reflection per record
 const (
 	offTstamp  = unsafe.Offsetof(wireFlowEvent{}.Tstamp)
 	offIfindex = unsafe.Offsetof(wireFlowEvent{}.Ifindex)
-	offDir     = unsafe.Offsetof(wireFlowEvent{}.Dir)
 	offProto   = unsafe.Offsetof(wireFlowEvent{}.Proto)
+	offDirL2   = unsafe.Offsetof(wireFlowEvent{}.DirL2)
 	offSegs    = unsafe.Offsetof(wireFlowEvent{}.Segs)
 	offSrcAddr = unsafe.Offsetof(wireFlowEvent{}.SrcAddr)
 	offDstAddr = unsafe.Offsetof(wireFlowEvent{}.DstAddr)
 	offSrcPort = unsafe.Offsetof(wireFlowEvent{}.SrcPort)
 	offDstPort = unsafe.Offsetof(wireFlowEvent{}.DstPort)
 	offLen     = unsafe.Offsetof(wireFlowEvent{}.Len)
-	offL2Len   = unsafe.Offsetof(wireFlowEvent{}.L2Len)
+)
+
+// DirL2 holds the direction in its top bit and the l2 header of each wire packet in the low 7
+const (
+	dirShift  = 7
+	l2LenMask = 1<<dirShift - 1
 )
 
 // DecodeFlowEvent decodes one ring buffer record and refuses an event the
@@ -55,7 +58,7 @@ func DecodeFlowEvent(raw []byte) (FlowEvent, error) {
 	ev := FlowEvent{
 		Tstamp:  time.Duration(ne.Uint64(raw[offTstamp:])),
 		Ifindex: ne.Uint32(raw[offIfindex:]),
-		Dir:     raw[offDir],
+		Dir:     raw[offDirL2] >> dirShift,
 		Proto:   raw[offProto],
 		SrcAddr: netip.AddrFrom16([16]byte(raw[offSrcAddr:])),
 		DstAddr: netip.AddrFrom16([16]byte(raw[offDstAddr:])),
@@ -63,7 +66,7 @@ func DecodeFlowEvent(raw []byte) (FlowEvent, error) {
 		DstPort: ne.Uint16(raw[offDstPort:]),
 		Segs:    ne.Uint16(raw[offSegs:]),
 		Len:     ne.Uint32(raw[offLen:]),
-		L2Len:   raw[offL2Len],
+		L2Len:   raw[offDirL2] & l2LenMask,
 	}
 	// every skb stands for at least one wire packet, and the probe counts
 	// the l2 header of every wire packet in len
