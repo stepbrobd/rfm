@@ -18,10 +18,14 @@ const MinIPFIXMaxMessageSize = 171
 const (
 	// defaultSampleRate samples 1 in 100 skbs
 	defaultSampleRate = 100
-	// defaultRingBufSize is 256 KiB, a power of two and a whole number of pages
-	defaultRingBufSize = 256 << 10
-	// defaultWakeupBatch wakes the reader once every 1024 events of a slot entry, or of a cpu for an interface without a slot
-	defaultWakeupBatch = 1024
+	// maxRingBufSize is the ring of each cpu at sample rate 1, which a one queue flood fills in about 3 ms without a reader
+	maxRingBufSize = 256 << 10
+	// minRingBufSize is the smallest ring a derived size goes down to, sample rates from 16 up share it
+	minRingBufSize = 16 << 10
+	// maxDerivedRingBufSize bounds the ring a large wakeup batch derives, a batch past it must set the ring
+	maxDerivedRingBufSize = 64 << 20
+	// ringRecordBytes is one flow event of 56 bytes and the 8 byte header of its ring record
+	ringRecordBytes = 64
 	// maxIfaceSlots is RFM_SLOTS in bpf/rfm_common.h, the bound the programs check a slot against
 	maxIfaceSlots = 256
 	// defaultMaxSampleRate caps the adaptive and the set rate at 1 in 1000

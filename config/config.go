@@ -137,7 +137,7 @@ type RIBConfig struct {
 // Parse decodes a TOML config, fills in the defaults and validates it
 func Parse(data []byte) (*Config, error) {
 	cfg := &Config{Agent: AgentConfig{
-		BPF:        BPFConfig{SampleRate: defaultSampleRate, RingBufSize: defaultRingBufSize, WakeupBatch: defaultWakeupBatch, MaxSampleRate: defaultMaxSampleRate},
+		BPF:        BPFConfig{SampleRate: defaultSampleRate, MaxSampleRate: defaultMaxSampleRate},
 		Collector:  CollectorConfig{MaxFlows: DefaultMaxFlows, EvictionTimeout: defaultEvictionTimeout, ActiveTimeout: defaultActiveTimeout},
 		IPFIX:      IPFIXConfig{TemplateRefresh: defaultTemplateRefresh, ObservationDomainID: defaultObservationDomainID, MaxMessageSize: DefaultIPFIXMaxMessageSize},
 		Prometheus: PrometheusConfig{Host: defaultHost, Port: defaultPrometheusPort},
@@ -154,11 +154,32 @@ func Parse(data []byte) (*Config, error) {
 	defaultEndpoint(&a.IPFIX.Host, &a.IPFIX.Port, defaultIPFIXPort)
 	defaultEndpoint(&a.Enrich.RIB.BMP.Host, &a.Enrich.RIB.BMP.Port, defaultBMPPort)
 	a.IPFIX.QueueSize = max(DefaultIPFIXQueueSize, a.Collector.MaxFlows)
+	if a.BPF.RingBufSize == 0 && a.BPF.SampleRate > 0 {
+		a.BPF.RingBufSize = RingBufSizeFor(a.BPF.SampleRate)
+		// a set batch gets a ring that holds twice its events, as validate asks
+		for uint64(a.BPF.RingBufSize) < 2*uint64(a.BPF.WakeupBatch)*ringRecordBytes && a.BPF.RingBufSize < maxDerivedRingBufSize {
+			a.BPF.RingBufSize *= 2
+		}
+	}
+	if a.BPF.WakeupBatch == 0 && a.BPF.RingBufSize > 0 {
+		a.BPF.WakeupBatch = uint32(max(a.BPF.RingBufSize/ringRecordBytes/4, 1))
+	}
 
 	if err := validate(cfg); err != nil {
 		return nil, err
 	}
 	return cfg, nil
+}
+
+// RingBufSizeFor returns the ring of each cpu for sample rate n, 256 KiB at rate 1
+// and half as much for each doubling of the rate down to 16 KiB, so a ring holds
+// about as long a burst of a cpu's packets at any rate, and never less than a page
+func RingBufSizeFor(n uint32) int {
+	size := maxRingBufSize
+	for r := uint32(2); r <= n && size > minRingBufSize; r *= 2 {
+		size /= 2
+	}
+	return max(size, os.Getpagesize())
 }
 
 // defaultEndpoint fills in the host or the port of an endpoint that sets only
@@ -254,7 +275,7 @@ func validate(cfg *Config) error {
 		return fmt.Errorf("agent.bpf.sample_rate must be > 0")
 	}
 	if a.BPF.RingBufSize <= 0 {
-		return fmt.Errorf("agent.bpf.ring_buf_size must be > 0")
+		return fmt.Errorf("agent.bpf.ring_buf_size must be > 0, or 0 to derive it from sample_rate, got %d", a.BPF.RingBufSize)
 	}
 	if a.BPF.RingBufSize&(a.BPF.RingBufSize-1) != 0 {
 		return fmt.Errorf("agent.bpf.ring_buf_size must be a power of two, got %d", a.BPF.RingBufSize)
@@ -263,8 +284,9 @@ func validate(cfg *Config) error {
 	if page := os.Getpagesize(); a.BPF.RingBufSize%page != 0 {
 		return fmt.Errorf("agent.bpf.ring_buf_size must be a multiple of the page size %d, got %d", page, a.BPF.RingBufSize)
 	}
-	if a.BPF.WakeupBatch == 0 {
-		return fmt.Errorf("agent.bpf.wakeup_batch must be > 0")
+	// a batch that fills more than half the ring leaves the reader no room to catch up after the wakeup
+	if records := uint32(a.BPF.RingBufSize / ringRecordBytes); a.BPF.WakeupBatch > records/2 {
+		return fmt.Errorf("agent.bpf.wakeup_batch must be at most half the %d events a ring of %d bytes holds, got %d", records, a.BPF.RingBufSize, a.BPF.WakeupBatch)
 	}
 	if a.BPF.IfaceStatsSize < 0 {
 		return fmt.Errorf("agent.bpf.iface_stats_size must be >= 0, got %d", a.BPF.IfaceStatsSize)

@@ -52,15 +52,15 @@ in
                     };
 
                     ring_buf_size = std.mkOption {
-                      type = std.types.ints.positive;
-                      default = 262144;
-                      description = "Size in bytes of the ring buffer of each CPU.";
+                      type = std.types.ints.unsigned;
+                      default = 0;
+                      description = "Size in bytes of the ring buffer of each CPU, 0 derives it from sample_rate: 256 KiB at 1 in 1, half as much for each doubling of the rate, down to 16 KiB from 1 in 16 on.";
                     };
 
                     wakeup_batch = std.mkOption {
-                      type = std.types.ints.positive;
-                      default = 1024;
-                      description = "Force a ring buffer wakeup every N flow events a CPU submits, counted per interface, direction and family for an interface with a counter slot.";
+                      type = std.types.ints.unsigned;
+                      default = 0;
+                      description = "Force a ring buffer wakeup every N flow events a CPU submits, counted per interface, direction and family for an interface with a counter slot, 0 derives a quarter of the events the ring holds. At most half of them, and a ring_buf_size of 0 grows to hold twice a set batch.";
                     };
 
                     iface_stats_size = std.mkOption {

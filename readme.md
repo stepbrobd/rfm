@@ -151,8 +151,6 @@ interfaces = ["eth0", "enp.*"]
 
 [agent.bpf]
 sample_rate = 100
-ring_buf_size = 262144
-wakeup_batch = 1024
 adaptive_sampling = false
 max_sample_rate = 1000
 pin_path = "/sys/fs/bpf/rfm"
@@ -228,19 +226,29 @@ several wire packets, and its event carries all of them. Must be greater than 0.
 A value of 1 samples every skb. Higher values reduce ring buffer throughput at
 the cost of flow granularity.
 
-`ring_buf_size` (int, default 262144): Size in bytes of the BPF ring buffer of
-each CPU. The agent creates one ring buffer per possible CPU, and together they
-take this size times the CPU count. Must be greater than 0, a power of two, and
-a multiple of the page size. Invalid values are rejected at config load time.
-Larger buffers reduce the chance of dropped events under burst traffic.
+`ring_buf_size` (int, default 0): Size in bytes of the BPF ring buffer of each
+CPU. The agent creates one ring buffer per possible CPU, and together they take
+this size times the CPU count. `0` derives it from `sample_rate`: 256 KiB at 1
+in 1, half as much for each doubling of the rate, and 16 KiB from 1 in 16 on, so
+a ring holds about as long a burst of one CPU's packets at any rate. The derived
+size is never below the page size. A set size must be a power of two and a
+multiple of the page size, and invalid values are rejected at config load time.
+Larger buffers reduce the chance of dropped events under burst traffic. The size
+follows the configured `sample_rate`, so a rate lowered at run time with
+`rfm set sample-rate` can overflow a ring sized for a higher one, which shows in
+`rfm_collector_dropped_events_total`.
 
-`wakeup_batch` (uint32, default 1024): The BPF program flags ring buffer submits
+`wakeup_batch` (uint32, default 0): The BPF program flags ring buffer submits
 with `BPF_RB_NO_WAKEUP` and forces a wakeup once every N submits on each CPU.
 For an interface with a counter slot the count runs per interface, direction and
 family. The collector drains every ring buffer on any wakeup. Lower values
 reduce flow event delivery latency at the cost of more userspace wakeups. Higher
 values amortize wakeups, and an event submitted without one waits for the
-collector's 100 millisecond read deadline at most. Must be greater than 0.
+collector's 100 millisecond read deadline at most. `0` derives a quarter of the
+events the ring holds, at 64 bytes an event, 1024 for a ring of 256 KiB. A set
+batch must be at most half of them, since a batch that fills the ring leaves the
+collector no room to catch up after the wakeup. A set batch with `ring_buf_size`
+at 0 doubles the derived ring until it holds twice the batch.
 
 `iface_stats_size` (int, default 0): Override the BPF iface stats hash map
 capacity, in keys. Up to `iface_slots` attached interfaces with an ifindex below

@@ -18,7 +18,7 @@ interfaces = ["eth0"]
 func TestParse(t *testing.T) {
 	defaults := Config{Agent: AgentConfig{
 		Interfaces: []string{"eth0"},
-		BPF:        BPFConfig{SampleRate: 100, RingBufSize: 262144, WakeupBatch: 1024, MaxSampleRate: 1000},
+		BPF:        BPFConfig{SampleRate: 100, RingBufSize: 16384, WakeupBatch: 64, MaxSampleRate: 1000},
 		Collector:  CollectorConfig{MaxFlows: 65536, EvictionTimeout: 30 * time.Second, ActiveTimeout: time.Minute},
 		// the queue holds a sweep of a full table
 		IPFIX:      IPFIXConfig{TemplateRefresh: time.Minute, ObservationDomainID: 1, QueueSize: 65536, MaxMessageSize: 1200},
@@ -95,6 +95,12 @@ socket = "/run/rfm/rfm.sock"
 		{"bmp host alone", base + "[agent.enrich.rib.bmp]\nhost = \"127.0.0.1\"\n", with(func(a *AgentConfig) { a.Enrich.RIB.BMP = BMPConfig{Host: "127.0.0.1", Port: 11019} })},
 		{"ipfix port alone", base + "[agent.ipfix]\nport = 2055\n", with(func(a *AgentConfig) { a.IPFIX.Host, a.IPFIX.Port = "::1", 2055 })},
 		{"ipfix host alone", base + "[agent.ipfix]\nhost = \"127.0.0.1\"\n", with(func(a *AgentConfig) { a.IPFIX.Host, a.IPFIX.Port = "127.0.0.1", 4739 })},
+		// the ring and the wakeup batch follow the sample rate unless set
+		{"rate 1 rings", base + "[agent.bpf]\nsample_rate = 1\n", with(func(a *AgentConfig) { a.BPF.SampleRate, a.BPF.RingBufSize, a.BPF.WakeupBatch = 1, 262144, 1024 })},
+		{"rate 10 rings", base + "[agent.bpf]\nsample_rate = 10\n", with(func(a *AgentConfig) { a.BPF.SampleRate, a.BPF.RingBufSize, a.BPF.WakeupBatch = 10, 32768, 128 })},
+		{"set ring, derived batch", base + "[agent.bpf]\nring_buf_size = 65536\n", with(func(a *AgentConfig) { a.BPF.RingBufSize, a.BPF.WakeupBatch = 65536, 256 })},
+		{"set batch, ring for it", base + "[agent.bpf]\nwakeup_batch = 1024\n", with(func(a *AgentConfig) { a.BPF.RingBufSize, a.BPF.WakeupBatch = 131072, 1024 })},
+		{"set batch, rate ring holds it", base + "[agent.bpf]\nsample_rate = 1\nwakeup_batch = 129\n", with(func(a *AgentConfig) { a.BPF.SampleRate, a.BPF.RingBufSize, a.BPF.WakeupBatch = 1, 262144, 129 })},
 		{"active timeout off", base + "[agent.collector]\nactive_timeout = \"0s\"\n", with(func(a *AgentConfig) { a.Collector.ActiveTimeout = 0 })},
 		// a message holds one record and the template of its family
 		{"smallest message", base + "[agent.ipfix]\nmax_message_size = " + strconv.Itoa(MinIPFIXMaxMessageSize) + "\n", with(func(a *AgentConfig) { a.IPFIX.MaxMessageSize = MinIPFIXMaxMessageSize })},
@@ -120,10 +126,13 @@ func TestParseRejects(t *testing.T) {
 		{"[agent]\ninterfaces = [\"[\"]\n", "agent.interfaces: interface pattern"},
 		{base + "[agent.bpf]\nsample_rte = 1\n", "unknown config key: agent.bpf.sample_rte"},
 		{base + "[agent.bpf]\nsample_rate = 0\n", "sample_rate must be > 0"},
-		{base + "[agent.bpf]\nring_buf_size = 0\n", "ring_buf_size must be > 0"},
+		{base + "[agent.bpf]\nring_buf_size = -4096\n", "ring_buf_size must be > 0, or 0 to derive it"},
 		{base + "[agent.bpf]\nring_buf_size = 12345\n", "ring_buf_size must be a power of two"},
 		{base + "[agent.bpf]\nring_buf_size = " + halfPage + "\n", "ring_buf_size must be a multiple of the page size"},
-		{base + "[agent.bpf]\nwakeup_batch = 0\n", "wakeup_batch must be > 0"},
+		// a batch of half the ring and more leaves the reader no room
+		{base + "[agent.bpf]\nring_buf_size = 65536\nwakeup_batch = 1024\n", "wakeup_batch must be at most half the 1024 events"},
+		{base + "[agent.bpf]\nring_buf_size = 16384\nwakeup_batch = 129\n", "wakeup_batch must be at most half the 256 events"},
+		{base + "[agent.bpf]\nwakeup_batch = 4000000000\n", "wakeup_batch must be at most half the 1048576 events"},
 		{base + "[agent.bpf]\niface_slots = -1\n", "iface_slots must be between 0 and 256"},
 		{base + "[agent.bpf]\niface_slots = 257\n", "iface_slots must be between 0 and 256"},
 		{base + "[agent.bpf]\niface_stats_size = -1\n", "iface_stats_size must be >= 0"},
@@ -202,5 +211,16 @@ func TestUnmatchedPatterns(t *testing.T) {
 	want := []string{"ranet*", "wg[0-9]+", "["}
 	if got := UnmatchedPatterns(patterns, names); !slices.Equal(got, want) {
 		t.Fatalf("UnmatchedPatterns = %q, want %q", got, want)
+	}
+}
+
+func TestRingBufSizeForHalvesPerDoublingDownToTheFloor(t *testing.T) {
+	for _, tc := range []struct {
+		n    uint32
+		want int
+	}{{1, 262144}, {2, 131072}, {3, 131072}, {4, 65536}, {8, 32768}, {10, 32768}, {16, 16384}, {100, 16384}, {1000, 16384}} {
+		if got := RingBufSizeFor(tc.n); got != max(tc.want, os.Getpagesize()) {
+			t.Fatalf("RingBufSizeFor(%d) = %d, want %d", tc.n, got, tc.want)
+		}
 	}
 }
