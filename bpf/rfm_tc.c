@@ -64,7 +64,7 @@ struct {
 	__type(value, struct rfm_slot_value);
 } rfm_iface_arr SEC(".maps");
 
-// skip count per CPU of every draw without a slot, and the wakeup countdown of the CPU's ring
+// skip count per CPU of every draw without a slot, and the wakeup countdown of the CPU's ring for the programs without a stage, the stage programs keep theirs in rfm_cpu_stage
 struct {
 	__uint(type, BPF_MAP_TYPE_PERCPU_ARRAY);
 	__uint(max_entries, 1);

@@ -244,16 +244,17 @@ with `rfm set sample-rate` can overflow a ring sized for a higher one, which
 shows in `rfm_collector_dropped_events_total`.
 
 `wakeup_batch` (uint32, default 0): The BPF program flags ring buffer submits
-with `BPF_RB_NO_WAKEUP` and forces a wakeup once every N submits on each CPU.
-The count runs over every interface, direction and family of the CPU, as its
-ring buffer does. The collector drains every ring buffer on any wakeup. Lower
-values reduce flow event delivery latency at the cost of more userspace wakeups.
-Higher values amortize wakeups, and an event submitted without one waits for the
-collector's 100 millisecond read deadline at most. `0` derives a quarter of the
-events the ring holds, at 64 bytes an event, 1024 for a ring of 256 KiB. A set
-batch must be at most half of them, since a batch that fills the ring leaves the
-collector no room to catch up after the wakeup. A set batch with `ring_buf_size`
-at 0 doubles the derived ring until it holds twice the batch.
+with `BPF_RB_NO_WAKEUP` and forces a wakeup once every N events on each CPU, a
+staged record counting every event it carries. The count runs over every
+interface, direction and family of the CPU, as its ring buffer does. The
+collector drains every ring buffer on any wakeup. Lower values reduce flow event
+delivery latency at the cost of more userspace wakeups. Higher values amortize
+wakeups, and an event submitted without one waits for the collector's 100
+millisecond read deadline at most. `0` derives a quarter of the events the ring
+holds, at 64 bytes an event, 1024 for a ring of 256 KiB. A set batch must be at
+most half of them, since a batch that fills the ring leaves the collector no
+room to catch up after the wakeup. A set batch with `ring_buf_size` at 0 doubles
+the derived ring until it holds twice the batch.
 
 `iface_stats_size` (int, default 0): Override the BPF iface stats hash map
 capacity, in keys. Up to `iface_slots` attached interfaces with an ifindex below
