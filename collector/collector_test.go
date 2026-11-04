@@ -299,6 +299,38 @@ func TestRunDroppedEvents(t *testing.T) {
 	}
 }
 
+// liveDropsReader holds no events and reports the drops a test stores
+type liveDropsReader struct{ drops atomic.Uint64 }
+
+func (r *liveDropsReader) ReadRawEvent() ([]byte, error) {
+	time.Sleep(time.Millisecond)
+	return nil, os.ErrDeadlineExceeded
+}
+func (r *liveDropsReader) SetDeadline(time.Time)          {}
+func (r *liveDropsReader) DroppedEvents() (uint64, error) { return r.drops.Load(), nil }
+func (r *liveDropsReader) Close() error                   { return nil }
+
+func TestStatsReadsRingDropsBetweenSweeps(t *testing.T) {
+	rd := &liveDropsReader{}
+	c := New(time.Hour, nil, config.DefaultMaxFlows)
+	ctx, cancel := context.WithCancel(context.Background())
+	errCh := make(chan error, 1)
+	go func() { errCh <- c.Run(ctx, rd) }()
+
+	// the first sweep is half an hour away, a scrape still sees drops as they happen
+	rd.drops.Store(7)
+	deadline := time.Now().Add(5 * time.Second)
+	for c.Stats().DroppedEvents != 7 {
+		if time.Now().After(deadline) {
+			cancel()
+			t.Fatalf("dropped events = %d, want 7 before the first sweep", c.Stats().DroppedEvents)
+		}
+		time.Sleep(time.Millisecond)
+	}
+	cancel()
+	<-errCh
+}
+
 // sustainedReader always returns events, never triggers deadline exceeded
 type sustainedReader struct {
 	event []byte

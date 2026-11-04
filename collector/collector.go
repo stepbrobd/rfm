@@ -21,6 +21,8 @@ type Collector struct {
 	flows map[flowID]*flowState
 	// lru orders flows by their last event, oldest first, approximate across cpus
 	lru *list.List
+	// live is the reader of a running Run, a scrape reads the ring drops from it
+	live Reader
 	// activeQueue orders live flows by the start of their unexported interval, oldest first
 	activeQueue *list.List
 	// rollups are the label tuples of the flow series, rollupLocked caps the labeled ones
@@ -581,7 +583,17 @@ func (c *Collector) ScrapeRollups(buf []RollupSample) []RollupSample {
 func (c *Collector) Stats() Stats {
 	c.mu.RLock()
 	activeFlows := uint64(len(c.flows))
+	live := c.live
 	c.mu.RUnlock()
+
+	// the sweep polls the drops once a period, a scrape reads them now
+	if live != nil {
+		if n, err := live.DroppedEvents(); err != nil {
+			c.bpfMapErrs.Add(1)
+		} else {
+			c.noteDrops(n)
+		}
+	}
 
 	return Stats{
 		ActiveFlows:     activeFlows,
@@ -642,8 +654,18 @@ func (c *Collector) pollDrops(rd Reader) {
 		c.bpfMapErrs.Add(1)
 		return
 	}
-	c.dropped.Store(dropped)
+	c.noteDrops(dropped)
 	c.adapt(dropped)
+}
+
+// noteDrops raises the drop count to n, the sweep's poll and a scrape both read the counter of the programs
+func (c *Collector) noteDrops(n uint64) {
+	for {
+		old := c.dropped.Load()
+		if n <= old || c.dropped.CompareAndSwap(old, n) {
+			return
+		}
+	}
 }
 
 // readBatch caps how many ring buffer records are recorded per lock acquisition
@@ -671,9 +693,20 @@ func (c *Collector) Run(ctx context.Context, rd Reader) error {
 		return fmt.Errorf("max flows must be positive, got %d", c.maxFlows)
 	}
 
-	c.mu.RLock()
+	c.mu.Lock()
 	period := sweepPeriod(c.timeout, c.active)
-	c.mu.RUnlock()
+	c.live = rd
+	c.mu.Unlock()
+	defer func() {
+		if n, err := rd.DroppedEvents(); err != nil {
+			c.bpfMapErrs.Add(1)
+		} else {
+			c.noteDrops(n)
+		}
+		c.mu.Lock()
+		c.live = nil
+		c.mu.Unlock()
+	}()
 	tick := time.NewTicker(period)
 	defer tick.Stop()
 
