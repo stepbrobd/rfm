@@ -87,3 +87,29 @@ func TestFlowEventIPBytes(t *testing.T) {
 		}
 	}
 }
+
+func TestFlowIDRoundTrips(t *testing.T) {
+	for _, k := range []FlowKey{
+		{Ifindex: 2, Dir: 1, Proto: 6, SrcAddr: netip.MustParseAddr("::ffff:192.0.2.1"), DstAddr: netip.MustParseAddr("::ffff:198.51.100.7"), SrcPort: 1, DstPort: 2},
+		{Ifindex: 1<<31 - 1, Proto: 58, SrcAddr: netip.MustParseAddr("fe80::1"), DstAddr: netip.MustParseAddr("ff02::1")},
+	} {
+		id := k.id()
+		if got := id.key(); got != k {
+			t.Fatalf("key %+v came back %+v", k, got)
+		}
+	}
+
+	// keys that differ in one field have different ids
+	base := FlowKey{Ifindex: 2, Proto: 6, SrcAddr: netip.MustParseAddr("::ffff:192.0.2.1"), DstAddr: netip.MustParseAddr("::ffff:192.0.2.2"), SrcPort: 1, DstPort: 2}
+	for _, other := range []FlowKey{
+		{Ifindex: 3, Proto: 6, SrcAddr: base.SrcAddr, DstAddr: base.DstAddr, SrcPort: 1, DstPort: 2},
+		{Ifindex: 2, Dir: 1, Proto: 6, SrcAddr: base.SrcAddr, DstAddr: base.DstAddr, SrcPort: 1, DstPort: 2},
+		{Ifindex: 2, Proto: 17, SrcAddr: base.SrcAddr, DstAddr: base.DstAddr, SrcPort: 1, DstPort: 2},
+		{Ifindex: 2, Proto: 6, SrcAddr: base.DstAddr, DstAddr: base.SrcAddr, SrcPort: 1, DstPort: 2},
+		{Ifindex: 2, Proto: 6, SrcAddr: base.SrcAddr, DstAddr: base.DstAddr, SrcPort: 2, DstPort: 1},
+	} {
+		if other.id() == base.id() {
+			t.Fatalf("%+v and %+v share an id", other, base)
+		}
+	}
+}

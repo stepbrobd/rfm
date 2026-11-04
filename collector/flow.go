@@ -1,6 +1,7 @@
 package collector
 
 import (
+	"encoding/binary"
 	"net/netip"
 	"time"
 )
@@ -63,6 +64,45 @@ type FlowKey struct {
 	DstAddr netip.Addr
 	SrcPort uint16
 	DstPort uint16
+}
+
+// flowID is a flow's key in the flow table, plain bytes the map hashes and compares in one pass
+type flowID struct {
+	// addrs holds the source then the destination address in their 16 byte form
+	addrs [32]byte
+	// ports holds the source then the destination port in host order
+	ports   [4]byte
+	ifindex [4]byte
+	dir     uint8
+	proto   uint8
+}
+
+// id returns the table key of k
+func (k FlowKey) id() flowID {
+	var id flowID
+	src, dst := k.SrcAddr.As16(), k.DstAddr.As16()
+	copy(id.addrs[:16], src[:])
+	copy(id.addrs[16:], dst[:])
+	ne := binary.NativeEndian
+	ne.PutUint16(id.ports[:], k.SrcPort)
+	ne.PutUint16(id.ports[2:], k.DstPort)
+	ne.PutUint32(id.ifindex[:], k.Ifindex)
+	id.dir, id.proto = k.Dir, k.Proto
+	return id
+}
+
+// key returns the flow key of id, its addresses in their 16 byte form
+func (id *flowID) key() FlowKey {
+	ne := binary.NativeEndian
+	return FlowKey{
+		Ifindex: ne.Uint32(id.ifindex[:]),
+		Dir:     id.dir,
+		Proto:   id.proto,
+		SrcAddr: netip.AddrFrom16([16]byte(id.addrs[:16])),
+		DstAddr: netip.AddrFrom16([16]byte(id.addrs[16:])),
+		SrcPort: ne.Uint16(id.ports[:]),
+		DstPort: ne.Uint16(id.ports[2:]),
+	}
 }
 
 // Direction returns the name of a Dir value

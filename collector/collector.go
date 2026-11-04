@@ -18,7 +18,7 @@ import (
 // Collector aggregates flow events into an in-memory flow table
 type Collector struct {
 	mu    sync.RWMutex
-	flows map[FlowKey]*flowState
+	flows map[flowID]*flowState
 	// lru orders flows by their last event, oldest first, approximate across cpus
 	lru *list.List
 	// activeQueue orders live flows by the start of their unexported interval, oldest first
@@ -53,7 +53,7 @@ type Collector struct {
 // New creates a collector that evicts flows idle for timeout and holds at most maxFlows flows, enricher may be nil
 func New(timeout time.Duration, enricher Enricher, maxFlows int) *Collector {
 	return &Collector{
-		flows:       make(map[FlowKey]*flowState),
+		flows:       make(map[flowID]*flowState),
 		lru:         list.New(),
 		activeQueue: list.New(),
 		rollups:     make(map[RollupKey]*rollupState),
@@ -192,12 +192,21 @@ func (c *Collector) Record(ev FlowEvent) {
 
 // RecordBatch records evs, the labels of new flows are looked up between two passes under the lock
 func (c *Collector) RecordBatch(evs []FlowEvent) {
+	batch := make([]sample, len(evs))
+	for i := range evs {
+		batch[i].from(&evs[i])
+	}
+	c.record(batch, evs)
+}
+
+// record records batch like RecordBatch, evs holds the events batch came from when the caller had them
+func (c *Collector) record(batch []sample, evs []FlowEvent) {
 	var expired []ExportedFlow
 	var unresolved []int
 
 	c.mu.Lock()
-	for i, ev := range evs {
-		ended, evicted, ok := c.recordLocked(ev, nil)
+	for i := range batch {
+		ended, evicted, ok := c.recordLocked(&batch[i], eventAt(evs, i), nil)
 		if !ok {
 			unresolved = append(unresolved, i)
 		} else if evicted {
@@ -210,13 +219,14 @@ func (c *Collector) RecordBatch(evs []FlowEvent) {
 	if len(unresolved) > 0 {
 		pairs := make([]addrPair, len(unresolved))
 		for j, i := range unresolved {
-			pairs[j] = addrPair{evs[i].SrcAddr, evs[i].DstAddr}
+			key := newKey(&batch[i], eventAt(evs, i))
+			pairs[j] = addrPair{key.SrcAddr, key.DstAddr}
 		}
 		labels := c.enrich(pairs)
 
 		c.mu.Lock()
 		for _, i := range unresolved {
-			if ended, evicted, _ := c.recordLocked(evs[i], labels); evicted {
+			if ended, evicted, _ := c.recordLocked(&batch[i], eventAt(evs, i), labels); evicted {
 				expired = append(expired, ended)
 			}
 		}
@@ -225,6 +235,22 @@ func (c *Collector) RecordBatch(evs []FlowEvent) {
 	}
 
 	c.exportFlows(exp, expired)
+}
+
+// eventAt returns the event at i of evs, nil when the batch came without its events
+func eventAt(evs []FlowEvent, i int) *FlowEvent {
+	if evs == nil {
+		return nil
+	}
+	return &evs[i]
+}
+
+// newKey returns the key a new flow of s takes, the one of its event when there is one
+func newKey(s *sample, ev *FlowEvent) FlowKey {
+	if ev != nil {
+		return ev.Key()
+	}
+	return s.id.key()
 }
 
 // addrPair is what one Enrich call looks up
@@ -249,17 +275,16 @@ func (c *Collector) enrich(pairs []addrPair) map[addrPair]labelPair {
 	return labels
 }
 
-// recordLocked records ev, ok is false when its new flow has no labels yet
-func (c *Collector) recordLocked(ev FlowEvent, labels map[addrPair]labelPair) (ended ExportedFlow, evicted, ok bool) {
-	now := ev.Tstamp
-	key := ev.Key()
-	packets := ev.Packets()
-	bytes := uint64(ev.Len)
-	ipBytes := ev.IPBytes()
-	rate := uint64(c.sampleRateAtLocked(ev.Tstamp))
+// recordLocked records s, ok is false when its new flow has no labels yet
+func (c *Collector) recordLocked(s *sample, ev *FlowEvent, labels map[addrPair]labelPair) (ended ExportedFlow, evicted, ok bool) {
+	now := s.tstamp
+	packets := uint64(s.segs)
+	bytes := uint64(s.len)
+	ipBytes := bytes - packets*uint64(s.l2Len)
+	rate := uint64(c.sampleRateAtLocked(now))
 	d := Counts{Packets: packets, Bytes: bytes, EstPackets: packets * rate, EstBytes: bytes * rate}
 
-	if state, found := c.flows[key]; found {
+	if state, found := c.flows[s.id]; found {
 		state.entry.Packets += d.Packets
 		state.entry.Bytes += d.Bytes
 		state.entry.IPBytes += ipBytes
@@ -271,10 +296,11 @@ func (c *Collector) recordLocked(ev FlowEvent, labels map[addrPair]labelPair) (e
 		return ExportedFlow{}, false, true
 	}
 
+	key := newKey(s, ev)
 	var lp labelPair
 	if c.enricher != nil {
 		var resolved bool
-		if lp, resolved = labels[addrPair{ev.SrcAddr, ev.DstAddr}]; !resolved {
+		if lp, resolved = labels[addrPair{key.SrcAddr, key.DstAddr}]; !resolved {
 			return ExportedFlow{}, false, false
 		}
 	}
@@ -284,7 +310,7 @@ func (c *Collector) recordLocked(ev FlowEvent, labels map[addrPair]labelPair) (e
 		ended, evicted = c.evictOldestLocked(FlowEndReasonLackOfResources)
 	}
 
-	rollup := c.rollupLocked(RollupKey{Ifindex: ev.Ifindex, Dir: ev.Dir, Proto: ev.Proto, Src: src, Dst: dst})
+	rollup := c.rollupLocked(RollupKey{Ifindex: key.Ifindex, Dir: key.Dir, Proto: key.Proto, Src: src, Dst: dst})
 	c.attachLocked(rollup)
 	rollup.add(d, now)
 
@@ -308,7 +334,7 @@ func (c *Collector) recordLocked(ev FlowEvent, labels map[addrPair]labelPair) (e
 	}
 	state.elem = c.lru.PushBack(state)
 	state.active = c.activeQueue.PushBack(state)
-	c.flows[key] = state
+	c.flows[s.id] = state
 	return ended, evicted, true
 }
 
@@ -370,7 +396,7 @@ func (c *Collector) dropRollupLocked(r *rollupState) {
 func (c *Collector) removeLocked(state *flowState) {
 	c.lru.Remove(state.elem)
 	c.activeQueue.Remove(state.active)
-	delete(c.flows, state.key)
+	delete(c.flows, state.key.id())
 	c.detachLocked(state.rollup, state.entry)
 }
 
@@ -456,8 +482,8 @@ func (c *Collector) Flows() map[FlowKey]FlowEntry {
 	defer c.mu.RUnlock()
 
 	snap := make(map[FlowKey]FlowEntry, len(c.flows))
-	for k, state := range c.flows {
-		snap[k] = state.entry
+	for _, state := range c.flows {
+		snap[state.key] = state.entry
 	}
 	return snap
 }
@@ -502,17 +528,17 @@ func (c *Collector) TopFlows(n int, byPackets bool) []Flow {
 			i = last
 		}
 	}
-	for k, state := range c.flows {
+	for _, state := range c.flows {
 		switch {
 		case len(top) < n:
-			top = append(top, Flow{k, state.entry})
+			top = append(top, Flow{state.key, state.entry})
 			if len(top) == n {
 				for i := n/2 - 1; i >= 0; i-- {
 					down(i)
 				}
 			}
 		case ahead(&state.entry, &top[0].FlowEntry):
-			top[0] = Flow{k, state.entry}
+			top[0] = Flow{state.key, state.entry}
 			down(0)
 		}
 	}
@@ -584,7 +610,7 @@ func (c *Collector) Flush(reason uint8) {
 			c.detachLocked(state.rollup, state.entry)
 		}
 	}
-	c.flows = make(map[FlowKey]*flowState)
+	c.flows = make(map[flowID]*flowState)
 	c.lru.Init()
 	c.activeQueue.Init()
 	exp = c.exporter
@@ -671,7 +697,7 @@ func (c *Collector) Run(ctx context.Context, rd Reader) error {
 		}
 	})
 
-	events := make([]FlowEvent, 0, readBatch)
+	batch := make([]sample, 0, readBatch)
 	for {
 		if ctx.Err() != nil {
 			return ctx.Err()
@@ -686,31 +712,31 @@ func (c *Collector) Run(ctx context.Context, rd Reader) error {
 			return fmt.Errorf("read event: %w", err)
 		}
 
-		events = c.appendEvent(events[:0], raw)
+		batch = c.appendSample(batch[:0], raw)
 
 		// a past deadline drains the rings without blocking
 		rd.SetDeadline(time.Now())
-		for len(events) < readBatch {
+		for len(batch) < readBatch {
 			raw, err := rd.ReadRawEvent()
 			if err != nil {
 				break
 			}
-			events = c.appendEvent(events, raw)
+			batch = c.appendSample(batch, raw)
 		}
 
-		if len(events) > 0 {
-			c.RecordBatch(events)
+		if len(batch) > 0 {
+			c.record(batch, nil)
 		}
 	}
 }
 
-// appendEvent decodes raw onto events, a record that fails to decode is counted and skipped
-func (c *Collector) appendEvent(events []FlowEvent, raw []byte) []FlowEvent {
-	ev, err := DecodeFlowEvent(raw)
-	if err != nil {
+// appendSample decodes raw onto batch in place, a record that fails to decode is counted and skipped
+func (c *Collector) appendSample(batch []sample, raw []byte) []sample {
+	batch = append(batch, sample{})
+	if err := batch[len(batch)-1].decode(raw); err != nil {
 		log.Error("decode flow event", "err", err, "raw_len", len(raw))
 		c.ringBufErrs.Add(1)
-		return events
+		return batch[:len(batch)-1]
 	}
-	return append(events, ev)
+	return batch
 }

@@ -100,3 +100,34 @@ func encodeWireEvent(ev FlowEvent) []byte {
 	binary.Write(&buf, binary.NativeEndian, &wire)
 	return buf.Bytes()
 }
+
+func TestSampleDecodeMatchesDecodeFlowEvent(t *testing.T) {
+	for _, ev := range []FlowEvent{
+		{Tstamp: 7, Ifindex: 3, Dir: 0, Proto: 6, SrcAddr: netip.MustParseAddr("::ffff:10.0.0.1"), DstAddr: netip.MustParseAddr("::ffff:10.0.0.2"), SrcPort: 40000, DstPort: 443, Segs: 1, Len: 1514, L2Len: 14},
+		{Tstamp: 1 << 40, Ifindex: 1 << 20, Dir: 1, Proto: 17, SrcAddr: netip.MustParseAddr("2001:db8::1"), DstAddr: netip.MustParseAddr("2001:db8:ffff::2"), SrcPort: 53, DstPort: 65535, Segs: 45, Len: 45 * 1518, L2Len: 26},
+	} {
+		raw := encodeWireEvent(ev)
+		want, err := DecodeFlowEvent(raw)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var s sample
+		if err := s.decode(raw); err != nil {
+			t.Fatal(err)
+		}
+		if s.tstamp != want.Tstamp || s.len != want.Len || s.segs != want.Segs || s.l2Len != want.L2Len {
+			t.Fatalf("sample counts %+v, want those of %+v", s, want)
+		}
+		if s.id != want.Key().id() || s.id.key() != want.Key() {
+			t.Fatalf("sample key %+v, want %+v", s.id.key(), want.Key())
+		}
+	}
+
+	// a sample refuses what DecodeFlowEvent refuses
+	for _, raw := range [][]byte{make([]byte, 55), encodeWireEvent(FlowEvent{Len: 100}), encodeWireEvent(FlowEvent{Segs: 2, Len: 20, L2Len: 14})} {
+		var s sample
+		if err := s.decode(raw); err == nil {
+			t.Fatalf("decoded %+v from % x, want it refused", s, raw)
+		}
+	}
+}
