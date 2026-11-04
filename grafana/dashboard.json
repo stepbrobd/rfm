@@ -4301,7 +4301,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum(rfm_flow_bytes)",
+          "expr": "sum(increase(rfm_flow_bytes_total[$__range]))",
           "legendFormat": "Bytes",
           "refId": "A",
           "instant": true
@@ -4311,7 +4311,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum(rfm_collector_active_flows)",
+          "expr": "sum(increase(rfm_collector_created_flows_total[$__range]))",
           "legendFormat": "Flows",
           "refId": "B",
           "instant": true
@@ -4419,7 +4419,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum(rfm_flow_packets)",
+          "expr": "sum(increase(rfm_flow_packets_total[$__range]))",
           "legendFormat": "Packets",
           "refId": "A",
           "instant": true
@@ -4429,7 +4429,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum(rfm_collector_active_flows)",
+          "expr": "sum(increase(rfm_collector_created_flows_total[$__range]))",
           "legendFormat": "Flows",
           "refId": "B",
           "instant": true
