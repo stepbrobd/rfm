@@ -85,6 +85,7 @@ type result struct {
 	XlatedBytes  int       `json:"xlated_bytes"`
 	JitedBytes   uint32    `json:"jited_bytes"`
 	Drops        uint64    `json:"ring_drops"`
+	Stage        uint32    `json:"stage"`
 	Kernel       string    `json:"kernel"`
 	CPU          uint32    `json:"cpu"`
 }
@@ -103,6 +104,7 @@ func main() {
 	warmup := flag.Duration("warmup", 5*time.Second, "settle time before the window, with -attach")
 	window := flag.Duration("window", 20*time.Second, "measurement window, with -attach")
 	acc := flag.String("accuracy", "", "K:M runs K flows of exactly M packets each through rfm_tc_ingress or the one ingress program -progs names, cycling the flows, and reports the sampled estimates against that ground truth")
+	stage := flag.Uint("stage", 1, "events per ring record of the stage programs, rfm_stage_events, from 2 on auto and the defaults of -attach and -accuracy take the stage programs")
 	flag.Parse()
 
 	if *obj == "" || *label == "" {
@@ -120,12 +122,16 @@ func main() {
 	}
 	kernel := unix.ByteSliceToString(uts.Release[:])
 
+	staged := *stage > 1
 	if *acc != "" {
 		prog := "rfm_tc_ingress"
+		if staged {
+			prog = "rfm_tc_ingress_staged"
+		}
 		if *progs != "auto" {
 			prog = *progs
 		}
-		if err := accuracy(*obj, *label, prog, *acc, uint32(*n), uint32(*ringOrder), kernel); err != nil {
+		if err := accuracy(*obj, *label, prog, *acc, uint32(*n), uint32(*ringOrder), uint32(*stage), kernel); err != nil {
 			fail(err)
 		}
 		return
@@ -139,7 +145,7 @@ func main() {
 				fail(errors.New("-progs with -attach wants ingress,egress"))
 			}
 		}
-		if err := insitu(*obj, *label, *attach, ingress, egress, uint32(*n), uint32(*ringOrder), *warmup, *window, kernel); err != nil {
+		if err := insitu(*obj, *label, *attach, ingress, egress, uint32(*n), uint32(*ringOrder), uint32(*stage), *warmup, *window, kernel); err != nil {
 			fail(err)
 		}
 		return
@@ -148,7 +154,7 @@ func main() {
 	names := strings.Split(*progs, ",")
 	if *progs == "auto" {
 		var err error
-		if names, err = entryPoints(*obj); err != nil {
+		if names, err = entryPoints(*obj, staged); err != nil {
 			fail(err)
 		}
 	}
@@ -158,9 +164,9 @@ func main() {
 			if err != nil {
 				fail(err)
 			}
-			res := result{Label: *label, Prog: pname, Frame: fname, N: uint32(*n), Repeat: uint32(*repeat), Kernel: kernel, CPU: uint32(*cpu)}
+			res := result{Label: *label, Prog: pname, Frame: fname, N: uint32(*n), Repeat: uint32(*repeat), Stage: uint32(*stage), Kernel: kernel, CPU: uint32(*cpu)}
 			for t := 0; t < *trials; t++ {
-				ns, wall, ret, drops, info, err := trial(*obj, pname, fr, uint32(*n), uint32(*repeat), uint32(*ringOrder))
+				ns, wall, ret, drops, info, err := trial(*obj, pname, fr, uint32(*n), uint32(*repeat), uint32(*ringOrder), uint32(*stage))
 				// a signal aborts the run, the retry reloads so its ring and counters start empty
 				if errors.Is(err, unix.EINTR) {
 					t--
@@ -203,8 +209,8 @@ type progInfo struct {
 var processedRe = regexp.MustCompile(`processed (\d+) insns`)
 
 // trial loads the object afresh, so every trial starts with empty counters,
-// an empty ring and zeroed skip counts
-func trial(obj, pname string, fr frame, n, repeat, ringOrder uint32) (uint32, float64, uint32, uint64, progInfo, error) {
+// an empty ring, empty stages and zeroed skip counts
+func trial(obj, pname string, fr frame, n, repeat, ringOrder, stage uint32) (uint32, float64, uint32, uint64, progInfo, error) {
 	var info progInfo
 
 	spec, err := ebpf.LoadCollectionSpec(obj)
@@ -220,6 +226,9 @@ func trial(obj, pname string, fr frame, n, repeat, ringOrder uint32) (uint32, fl
 		}
 	}
 	sizeRings(spec, ringOrder)
+	if err := setStage(spec, stage); err != nil {
+		return 0, 0, 0, 0, info, err
+	}
 
 	coll, err := ebpf.NewCollectionWithOptions(spec, ebpf.CollectionOptions{
 		Programs: ebpf.ProgramOptions{LogLevel: ebpf.LogLevelStats},
@@ -452,14 +461,19 @@ func buildFrame(name string) (frame, error) {
 	return frame{}, fmt.Errorf("unknown frame %q", name)
 }
 
-// entryPoints lists the rfm programs an object carries, in a fixed order
-func entryPoints(obj string) ([]string, error) {
+// entryPoints lists the rfm programs an object carries, in a fixed order, the
+// stage programs when staged
+func entryPoints(obj string, staged bool) ([]string, error) {
 	spec, err := ebpf.LoadCollectionSpec(obj)
 	if err != nil {
 		return nil, err
 	}
+	all := []string{"rfm_tc_ingress", "rfm_xdp", "rfm_tc_egress", "rfm_tc_ingress_sampled", "rfm_tc_egress_sampled"}
+	if staged {
+		all = []string{"rfm_tc_ingress_staged", "rfm_tc_egress_staged", "rfm_tc_ingress_sampled_staged", "rfm_tc_egress_sampled_staged"}
+	}
 	var names []string
-	for _, name := range []string{"rfm_tc_ingress", "rfm_xdp", "rfm_tc_egress", "rfm_tc_ingress_sampled", "rfm_tc_egress_sampled"} {
+	for _, name := range all {
 		if _, ok := spec.Programs[name]; ok {
 			names = append(names, name)
 		}

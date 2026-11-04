@@ -51,8 +51,9 @@ type insituResult struct {
 }
 
 // insitu attaches ingress and egress of obj, or rfm_xdp (else rfm_tc_ingress)
-// and rfm_tc_egress when they are empty
-func insitu(obj, label, iface, ingress, egress string, n uint32, ringOrder uint32, warmup, window time.Duration, kernel string) error {
+// and rfm_tc_egress when they are empty, their stage programs from a stage of
+// 2 events on
+func insitu(obj, label, iface, ingress, egress string, n, ringOrder, stage uint32, warmup, window time.Duration, kernel string) error {
 	ifc, err := net.InterfaceByName(iface)
 	if err != nil {
 		return err
@@ -66,7 +67,24 @@ func insitu(obj, label, iface, ingress, egress string, n uint32, ringOrder uint3
 		if err != nil {
 			return err
 		}
+		if ingress == "" {
+			ingress, egress = "rfm_tc_ingress", "rfm_tc_egress"
+			if _, ok := spec.Programs["rfm_xdp"]; ok {
+				ingress = "rfm_xdp"
+			} else if stage > 1 {
+				ingress, egress = "rfm_tc_ingress_staged", "rfm_tc_egress_staged"
+			}
+		}
+		// only the attached pair loads, as in the agent
+		for name := range spec.Programs {
+			if name != ingress && name != egress {
+				delete(spec.Programs, name)
+			}
+		}
 		sizeRings(spec, ringOrder)
+		if err := setStage(spec, stage); err != nil {
+			return err
+		}
 		coll, err = ebpf.NewCollection(spec)
 		if err != nil {
 			return err
@@ -94,12 +112,6 @@ func insitu(obj, label, iface, ingress, egress string, n uint32, ringOrder uint3
 		}
 		defer stats.Close()
 
-		if ingress == "" {
-			ingress, egress = "rfm_tc_ingress", "rfm_tc_egress"
-			if _, ok := coll.Programs["rfm_xdp"]; ok {
-				ingress = "rfm_xdp"
-			}
-		}
 		inProg, outProg := coll.Programs[ingress], coll.Programs[egress]
 		if inProg == nil || outProg == nil {
 			return fmt.Errorf("%s has no %s or %s program", obj, ingress, egress)
@@ -140,7 +152,8 @@ func insitu(obj, label, iface, ingress, egress string, n uint32, ringOrder uint3
 						}
 						continue
 					}
-					events.Add(1)
+					// a record of a stage program holds several events
+					events.Add(uint64(max(len(rec.RawSample)/eventSize, 1)))
 				}
 			}()
 		}

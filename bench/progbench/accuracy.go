@@ -45,7 +45,7 @@ type accuracyResult struct {
 // test run per packet, with the flows interleaved round robin as the
 // sequential pktgen ports of accuracy.nu produce or each sent as one burst,
 // then reads every event from the ring and scales each flow's samples by N
-func accuracy(obj, label, prog, km string, n, ringOrder uint32, kernel string) error {
+func accuracy(obj, label, prog, km string, n, ringOrder, stage uint32, kernel string) error {
 	parts := strings.Split(km, ":")
 	if len(parts) < 2 || len(parts) > 3 || (len(parts) == 3 && parts[2] != "burst") {
 		return fmt.Errorf("-accuracy wants K:M or K:M:burst, got %q", km)
@@ -74,6 +74,9 @@ func accuracy(obj, label, prog, km string, n, ringOrder uint32, kernel string) e
 		}
 	}
 	sizeRings(spec, ringOrder)
+	if err := setStage(spec, stage); err != nil {
+		return err
+	}
 	coll, err := ebpf.NewCollection(spec)
 	if err != nil {
 		return err
@@ -124,6 +127,10 @@ func accuracy(obj, label, prog, km string, n, ringOrder uint32, kernel string) e
 		}
 	}
 
+	// the last events of a stage program wait for the flush of their stage
+	if err := waitStages(coll); err != nil {
+		return err
+	}
 	counts := make([]int, k)
 	events := 0
 	for _, ring := range rings {
@@ -141,17 +148,20 @@ func accuracy(obj, label, prog, km string, n, ringOrder uint32, kernel string) e
 				rd.Close()
 				return err
 			}
-			if len(rec.RawSample) < srcPortOff+2 {
+			raw := rec.RawSample
+			if len(raw) == 0 || len(raw)%eventSize != 0 {
 				rd.Close()
-				return fmt.Errorf("short event of %d bytes", len(rec.RawSample))
+				return fmt.Errorf("record of %d bytes, not a positive multiple of the %d of an event", len(raw), eventSize)
 			}
-			port := int(binary.NativeEndian.Uint16(rec.RawSample[srcPortOff:])) - portBase
-			if port < 0 || port >= k {
-				rd.Close()
-				return fmt.Errorf("event for unknown source port %d", port+portBase)
+			for off := 0; off < len(raw); off += eventSize {
+				port := int(binary.NativeEndian.Uint16(raw[off+srcPortOff:])) - portBase
+				if port < 0 || port >= k {
+					rd.Close()
+					return fmt.Errorf("event for unknown source port %d", port+portBase)
+				}
+				counts[port]++
+				events++
 			}
-			counts[port]++
-			events++
 		}
 		rd.Close()
 	}

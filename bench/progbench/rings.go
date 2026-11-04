@@ -3,9 +3,12 @@
 package main
 
 import (
+	"encoding/binary"
 	"errors"
+	"fmt"
 	"math/bits"
 	"os"
+	"time"
 
 	"github.com/cilium/ebpf"
 )
@@ -14,14 +17,70 @@ import (
 // rfm_flow_rings, older objects and the variants to the single
 // rfm_flow_events
 
+// eventSize is the size of struct rfm_flow_event, a record of the stage
+// programs holds several back to back
+const eventSize = 56
+
+// stageMax is RFM_STAGE_MAX in bpf/rfm_common.h, the events the stage of a CPU holds
+const stageMax = 32
+
 // sizeRings sizes the single ring to 1 << order bytes before the collection
-// loads, and gives rfm_flow_rings a slot per possible CPU
+// loads, and gives rfm_flow_rings and the flush timers of the stages a slot
+// per possible CPU
 func sizeRings(spec *ebpf.CollectionSpec, order uint32) {
 	if m, ok := spec.Maps["rfm_flow_events"]; ok {
 		m.MaxEntries = 1 << order
 	}
-	if m, ok := spec.Maps["rfm_flow_rings"]; ok {
-		m.MaxEntries = uint32(ebpf.MustPossibleCPU())
+	for _, name := range []string{"rfm_flow_rings", "rfm_stage_timers"} {
+		if m, ok := spec.Maps[name]; ok {
+			m.MaxEntries = uint32(ebpf.MustPossibleCPU())
+		}
+	}
+}
+
+// setStage sets the events a stage program writes per record, the programs
+// without a stage ignore it and an object without stage programs takes 1
+func setStage(spec *ebpf.CollectionSpec, k uint32) error {
+	v, ok := spec.Variables["rfm_stage_events"]
+	if !ok {
+		if k > 1 {
+			return errors.New("the object has no stage programs")
+		}
+		return nil
+	}
+	if k < 1 || k > stageMax {
+		return fmt.Errorf("a stage holds 1 to %d events, got %d", stageMax, k)
+	}
+	return v.Set(k)
+}
+
+// waitStages waits until the stage of every CPU is empty with no flush
+// pending, the timer of a stage writes it 10 ms after the event that armed it
+func waitStages(coll *ebpf.Collection) error {
+	m, ok := coll.Maps["rfm_cpu_stage"]
+	if !ok {
+		return nil
+	}
+	stride := (int(m.ValueSize()) + 7) &^ 7
+	for deadline := time.Now().Add(time.Second); ; {
+		buf, err := m.LookupBytes(uint32(0))
+		if err != nil {
+			return err
+		}
+		idle := true
+		// n and armed lead struct rfm_stage
+		for off := 0; off+16 <= len(buf); off += stride {
+			if binary.NativeEndian.Uint32(buf[off:]) != 0 || binary.NativeEndian.Uint64(buf[off+8:]) != 0 {
+				idle = false
+			}
+		}
+		if idle {
+			return nil
+		}
+		if time.Now().After(deadline) {
+			return errors.New("a stage still holds events a second after the runs")
+		}
+		time.Sleep(time.Millisecond)
 	}
 }
 
