@@ -213,9 +213,17 @@ func (c *Collector) record(batch []sample, evs []FlowEvent) {
 	var unresolved []int
 
 	c.mu.Lock()
+	// a run of events of one flow, as the ring of a bulk transfer holds, looks the flow up once
+	var last *flowState
 	for i := range batch {
+		s := &batch[i]
+		if last != nil && s.id == batch[i-1].id {
+			d, ipBytes := c.countsLocked(s)
+			c.hitLocked(last, s.tstamp, d, ipBytes)
+			continue
+		}
 		var ok bool
-		if expired, ok = c.recordLocked(&batch[i], eventAt(evs, i), nil, expired); !ok {
+		if expired, last, ok = c.recordLocked(s, eventAt(evs, i), nil, expired); !ok {
 			unresolved = append(unresolved, i)
 		}
 	}
@@ -232,7 +240,7 @@ func (c *Collector) record(batch []sample, evs []FlowEvent) {
 
 		c.mu.Lock()
 		for _, i := range unresolved {
-			expired, _ = c.recordLocked(&batch[i], eventAt(evs, i), labels, expired)
+			expired, _, _ = c.recordLocked(&batch[i], eventAt(evs, i), labels, expired)
 		}
 		exp = c.exporter
 		c.mu.Unlock()
@@ -279,14 +287,14 @@ func (c *Collector) enrich(pairs []addrPair) map[addrPair]labelPair {
 	return labels
 }
 
-// recordLocked records s and appends the record of a flow it evicts to expired, ok is false when its new flow has no labels yet
-func (c *Collector) recordLocked(s *sample, ev *FlowEvent, labels map[addrPair]labelPair, expired []ExportedFlow) (_ []ExportedFlow, ok bool) {
+// recordLocked records s and appends the record of a flow it evicts to expired, it returns the flow of s, ok is false when its new flow has no labels yet
+func (c *Collector) recordLocked(s *sample, ev *FlowEvent, labels map[addrPair]labelPair, expired []ExportedFlow) (_ []ExportedFlow, _ *flowState, ok bool) {
 	now := s.tstamp
 	d, ipBytes := c.countsLocked(s)
 
 	if state, found := c.flows[s.id]; found {
 		c.hitLocked(state, now, d, ipBytes)
-		return expired, true
+		return expired, state, true
 	}
 
 	key := newKey(s, ev)
@@ -294,7 +302,7 @@ func (c *Collector) recordLocked(s *sample, ev *FlowEvent, labels map[addrPair]l
 	if c.enricher != nil {
 		var resolved bool
 		if lp, resolved = labels[addrPair{key.SrcAddr, key.DstAddr}]; !resolved {
-			return expired, false
+			return expired, nil, false
 		}
 	}
 	src, dst := lp.src, lp.dst
@@ -331,7 +339,7 @@ func (c *Collector) recordLocked(s *sample, ev *FlowEvent, labels map[addrPair]l
 	state.elem = c.lru.PushBack(state)
 	state.active = c.activeQueue.PushBack(state)
 	c.flows[s.id] = state
-	return expired, true
+	return expired, state, true
 }
 
 // countsLocked returns the counts s adds at the sample rate in force at its time, and the ip bytes of its packets

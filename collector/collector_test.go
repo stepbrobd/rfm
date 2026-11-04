@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/netip"
 	"os"
+	"reflect"
 	"slices"
 	"sync"
 	"sync/atomic"
@@ -861,6 +862,36 @@ func TestSweepEvictsAFlowIdleForTheTimeoutAndTheSlack(t *testing.T) {
 	c.Evict(t0 + 100*time.Millisecond + 32*time.Second + time.Second)
 	if n := len(c.Flows()); n != 0 {
 		t.Fatalf("flows left = %d, want 0 once b was idle for the timeout and the slack", n)
+	}
+}
+
+func TestRecordBatchRunsOfOneFlowCountLikeSingleEvents(t *testing.T) {
+	t0 := time.Hour
+	a := FlowEvent{
+		Proto: 6, SrcPort: 1000, DstPort: 80,
+		SrcAddr: netip.MustParseAddr("::ffff:10.0.0.1"),
+		DstAddr: netip.MustParseAddr("::ffff:10.0.0.2"),
+		Segs:    1,
+		Len:     100,
+		L2Len:   14,
+	}
+	b := a
+	b.SrcPort = 2000
+	var evs []FlowEvent
+	for i, ev := range []FlowEvent{a, a, a, b, b, a, b, a, a} {
+		ev.Segs = uint16(1 + i%3)
+		ev.Len = uint32(ev.Segs) * uint32(100+10*i)
+		evs = append(evs, at(ev, t0+time.Duration(i)*time.Millisecond))
+	}
+
+	batched := New(30*time.Second, nil, config.DefaultMaxFlows)
+	batched.RecordBatch(evs)
+	single := New(30*time.Second, nil, config.DefaultMaxFlows)
+	for _, ev := range evs {
+		single.Record(ev)
+	}
+	if got, want := batched.Flows(), single.Flows(); !reflect.DeepEqual(got, want) {
+		t.Fatalf("batched flows %+v, want %+v", got, want)
 	}
 }
 
