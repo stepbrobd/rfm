@@ -6,9 +6,8 @@ import (
 )
 
 // flowState is a live flow and what its earlier records carried, the fields
-// an event touches come first and span two cache lines at most offsets
+// an event touches come first and span two cache lines of its slot
 type flowState struct {
-	elem   *list.Element
 	rollup *rollupState
 	// first and last are the min and max event time since the last record, events arrive out of order, 0 before the first
 	first, last time.Duration
@@ -16,8 +15,8 @@ type flowState struct {
 	queued time.Duration
 	entry  FlowEntry
 
-	// active is the position in the fifo of pending active timeout exports
-	active *list.Element
+	// links holds the place of the flow in the lru and in the fifo of pending active timeout exports
+	links [2]flowLinks
 	// intervalStart is when the not yet exported interval began, the flow's
 	// creation or the sweep that marked it, the active timeout runs from it
 	intervalStart time.Duration
@@ -27,6 +26,8 @@ type flowState struct {
 		packets, ipBytes, estPackets uint64
 	}
 	key FlowKey
+	// pad fills the slot to four cache lines, so every slot of a chunk starts on a line
+	_ [8]byte
 }
 
 // seen extends the flow and its unexported interval to an event at t

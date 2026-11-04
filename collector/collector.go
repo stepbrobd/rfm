@@ -17,16 +17,13 @@ import (
 
 // Collector aggregates flow events into an in-memory flow table
 type Collector struct {
-	mu    sync.RWMutex
-	flows map[flowID]*flowState
-	// lru orders flows by their last event to within lruSlack, oldest first, approximate across cpus
-	lru *list.List
-	// lruSlack is how much event time passes before an event moves its flow to the back of lru again
+	mu sync.RWMutex
+	// flows holds the live flows, its lru is approximate across cpus
+	flows flowTable
+	// lruSlack is how much event time passes before an event moves its flow to the back of the lru again
 	lruSlack time.Duration
 	// live is the reader of a running Run, a scrape reads the ring drops from it
 	live Reader
-	// activeQueue orders live flows by the start of their unexported interval, oldest first
-	activeQueue *list.List
 	// rollups are the label tuples of the flow series, rollupLocked caps the labeled ones
 	rollups   map[RollupKey]*rollupState
 	rollupIDs uint64
@@ -57,9 +54,7 @@ type Collector struct {
 // New creates a collector that evicts flows idle for timeout and holds at most maxFlows flows, enricher may be nil
 func New(timeout time.Duration, enricher Enricher, maxFlows int) *Collector {
 	return &Collector{
-		flows:       make(map[flowID]*flowState),
-		lru:         list.New(),
-		activeQueue: list.New(),
+		flows:       newFlowTable(),
 		rollups:     make(map[RollupKey]*rollupState),
 		idleRollups: list.New(),
 		timeout:     timeout,
@@ -214,10 +209,10 @@ func (c *Collector) record(batch []sample, evs []FlowEvent) {
 
 	c.mu.Lock()
 	// a run of events of one flow, as the ring of a bulk transfer holds, looks the flow up once
-	var last *flowState
+	var last flowRef
 	for i := range batch {
 		s := &batch[i]
-		if last != nil && s.id == batch[i-1].id {
+		if last != 0 && s.id == batch[i-1].id {
 			d, ipBytes := c.countsLocked(s)
 			c.hitLocked(last, s.tstamp, d, ipBytes)
 			continue
@@ -287,14 +282,14 @@ func (c *Collector) enrich(pairs []addrPair) map[addrPair]labelPair {
 	return labels
 }
 
-// recordLocked records s and appends the record of a flow it evicts to expired, it returns the flow of s, ok is false when its new flow has no labels yet
-func (c *Collector) recordLocked(s *sample, ev *FlowEvent, labels map[addrPair]labelPair, expired []ExportedFlow) (_ []ExportedFlow, _ *flowState, ok bool) {
+// recordLocked records s and appends the record of a flow it evicts to expired, it returns the slot of the flow of s, ok is false when its new flow has no labels yet
+func (c *Collector) recordLocked(s *sample, ev *FlowEvent, labels map[addrPair]labelPair, expired []ExportedFlow) (_ []ExportedFlow, _ flowRef, ok bool) {
 	now := s.tstamp
 	d, ipBytes := c.countsLocked(s)
 
-	if state, found := c.flows[s.id]; found {
-		c.hitLocked(state, now, d, ipBytes)
-		return expired, state, true
+	if r, found := c.flows.get(&s.id); found {
+		c.hitLocked(r, now, d, ipBytes)
+		return expired, r, true
 	}
 
 	key := newKey(s, ev)
@@ -302,12 +297,12 @@ func (c *Collector) recordLocked(s *sample, ev *FlowEvent, labels map[addrPair]l
 	if c.enricher != nil {
 		var resolved bool
 		if lp, resolved = labels[addrPair{key.SrcAddr, key.DstAddr}]; !resolved {
-			return expired, nil, false
+			return expired, 0, false
 		}
 	}
 	src, dst := lp.src, lp.dst
 
-	if len(c.flows) >= c.maxFlows {
+	if c.flows.len() >= c.maxFlows {
 		if ended, evicted := c.evictOldestLocked(FlowEndReasonLackOfResources); evicted {
 			expired = append(expired, ended)
 		}
@@ -317,7 +312,7 @@ func (c *Collector) recordLocked(s *sample, ev *FlowEvent, labels map[addrPair]l
 	c.attachLocked(rollup)
 	rollup.add(d, now)
 
-	state := &flowState{
+	r := c.flows.add(s.id, &flowState{
 		key: key,
 		entry: FlowEntry{
 			FirstSeen:  now,
@@ -335,11 +330,8 @@ func (c *Collector) recordLocked(s *sample, ev *FlowEvent, labels map[addrPair]l
 		first:         now,
 		last:          now,
 		queued:        now,
-	}
-	state.elem = c.lru.PushBack(state)
-	state.active = c.activeQueue.PushBack(state)
-	c.flows[s.id] = state
-	return expired, state, true
+	})
+	return expired, r, true
 }
 
 // countsLocked returns the counts s adds at the sample rate in force at its time, and the ip bytes of its packets
@@ -350,8 +342,9 @@ func (c *Collector) countsLocked(s *sample) (Counts, uint64) {
 	return Counts{Packets: packets, Bytes: bytes, EstPackets: packets * rate, EstBytes: bytes * rate}, bytes - packets*uint64(s.l2Len)
 }
 
-// hitLocked adds the counts of an event at now to a live flow, which moves to the back of lru at most once per lruSlack
-func (c *Collector) hitLocked(state *flowState, now time.Duration, d Counts, ipBytes uint64) {
+// hitLocked adds the counts of an event at now to the flow in slot r, which moves to the back of the lru at most once per lruSlack
+func (c *Collector) hitLocked(r flowRef, now time.Duration, d Counts, ipBytes uint64) {
+	state := c.flows.at(r)
 	state.entry.Packets += d.Packets
 	state.entry.Bytes += d.Bytes
 	state.entry.IPBytes += ipBytes
@@ -361,7 +354,7 @@ func (c *Collector) hitLocked(state *flowState, now time.Duration, d Counts, ipB
 	state.rollup.add(d, now)
 	if now-state.queued >= c.lruSlack {
 		state.queued = now
-		c.lru.MoveToBack(state.elem)
+		c.flows.moveToBack(lruList, r)
 	}
 }
 
@@ -418,29 +411,30 @@ func (c *Collector) dropRollupLocked(r *rollupState) {
 	delete(c.rollups, r.key)
 }
 
-// removeLocked drops a flow from the table and both lists
+// removeLocked drops the flow in slot r from the table, its slot is cleared
 // it must be called with mu held
-func (c *Collector) removeLocked(state *flowState) {
-	c.lru.Remove(state.elem)
-	c.activeQueue.Remove(state.active)
-	delete(c.flows, state.key.id())
+func (c *Collector) removeLocked(r flowRef) {
+	state := c.flows.at(r)
 	c.detachLocked(state.rollup, state.entry)
+	c.flows.remove(r)
 }
 
 // evictOldestLocked removes the flow with the oldest LastSeen
 // it must be called with mu held
 func (c *Collector) evictOldestLocked(reason uint8) (ExportedFlow, bool) {
-	front := c.lru.Front()
-	if front == nil {
+	r := c.flows.front(lruList)
+	if r == 0 {
 		return ExportedFlow{}, false
 	}
-	oldest := front.Value.(*flowState)
-	c.removeLocked(oldest)
+	var ended ExportedFlow
+	oldest := c.flows.at(r)
+	pending := oldest.pending()
+	if pending {
+		ended = oldest.record(reason)
+	}
+	c.removeLocked(r)
 	c.forced.Add(1)
-	if !oldest.pending() {
-		return ExportedFlow{}, false
-	}
-	return oldest.record(reason), true
+	return ended, pending
 }
 
 // Evict sweeps the table once at now, a CLOCK_BOOTTIME reading
@@ -456,15 +450,18 @@ func (c *Collector) sweep(now, period time.Duration) {
 	c.mu.Lock()
 
 	for {
-		front := c.lru.Front()
-		if front == nil || front.Value.(*flowState).entry.LastSeen >= cutoff {
+		r := c.flows.front(lruList)
+		if r == 0 {
 			break
 		}
-		oldest := front.Value.(*flowState)
-		c.removeLocked(oldest)
+		oldest := c.flows.at(r)
+		if oldest.entry.LastSeen >= cutoff {
+			break
+		}
 		if oldest.pending() {
 			expired = append(expired, oldest.record(FlowEndReasonIdleTimeout))
 		}
+		c.removeLocked(r)
 	}
 
 	// idle tuples are in the order they lost their last flow
@@ -481,11 +478,11 @@ func (c *Collector) sweep(now, period time.Duration) {
 		// half a period of slack keeps a record from slipping a period when its tick comes early
 		due := c.active - period/2
 		for {
-			front := c.activeQueue.Front()
-			if front == nil {
+			r := c.flows.front(activeList)
+			if r == 0 {
 				break
 			}
-			state := front.Value.(*flowState)
+			state := c.flows.at(r)
 			if now-state.intervalStart < due {
 				break
 			}
@@ -493,7 +490,7 @@ func (c *Collector) sweep(now, period time.Duration) {
 				expired = append(expired, state.record(FlowEndReasonActiveTimeout))
 			}
 			state.mark(now)
-			c.activeQueue.MoveToBack(front)
+			c.flows.moveToBack(activeList, r)
 		}
 	}
 
@@ -508,8 +505,8 @@ func (c *Collector) Flows() map[FlowKey]FlowEntry {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
-	snap := make(map[FlowKey]FlowEntry, len(c.flows))
-	for _, state := range c.flows {
+	snap := make(map[FlowKey]FlowEntry, c.flows.len())
+	for state := range c.flows.all() {
 		snap[state.key] = state.entry
 	}
 	return snap
@@ -539,7 +536,7 @@ func (c *Collector) TopFlows(n int, byPackets bool) []Flow {
 
 	c.mu.RLock()
 	// once full, top is a heap with the flow furthest behind at its root
-	top := make([]Flow, 0, min(n, len(c.flows)))
+	top := make([]Flow, 0, min(n, c.flows.len()))
 	down := func(i int) {
 		for {
 			last := i
@@ -555,7 +552,7 @@ func (c *Collector) TopFlows(n int, byPackets bool) []Flow {
 			i = last
 		}
 	}
-	for _, state := range c.flows {
+	for state := range c.flows.all() {
 		switch {
 		case len(top) < n:
 			top = append(top, Flow{state.key, state.entry})
@@ -609,7 +606,7 @@ func (c *Collector) ScrapeRollups(buf []RollupSample) []RollupSample {
 // Stats returns collector-level statistics
 func (c *Collector) Stats() Stats {
 	c.mu.RLock()
-	activeFlows := uint64(len(c.flows))
+	activeFlows := uint64(c.flows.len())
 	live := c.live
 	c.mu.RUnlock()
 
@@ -638,18 +635,16 @@ func (c *Collector) Flush(reason uint8) {
 	var exp FlowExporter
 
 	c.mu.Lock()
-	if len(c.flows) > 0 {
-		expired = make([]ExportedFlow, 0, len(c.flows))
-		for _, state := range c.flows {
+	if c.flows.len() > 0 {
+		expired = make([]ExportedFlow, 0, c.flows.len())
+		for state := range c.flows.all() {
 			if state.pending() {
 				expired = append(expired, state.record(reason))
 			}
 			c.detachLocked(state.rollup, state.entry)
 		}
 	}
-	c.flows = make(map[flowID]*flowState)
-	c.lru.Init()
-	c.activeQueue.Init()
+	c.flows = newFlowTable()
 	exp = c.exporter
 	c.mu.Unlock()
 

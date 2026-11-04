@@ -36,7 +36,8 @@ func (r *cycleReader) Close() error                   { return nil }
 
 func BenchmarkRun(b *testing.B) {
 	for _, enricher := range []Enricher{nil, asnPerSource{}} {
-		for _, flows := range []int{1000, config.DefaultMaxFlows} {
+		// four times the flows the table holds evict its oldest flow on every event
+		for _, flows := range []int{1000, config.DefaultMaxFlows, 4 * config.DefaultMaxFlows} {
 			name := fmt.Sprintf("flows=%d", flows)
 			if enricher != nil {
 				name += "/enricher"
