@@ -8,13 +8,13 @@ buildGoModule (finalAttrs: {
   __structuredAttrs = true;
 
   pname = "netobserv-ebpf-agent";
-  version = "1.11.5";
+  version = "2.0.2";
 
   src = fetchFromGitHub {
     owner = "netobserv";
     repo = "netobserv-ebpf-agent";
     tag = "v${finalAttrs.version}-community";
-    hash = "sha256-XuPMiBb1udd95wVMRtrh/988ucJhCn9L80VChemfL7Q=";
+    hash = "sha256-X+KQG2zBkrWjGnX1CHDV3P0L2zpZX/bfmdq+l29LYFI=";
   };
 
   vendorHash = null;
