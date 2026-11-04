@@ -30,7 +30,7 @@ port=9669
     sleep 2sec
     let c1 = (proc-cpu $r.pid)
     let dur = (((date now) - $t0) / 1sec)
-    let m = (metrics)
+    let m = (flow-metrics)
     let rx = (metric-sum $m "rfm_interface_rx_packets_total")
     let st = (ingress-stat)
     let rt = if ($st == null) { 0 } else { $st.run_time_ns? | default 0 | into int }
@@ -42,7 +42,7 @@ port=9669
       "sent": $count
       "rx (exact)": ($rx | into int)
       "exact %": ($rx / $count * 100 | math round --precision 3)
-      "sampled": (metric-sum $m "rfm_flow_sampled_packets" | into int)
+      "sampled": (metric-sum $m "rfm_flow_sampled_packets_total" | into int)
       "ring drops": (metric-val $m "rfm_collector_dropped_events_total" | into int)
       "kernel ns/pkt": (if $rc > 0 { ($rt / $rc) | math round --precision 1 } else { 0 })
       "rfm cores": (if $dur > 0 { $dc / $clk / $dur | math round --precision 3 } else { 0 })

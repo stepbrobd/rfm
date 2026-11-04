@@ -94,7 +94,7 @@ port=9669
         n: $n
         secs: ($dur | math round --precision 1)
         rx_total_delta: (($rx1 - $rx0) | into int)
-        sampled_total: (metric-sum $m1 "rfm_flow_sampled_packets" | into int)
+        sampled_total: (metric-sum $m1 "rfm_flow_sampled_packets_total" | into int)
         ring_drops: (metric-val $m1 "rfm_collector_dropped_events_total" | into int)
         kern_ns_per_pkt: (if $rc > 0 { ($rt / $rc | math round --precision 1) } else { 0 })
         kern_run_cnt: $rc

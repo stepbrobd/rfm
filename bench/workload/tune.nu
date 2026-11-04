@@ -34,7 +34,7 @@ port=9669
         sleep 2sec
         let c1 = (proc-cpu $r.pid)
         let dur = (((date now) - $t0) / 1sec)
-        let mm = (metrics)
+        let mm = (flow-metrics)
         let st = (ingress-stat)
         let rt = (
             if $st == null { 0 } else {
@@ -52,7 +52,7 @@ port=9669
             "ring_buf_size": $ring
             "wakeup_batch": $batch
             "ring drops": (metric-val $mm "rfm_collector_dropped_events_total" | into int)
-            "sampled": (metric-sum $mm "rfm_flow_sampled_packets" | into int)
+            "sampled": (metric-sum $mm "rfm_flow_sampled_packets_total" | into int)
             "kernel ns/pkt": (
                 if $rc > 0 {
                     ($rt / $rc) | math round --precision 1

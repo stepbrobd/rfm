@@ -91,6 +91,12 @@ export def metrics [] {
     ^curl -s --max-time 2 http://127.0.0.1:9669/metrics | complete | get stdout
 }
 
+# scrape twice, a new label tuple shows its flow counters at zero in its first scrape
+export def flow-metrics [] {
+    metrics | ignore
+    metrics
+}
+
 # sum the values of every metric line whose name starts with the prefix
 export def metric-sum [m: string, prefix: string] {
     let xs = (

@@ -57,7 +57,7 @@ port=9669
     let k1 = (kern-ns)
     let c1 = (proc-cpu $r.pid)
     let dur = (((date now) - $t0) / 1sec)
-    let m = (metrics)
+    let m = (flow-metrics)
     let agg = ($count * $c)
     let pps = (0..($c - 1) | each {|i|
       open --raw $"($env.PG)/g($i)" | lines | where {|l| $l =~ 'pps'} | get 0? | default ""
@@ -72,7 +72,7 @@ port=9669
       "agg sent": $agg
       "rx (exact)": ($rx | into int)
       "exact %": ($rx / $agg * 100 | math round --precision 2)
-      "sampled": (metric-sum $m "rfm_flow_sampled_packets" | into int)
+      "sampled": (metric-sum $m "rfm_flow_sampled_packets_total" | into int)
       "ring drops": (metric-val $m "rfm_collector_dropped_events_total" | into int)
       "kernel cores": (if $dur > 0 { $dk / 1000000000 / $dur | math round --precision 3 } else { 0 })
       "rfm cores": (if $dur > 0 { $dc / $clk / $dur | math round --precision 3 } else { 0 })
