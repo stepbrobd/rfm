@@ -265,9 +265,11 @@ func checkTimerPin(spec *ebpf.CollectionSpec) error {
 	if err != nil {
 		return fmt.Errorf("run the bpf_timer probe: %w", err)
 	}
-	if errno := int32(ret); errno < 0 {
-		return fmt.Errorf("bpf_timer_start refuses BPF_F_TIMER_CPU_PIN, which needs Linux 6.7 or later: %w", unix.Errno(-errno))
-	} else if errno > 0 {
+	if errno := unix.Errno(-int32(ret)); errno == unix.EINVAL {
+		return fmt.Errorf("bpf_timer_start refuses BPF_F_TIMER_CPU_PIN, which needs Linux 6.7 or later: %w", errno)
+	} else if int32(ret) < 0 {
+		return fmt.Errorf("the bpf_timer probe failed: %w", errno)
+	} else if int32(ret) > 0 {
 		return fmt.Errorf("the bpf_timer probe found no timer, it returned %d", errno)
 	}
 	return nil
