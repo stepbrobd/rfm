@@ -40,16 +40,30 @@ export def proc-cpu [pid: int] {
     (($s | get 13 | into int) + ($s | get 14 | into int))
 }
 
+# stime of a pid in clock ticks
+export def proc-sys [pid: int] {
+    open --raw $"/proc/($pid)/stat" | str trim | split row ' ' | get 14 | into int
+}
+
+# vmrss of a pid in kB
+export def proc-rss [pid: int] {
+    open --raw $"/proc/($pid)/status" | lines | parse --regex '^VmRSS:\s+(?<kb>\d+)' | get kb.0 | into int
+}
+
 export def bpf-stats [on: bool] {
     ^sysctl -w $"kernel.bpf_stats_enabled=(if $on { 1 } else { 0 })" | complete | ignore
     null
 }
 
-# start rfm from a config string
+# start rfm from a config string, under taskset -c when cpus is a cpu list
 # returns {jid, pid}
-export def rfm-start [toml: string] {
+export def rfm-start [toml: string, --cpus: string = ""] {
     $toml | save --raw --force /tmp/rfm.toml
-    let jid = job spawn {|| ^($env.RFM) agent -c /tmp/rfm.toml out+err> /tmp/rfm.log }
+    let jid = if ($cpus | is-empty) {
+        job spawn {|| ^($env.RFM) agent -c /tmp/rfm.toml out+err> /tmp/rfm.log }
+    } else {
+        job spawn {|| ^taskset -c $cpus $env.RFM agent -c /tmp/rfm.toml out+err> /tmp/rfm.log }
+    }
     # wait for the prometheus endpoint to answer (up to ~20s) so metric scrapes
     # under a heavy flood do not race the agent's HTTP server coming up
     ^bash -c 'for i in $(seq 1 40); do curl -s --max-time 1 http://127.0.0.1:9669/metrics >/dev/null 2>&1 && exit 0; sleep 0.5; done; exit 0' | complete | ignore
@@ -108,6 +122,53 @@ export def kern-ns [] {
 
 export def ingress-stat [] {
     ^bpftool prog show -j | from json | where {|p| ($p.name? | default "") == "rfm_tc_ingress"} | get 0?
+}
+
+# one value of a bpftool map dump, hex byte strings in memory order, little endian on the nodes, or a plain int
+def map-value [v] {
+    if ($v | describe | str starts-with "list") {
+        $v | each {|b| $b | str replace "0x" "" } | str join | decode hex | into int --endian little
+    } else {
+        $v | into int
+    }
+}
+
+# per cpu drops [{cpu, drops}] from the json of bpftool map dump name rfm_flow_drops -j, the raw values or else the btf formatted ones
+export def parse-flow-drops [dump: string] {
+    let elems = $dump | from json
+    # bpftool wraps each map in a header with its elements when the name matches more than one
+    if ($elems | any {|e| $e.elements? != null }) {
+        error make {
+            msg: $"bpftool found ($elems | length) maps named rfm_flow_drops, stop the other agent or loader first"
+        }
+    }
+    if ($elems | length) != 1 {
+        error make {
+            msg: $"rfm_flow_drops dumped ($elems | length) elements, expected its one key"
+        }
+    }
+    let e = $elems | first
+    let raw = $e.values? | default []
+    let vs = if ($raw | is-empty) {
+        $e.formatted?.values? | default []
+    } else {
+        $raw
+    }
+    if ($vs | is-empty) {
+        error make {msg: "bpftool printed no per cpu values for rfm_flow_drops"}
+    }
+    $vs | each {|v| {cpu: $v.cpu, drops: (map-value $v.value)} }
+}
+
+# per cpu drops [{cpu, drops}] of the running agent's rfm_flow_drops map
+export def flow-drops [] {
+    let r = (^bpftool map dump name rfm_flow_drops -j | complete)
+    if $r.exit_code != 0 {
+        error make {
+            msg: $"bpftool map dump name rfm_flow_drops failed: ($r.stdout | str trim) ($r.stderr | str trim)"
+        }
+    }
+    parse-flow-drops $r.stdout
 }
 
 # configure + start one pktgen device on thread 0; returns achieved pps

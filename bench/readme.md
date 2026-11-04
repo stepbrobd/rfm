@@ -133,6 +133,12 @@ nu workload/gen.nu --dst <dut-ip> --dstmac <dut-mac> --threads 1 --count 1200000
 # DUT: overhead vs sample rate on the real NIC (descending, N=1 last)
 nu workload/realnic.nu --ns "1024 100 10 1" --secs 15
 
+# DUT: the same sweep with the flood dropped after rfm's programs and a larger flow table
+nu workload/realnic.nu --ns "1024 100 10 1" --secs 15 --drop --extra '[agent.collector]\nmax_flows=2097152'
+
+# DUT: ring drops per CPU, RSS and busiest threads of one N=1 agent each second from its start, --cpus pins it with taskset
+nu workload/drops.nu --secs 60 --ring 1048576
+
 # DUT: hardware RSS multi-queue sweep (resets the NIC via ethtool -L, detached)
 nu workload/rss.nu --queues "1 2 4 8 16 32 64" --ns "100 1"
 
@@ -142,4 +148,5 @@ nu workload/headtohead.nu --n 100
 ```
 
 Run the DUT scripts detached (a line-rate flood stalls the management SSH on the
-single NIC). Read results from `/tmp/{realnic,rss}.json`.
+single NIC). `realnic.nu --drop` drops the management SSH on that NIC too, until
+the run removes its filter. Read results from `/tmp/{realnic,rss,drops}.json`.
