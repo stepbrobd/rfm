@@ -225,6 +225,15 @@ func runAgent(ctx context.Context, path string, deps agentDeps) error {
 	defer wg.Wait()
 	defer fail(nil)
 
+	// the collector reads the rings before the watcher attaches a program, so no event waits in a ring nobody drains
+	collected := make(chan struct{})
+	wg.Go(func() {
+		defer close(collected)
+		if err := c.Run(run, rd); err != nil && run.Err() == nil {
+			fail(fmt.Errorf("collector: %w", err))
+		}
+	})
+
 	if ctlSrv != nil {
 		wg.Go(func() {
 			if err := ctlSrv.Serve(run); err != nil && run.Err() == nil {
@@ -272,9 +281,7 @@ func runAgent(ctx context.Context, path string, deps agentDeps) error {
 		}
 	})
 
-	if err := c.Run(run, rd); err != nil && run.Err() == nil {
-		fail(fmt.Errorf("collector: %w", err))
-	}
+	<-collected
 	if ipfixExp != nil {
 		c.Flush(collector.FlowEndReasonForcedEnd)
 		if err := ipfixExp.Close(); err != nil {

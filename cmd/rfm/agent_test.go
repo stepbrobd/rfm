@@ -874,6 +874,45 @@ interfaces = [%q]
 	})
 }
 
+func TestRunAgentReadsEventsBeforeTheMetricsListenerOpens(t *testing.T) {
+	lo := testutil.LoopbackName(t)
+	cfgPath := writeTestConfig(t, fmt.Sprintf(`
+[agent]
+interfaces = [%q]
+`, lo))
+
+	// an event the programs write as soon as they attach waits for no later
+	// setup step, this listener opens only once the collector took it off
+	// the ring, so an agent that started reading after it would never open it
+	f := newFakeProbe()
+	f.events <- rawTCPEvent(t, 1, "192.0.2.1", "192.0.2.2", 1000, 80, 100)
+	opened := make(chan struct{})
+	listen := func(network, _ string) (net.Listener, error) {
+		deadline := time.Now().Add(10 * time.Second)
+		for len(f.events) > 0 {
+			if time.Now().After(deadline) {
+				return nil, errors.New("the collector read no event")
+			}
+			time.Sleep(time.Millisecond)
+		}
+		close(opened)
+		return net.Listen(network, "127.0.0.1:0")
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() { done <- runAgent(ctx, cfgPath, agentDeps{loadProbe: f.load, listen: listen}) }()
+	select {
+	case <-opened:
+	case err := <-done:
+		cancel()
+		t.Fatalf("agent stopped with %v before the metrics listener opened", err)
+	}
+	cancel()
+	if err := <-done; err != nil {
+		t.Fatalf("agent stopped with %v, want nil", err)
+	}
+}
+
 func TestRunAgentExportsWatcherErrors(t *testing.T) {
 	lo := testutil.LoopbackName(t)
 	cfgPath := writeTestConfig(t, fmt.Sprintf(`
