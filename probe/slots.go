@@ -6,6 +6,13 @@ import "maps"
 // slot per direction: non-IP, IPv4 and IPv6
 const ifaceFamilies = 3
 
+const (
+	// DefaultIfaceSlots is the counter slots a load without a pin or a size gets
+	DefaultIfaceSlots = 16
+	// MaxIfaceSlots is RFM_SLOTS in bpf/rfm_common.h, the bound the programs check a slot against
+	MaxIfaceSlots = 256
+)
+
 // IfaceCounter is the traffic one interface carried in one direction and
 // family, summed over CPUs and over the counter slot and the hash
 type IfaceCounter struct {

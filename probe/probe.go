@@ -14,6 +14,7 @@ import (
 	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/link"
 	"github.com/vishvananda/netlink"
+	"golang.org/x/sys/unix"
 )
 
 // ifaceLinks are the two tcx links of one attached interface
@@ -81,6 +82,16 @@ func Load(cfg Config) (*Probe, error) {
 	if cfg.IfaceStatsSize > 0 {
 		spec.Maps[pinStats].MaxEntries = uint32(cfg.IfaceStatsSize)
 	}
+	// every slot costs six counters of each possible cpu, an interface past the slots counts in the hash
+	slots := DefaultIfaceSlots
+	if cfg.IfaceSlots > 0 {
+		slots = cfg.IfaceSlots
+	}
+	if slots > MaxIfaceSlots {
+		return nil, fmt.Errorf("%d counter slots, the programs index at most %d", slots, MaxIfaceSlots)
+	}
+	spec.Maps[pinArr].MaxEntries = uint32(slots * 2 * ifaceFamilies)
+	sized := map[string]bool{pinStats: cfg.IfaceStatsSize > 0, pinArr: cfg.IfaceSlots > 0, pinSlot: true}
 	// sampled only keeps no counters, which also leaves no slot to assign
 	if cfg.SampledOnly {
 		for _, name := range []string{pinStats, pinSlot, pinArr} {
@@ -93,7 +104,7 @@ func Load(cfg Config) (*Probe, error) {
 	var opts ebpf.CollectionOptions
 	var pinned map[string]*ebpf.Map
 	if pin {
-		pinned, err = loadPins(cfg.PinPath, spec)
+		pinned, err = loadPins(cfg.PinPath, spec, sized)
 		if err != nil {
 			return nil, err
 		}
@@ -199,8 +210,11 @@ const (
 	pinArr   = "rfm_iface_arr"
 )
 
-// loadPins returns the counter maps pinned under dir, dropping a slot map or counter array pinned alone
-func loadPins(dir string, spec *ebpf.CollectionSpec) (map[string]*ebpf.Map, error) {
+// loadPins returns the counter maps pinned under dir, dropping a slot map or
+// counter array pinned alone, a map whose size the config left unset takes
+// the size of its pin, so an upgrade that shrinks a default keeps the counters
+// until the pins go at a reboot
+func loadPins(dir string, spec *ebpf.CollectionSpec, sized map[string]bool) (map[string]*ebpf.Map, error) {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return nil, fmt.Errorf("create pin directory %q: %w", dir, err)
 	}
@@ -220,6 +234,13 @@ func loadPins(dir string, spec *ebpf.CollectionSpec) (map[string]*ebpf.Map, erro
 		if err != nil {
 			closeAll()
 			return nil, fmt.Errorf("load pinned %s %q: %w", name, path, err)
+		}
+		if !sized[name] {
+			spec.Maps[name].MaxEntries = m.MaxEntries()
+		}
+		// a pinned hash keeps its own preallocation, the programs do not depend on it
+		if name == pinStats {
+			spec.Maps[name].Flags = spec.Maps[name].Flags&^unix.BPF_F_NO_PREALLOC | m.Flags()&unix.BPF_F_NO_PREALLOC
 		}
 		// the same check the loader runs on a replacement map
 		if err := spec.Maps[name].Compatible(m); err != nil {

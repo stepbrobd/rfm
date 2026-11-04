@@ -66,7 +66,13 @@ in
                     iface_stats_size = std.mkOption {
                       type = std.types.ints.unsigned;
                       default = 0;
-                      description = "Override the BPF iface stats map capacity, 0 keeps the default of 4096 counter keys. A pinned map of another capacity fails the start until the pin is removed or the host reboots.";
+                      description = "Override the BPF iface stats map capacity, 0 keeps the default of 4096 counter keys or the capacity of a pinned map. A set capacity that differs from the pinned one fails the start until the pin is removed or the host reboots.";
+                    };
+
+                    iface_slots = std.mkOption {
+                      type = std.types.ints.between 0 256;
+                      default = 0;
+                      description = "Counter slots of the per CPU array, 0 keeps the default of 16 or the slots of a pinned array. An interface past the slots counts in the iface stats map. A set count that differs from the pinned one fails the start until the pin is removed or the host reboots.";
                     };
 
                     adaptive_sampling = std.mkOption {

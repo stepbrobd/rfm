@@ -45,6 +45,7 @@ sample_rate = 50
 ring_buf_size = 131072
 wakeup_batch = 256
 iface_stats_size = 8192
+iface_slots = 4
 adaptive_sampling = true
 max_sample_rate = 640
 pin_path = "/sys/fs/bpf/rfm"
@@ -82,7 +83,7 @@ port = 11020
 socket = "/run/rfm/rfm.sock"
 `, Config{Agent: AgentConfig{
 			Interfaces: []string{"eth0", "tailscale0"},
-			BPF:        BPFConfig{SampleRate: 50, RingBufSize: 131072, WakeupBatch: 256, IfaceStatsSize: 8192, AdaptiveSampling: true, MaxSampleRate: 640, PinPath: "/sys/fs/bpf/rfm", SampledOnly: true},
+			BPF:        BPFConfig{SampleRate: 50, RingBufSize: 131072, WakeupBatch: 256, IfaceStatsSize: 8192, IfaceSlots: 4, AdaptiveSampling: true, MaxSampleRate: 640, PinPath: "/sys/fs/bpf/rfm", SampledOnly: true},
 			Collector:  CollectorConfig{MaxFlows: 1024, EvictionTimeout: 10 * time.Second, ActiveTimeout: 2 * time.Minute},
 			// a small table keeps the queue at its floor
 			IPFIX:      IPFIXConfig{Host: "192.0.2.10", Port: 2055, Bind: IPFIXBindConfig{Host: "192.0.2.20", Port: 40000}, TemplateRefresh: 30 * time.Second, ObservationDomainID: 42, QueueSize: DefaultIPFIXQueueSize, MaxMessageSize: 512},
@@ -123,6 +124,8 @@ func TestParseRejects(t *testing.T) {
 		{base + "[agent.bpf]\nring_buf_size = 12345\n", "ring_buf_size must be a power of two"},
 		{base + "[agent.bpf]\nring_buf_size = " + halfPage + "\n", "ring_buf_size must be a multiple of the page size"},
 		{base + "[agent.bpf]\nwakeup_batch = 0\n", "wakeup_batch must be > 0"},
+		{base + "[agent.bpf]\niface_slots = -1\n", "iface_slots must be between 0 and 256"},
+		{base + "[agent.bpf]\niface_slots = 257\n", "iface_slots must be between 0 and 256"},
 		{base + "[agent.bpf]\niface_stats_size = -1\n", "iface_stats_size must be >= 0"},
 		{base + "[agent.bpf]\nsample_rate = 2000\n", "max_sample_rate must be >= sample_rate"},
 		{base + "[agent.bpf]\nmax_sample_rate = 0\n", "max_sample_rate must be >= sample_rate"},

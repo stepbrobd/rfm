@@ -1587,14 +1587,15 @@ func TestPinnedCountersRefuseIncompatibleFlags(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// a pin of the right shape whose flags differ, as another build may
-	// leave it, is refused like a pin of another size
+	// a pin of the right shape whose flags differ beyond the preallocation,
+	// here a hash the programs could not write, is refused like a pin of
+	// another size
 	spec, err := loadRfm()
 	if err != nil {
 		t.Fatal(err)
 	}
 	stale := spec.Maps["rfm_iface_stats"].Copy()
-	stale.Flags |= unix.BPF_F_NO_PREALLOC
+	stale.Flags |= unix.BPF_F_RDONLY_PROG
 	m, err := ebpf.NewMap(stale)
 	if err != nil {
 		testutil.SkipIfUnprivileged(t, err)
@@ -1616,8 +1617,125 @@ func TestPinnedCountersRefuseIncompatibleFlags(t *testing.T) {
 		t.Fatalf("pin after the refused load: %v", err)
 	}
 	defer pinned.Close()
-	if flags := pinned.Flags(); flags&unix.BPF_F_NO_PREALLOC == 0 {
+	if flags := pinned.Flags(); flags&unix.BPF_F_RDONLY_PROG == 0 {
 		t.Fatalf("pinned map flags = %#x, the pin was replaced", flags)
+	}
+}
+
+func TestPinnedCountersKeepTheirPreallocation(t *testing.T) {
+	testutil.RequireRoot(t)
+
+	dir := pinDir(t)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	// a build before the hash was allocated on demand pinned it preallocated
+	spec, err := loadRfm()
+	if err != nil {
+		t.Fatal(err)
+	}
+	old := spec.Maps[pinStats].Copy()
+	old.Flags &^= unix.BPF_F_NO_PREALLOC
+	m, err := ebpf.NewMap(old)
+	if err != nil {
+		testutil.SkipIfUnprivileged(t, err)
+		t.Fatal(err)
+	}
+	defer m.Close()
+	if err := m.Pin(filepath.Join(dir, pinStats)); err != nil {
+		t.Fatal(err)
+	}
+	key := rfmRfmIfaceKey{Ifindex: 3, Dir: 0, Proto: 4}
+	ncpu, err := ebpf.PossibleCPU()
+	if err != nil {
+		t.Fatal(err)
+	}
+	vals := make([]rfmRfmIfaceValue, ncpu)
+	vals[0] = rfmRfmIfaceValue{Packets: 7, Bytes: 700}
+	if err := m.Put(key, vals); err != nil {
+		t.Fatal(err)
+	}
+
+	// the upgrade keeps that pin and its counters instead of failing the start
+	p, err := Load(Config{SampleRate: 1 << 30, WakeupBatch: 1, PinPath: dir})
+	if err != nil {
+		t.Fatalf("load over a preallocated pin: %v", err)
+	}
+	defer p.Close()
+	if flags := p.objs.RfmIfaceStats.Flags(); flags&unix.BPF_F_NO_PREALLOC != 0 {
+		t.Fatalf("hash flags = %#x, want the preallocated pin", flags)
+	}
+	if packets := hashStats(t, p, key); packets != 7 {
+		t.Fatalf("hash entry after the upgrade = %d packets, want the 7 pinned", packets)
+	}
+}
+
+func TestCounterHashIsAllocatedOnDemand(t *testing.T) {
+	testutil.RequireRoot(t)
+
+	p, err := Load(Config{SampleRate: 1 << 30, WakeupBatch: 1})
+	if err != nil {
+		testutil.SkipIfUnprivileged(t, err)
+		t.Fatal(err)
+	}
+	defer p.Close()
+	if flags := p.objs.RfmIfaceStats.Flags(); flags&unix.BPF_F_NO_PREALLOC == 0 {
+		t.Fatalf("hash flags = %#x, want BPF_F_NO_PREALLOC", flags)
+	}
+}
+
+func TestLoadSizesTheCounterArrayToTheSlots(t *testing.T) {
+	testutil.RequireRoot(t)
+
+	for _, tc := range []struct{ slots, want int }{{0, DefaultIfaceSlots}, {4, 4}, {MaxIfaceSlots, MaxIfaceSlots}} {
+		p, err := Load(Config{SampleRate: 1 << 30, WakeupBatch: 1, IfaceSlots: tc.slots})
+		if err != nil {
+			testutil.SkipIfUnprivileged(t, err)
+			t.Fatal(err)
+		}
+		entries, free := p.objs.RfmIfaceArr.MaxEntries(), len(p.slots.used)
+		p.Close()
+		if entries != uint32(tc.want*2*ifaceFamilies) || free != tc.want {
+			t.Fatalf("iface_slots %d: array of %d entries and %d slots, want %d slots", tc.slots, entries, free, tc.want)
+		}
+	}
+	if _, err := Load(Config{SampleRate: 1 << 30, WakeupBatch: 1, IfaceSlots: MaxIfaceSlots + 1}); err == nil || !strings.Contains(err.Error(), "the programs index at most") {
+		t.Fatalf("load with %d slots = %v, want it refused", MaxIfaceSlots+1, err)
+	}
+}
+
+func TestPinnedCounterArrayKeepsItsSlotsUnlessSet(t *testing.T) {
+	testutil.RequireRoot(t)
+
+	dir := pinDir(t)
+	// an earlier default of 256 slots left its pins
+	p, err := Load(Config{SampleRate: 1 << 30, WakeupBatch: 1, IfaceSlots: MaxIfaceSlots, PinPath: dir})
+	if err != nil {
+		testutil.SkipIfUnprivileged(t, err)
+		t.Fatal(err)
+	}
+	if err := p.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	// a load that sets no slots takes the pinned array as it is
+	p, err = Load(Config{SampleRate: 1 << 30, WakeupBatch: 1, PinPath: dir})
+	if err != nil {
+		t.Fatalf("load without slots over a 256 slot pin: %v", err)
+	}
+	entries, slots := p.objs.RfmIfaceArr.MaxEntries(), len(p.slots.used)
+	if err := p.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if entries != MaxIfaceSlots*2*ifaceFamilies || slots != MaxIfaceSlots {
+		t.Fatalf("array of %d entries and %d slots, want the pinned %d slots", entries, slots, MaxIfaceSlots)
+	}
+
+	// a load that sets another count is refused like any other mismatch
+	_, err = Load(Config{SampleRate: 1 << 30, WakeupBatch: 1, IfaceSlots: 8, PinPath: dir})
+	if !errors.Is(err, ebpf.ErrMapIncompatible) || !strings.Contains(err.Error(), "MaxEntries") {
+		t.Fatalf("load with 8 slots over a 256 slot pin = %v, want the pin refused", err)
 	}
 }
 

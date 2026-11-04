@@ -6,8 +6,13 @@ type Config struct {
 	WakeupBatch uint32
 	// RingBufSize is the size in bytes of the event ring of each possible
 	// CPU, 0 keeps the 256 KiB of the object
-	RingBufSize    int
+	RingBufSize int
+	// IfaceStatsSize is the capacity of the counter hash, 0 keeps the 4096 of
+	// the object or the capacity of a pinned hash
 	IfaceStatsSize int
+	// IfaceSlots is the counter slots of the per cpu array, 0 keeps
+	// DefaultIfaceSlots or the slots of a pinned array
+	IfaceSlots int
 	// SampledOnly loads the programs that keep no interface counters and leaves the pins alone
 	SampledOnly bool
 	// PinPath is a bpffs directory where the interface counters are pinned

@@ -243,14 +243,23 @@ values amortize wakeups, and an event submitted without one waits for the
 collector's 100 millisecond read deadline at most. Must be greater than 0.
 
 `iface_stats_size` (int, default 0): Override the BPF iface stats hash map
-capacity, in keys. Up to 256 attached interfaces with an ifindex below 16384
-count in counter slots of their own, and the hash counts the others. `0` keeps
-the 4096 keys the program declares. An interface takes up to six keys, one per
-direction and family, which makes 4096 keys enough for about 680 interfaces
-beyond the slots. A counter update the full map refuses leaves that traffic
-uncounted and counts as a `bpf_map` error. Set it explicitly when running on a
-router with more subinterfaces than that. With `pin_path` set, a new size fails
-the start until the old pin is removed, see `pin_path`.
+capacity, in keys. Up to `iface_slots` attached interfaces with an ifindex below
+16384 count in counter slots of their own, and the hash counts the others. The
+hash takes kernel memory only for the keys in use. `0` keeps the 4096 keys the
+program declares, or the capacity of a pinned hash. An interface takes up to six
+keys, one per direction and family, which makes 4096 keys enough for about 680
+interfaces beyond the slots. A counter update the full map refuses leaves that
+traffic uncounted and counts as a `bpf_map` error. Set it explicitly when
+running on a router with more subinterfaces than that. With `pin_path` set, a
+set size that differs from the pinned one fails the start until the old pin is
+removed, see `pin_path`.
+
+`iface_slots` (int, default 0): Counter slots of the per-CPU counter array, up
+to 256. `0` keeps 16, or the slots of a pinned array. Each slot holds six
+counters on every possible CPU, about 7 KB on a host of 36 CPUs, and an
+interface past the slots counts in the iface stats hash, which costs a hash
+lookup per packet. With `pin_path` set, a set count that differs from the pinned
+one fails the start until the old pin is removed.
 
 `adaptive_sampling` (bool, default false): Let the collector double the sample
 rate, up to `max_sample_rate`, after every sweep that saw a ring buffer drop
@@ -274,17 +283,19 @@ are pinned. A restart or upgrade reuses the pinned maps, so the counters stay
 monotonic across it. The NixOS module sets `/sys/fs/bpf/rfm`. Empty keeps the
 maps private to the process. The agent creates the directory and holds a lock on
 it, and a second agent on the same `pin_path` refuses to start. A pinned map
-that does not match the configured one, from another `iface_stats_size` or the
-map layout of another build, fails the start with an error that names the
-difference. To start the counters from zero, remove the pin files
-`rfm_iface_stats`, `rfm_iface_slot` and `rfm_iface_arr` in the directory, or
-reboot. An upgrade from a build without counter slots, which pinned
-`rfm_iface_stats` alone, keeps that pin with its counters and needs no reboot.
-`rfm_iface_slot` pinned without `rfm_iface_arr`, or the reverse, is removed with
-a warning, and the slotted counters start from zero. With `sampled_only` the
-agent leaves the pins untouched for the next start without it. After its first
-link dump the agent deletes the pinned counters of every interface it neither
-attached nor keeps retrying.
+whose size the config sets and that differs from it, or whose layout another
+build changed, fails the start with an error that names the difference. With
+`iface_stats_size` and `iface_slots` at 0 the agent takes the sizes of the
+pinned maps, and a pinned hash keeps its own preallocation, so an upgrade that
+changes a default keeps the counters until a reboot clears the pins. To start
+the counters from zero, remove the pin files `rfm_iface_stats`, `rfm_iface_slot`
+and `rfm_iface_arr` in the directory, or reboot. An upgrade from a build without
+counter slots, which pinned `rfm_iface_stats` alone, keeps that pin with its
+counters and needs no reboot. `rfm_iface_slot` pinned without `rfm_iface_arr`,
+or the reverse, is removed with a warning, and the slotted counters start from
+zero. With `sampled_only` the agent leaves the pins untouched for the next start
+without it. After its first link dump the agent deletes the pinned counters of
+every interface it neither attached nor keeps retrying.
 
 ### `agent.collector`
 

@@ -22,6 +22,8 @@ const (
 	defaultRingBufSize = 256 << 10
 	// defaultWakeupBatch wakes the reader once every 1024 events of a slot entry, or of a cpu for an interface without a slot
 	defaultWakeupBatch = 1024
+	// maxIfaceSlots is RFM_SLOTS in bpf/rfm_common.h, the bound the programs check a slot against
+	maxIfaceSlots = 256
 	// defaultMaxSampleRate caps the adaptive and the set rate at 1 in 1000
 	defaultMaxSampleRate = 1000
 	// defaultEvictionTimeout ends a flow idle for 30 s

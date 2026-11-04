@@ -381,6 +381,7 @@ func probeConfig(cfg *config.Config) probe.Config {
 		RingBufSize:    cfg.Agent.BPF.RingBufSize,
 		WakeupBatch:    cfg.Agent.BPF.WakeupBatch,
 		IfaceStatsSize: cfg.Agent.BPF.IfaceStatsSize,
+		IfaceSlots:     cfg.Agent.BPF.IfaceSlots,
 		PinPath:        cfg.Agent.BPF.PinPath,
 		SampledOnly:    cfg.Agent.BPF.SampledOnly,
 	}

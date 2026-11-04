@@ -34,9 +34,11 @@ struct rfm_vlan_hdr {
 
 struct rfm_config rfm_cfg;
 
+// counters of an interface without a slot, allocated on first use since most hosts have none
 struct {
 	__uint(type, BPF_MAP_TYPE_PERCPU_HASH);
 	__uint(max_entries, 4096);
+	__uint(map_flags, BPF_F_NO_PREALLOC);
 	__type(key, struct rfm_iface_key);
 	__type(value, struct rfm_iface_value);
 } rfm_iface_stats SEC(".maps");
@@ -49,7 +51,7 @@ struct {
 	__type(value, __u32);
 } rfm_iface_slot SEC(".maps");
 
-// counters at slot * 2 * RFM_FAMILIES + dir * RFM_FAMILIES + family
+// counters at slot * 2 * RFM_FAMILIES + dir * RFM_FAMILIES + family, the loader sizes it to the configured slots
 struct {
 	__uint(type, BPF_MAP_TYPE_PERCPU_ARRAY);
 	__uint(max_entries, RFM_SLOTS * 2 * RFM_FAMILIES);

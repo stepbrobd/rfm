@@ -41,6 +41,7 @@ type BPFConfig struct {
 	RingBufSize      int    `toml:"ring_buf_size"`
 	WakeupBatch      uint32 `toml:"wakeup_batch"`
 	IfaceStatsSize   int    `toml:"iface_stats_size"`
+	IfaceSlots       int    `toml:"iface_slots"`
 	AdaptiveSampling bool   `toml:"adaptive_sampling"`
 	MaxSampleRate    uint32 `toml:"max_sample_rate"`
 	PinPath          string `toml:"pin_path"`
@@ -267,6 +268,9 @@ func validate(cfg *Config) error {
 	}
 	if a.BPF.IfaceStatsSize < 0 {
 		return fmt.Errorf("agent.bpf.iface_stats_size must be >= 0, got %d", a.BPF.IfaceStatsSize)
+	}
+	if a.BPF.IfaceSlots < 0 || a.BPF.IfaceSlots > maxIfaceSlots {
+		return fmt.Errorf("agent.bpf.iface_slots must be between 0 and %d, got %d, 0 keeps the default", maxIfaceSlots, a.BPF.IfaceSlots)
 	}
 	if a.BPF.MaxSampleRate < a.BPF.SampleRate {
 		return fmt.Errorf("agent.bpf.max_sample_rate must be >= sample_rate, got %d < %d", a.BPF.MaxSampleRate, a.BPF.SampleRate)
