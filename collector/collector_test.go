@@ -620,6 +620,141 @@ func TestRunRingBufErrors(t *testing.T) {
 	}
 }
 
+// wireRecord returns evs back to back, the record the stage programs write
+func wireRecord(evs ...FlowEvent) []byte {
+	var raw []byte
+	for _, ev := range evs {
+		raw = append(raw, encodeWireEvent(ev)...)
+	}
+	return raw
+}
+
+// runUntil runs c on rd until done holds, then stops it
+func runUntil(t *testing.T, c *Collector, rd Reader, what string, done func() bool) {
+	t.Helper()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	errCh := make(chan error, 1)
+	go func() { errCh <- c.Run(ctx, rd) }()
+
+	deadline := time.Now().Add(time.Second)
+	for !done() {
+		if time.Now().After(deadline) {
+			cancel()
+			<-errCh
+			t.Fatalf("timed out waiting for %s", what)
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	cancel()
+	if err := <-errCh; !errors.Is(err, context.Canceled) {
+		t.Fatalf("Run returned %v, want context.Canceled", err)
+	}
+}
+
+func TestRunRecordsEveryEventOfARecord(t *testing.T) {
+	a := FlowEvent{
+		Ifindex: 1, Proto: 6, SrcPort: 1000, DstPort: 80,
+		SrcAddr: netip.MustParseAddr("::ffff:10.0.0.1"),
+		DstAddr: netip.MustParseAddr("::ffff:10.0.0.2"),
+		Segs:    1,
+		Len:     100,
+	}
+	b := a
+	b.SrcPort, b.Segs, b.Len = 2000, 3, 300
+	// a record of a stage and one of a program without one
+	mr := &mockReader{events: [][]byte{wireRecord(a, b, a), wireRecord(b)}}
+
+	c := New(30*time.Second, nil, config.DefaultMaxFlows)
+	runUntil(t, c, mr, "both records", func() bool {
+		flows := c.Flows()
+		return flows[a.Key()].Packets == 2 && flows[b.Key()].Packets == 6
+	})
+
+	if s := c.Stats(); s.RingBufErrors != 0 || s.ActiveFlows != 2 {
+		t.Fatalf("decode errors = %d with %d flows, want none and 2", s.RingBufErrors, s.ActiveFlows)
+	}
+	if f := c.Flows()[b.Key()]; f.Bytes != 600 {
+		t.Fatalf("bytes of the flow in both records = %d, want 600", f.Bytes)
+	}
+}
+
+func TestRunScalesEveryEventOfARecordByItsRate(t *testing.T) {
+	c := New(30*time.Second, nil, config.DefaultMaxFlows)
+	c.SetRateApplier(10, nil)
+	// the rate doubles from boot time 5000 on, while the stage of one record fills
+	c.addRate(20, 5_000)
+
+	ev := FlowEvent{
+		Tstamp: 1_000,
+		Proto:  6, SrcPort: 1000, DstPort: 80,
+		SrcAddr: netip.MustParseAddr("::ffff:10.0.0.1"),
+		DstAddr: netip.MustParseAddr("::ffff:10.0.0.2"),
+		Segs:    1,
+		Len:     100,
+	}
+	late, early := at(ev, 6_000), at(ev, 2_000)
+	mr := &mockReader{events: [][]byte{wireRecord(ev, late, early)}}
+
+	runUntil(t, c, mr, "the record", func() bool { return c.Flows()[ev.Key()].Packets == 3 })
+
+	// each event scales by the rate that sampled it, not by one rate for its record
+	if entry := c.Flows()[ev.Key()]; entry.EstPackets != 40 || entry.EstBytes != 4000 {
+		t.Fatalf("estimated = %d packets %d bytes, want 40 and 4000", entry.EstPackets, entry.EstBytes)
+	}
+}
+
+func TestRunCountsABadRecordOnceAndKeepsTheGoodEventsOfARecord(t *testing.T) {
+	good := FlowEvent{
+		Ifindex: 1, Proto: 6, SrcPort: 1000, DstPort: 80,
+		SrcAddr: netip.MustParseAddr("::ffff:10.0.0.1"),
+		DstAddr: netip.MustParseAddr("::ffff:10.0.0.2"),
+		Segs:    1,
+		Len:     100,
+	}
+	// an event of no wire packets fails DecodeFlowEvent
+	bad := good
+	bad.Segs = 0
+	two := wireRecord(good, good)
+	mr := &mockReader{events: [][]byte{
+		// a record that ends inside an event is one error and none of its events count
+		two[:len(two)-1],
+		// a bad event is one error and the others of its record count
+		wireRecord(good, bad, good),
+	}}
+
+	c := New(30*time.Second, nil, config.DefaultMaxFlows)
+	runUntil(t, c, mr, "both records", func() bool {
+		return c.Stats().RingBufErrors >= 2 && c.Flows()[good.Key()].Packets == 2
+	})
+
+	if s := c.Stats(); s.RingBufErrors != 2 {
+		t.Fatalf("decode errors = %d, want 2", s.RingBufErrors)
+	}
+}
+
+func TestRunTakesARecordThatCarriesTheBatchPastItsCap(t *testing.T) {
+	ev := FlowEvent{
+		Ifindex: 1, Proto: 6, SrcPort: 1000, DstPort: 80,
+		SrcAddr: netip.MustParseAddr("::ffff:10.0.0.1"),
+		DstAddr: netip.MustParseAddr("::ffff:10.0.0.2"),
+		Segs:    1,
+		Len:     100,
+	}
+	// records of one event leave the batch room for 4, the two records of 32 after them go in whole
+	stage := wireRecord(slices.Repeat([]FlowEvent{ev}, 32)...)
+	events := slices.Repeat([][]byte{encodeWireEvent(ev)}, readBatch-4)
+	events = append(events, stage, stage)
+	want := uint64(readBatch - 4 + 64)
+
+	c := New(30*time.Second, nil, config.DefaultMaxFlows)
+	runUntil(t, c, &mockReader{events: events}, "every event", func() bool { return c.Flows()[ev.Key()].Packets == want })
+
+	if s := c.Stats(); s.RingBufErrors != 0 {
+		t.Fatalf("decode errors = %d, want none", s.RingBufErrors)
+	}
+}
+
 type mockFlowExporter struct {
 	flows []ExportedFlow
 	err   error

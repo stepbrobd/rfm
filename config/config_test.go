@@ -18,7 +18,7 @@ interfaces = ["eth0"]
 func TestParse(t *testing.T) {
 	defaults := Config{Agent: AgentConfig{
 		Interfaces: []string{"eth0"},
-		BPF:        BPFConfig{SampleRate: 100, RingBufSize: 65536, WakeupBatch: 256, MaxSampleRate: 1000},
+		BPF:        BPFConfig{SampleRate: 100, RingBufSize: 65536, WakeupBatch: 256, MaxSampleRate: 1000, StageEvents: 1},
 		Collector:  CollectorConfig{MaxFlows: 65536, EvictionTimeout: 30 * time.Second, ActiveTimeout: time.Minute},
 		// the queue holds a sweep of a full table
 		IPFIX:      IPFIXConfig{TemplateRefresh: time.Minute, ObservationDomainID: 1, QueueSize: 65536, MaxMessageSize: 1200},
@@ -50,6 +50,7 @@ adaptive_sampling = true
 max_sample_rate = 640
 pin_path = "/sys/fs/bpf/rfm"
 sampled_only = true
+stage_events = 16
 
 [agent.collector]
 max_flows = 1024
@@ -83,7 +84,7 @@ port = 11020
 socket = "/run/rfm/rfm.sock"
 `, Config{Agent: AgentConfig{
 			Interfaces: []string{"eth0", "tailscale0"},
-			BPF:        BPFConfig{SampleRate: 50, RingBufSize: 131072, WakeupBatch: 256, IfaceStatsSize: 8192, IfaceSlots: 4, AdaptiveSampling: true, MaxSampleRate: 640, PinPath: "/sys/fs/bpf/rfm", SampledOnly: true},
+			BPF:        BPFConfig{SampleRate: 50, RingBufSize: 131072, WakeupBatch: 256, IfaceStatsSize: 8192, IfaceSlots: 4, AdaptiveSampling: true, MaxSampleRate: 640, PinPath: "/sys/fs/bpf/rfm", SampledOnly: true, StageEvents: 16},
 			Collector:  CollectorConfig{MaxFlows: 1024, EvictionTimeout: 10 * time.Second, ActiveTimeout: 2 * time.Minute},
 			// a small table keeps the queue at its floor
 			IPFIX:      IPFIXConfig{Host: "192.0.2.10", Port: 2055, Bind: IPFIXBindConfig{Host: "192.0.2.20", Port: 40000}, TemplateRefresh: 30 * time.Second, ObservationDomainID: 42, QueueSize: DefaultIPFIXQueueSize, MaxMessageSize: 512},
@@ -135,6 +136,9 @@ func TestParseRejects(t *testing.T) {
 		{base + "[agent.bpf]\nwakeup_batch = 4000000000\n", "wakeup_batch must be at most half the 1048576 events"},
 		{base + "[agent.bpf]\niface_slots = -1\n", "iface_slots must be between 0 and 256"},
 		{base + "[agent.bpf]\niface_slots = 257\n", "iface_slots must be between 0 and 256"},
+		// a stage holds 32 events at most
+		{base + "[agent.bpf]\nstage_events = 0\n", "stage_events must be between 1 and 32"},
+		{base + "[agent.bpf]\nstage_events = 33\n", "stage_events must be between 1 and 32"},
 		{base + "[agent.bpf]\niface_stats_size = -1\n", "iface_stats_size must be >= 0"},
 		{base + "[agent.bpf]\nsample_rate = 2000\n", "max_sample_rate must be >= sample_rate"},
 		{base + "[agent.bpf]\nmax_sample_rate = 0\n", "max_sample_rate must be >= sample_rate"},

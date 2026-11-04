@@ -384,5 +384,6 @@ func probeConfig(cfg *config.Config) probe.Config {
 		IfaceSlots:     cfg.Agent.BPF.IfaceSlots,
 		PinPath:        cfg.Agent.BPF.PinPath,
 		SampledOnly:    cfg.Agent.BPF.SampledOnly,
+		StageEvents:    cfg.Agent.BPF.StageEvents,
 	}
 }

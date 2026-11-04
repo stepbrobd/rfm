@@ -15,6 +15,11 @@ type Config struct {
 	IfaceSlots int
 	// SampledOnly loads the programs that keep no interface counters and leaves the pins alone
 	SampledOnly bool
+	// StageEvents is how many sampled events a CPU stages before it writes
+	// them to its ring as one record, 0 and 1 write every event at once,
+	// more needs bpf_timer_start to take BPF_F_TIMER_CPU_PIN, Linux 6.7 or
+	// later without PREEMPT_RT
+	StageEvents uint32
 	// PinPath is a bpffs directory where the interface counters are pinned
 	// so they survive a restart, empty keeps them private to the process
 	PinPath string

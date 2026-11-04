@@ -93,6 +93,12 @@ in
                       description = "Keep no exact interface counters, a packet the sampling draw passes over then costs only the draw. The interface metrics go away, the flow metrics stay.";
                     };
 
+                    stage_events = std.mkOption {
+                      type = std.types.ints.between 1 32;
+                      default = 1;
+                      description = "Sampled events each CPU stages before it writes them to its ring buffer as one record, 1 writes every event at once. Above 1 needs Linux 6.7 or later without PREEMPT_RT, a timer writes a partial stage within 10 milliseconds, and the wakeup batch counts the events each CPU writes.";
+                    };
+
                     pin_path = std.mkOption {
                       type = std.types.strMatching "(/sys/fs/bpf/[^/]+)?";
                       default = "/sys/fs/bpf/rfm";

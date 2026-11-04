@@ -708,7 +708,9 @@ func (c *Collector) noteDrops(n uint64) {
 	}
 }
 
-// readBatch caps how many ring buffer records are recorded per lock acquisition
+// readBatch caps how many events are recorded per lock acquisition, the last
+// record of a batch may carry it past the cap, and how many records the reader
+// takes from one ring in a turn
 const readBatch = 64
 
 // readDeadline bounds a blocking read so the loop notices a cancelled context
@@ -813,7 +815,7 @@ func (c *Collector) Run(ctx context.Context, rd Reader) error {
 			return fmt.Errorf("read event: %w", err)
 		}
 		first = time.Now()
-		batch = c.appendSample(batch[:0], raw)
+		batch = c.appendSamples(batch[:0], raw)
 
 		// a past deadline drains the rings without blocking
 		rd.SetDeadline(first)
@@ -826,7 +828,7 @@ func (c *Collector) Run(ctx context.Context, rd Reader) error {
 			if err != nil {
 				break
 			}
-			batch = c.appendSample(batch, raw)
+			batch = c.appendSamples(batch, raw)
 		}
 
 		switch {
@@ -839,13 +841,24 @@ func (c *Collector) Run(ctx context.Context, rd Reader) error {
 	}
 }
 
-// appendSample decodes raw onto batch in place, a record that fails to decode is counted and skipped
-func (c *Collector) appendSample(batch []sample, raw []byte) []sample {
-	batch = append(batch, sample{})
-	if err := batch[len(batch)-1].decode(raw); err != nil {
-		log.Error("decode flow event", "err", err, "raw_len", len(raw))
+// appendSamples decodes the events of the record raw onto batch in place, a
+// record of a length that is not a positive multiple of the event size counts
+// as one error and is skipped, an event that fails to decode counts as one and
+// is skipped while the others of its record are kept
+func (c *Collector) appendSamples(batch []sample, raw []byte) []sample {
+	n, err := recordEvents(raw)
+	if err != nil {
+		log.Error("decode flow event record", "err", err)
 		c.ringBufErrs.Add(1)
-		return batch[:len(batch)-1]
+		return batch
+	}
+	for i := range n {
+		batch = append(batch, sample{})
+		if err := batch[len(batch)-1].decode(recordEvent(raw, i)); err != nil {
+			log.Error("decode flow event", "err", err, "event", i, "events", n)
+			c.ringBufErrs.Add(1)
+			batch = batch[:len(batch)-1]
+		}
 	}
 	return batch
 }

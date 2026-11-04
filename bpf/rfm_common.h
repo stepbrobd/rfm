@@ -58,4 +58,22 @@ struct rfm_flow_event {
 _Static_assert(sizeof(struct rfm_flow_event) == 56,
 	       "rfm_flow_event is not 56 bytes");
 
+// a record of the stage programs holds 1 to rfm_stage_events events back to back
+#define RFM_STAGE_MAX 32
+
+// n counts the staged events, wake events to the next wakeup, armed is the boot time the pending flush was armed or 0, ready marks the timer of the CPU set up with its callback
+struct rfm_stage {
+	__u32 n;
+	__u32 wake;
+	__u64 armed;
+	__u32 ready;
+	__u32 _pad;
+	struct rfm_flow_event ev[RFM_STAGE_MAX];
+};
+
+// a bpf_timer cannot live in a per CPU map, the flush timer of each CPU's stage sits in an array by CPU
+struct rfm_stage_timer {
+	struct bpf_timer timer;
+};
+
 #endif

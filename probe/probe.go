@@ -62,6 +62,10 @@ func Load(cfg Config) (*Probe, error) {
 	if cfg.WakeupBatch == 0 {
 		return nil, errors.New("wakeup batch must be > 0")
 	}
+	if cfg.StageEvents > maxStageEvents {
+		return nil, fmt.Errorf("stage events must be at most %d, got %d", maxStageEvents, cfg.StageEvents)
+	}
+	staged := cfg.StageEvents > 1
 
 	spec, err := loadRfm()
 	if err != nil {
@@ -77,6 +81,17 @@ func Load(cfg Config) (*Probe, error) {
 	spec.Maps["rfm_flow_rings"].MaxEntries = uint32(ncpu)
 	if cfg.RingBufSize > 0 {
 		ringSpec.MaxEntries = uint32(cfg.RingBufSize)
+	}
+
+	// a stage of more than one event takes a flush timer per possible CPU
+	if staged {
+		if err := checkTimerPin(spec); err != nil {
+			return nil, fmt.Errorf("stage events %d: %w", cfg.StageEvents, err)
+		}
+		spec.Maps[stageTimers].MaxEntries = uint32(ncpu)
+		if err := spec.Variables[stageEvents].Set(cfg.StageEvents); err != nil {
+			return nil, fmt.Errorf("set stage events: %w", err)
+		}
 	}
 
 	if cfg.IfaceStatsSize > 0 {
@@ -113,8 +128,13 @@ func Load(cfg Config) (*Probe, error) {
 
 	// only the program pair of the mode loads
 	ingress, egress := "rfm_tc_ingress", "rfm_tc_egress"
-	if cfg.SampledOnly {
+	switch {
+	case cfg.SampledOnly && staged:
+		ingress, egress = "rfm_tc_ingress_sampled_staged", "rfm_tc_egress_sampled_staged"
+	case cfg.SampledOnly:
 		ingress, egress = "rfm_tc_ingress_sampled", "rfm_tc_egress_sampled"
+	case staged:
+		ingress, egress = "rfm_tc_ingress_staged", "rfm_tc_egress_staged"
 	}
 	p := &Probe{
 		objs:    new(rfmObjects),
@@ -209,6 +229,45 @@ const (
 	pinSlot  = "rfm_iface_slot"
 	pinArr   = "rfm_iface_arr"
 )
+
+// the flush timers and the record size of the stage programs, and the program that checks the kernel takes their timers
+const (
+	stageTimers = "rfm_stage_timers"
+	stageEvents = "rfm_stage_events"
+	stageProbe  = "rfm_stage_probe"
+)
+
+// maxStageEvents is RFM_STAGE_MAX in bpf/rfm_common.h, the events a stage holds
+const maxStageEvents = uint32(len(rfmRfmStage{}.Ev))
+
+// checkTimerPin runs rfm_stage_probe with the timer array alone, the flush
+// timers of the stages must start pinned to the CPU of their stage, which
+// bpf_timer_start refuses before Linux 6.7 and the verifier refuses for any
+// bpf_timer under PREEMPT_RT
+func checkTimerPin(spec *ebpf.CollectionSpec) error {
+	probe := &ebpf.CollectionSpec{
+		Maps:      map[string]*ebpf.MapSpec{stageTimers: spec.Maps[stageTimers].Copy()},
+		Programs:  map[string]*ebpf.ProgramSpec{stageProbe: spec.Programs[stageProbe].Copy()},
+		Types:     spec.Types,
+		ByteOrder: spec.ByteOrder,
+	}
+	coll, err := ebpf.NewCollection(probe)
+	if err != nil {
+		return fmt.Errorf("load the bpf_timer probe: %w", err)
+	}
+	defer coll.Close()
+	// a test run of a tc program takes an ethernet header at least
+	ret, err := coll.Programs[stageProbe].Run(&ebpf.RunOptions{Data: make([]byte, 14)})
+	if err != nil {
+		return fmt.Errorf("run the bpf_timer probe: %w", err)
+	}
+	if errno := int32(ret); errno < 0 {
+		return fmt.Errorf("bpf_timer_start refuses BPF_F_TIMER_CPU_PIN, which needs Linux 6.7 or later: %w", unix.Errno(-errno))
+	} else if errno > 0 {
+		return fmt.Errorf("the bpf_timer probe found no timer, it returned %d", errno)
+	}
+	return nil
+}
 
 // loadPins returns the counter maps pinned under dir, dropping a slot map or
 // counter array pinned alone, a map whose size the config left unset takes

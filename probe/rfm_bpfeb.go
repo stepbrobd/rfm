@@ -43,23 +43,61 @@ type rfmRfmSlotValue struct {
 	Wake    uint32
 }
 
+type rfmRfmStage struct {
+	_     structs.HostLayout
+	N     uint32
+	Wake  uint32
+	Armed uint64
+	Ready uint32
+	Pad   uint32
+	Ev    [32]struct {
+		_       structs.HostLayout
+		Tstamp  uint64
+		Ifindex uint32
+		Proto   uint8
+		DirL2   uint8
+		Segs    uint16
+		SrcAddr [16]uint8
+		DstAddr [16]uint8
+		SrcPort uint16
+		DstPort uint16
+		Len     uint32
+	}
+}
+
+type rfmRfmStageTimer struct {
+	_     structs.HostLayout
+	Timer struct {
+		_      structs.HostLayout
+		Opaque [2]uint64
+	}
+}
+
 // Names of all BPF objects in the ELF.
 //
 // Used for safe lookups in a Collection or CollectionSpec.
 const (
-	rfmMapRfmCpuDraw           = "rfm_cpu_draw"
-	rfmMapRfmFlowDrops         = "rfm_flow_drops"
-	rfmMapRfmFlowRings         = "rfm_flow_rings"
-	rfmMapRfmGsoHdrErrors      = "rfm_gso_hdr_errors"
-	rfmMapRfmIfaceArr          = "rfm_iface_arr"
-	rfmMapRfmIfaceErrors       = "rfm_iface_errors"
-	rfmMapRfmIfaceSlot         = "rfm_iface_slot"
-	rfmMapRfmIfaceStats        = "rfm_iface_stats"
-	rfmProgRfmTcEgress         = "rfm_tc_egress"
-	rfmProgRfmTcEgressSampled  = "rfm_tc_egress_sampled"
-	rfmProgRfmTcIngress        = "rfm_tc_ingress"
-	rfmProgRfmTcIngressSampled = "rfm_tc_ingress_sampled"
-	rfmVarRfmCfg               = "rfm_cfg"
+	rfmMapRfmCpuDraw                 = "rfm_cpu_draw"
+	rfmMapRfmCpuStage                = "rfm_cpu_stage"
+	rfmMapRfmFlowDrops               = "rfm_flow_drops"
+	rfmMapRfmFlowRings               = "rfm_flow_rings"
+	rfmMapRfmGsoHdrErrors            = "rfm_gso_hdr_errors"
+	rfmMapRfmIfaceArr                = "rfm_iface_arr"
+	rfmMapRfmIfaceErrors             = "rfm_iface_errors"
+	rfmMapRfmIfaceSlot               = "rfm_iface_slot"
+	rfmMapRfmIfaceStats              = "rfm_iface_stats"
+	rfmMapRfmStageTimers             = "rfm_stage_timers"
+	rfmProgRfmStageProbe             = "rfm_stage_probe"
+	rfmProgRfmTcEgress               = "rfm_tc_egress"
+	rfmProgRfmTcEgressSampled        = "rfm_tc_egress_sampled"
+	rfmProgRfmTcEgressSampledStaged  = "rfm_tc_egress_sampled_staged"
+	rfmProgRfmTcEgressStaged         = "rfm_tc_egress_staged"
+	rfmProgRfmTcIngress              = "rfm_tc_ingress"
+	rfmProgRfmTcIngressSampled       = "rfm_tc_ingress_sampled"
+	rfmProgRfmTcIngressSampledStaged = "rfm_tc_ingress_sampled_staged"
+	rfmProgRfmTcIngressStaged        = "rfm_tc_ingress_staged"
+	rfmVarRfmCfg                     = "rfm_cfg"
+	rfmVarRfmStageEvents             = "rfm_stage_events"
 )
 
 // loadRfm returns the embedded CollectionSpec for rfm.
@@ -104,10 +142,15 @@ type rfmSpecs struct {
 //
 // It can be passed ebpf.CollectionSpec.Assign.
 type rfmProgramSpecs struct {
-	RfmTcEgress         *ebpf.ProgramSpec `ebpf:"rfm_tc_egress"`
-	RfmTcEgressSampled  *ebpf.ProgramSpec `ebpf:"rfm_tc_egress_sampled"`
-	RfmTcIngress        *ebpf.ProgramSpec `ebpf:"rfm_tc_ingress"`
-	RfmTcIngressSampled *ebpf.ProgramSpec `ebpf:"rfm_tc_ingress_sampled"`
+	RfmStageProbe             *ebpf.ProgramSpec `ebpf:"rfm_stage_probe"`
+	RfmTcEgress               *ebpf.ProgramSpec `ebpf:"rfm_tc_egress"`
+	RfmTcEgressSampled        *ebpf.ProgramSpec `ebpf:"rfm_tc_egress_sampled"`
+	RfmTcEgressSampledStaged  *ebpf.ProgramSpec `ebpf:"rfm_tc_egress_sampled_staged"`
+	RfmTcEgressStaged         *ebpf.ProgramSpec `ebpf:"rfm_tc_egress_staged"`
+	RfmTcIngress              *ebpf.ProgramSpec `ebpf:"rfm_tc_ingress"`
+	RfmTcIngressSampled       *ebpf.ProgramSpec `ebpf:"rfm_tc_ingress_sampled"`
+	RfmTcIngressSampledStaged *ebpf.ProgramSpec `ebpf:"rfm_tc_ingress_sampled_staged"`
+	RfmTcIngressStaged        *ebpf.ProgramSpec `ebpf:"rfm_tc_ingress_staged"`
 }
 
 // rfmMapSpecs contains maps before they are loaded into the kernel.
@@ -115,6 +158,7 @@ type rfmProgramSpecs struct {
 // It can be passed ebpf.CollectionSpec.Assign.
 type rfmMapSpecs struct {
 	RfmCpuDraw      *ebpf.MapSpec `ebpf:"rfm_cpu_draw"`
+	RfmCpuStage     *ebpf.MapSpec `ebpf:"rfm_cpu_stage"`
 	RfmFlowDrops    *ebpf.MapSpec `ebpf:"rfm_flow_drops"`
 	RfmFlowRings    *ebpf.MapSpec `ebpf:"rfm_flow_rings"`
 	RfmGsoHdrErrors *ebpf.MapSpec `ebpf:"rfm_gso_hdr_errors"`
@@ -122,13 +166,15 @@ type rfmMapSpecs struct {
 	RfmIfaceErrors  *ebpf.MapSpec `ebpf:"rfm_iface_errors"`
 	RfmIfaceSlot    *ebpf.MapSpec `ebpf:"rfm_iface_slot"`
 	RfmIfaceStats   *ebpf.MapSpec `ebpf:"rfm_iface_stats"`
+	RfmStageTimers  *ebpf.MapSpec `ebpf:"rfm_stage_timers"`
 }
 
 // rfmVariableSpecs contains global variables before they are loaded into the kernel.
 //
 // It can be passed ebpf.CollectionSpec.Assign.
 type rfmVariableSpecs struct {
-	RfmCfg *ebpf.VariableSpec `ebpf:"rfm_cfg"`
+	RfmCfg         *ebpf.VariableSpec `ebpf:"rfm_cfg"`
+	RfmStageEvents *ebpf.VariableSpec `ebpf:"rfm_stage_events"`
 }
 
 // rfmObjects contains all objects after they have been loaded into the kernel.
@@ -152,6 +198,7 @@ func (o *rfmObjects) Close() error {
 // It can be passed to loadRfmObjects or ebpf.CollectionSpec.LoadAndAssign.
 type rfmMaps struct {
 	RfmCpuDraw      *ebpf.Map `ebpf:"rfm_cpu_draw"`
+	RfmCpuStage     *ebpf.Map `ebpf:"rfm_cpu_stage"`
 	RfmFlowDrops    *ebpf.Map `ebpf:"rfm_flow_drops"`
 	RfmFlowRings    *ebpf.Map `ebpf:"rfm_flow_rings"`
 	RfmGsoHdrErrors *ebpf.Map `ebpf:"rfm_gso_hdr_errors"`
@@ -159,11 +206,13 @@ type rfmMaps struct {
 	RfmIfaceErrors  *ebpf.Map `ebpf:"rfm_iface_errors"`
 	RfmIfaceSlot    *ebpf.Map `ebpf:"rfm_iface_slot"`
 	RfmIfaceStats   *ebpf.Map `ebpf:"rfm_iface_stats"`
+	RfmStageTimers  *ebpf.Map `ebpf:"rfm_stage_timers"`
 }
 
 func (m *rfmMaps) Close() error {
 	return _RfmClose(
 		m.RfmCpuDraw,
+		m.RfmCpuStage,
 		m.RfmFlowDrops,
 		m.RfmFlowRings,
 		m.RfmGsoHdrErrors,
@@ -171,6 +220,7 @@ func (m *rfmMaps) Close() error {
 		m.RfmIfaceErrors,
 		m.RfmIfaceSlot,
 		m.RfmIfaceStats,
+		m.RfmStageTimers,
 	)
 }
 
@@ -178,25 +228,36 @@ func (m *rfmMaps) Close() error {
 //
 // It can be passed to loadRfmObjects or ebpf.CollectionSpec.LoadAndAssign.
 type rfmVariables struct {
-	RfmCfg *ebpf.Variable `ebpf:"rfm_cfg"`
+	RfmCfg         *ebpf.Variable `ebpf:"rfm_cfg"`
+	RfmStageEvents *ebpf.Variable `ebpf:"rfm_stage_events"`
 }
 
 // rfmPrograms contains all programs after they have been loaded into the kernel.
 //
 // It can be passed to loadRfmObjects or ebpf.CollectionSpec.LoadAndAssign.
 type rfmPrograms struct {
-	RfmTcEgress         *ebpf.Program `ebpf:"rfm_tc_egress"`
-	RfmTcEgressSampled  *ebpf.Program `ebpf:"rfm_tc_egress_sampled"`
-	RfmTcIngress        *ebpf.Program `ebpf:"rfm_tc_ingress"`
-	RfmTcIngressSampled *ebpf.Program `ebpf:"rfm_tc_ingress_sampled"`
+	RfmStageProbe             *ebpf.Program `ebpf:"rfm_stage_probe"`
+	RfmTcEgress               *ebpf.Program `ebpf:"rfm_tc_egress"`
+	RfmTcEgressSampled        *ebpf.Program `ebpf:"rfm_tc_egress_sampled"`
+	RfmTcEgressSampledStaged  *ebpf.Program `ebpf:"rfm_tc_egress_sampled_staged"`
+	RfmTcEgressStaged         *ebpf.Program `ebpf:"rfm_tc_egress_staged"`
+	RfmTcIngress              *ebpf.Program `ebpf:"rfm_tc_ingress"`
+	RfmTcIngressSampled       *ebpf.Program `ebpf:"rfm_tc_ingress_sampled"`
+	RfmTcIngressSampledStaged *ebpf.Program `ebpf:"rfm_tc_ingress_sampled_staged"`
+	RfmTcIngressStaged        *ebpf.Program `ebpf:"rfm_tc_ingress_staged"`
 }
 
 func (p *rfmPrograms) Close() error {
 	return _RfmClose(
+		p.RfmStageProbe,
 		p.RfmTcEgress,
 		p.RfmTcEgressSampled,
+		p.RfmTcEgressSampledStaged,
+		p.RfmTcEgressStaged,
 		p.RfmTcIngress,
 		p.RfmTcIngressSampled,
+		p.RfmTcIngressSampledStaged,
+		p.RfmTcIngressStaged,
 	)
 }
 

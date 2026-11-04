@@ -47,11 +47,11 @@ const (
 	l2LenMask = 1<<dirShift - 1
 )
 
-// DecodeFlowEvent decodes one ring buffer record and refuses an event the
-// probe does not emit, so the methods of FlowEvent can rely on its fields
+// DecodeFlowEvent decodes one flow event and refuses an event the probe
+// does not emit, so the methods of FlowEvent can rely on its fields
 func DecodeFlowEvent(raw []byte) (FlowEvent, error) {
-	if len(raw) < wireFlowEventSize {
-		return FlowEvent{}, fmt.Errorf("short flow event: %d < %d bytes", len(raw), wireFlowEventSize)
+	if len(raw) != wireFlowEventSize {
+		return FlowEvent{}, fmt.Errorf("flow event of %d bytes, want %d", len(raw), wireFlowEventSize)
 	}
 
 	ne := binary.NativeEndian
@@ -72,6 +72,37 @@ func DecodeFlowEvent(raw []byte) (FlowEvent, error) {
 		return FlowEvent{}, err
 	}
 	return ev, nil
+}
+
+// DecodeFlowEvents decodes a ring buffer record, one or more events back to
+// back, and refuses the record when its length is not a positive multiple of
+// the event size or when DecodeFlowEvent refuses one of its events
+func DecodeFlowEvents(raw []byte) ([]FlowEvent, error) {
+	n, err := recordEvents(raw)
+	if err != nil {
+		return nil, err
+	}
+	evs := make([]FlowEvent, n)
+	for i := range evs {
+		if evs[i], err = DecodeFlowEvent(recordEvent(raw, i)); err != nil {
+			return nil, fmt.Errorf("event %d of %d: %w", i, n, err)
+		}
+	}
+	return evs, nil
+}
+
+// recordEvents returns how many events a ring buffer record holds, the stage
+// programs of the probe write up to RFM_STAGE_MAX in one record
+func recordEvents(raw []byte) (int, error) {
+	if len(raw) == 0 || len(raw)%wireFlowEventSize != 0 {
+		return 0, fmt.Errorf("flow event record of %d bytes, not a positive multiple of %d", len(raw), wireFlowEventSize)
+	}
+	return len(raw) / wireFlowEventSize, nil
+}
+
+// recordEvent returns event i of a record recordEvents accepted
+func recordEvent(raw []byte, i int) []byte {
+	return raw[i*wireFlowEventSize : (i+1)*wireFlowEventSize : (i+1)*wireFlowEventSize]
 }
 
 // checkCounts refuses counts the probe cannot emit, every skb stands for at
@@ -99,10 +130,10 @@ type sample struct {
 	id    flowID
 }
 
-// decode fills s from one ring buffer record and refuses what DecodeFlowEvent refuses
+// decode fills s from one flow event and refuses what DecodeFlowEvent refuses
 func (s *sample) decode(raw []byte) error {
-	if len(raw) < wireFlowEventSize {
-		return fmt.Errorf("short flow event: %d < %d bytes", len(raw), wireFlowEventSize)
+	if len(raw) != wireFlowEventSize {
+		return fmt.Errorf("flow event of %d bytes, want %d", len(raw), wireFlowEventSize)
 	}
 	ne := binary.NativeEndian
 	s.tstamp = time.Duration(ne.Uint64(raw[offTstamp:]))

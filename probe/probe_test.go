@@ -17,6 +17,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unsafe"
 
 	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/asm"
@@ -2650,31 +2651,40 @@ func loopbackSamples(t *testing.T, p *Probe, n uint32) int {
 
 	rd := newFlowReader(t, p)
 
-	drops := func() (sum uint64) {
-		var vals []uint64
-		if err := p.FlowDrops().Lookup(uint32(0), &vals); err != nil {
-			t.Fatal(err)
-		}
-		for _, v := range vals {
-			sum += v
-		}
-		return sum
-	}
-	before := drops()
+	before := flowDrops(t, p)
 	frame := testutil.EthIPv4UDP(net.IPv4(10, 0, 9, 1), net.IPv4(10, 0, 9, 2), 9100, 53)
 	if _, err := p.ingress.Run(&ebpf.RunOptions{Data: frame, Repeat: n}); err != nil {
 		testutil.SkipIfUnprivileged(t, err)
 		t.Fatal(err)
 	}
-	samples := int(drops() - before)
+	// the stage programs write or drop what they staged by the flush of each stage
+	for cpu := range p.FlowRings() {
+		waitStageIdle(t, p, cpu)
+	}
+	samples := int(flowDrops(t, p) - before)
 	for {
-		if _, err := rd.read(time.Now()); errors.Is(err, os.ErrDeadlineExceeded) {
+		raw, err := rd.read(time.Now())
+		if errors.Is(err, os.ErrDeadlineExceeded) {
 			return samples
 		} else if err != nil {
 			t.Fatal(err)
 		}
-		samples++
+		samples += len(raw) / eventSize
 	}
+}
+
+// flowDrops returns the events the rings of every CPU refused
+func flowDrops(t *testing.T, p *Probe) (sum uint64) {
+	t.Helper()
+
+	var vals []uint64
+	if err := p.FlowDrops().Lookup(uint32(0), &vals); err != nil {
+		t.Fatal(err)
+	}
+	for _, v := range vals {
+		sum += v
+	}
+	return sum
 }
 
 // flowReader reads the event rings of every CPU, the ring a record lands in
@@ -2721,9 +2731,9 @@ func (fr *flowReader) read(deadline time.Time) ([]byte, error) {
 	}
 }
 
-// pinOneCPU keeps the test on one CPU until it ends, test runs count and
-// write their events on the CPU they run on
-func pinOneCPU(t *testing.T) {
+// pinOneCPU keeps the test on one CPU until it ends and returns it, test runs
+// count, stage and write their events on the CPU they run on
+func pinOneCPU(t *testing.T) int {
 	t.Helper()
 
 	runtime.LockOSThread()
@@ -2732,16 +2742,16 @@ func pinOneCPU(t *testing.T) {
 	if err := unix.SchedGetaffinity(0, &set); err != nil {
 		t.Fatal(err)
 	}
-	for cpu := 0; ; cpu++ {
-		if set.IsSet(cpu) {
-			one.Set(cpu)
-			break
-		}
+	cpu := 0
+	for !set.IsSet(cpu) {
+		cpu++
 	}
+	one.Set(cpu)
 	if err := unix.SchedSetaffinity(0, &one); err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { unix.SchedSetaffinity(0, &set) })
+	return cpu
 }
 
 // slotLoopback gives loopback a counter slot, as Attach gives one to an
@@ -3073,5 +3083,381 @@ func TestSampledOnlyKeepsTheRate(t *testing.T) {
 	}
 	if got := loopbackSamples(t, p, 5); got != 5 {
 		t.Fatalf("samples of 5 packets after the rate went to 1 = %d, want 5", got)
+	}
+}
+
+// stageFlush is RFM_STAGE_FLUSH_NS in bpf/rfm_tc.c, the timer of a stage
+// writes it this long after the run that armed it
+const stageFlush = 10 * time.Millisecond
+
+// readDeadline is the read deadline of the collector, a staged event reaches
+// the reader within the flush interval and that deadline
+const readDeadline = 100 * time.Millisecond
+
+// eventSize is the size of struct rfm_flow_event, a record of the stage
+// programs holds several back to back
+const eventSize = int(unsafe.Sizeof(rfmRfmStage{}.Ev[0]))
+
+// the four stage programs, exact and sampled only in both directions
+var stageModes = []struct {
+	name        string
+	sampledOnly bool
+	egress      bool
+}{
+	{"exact ingress", false, false},
+	{"exact egress", false, true},
+	{"sampled only ingress", true, false},
+	{"sampled only egress", true, true},
+}
+
+// stageOf returns the stage of cpu
+func stageOf(t *testing.T, p *Probe, cpu int) rfmRfmStage {
+	t.Helper()
+
+	var vals []rfmRfmStage
+	if err := p.objs.RfmCpuStage.Lookup(uint32(0), &vals); err != nil {
+		t.Fatal(err)
+	}
+	return vals[cpu]
+}
+
+// waitStageIdle waits until the stage of cpu holds no event and no flush of
+// it is pending
+func waitStageIdle(t *testing.T, p *Probe, cpu int) {
+	t.Helper()
+
+	testutil.Eventually(t, time.Second, time.Millisecond, func() error {
+		if st := stageOf(t, p, cpu); st.N != 0 || st.Armed != 0 {
+			return fmt.Errorf("stage of cpu %d holds %d events, its flush armed at %d", cpu, st.N, st.Armed)
+		}
+		return nil
+	})
+}
+
+// stageRuns runs prog repeat times on each frame once the stage of cpu is
+// idle, and reports whether the runs ended within the flush interval of the
+// first, so the timer the first armed has not written their stage
+func stageRuns(t *testing.T, p *Probe, cpu int, prog *ebpf.Program, repeat uint32, frames ...[]byte) bool {
+	t.Helper()
+
+	waitStageIdle(t, p, cpu)
+	start := time.Now()
+	for _, frame := range frames {
+		if _, err := prog.Run(&ebpf.RunOptions{Data: frame, Repeat: repeat}); err != nil {
+			testutil.SkipIfUnprivileged(t, err)
+			t.Fatal(err)
+		}
+	}
+	return time.Since(start) < stageFlush
+}
+
+// untilWithinFlush calls attempt until one reports that its runs ended within
+// the flush interval, a loaded machine stretches some of them past it
+func untilWithinFlush(t *testing.T, attempt func() bool) {
+	t.Helper()
+
+	for i := 1; !attempt(); i++ {
+		if i == 20 {
+			t.Fatalf("the runs of %d attempts took longer than the %v flush interval", i, stageFlush)
+		}
+	}
+}
+
+// drainRecords waits for the flush of the stage of cpu and reads every record
+// in the rings
+func drainRecords(t *testing.T, p *Probe, cpu int, rd *flowReader) {
+	t.Helper()
+
+	waitStageIdle(t, p, cpu)
+	for {
+		if _, err := rd.read(time.Now()); err != nil {
+			return
+		}
+	}
+}
+
+// bootTime reads CLOCK_BOOTTIME, the clock of the event timestamps
+func bootTime(t *testing.T) time.Duration {
+	t.Helper()
+
+	var ts unix.Timespec
+	if err := unix.ClockGettime(unix.CLOCK_BOOTTIME, &ts); err != nil {
+		t.Fatal(err)
+	}
+	return time.Duration(ts.Nano())
+}
+
+func TestLoadRefusesAStageAboveItsSize(t *testing.T) {
+	// the stage of each CPU holds RFM_STAGE_MAX events
+	p, err := Load(Config{SampleRate: 1, WakeupBatch: 1, StageEvents: maxStageEvents + 1})
+	if err == nil {
+		p.Close()
+	}
+	if err == nil || !strings.Contains(err.Error(), "stage events") {
+		t.Fatalf("load with a stage of %d events = %v, want it refused", maxStageEvents+1, err)
+	}
+}
+
+func TestStageOfOneEventWritesEveryEventAtOnce(t *testing.T) {
+	testutil.RequireRoot(t)
+
+	testutil.NewNS(t)
+	cpu := pinOneCPU(t)
+
+	p, err := Load(Config{SampleRate: 1, WakeupBatch: 1, StageEvents: 1})
+	if err != nil {
+		testutil.SkipIfUnprivileged(t, err)
+		t.Fatal(err)
+	}
+	defer p.Close()
+	rd := newFlowReader(t, p)
+
+	frame := testutil.EthIPv4UDP(net.IPv4(10, 0, 9, 1), net.IPv4(10, 0, 9, 2), 9500, 53)
+	if _, err := p.ingress.Run(&ebpf.RunOptions{Data: frame}); err != nil {
+		testutil.SkipIfUnprivileged(t, err)
+		t.Fatal(err)
+	}
+	// the programs without a stage put the event in the ring before the run returns
+	raw, err := rd.read(time.Now())
+	if err != nil {
+		t.Fatalf("event after the run: %v", err)
+	}
+	if len(raw) != eventSize {
+		t.Fatalf("record of %d bytes, want one event of %d", len(raw), eventSize)
+	}
+	if st := stageOf(t, p, cpu); st.N != 0 || st.Armed != 0 || st.Ready != 0 {
+		t.Fatalf("stage of a load of one event a record holds %d events, armed at %d, ready %d, want it untouched", st.N, st.Armed, st.Ready)
+	}
+}
+
+func TestStageWritesItsEventsAsOneRecord(t *testing.T) {
+	testutil.RequireRoot(t)
+
+	for _, mode := range stageModes {
+		t.Run(mode.name, func(t *testing.T) {
+			testutil.NewNS(t)
+			cpu := pinOneCPU(t)
+
+			p, err := Load(Config{SampleRate: 1, WakeupBatch: 1, StageEvents: 4, SampledOnly: mode.sampledOnly})
+			if err != nil {
+				testutil.SkipIfUnprivileged(t, err)
+				t.Fatal(err)
+			}
+			defer p.Close()
+			prog, dir := p.ingress, uint8(0)
+			if mode.egress {
+				prog, dir = p.egress, 1
+			}
+			lo, err := netlink.LinkByName("lo")
+			if err != nil {
+				t.Fatal(err)
+			}
+			rd := newFlowReader(t, p)
+
+			frames := make([][]byte, 4)
+			for i := range frames {
+				frames[i] = testutil.EthIPv4UDP(net.IPv4(10, 0, 9, 1), net.IPv4(10, 0, 9, 2), uint16(9300+i), 53)
+			}
+			// four runs within the flush interval fill the stage before its timer writes it
+			untilWithinFlush(t, func() bool {
+				if stageRuns(t, p, cpu, prog, 1, frames...) {
+					return true
+				}
+				drainRecords(t, p, cpu, rd)
+				return false
+			})
+
+			raw, err := rd.read(time.Now().Add(time.Second))
+			if err != nil {
+				t.Fatal(err)
+			}
+			evs, err := collector.DecodeFlowEvents(raw)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(evs) != len(frames) {
+				t.Fatalf("record of %d events, want the %d of a full stage", len(evs), len(frames))
+			}
+			for i, ev := range evs {
+				if ev.Ifindex != uint32(lo.Attrs().Index) || ev.Dir != dir || ev.Proto != 17 || ev.SrcPort != uint16(9300+i) || ev.DstPort != 53 ||
+					ev.Segs != 1 || ev.Len != uint32(len(frames[i])) || ev.L2Len != 14 {
+					t.Fatalf("event %d = %+v, want the frame of port %d in direction %d", i, ev, 9300+i, dir)
+				}
+				if i > 0 && ev.Tstamp < evs[i-1].Tstamp {
+					t.Fatalf("event %d staged at %v, before event %d at %v", i, ev.Tstamp, i-1, evs[i-1].Tstamp)
+				}
+			}
+			// the stage went out full, its timer finds nothing to write
+			waitStageIdle(t, p, cpu)
+			if raw, err := rd.read(time.Now()); err == nil {
+				t.Fatalf("another record of %d bytes, want the events in one", len(raw))
+			}
+		})
+	}
+}
+
+func TestStageFlushesAPartialStageWithinTheInterval(t *testing.T) {
+	testutil.RequireRoot(t)
+
+	testutil.NewNS(t)
+	cpu := pinOneCPU(t)
+
+	p, err := Load(Config{SampleRate: 1, WakeupBatch: 1, StageEvents: 8})
+	if err != nil {
+		testutil.SkipIfUnprivileged(t, err)
+		t.Fatal(err)
+	}
+	defer p.Close()
+	rd := newFlowReader(t, p)
+
+	frame := testutil.EthIPv4UDP(net.IPv4(10, 0, 9, 1), net.IPv4(10, 0, 9, 2), 9400, 53)
+	// three events within the interval leave the stage short of its eight
+	var raw []byte
+	var read time.Duration
+	untilWithinFlush(t, func() bool {
+		if !stageRuns(t, p, cpu, p.ingress, 3, frame) {
+			drainRecords(t, p, cpu, rd)
+			return false
+		}
+		if raw, err = rd.read(time.Now().Add(time.Second)); err != nil {
+			t.Fatalf("partial stage never reached the ring: %v", err)
+		}
+		read = bootTime(t)
+		return true
+	})
+
+	evs, err := collector.DecodeFlowEvents(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(evs) != 3 {
+		t.Fatalf("flushed record of %d events, want the 3 staged", len(evs))
+	}
+	// the first event armed the timer, which writes the stage an interval later and not before
+	age := read - evs[0].Tstamp
+	t.Logf("the first event reached the reader %v after it was staged", age)
+	if age < stageFlush || age > stageFlush+readDeadline {
+		t.Fatalf("first event read %v after it was staged, want the %v flush interval and at most the %v read deadline after it", age, stageFlush, readDeadline)
+	}
+	if st := stageOf(t, p, cpu); st.N != 0 || st.Armed != 0 {
+		t.Fatalf("stage after its flush holds %d events, armed at %d, want it empty with no flush pending", st.N, st.Armed)
+	}
+}
+
+func TestStageDropsCountEveryEvent(t *testing.T) {
+	testutil.RequireRoot(t)
+
+	testutil.NewNS(t)
+	cpu := pinOneCPU(t)
+
+	frame := testutil.EthIPv4UDP(net.IPv4(10, 0, 9, 1), net.IPv4(10, 0, 9, 2), 9600, 53)
+	untilWithinFlush(t, func() bool {
+		// a ring of one page takes four records of 16 events, 904 bytes with
+		// their headers, and leaves 480 bytes
+		p, err := Load(Config{SampleRate: 1, WakeupBatch: 1, RingBufSize: 4096, StageEvents: 16})
+		if err != nil {
+			testutil.SkipIfUnprivileged(t, err)
+			t.Fatal(err)
+		}
+		defer p.Close()
+
+		for _, step := range []struct {
+			runs  uint32
+			drops uint64
+		}{
+			// four full records fill the ring, the timer's record of the 9 left needs 512 bytes
+			{73, 9},
+			// a full record of 16 events finds no room either
+			{16, 25},
+			// the timer's record of 8 events fits in 456 bytes
+			{8, 25},
+		} {
+			if !stageRuns(t, p, cpu, p.ingress, step.runs, frame) {
+				return false
+			}
+			waitStageIdle(t, p, cpu)
+			if got := flowDrops(t, p); got != step.drops {
+				t.Fatalf("drops after %d more runs = %d, want %d", step.runs, got, step.drops)
+			}
+		}
+
+		rd := newFlowReader(t, p)
+		var sizes []int
+		for {
+			raw, err := rd.read(time.Now())
+			if err != nil {
+				break
+			}
+			sizes = append(sizes, len(raw)/eventSize)
+		}
+		if want := []int{16, 16, 16, 16, 8}; !slices.Equal(sizes, want) {
+			t.Fatalf("records of %v events, want %v", sizes, want)
+		}
+		return true
+	})
+}
+
+func TestStageWakeupCountsTheEventsOfTheCPU(t *testing.T) {
+	testutil.RequireRoot(t)
+
+	testutil.NewNS(t)
+	cpu := pinOneCPU(t)
+
+	frame := testutil.EthIPv4UDP(net.IPv4(10, 0, 9, 1), net.IPv4(10, 0, 9, 2), 9700, 53)
+	untilWithinFlush(t, func() bool {
+		p, err := Load(Config{SampleRate: 1, WakeupBatch: 8, StageEvents: 4})
+		if err != nil {
+			testutil.SkipIfUnprivileged(t, err)
+			t.Fatal(err)
+		}
+		defer p.Close()
+
+		// the first record wakes the reader, and so does every record that
+		// brings the events written since the last wakeup to the batch
+		for i, step := range []struct{ runs, wake uint32 }{
+			{4, 8}, {4, 4}, {4, 8}, {4, 4},
+			// the timer writes a partial stage under the same countdown
+			{3, 1}, {1, 8},
+		} {
+			if !stageRuns(t, p, cpu, p.ingress, step.runs, frame) {
+				return false
+			}
+			waitStageIdle(t, p, cpu)
+			if got := stageOf(t, p, cpu).Wake; got != step.wake {
+				t.Fatalf("after record %d of %d events the cpu waits %d events to wake, want %d", i+1, step.runs, got, step.wake)
+			}
+		}
+
+		// the stage counts down for every interface of the CPU, the draw entry keeps no countdown
+		var vals []rfmRfmSlotValue
+		if err := p.objs.RfmCpuDraw.Lookup(uint32(0), &vals); err != nil {
+			t.Fatal(err)
+		}
+		if vals[cpu].Wake != 0 {
+			t.Fatalf("draw entry of the cpu waits %d events to wake, want no countdown", vals[cpu].Wake)
+		}
+		return true
+	})
+}
+
+func TestStageKeepsTheRate(t *testing.T) {
+	testutil.RequireRoot(t)
+
+	for _, sampledOnly := range []bool{false, true} {
+		t.Run(fmt.Sprintf("sampled only %v", sampledOnly), func(t *testing.T) {
+			testutil.NewNS(t)
+
+			p, err := Load(Config{SampleRate: 10, WakeupBatch: 1, StageEvents: 16, SampledOnly: sampledOnly})
+			if err != nil {
+				testutil.SkipIfUnprivileged(t, err)
+				t.Fatal(err)
+			}
+			defer p.Close()
+
+			// every sampled run is an event of a record or a drop
+			if got := loopbackSamples(t, p, 20000); got < 1800 || got > 2200 {
+				t.Fatalf("samples of 20000 packets at 1 in 10 = %d, want 2000 within 200", got)
+			}
+		})
 	}
 }

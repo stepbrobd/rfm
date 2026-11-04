@@ -14,6 +14,9 @@ const (
 // MinIPFIXMaxMessageSize holds the message header, the ipv6 template set and one ipv6 record
 const MinIPFIXMaxMessageSize = 171
 
+// maxStageEvents is RFM_STAGE_MAX in bpf/rfm_common.h, the events the stage of a cpu holds
+const maxStageEvents = 32
+
 // the defaults of the other settings a config leaves out, the readme documents each
 const (
 	// defaultSampleRate samples 1 in 100 skbs
@@ -30,6 +33,8 @@ const (
 	maxIfaceSlots = 256
 	// defaultMaxSampleRate caps the adaptive and the set rate at 1 in 1000
 	defaultMaxSampleRate = 1000
+	// defaultStageEvents writes every event to the ring at once, which takes no flush timer and loads on PREEMPT_RT kernels too
+	defaultStageEvents = 1
 	// defaultEvictionTimeout ends a flow idle for 30 s
 	defaultEvictionTimeout = 30 * time.Second
 	// defaultActiveTimeout reports a busy flow once a minute

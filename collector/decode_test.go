@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"encoding/binary"
 	"net/netip"
+	"slices"
+	"strings"
 	"testing"
 )
 
@@ -62,6 +64,60 @@ func TestDecodeFlowEventShort(t *testing.T) {
 
 	if _, err := DecodeFlowEvent(make([]byte, 55)); err == nil {
 		t.Fatal("expected error for an event without its last byte")
+	}
+}
+
+func TestDecodeFlowEventTakesOneEvent(t *testing.T) {
+	// a record of two events is not one event with trailing bytes
+	ev := encodeWireEvent(FlowEvent{Proto: 6, Segs: 1, Len: 100, L2Len: 14})
+	if got, err := DecodeFlowEvent(append(ev, ev...)); err == nil {
+		t.Fatalf("decoded %+v from a record of two events, want it refused", got)
+	}
+}
+
+func TestDecodeFlowEventsSplitsARecord(t *testing.T) {
+	// the stage programs write the events of a CPU back to back in one record
+	want := []FlowEvent{
+		{Tstamp: 7, Ifindex: 3, Dir: 0, Proto: 6, SrcAddr: netip.MustParseAddr("::ffff:10.0.0.1"), DstAddr: netip.MustParseAddr("::ffff:10.0.0.2"), SrcPort: 40000, DstPort: 443, Segs: 1, Len: 1514, L2Len: 14},
+		{Tstamp: 8, Ifindex: 4, Dir: 1, Proto: 17, SrcAddr: netip.MustParseAddr("2001:db8::1"), DstAddr: netip.MustParseAddr("2001:db8:ffff::2"), SrcPort: 53, DstPort: 65535, Segs: 45, Len: 45 * 1518, L2Len: 18},
+		{Tstamp: 9, Ifindex: 3, Dir: 0, Proto: 58, SrcAddr: netip.MustParseAddr("fe80::1"), DstAddr: netip.MustParseAddr("ff02::1"), Segs: 1, Len: 86, L2Len: 14},
+	}
+	var raw []byte
+	for _, ev := range want {
+		raw = append(raw, encodeWireEvent(ev)...)
+	}
+	got, err := DecodeFlowEvents(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(got, want) {
+		t.Fatalf("got %+v, want %+v", got, want)
+	}
+
+	// a record of one event is what the programs without a stage write
+	one, err := DecodeFlowEvents(raw[:wireFlowEventSize])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(one, want[:1]) {
+		t.Fatalf("got %+v, want %+v", one, want[:1])
+	}
+}
+
+func TestDecodeFlowEventsRefusesARecordItCannotSplit(t *testing.T) {
+	// the length of a record is a positive multiple of the event size
+	for _, n := range []int{0, 10, 55, 57, 2*wireFlowEventSize - 1, 2*wireFlowEventSize + 1} {
+		if evs, err := DecodeFlowEvents(make([]byte, n)); err == nil {
+			t.Errorf("decoded %d events from a record of %d bytes, want it refused", len(evs), n)
+		}
+	}
+
+	// one event the probe cannot emit refuses its record and names the event
+	good := encodeWireEvent(FlowEvent{Proto: 6, Segs: 1, Len: 100, L2Len: 14})
+	bad := encodeWireEvent(FlowEvent{Proto: 6, Len: 100})
+	raw := slices.Concat(good, bad, good)
+	if evs, err := DecodeFlowEvents(raw); err == nil || !strings.Contains(err.Error(), "event 1 of 3") {
+		t.Fatalf("record with a bad second event = %+v, %v, want it refused at event 1 of 3", evs, err)
 	}
 }
 

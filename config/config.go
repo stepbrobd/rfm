@@ -46,6 +46,7 @@ type BPFConfig struct {
 	MaxSampleRate    uint32 `toml:"max_sample_rate"`
 	PinPath          string `toml:"pin_path"`
 	SampledOnly      bool   `toml:"sampled_only"`
+	StageEvents      uint32 `toml:"stage_events"`
 }
 
 // CollectorConfig controls flow collection and eviction
@@ -137,7 +138,7 @@ type RIBConfig struct {
 // Parse decodes a TOML config, fills in the defaults and validates it
 func Parse(data []byte) (*Config, error) {
 	cfg := &Config{Agent: AgentConfig{
-		BPF:        BPFConfig{SampleRate: defaultSampleRate, MaxSampleRate: defaultMaxSampleRate},
+		BPF:        BPFConfig{SampleRate: defaultSampleRate, MaxSampleRate: defaultMaxSampleRate, StageEvents: defaultStageEvents},
 		Collector:  CollectorConfig{MaxFlows: DefaultMaxFlows, EvictionTimeout: defaultEvictionTimeout, ActiveTimeout: defaultActiveTimeout},
 		IPFIX:      IPFIXConfig{TemplateRefresh: defaultTemplateRefresh, ObservationDomainID: defaultObservationDomainID, MaxMessageSize: DefaultIPFIXMaxMessageSize},
 		Prometheus: PrometheusConfig{Host: defaultHost, Port: defaultPrometheusPort},
@@ -288,6 +289,9 @@ func validate(cfg *Config) error {
 	// a batch that fills more than half the ring leaves the reader no room to catch up after the wakeup
 	if records := uint32(a.BPF.RingBufSize / ringRecordBytes); a.BPF.WakeupBatch > records/2 {
 		return fmt.Errorf("agent.bpf.wakeup_batch must be at most half the %d events a ring of %d bytes holds, got %d", records, a.BPF.RingBufSize, a.BPF.WakeupBatch)
+	}
+	if a.BPF.StageEvents < 1 || a.BPF.StageEvents > maxStageEvents {
+		return fmt.Errorf("agent.bpf.stage_events must be between 1 and %d, got %d", maxStageEvents, a.BPF.StageEvents)
 	}
 	if a.BPF.IfaceStatsSize < 0 {
 		return fmt.Errorf("agent.bpf.iface_stats_size must be >= 0, got %d", a.BPF.IfaceStatsSize)
