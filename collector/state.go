@@ -12,7 +12,9 @@ type flowState struct {
 	rollup *rollupState
 	// first and last are the min and max event time since the last record, events arrive out of order, 0 before the first
 	first, last time.Duration
-	entry       FlowEntry
+	// queued is the event time the flow last moved to the back of the lru
+	queued time.Duration
+	entry  FlowEntry
 
 	// active is the position in the fifo of pending active timeout exports
 	active *list.Element

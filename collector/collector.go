@@ -19,8 +19,10 @@ import (
 type Collector struct {
 	mu    sync.RWMutex
 	flows map[flowID]*flowState
-	// lru orders flows by their last event, oldest first, approximate across cpus
+	// lru orders flows by their last event to within lruSlack, oldest first, approximate across cpus
 	lru *list.List
+	// lruSlack is how much event time passes before an event moves its flow to the back of lru again
+	lruSlack time.Duration
 	// live is the reader of a running Run, a scrape reads the ring drops from it
 	live Reader
 	// activeQueue orders live flows by the start of their unexported interval, oldest first
@@ -61,11 +63,15 @@ func New(timeout time.Duration, enricher Enricher, maxFlows int) *Collector {
 		rollups:     make(map[RollupKey]*rollupState),
 		idleRollups: list.New(),
 		timeout:     timeout,
+		lruSlack:    timeout / lruSlackParts,
 		enricher:    enricher,
 		maxFlows:    maxFlows,
 		rates:       []rateChange{{rate: 1}},
 	}
 }
+
+// lruSlackParts splits the eviction timeout into the slack of the lru order, a sweep misses an idle flow by at most one part
+const lruSlackParts = 32
 
 // RollupRetention is how many eviction timeouts a shown idle tuple stays in the scrape
 const RollupRetention = 10
@@ -276,21 +282,10 @@ func (c *Collector) enrich(pairs []addrPair) map[addrPair]labelPair {
 // recordLocked records s and appends the record of a flow it evicts to expired, ok is false when its new flow has no labels yet
 func (c *Collector) recordLocked(s *sample, ev *FlowEvent, labels map[addrPair]labelPair, expired []ExportedFlow) (_ []ExportedFlow, ok bool) {
 	now := s.tstamp
-	packets := uint64(s.segs)
-	bytes := uint64(s.len)
-	ipBytes := bytes - packets*uint64(s.l2Len)
-	rate := uint64(c.sampleRateAtLocked(now))
-	d := Counts{Packets: packets, Bytes: bytes, EstPackets: packets * rate, EstBytes: bytes * rate}
+	d, ipBytes := c.countsLocked(s)
 
 	if state, found := c.flows[s.id]; found {
-		state.entry.Packets += d.Packets
-		state.entry.Bytes += d.Bytes
-		state.entry.IPBytes += ipBytes
-		state.entry.EstPackets += d.EstPackets
-		state.entry.EstBytes += d.EstBytes
-		state.seen(now)
-		state.rollup.add(d, now)
-		c.lru.MoveToBack(state.elem)
+		c.hitLocked(state, now, d, ipBytes)
 		return expired, true
 	}
 
@@ -331,11 +326,35 @@ func (c *Collector) recordLocked(s *sample, ev *FlowEvent, labels map[addrPair]l
 		intervalStart: now,
 		first:         now,
 		last:          now,
+		queued:        now,
 	}
 	state.elem = c.lru.PushBack(state)
 	state.active = c.activeQueue.PushBack(state)
 	c.flows[s.id] = state
 	return expired, true
+}
+
+// countsLocked returns the counts s adds at the sample rate in force at its time, and the ip bytes of its packets
+func (c *Collector) countsLocked(s *sample) (Counts, uint64) {
+	packets := uint64(s.segs)
+	bytes := uint64(s.len)
+	rate := uint64(c.sampleRateAtLocked(s.tstamp))
+	return Counts{Packets: packets, Bytes: bytes, EstPackets: packets * rate, EstBytes: bytes * rate}, bytes - packets*uint64(s.l2Len)
+}
+
+// hitLocked adds the counts of an event at now to a live flow, which moves to the back of lru at most once per lruSlack
+func (c *Collector) hitLocked(state *flowState, now time.Duration, d Counts, ipBytes uint64) {
+	state.entry.Packets += d.Packets
+	state.entry.Bytes += d.Bytes
+	state.entry.IPBytes += ipBytes
+	state.entry.EstPackets += d.EstPackets
+	state.entry.EstBytes += d.EstBytes
+	state.seen(now)
+	state.rollup.add(d, now)
+	if now-state.queued >= c.lruSlack {
+		state.queued = now
+		c.lru.MoveToBack(state.elem)
+	}
 }
 
 // rollupLocked returns the tuple of a new flow, at the cap an idle shown tuple makes room or the flow folds

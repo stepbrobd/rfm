@@ -801,6 +801,69 @@ func TestEvictOrderFollowsLastSeen(t *testing.T) {
 	}
 }
 
+func TestLRUOrderHoldsToWithinTheSlack(t *testing.T) {
+	t0 := time.Hour
+	mk := func(port uint16) FlowEvent {
+		return FlowEvent{
+			Proto: 6, SrcPort: port, DstPort: 80,
+			SrcAddr: netip.MustParseAddr("::ffff:10.0.0.1"),
+			DstAddr: netip.MustParseAddr("::ffff:10.0.0.2"),
+			Segs:    1,
+			Len:     100,
+		}
+	}
+	// a 32 s timeout gives a slack of 1 s, the table holds two flows and the
+	// third one evicts the flow at the front of the lru
+	evicted := func(again time.Duration) ExportedFlow {
+		t.Helper()
+		c := New(32*time.Second, nil, 2)
+		exp := &mockFlowExporter{}
+		c.SetFlowExporter(exp)
+		c.Record(at(mk(1), t0))
+		c.Record(at(mk(2), t0+100*time.Millisecond))
+		c.Record(at(mk(1), t0+again))
+		c.Record(at(mk(3), t0+again+100*time.Millisecond))
+		if len(exp.flows) != 1 {
+			t.Fatalf("exported flows = %d, want 1", len(exp.flows))
+		}
+		return exp.flows[0]
+	}
+
+	// seen again past the slack, the first flow moved behind the second
+	if got := evicted(1500 * time.Millisecond); got.SrcPort != 2 {
+		t.Fatalf("evicted port %d, want 2", got.SrcPort)
+	}
+	// seen again within the slack it kept its place, and its record still carries both packets
+	got := evicted(500 * time.Millisecond)
+	if got.SrcPort != 1 || got.Packets != 2 {
+		t.Fatalf("evicted port %d with %d packets, want port 1 with 2", got.SrcPort, got.Packets)
+	}
+}
+
+func TestSweepEvictsAFlowIdleForTheTimeoutAndTheSlack(t *testing.T) {
+	c := New(32*time.Second, nil, config.DefaultMaxFlows)
+	t0 := time.Hour
+	a := FlowEvent{
+		Proto: 6, SrcPort: 1, DstPort: 80,
+		SrcAddr: netip.MustParseAddr("::ffff:10.0.0.1"),
+		DstAddr: netip.MustParseAddr("::ffff:10.0.0.2"),
+		Segs:    1,
+		Len:     100,
+	}
+	b := a
+	b.SrcPort = 2
+
+	// a is seen again within the slack and stays ahead of b in the lru, a
+	// sweep that stops at a fresh a leaves the idle b for a later sweep
+	c.Record(at(a, t0))
+	c.Record(at(b, t0+100*time.Millisecond))
+	c.Record(at(a, t0+500*time.Millisecond))
+	c.Evict(t0 + 100*time.Millisecond + 32*time.Second + time.Second)
+	if n := len(c.Flows()); n != 0 {
+		t.Fatalf("flows left = %d, want 0 once b was idle for the timeout and the slack", n)
+	}
+}
+
 func TestRecordBatchCountsEveryEvent(t *testing.T) {
 	c := New(30*time.Second, nil, config.DefaultMaxFlows)
 	t0 := time.Hour
