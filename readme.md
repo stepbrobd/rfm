@@ -298,11 +298,12 @@ per-CPU stage and write them as one record of 56 bytes per event, which takes
 one ring buffer write and its lock per record in place of one per event. A stage
 that does not fill is written by a timer of its CPU 10 milliseconds after the
 timer was armed, so an event waits at most that long before the collector can
-read it. With a stage, `wakeup_batch` counts the events a CPU writes over all
-its interfaces together. More than 1 needs `bpf_timer_start` to take
-`BPF_F_TIMER_CPU_PIN`, which Linux 6.7 and later do on kernels without
-PREEMPT_RT, and the agent refuses to start otherwise. A change takes effect at
-the next start.
+read it. A CPU that goes offline keeps the events of its stage, written or
+dropped by neither, until it runs the programs again after it comes back. With a
+stage, `wakeup_batch` counts the events a CPU writes over all its interfaces
+together. More than 1 needs `bpf_timer_start` to take `BPF_F_TIMER_CPU_PIN`,
+which Linux 6.7 and later do on kernels without PREEMPT_RT, and the agent
+refuses to start otherwise. A change takes effect at the next start.
 
 `pin_path` (string, default ""): A bpffs directory where the interface counters
 are pinned. A restart or upgrade reuses the pinned maps, so the counters stay
@@ -319,9 +320,12 @@ and `rfm_iface_arr` in the directory, or reboot. An upgrade from a build without
 counter slots, which pinned `rfm_iface_stats` alone, keeps that pin with its
 counters and needs no reboot. `rfm_iface_slot` pinned without `rfm_iface_arr`,
 or the reverse, is removed with a warning, and the slotted counters start from
-zero. With `sampled_only` the agent leaves the pins untouched for the next start
-without it. After its first link dump the agent deletes the pinned counters of
-every interface it neither attached nor keeps retrying.
+zero. A build from before `iface_slots` compares the pins strictly and refuses
+the ones a later build creates, a hash without preallocation and an array sized
+to the slots, so going back to it needs the pin files removed or a reboot. With
+`sampled_only` the agent leaves the pins untouched for the next start without
+it. After its first link dump the agent deletes the pinned counters of every
+interface it neither attached nor keeps retrying.
 
 ### `agent.collector`
 
