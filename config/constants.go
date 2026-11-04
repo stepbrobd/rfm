@@ -20,8 +20,8 @@ const (
 	defaultSampleRate = 100
 	// maxRingBufSize is the ring of each cpu at sample rate 1, which a one queue flood fills in about 3 ms without a reader
 	maxRingBufSize = 256 << 10
-	// minRingBufSize is the smallest ring a derived size goes down to, sample rates from 16 up share it
-	minRingBufSize = 16 << 10
+	// minRingBufSize is the smallest ring a derived size goes down to, sample rates from 4 up share it, and its batch of 256 events keeps the wakeups of a busy cpu few
+	minRingBufSize = 64 << 10
 	// maxDerivedRingBufSize bounds the ring a large wakeup batch derives, a batch past it must set the ring
 	maxDerivedRingBufSize = 64 << 20
 	// ringRecordBytes is one flow event of 56 bytes and the 8 byte header of its ring record

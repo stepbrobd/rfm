@@ -172,8 +172,9 @@ func Parse(data []byte) (*Config, error) {
 }
 
 // RingBufSizeFor returns the ring of each cpu for sample rate n, 256 KiB at rate 1
-// and half as much for each doubling of the rate down to 16 KiB, so a ring holds
-// about as long a burst of a cpu's packets at any rate, and never less than a page
+// and half as much for each doubling of the rate down to 64 KiB, so a ring holds
+// about as long a burst of a cpu's packets up to rate 4, the floor keeps the
+// derived wakeup batch at 256 events, and a ring is never less than a page
 func RingBufSizeFor(n uint32) int {
 	size := maxRingBufSize
 	for r := uint32(2); r <= n && size > minRingBufSize; r *= 2 {

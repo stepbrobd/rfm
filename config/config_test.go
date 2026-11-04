@@ -18,7 +18,7 @@ interfaces = ["eth0"]
 func TestParse(t *testing.T) {
 	defaults := Config{Agent: AgentConfig{
 		Interfaces: []string{"eth0"},
-		BPF:        BPFConfig{SampleRate: 100, RingBufSize: 16384, WakeupBatch: 64, MaxSampleRate: 1000},
+		BPF:        BPFConfig{SampleRate: 100, RingBufSize: 65536, WakeupBatch: 256, MaxSampleRate: 1000},
 		Collector:  CollectorConfig{MaxFlows: 65536, EvictionTimeout: 30 * time.Second, ActiveTimeout: time.Minute},
 		// the queue holds a sweep of a full table
 		IPFIX:      IPFIXConfig{TemplateRefresh: time.Minute, ObservationDomainID: 1, QueueSize: 65536, MaxMessageSize: 1200},
@@ -97,7 +97,7 @@ socket = "/run/rfm/rfm.sock"
 		{"ipfix host alone", base + "[agent.ipfix]\nhost = \"127.0.0.1\"\n", with(func(a *AgentConfig) { a.IPFIX.Host, a.IPFIX.Port = "127.0.0.1", 4739 })},
 		// the ring and the wakeup batch follow the sample rate unless set
 		{"rate 1 rings", base + "[agent.bpf]\nsample_rate = 1\n", with(func(a *AgentConfig) { a.BPF.SampleRate, a.BPF.RingBufSize, a.BPF.WakeupBatch = 1, 262144, 1024 })},
-		{"rate 10 rings", base + "[agent.bpf]\nsample_rate = 10\n", with(func(a *AgentConfig) { a.BPF.SampleRate, a.BPF.RingBufSize, a.BPF.WakeupBatch = 10, 32768, 128 })},
+		{"rate 10 rings", base + "[agent.bpf]\nsample_rate = 10\n", with(func(a *AgentConfig) { a.BPF.SampleRate, a.BPF.RingBufSize, a.BPF.WakeupBatch = 10, 65536, 256 })},
 		{"set ring, derived batch", base + "[agent.bpf]\nring_buf_size = 65536\n", with(func(a *AgentConfig) { a.BPF.RingBufSize, a.BPF.WakeupBatch = 65536, 256 })},
 		{"set batch, ring for it", base + "[agent.bpf]\nwakeup_batch = 1024\n", with(func(a *AgentConfig) { a.BPF.RingBufSize, a.BPF.WakeupBatch = 131072, 1024 })},
 		{"set batch, rate ring holds it", base + "[agent.bpf]\nsample_rate = 1\nwakeup_batch = 129\n", with(func(a *AgentConfig) { a.BPF.SampleRate, a.BPF.RingBufSize, a.BPF.WakeupBatch = 1, 262144, 129 })},
@@ -218,7 +218,7 @@ func TestRingBufSizeForHalvesPerDoublingDownToTheFloor(t *testing.T) {
 	for _, tc := range []struct {
 		n    uint32
 		want int
-	}{{1, 262144}, {2, 131072}, {3, 131072}, {4, 65536}, {8, 32768}, {10, 32768}, {16, 16384}, {100, 16384}, {1000, 16384}} {
+	}{{1, 262144}, {2, 131072}, {3, 131072}, {4, 65536}, {8, 65536}, {10, 65536}, {16, 65536}, {100, 65536}, {1000, 65536}} {
 		if got := RingBufSizeFor(tc.n); got != max(tc.want, os.Getpagesize()) {
 			t.Fatalf("RingBufSizeFor(%d) = %d, want %d", tc.n, got, tc.want)
 		}

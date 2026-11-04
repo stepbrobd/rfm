@@ -232,14 +232,15 @@ the cost of flow granularity.
 `ring_buf_size` (int, default 0): Size in bytes of the BPF ring buffer of each
 CPU. The agent creates one ring buffer per possible CPU, and together they take
 this size times the CPU count. `0` derives it from `sample_rate`: 256 KiB at 1
-in 1, half as much for each doubling of the rate, and 16 KiB from 1 in 16 on, so
-a ring holds about as long a burst of one CPU's packets at any rate. The derived
-size is never below the page size. A set size must be a power of two and a
-multiple of the page size, and invalid values are rejected at config load time.
-Larger buffers reduce the chance of dropped events under burst traffic. The size
-follows the configured `sample_rate`, so a rate lowered at run time with
-`rfm set sample-rate` can overflow a ring sized for a higher one, which shows in
-`rfm_collector_dropped_events_total`.
+in 1, half as much for each doubling of the rate, and 64 KiB from 1 in 4 on, so
+a ring holds about as long a burst of one CPU's packets up to 1 in 4, and its
+batch of 256 events keeps the wakeups of a busy CPU few at higher rates. The
+derived size is never below the page size. A set size must be a power of two and
+a multiple of the page size, and invalid values are rejected at config load
+time. Larger buffers reduce the chance of dropped events under burst traffic.
+The size follows the configured `sample_rate`, so a rate lowered at run time
+with `rfm set sample-rate` can overflow a ring sized for a higher one, which
+shows in `rfm_collector_dropped_events_total`.
 
 `wakeup_batch` (uint32, default 0): The BPF program flags ring buffer submits
 with `BPF_RB_NO_WAKEUP` and forces a wakeup once every N submits on each CPU.
