@@ -105,10 +105,13 @@ exec netobserv-ebpf-agent
         | path join ".." "lib" "hsflowd" "modules"
         | path expand
     )
+    # hsflowd ignores sampling inside epcap and samples a port that reports a speed at 1 in speed over bps_ratio, 25000 at 25G, unless the ratio is 0
     $'sflow {
   agent = ($iface)
+  sampling = ($n)
+  sampling.bps_ratio = 0
   collector { ip = 127.0.0.1  udpport = 6343 }
-  epcap { dev = ($iface)  sampling = ($n) }
+  epcap { dev = ($iface) }
 }
 ' | save --force /tmp/kmem-hsf.conf
     ^bash -c $"nohup hsflowd -d -f /tmp/kmem-hsf.conf -l ($hsf_mod) > /tmp/kmem-hsf.log 2>&1 &"
