@@ -181,4 +181,6 @@ type Stats struct {
 	// FoldedFlows counts the flows whose label tuple found no room under the
 	// rollup cap and that count under empty enrichment labels instead
 	FoldedFlows uint64
+	// CreatedFlows counts the flows the table created, one that returns after its eviction counts again
+	CreatedFlows uint64
 }

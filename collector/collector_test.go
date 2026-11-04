@@ -406,8 +406,15 @@ func TestStats(t *testing.T) {
 	c.Record(at(ev, now))
 
 	s := c.Stats()
-	if s.ActiveFlows != 1 {
-		t.Errorf("active flows=%d want 1", s.ActiveFlows)
+	if s.ActiveFlows != 1 || s.CreatedFlows != 1 {
+		t.Errorf("active flows=%d created=%d want 1 and 1", s.ActiveFlows, s.CreatedFlows)
+	}
+
+	// the flow comes back after its eviction as a new one
+	c.Evict(now + time.Minute)
+	c.Record(at(ev, now+time.Minute))
+	if s := c.Stats(); s.ActiveFlows != 1 || s.CreatedFlows != 2 {
+		t.Errorf("after eviction active flows=%d created=%d want 1 and 2", s.ActiveFlows, s.CreatedFlows)
 	}
 }
 

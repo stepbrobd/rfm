@@ -20,6 +20,8 @@ type Collector struct {
 	mu sync.RWMutex
 	// flows holds the live flows, its lru is approximate across cpus
 	flows flowTable
+	// created counts every flow added to flows, a flush leaves it as it is
+	created uint64
 	// lruSlack is how much event time passes before an event moves its flow to the back of the lru again
 	lruSlack time.Duration
 	// live is the reader of a running Run, a scrape reads the ring drops from it
@@ -312,6 +314,7 @@ func (c *Collector) recordLocked(s *sample, ev *FlowEvent, labels map[addrPair]l
 	c.attachLocked(rollup)
 	rollup.add(d, now)
 
+	c.created++
 	r := c.flows.add(s.id, &flowState{
 		key: key,
 		entry: FlowEntry{
@@ -607,6 +610,7 @@ func (c *Collector) ScrapeRollups(buf []RollupSample) []RollupSample {
 func (c *Collector) Stats() Stats {
 	c.mu.RLock()
 	activeFlows := uint64(c.flows.len())
+	created := c.created
 	live := c.live
 	c.mu.RUnlock()
 
@@ -621,6 +625,7 @@ func (c *Collector) Stats() Stats {
 
 	return Stats{
 		ActiveFlows:     activeFlows,
+		CreatedFlows:    created,
 		DroppedEvents:   c.dropped.Load(),
 		ForcedEvictions: c.forced.Load(),
 		FoldedFlows:     c.folded.Load(),
