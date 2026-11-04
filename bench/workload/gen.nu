@@ -26,6 +26,12 @@ def main [
     ^modprobe pktgen
     let spmin = 10000
     let spmax = ($spmin + $flows - 1)
+    # udp_src_max is 16 bits, a larger value wraps below udp_src_min and pktgen then sends from one port
+    if $spmax > 65535 {
+        error make {
+            msg: $"--flows ($flows) needs source ports up to ($spmax), at most (65536 - $spmin) flows fit"
+        }
+    }
     # start runs every thread with a device, so clear the ones above --threads left by an earlier run
     glob $"($env.PG)/kpktgend_*" | each {|t| pg $t "rem_device_all" } | ignore
     0..($threads - 1) | each {|i|
