@@ -283,6 +283,8 @@ func loadPins(dir string, spec *ebpf.CollectionSpec, sized map[string]bool) (map
 	}
 
 	pins := make(map[string]*ebpf.Map)
+	// configured holds the sizes the pins replaced, a pin dropped below gives its map back the configured size
+	configured := make(map[string]uint32)
 	closeAll := func() {
 		for _, m := range pins {
 			m.Close()
@@ -299,6 +301,7 @@ func loadPins(dir string, spec *ebpf.CollectionSpec, sized map[string]bool) (map
 			return nil, fmt.Errorf("load pinned %s %q: %w", name, path, err)
 		}
 		if !sized[name] {
+			configured[name] = spec.Maps[name].MaxEntries
 			spec.Maps[name].MaxEntries = m.MaxEntries()
 		}
 		// a pinned hash keeps its own preallocation, the programs do not depend on it
@@ -319,6 +322,9 @@ func loadPins(dir string, spec *ebpf.CollectionSpec, sized map[string]bool) (map
 			if m := pins[name]; m != nil {
 				m.Close()
 				delete(pins, name)
+			}
+			if n, ok := configured[name]; ok {
+				spec.Maps[name].MaxEntries = n
 			}
 			if err := os.Remove(filepath.Join(dir, name)); err != nil && !errors.Is(err, os.ErrNotExist) {
 				closeAll()

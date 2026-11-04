@@ -2643,6 +2643,38 @@ func TestPinnedCountersDropALoneSlotPin(t *testing.T) {
 	wantIfaceStats(t, p, key, 1, uint64(len(pkt)))
 }
 
+func TestPinnedCountersDropALoneArrayPinOfAnotherSize(t *testing.T) {
+	testutil.RequireRoot(t)
+
+	dir := pinDir(t)
+	p, err := Load(Config{SampleRate: 1 << 30, WakeupBatch: 1, IfaceSlots: MaxIfaceSlots, PinPath: dir})
+	if err != nil {
+		testutil.SkipIfUnprivileged(t, err)
+		t.Fatal(err)
+	}
+	if err := p.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(filepath.Join(dir, pinSlot)); err != nil {
+		t.Fatal(err)
+	}
+
+	// the dropped array of 256 slots leaves its size behind neither in the new array nor in its pin
+	for i := range 2 {
+		p, err = Load(Config{SampleRate: 1 << 30, WakeupBatch: 1, PinPath: dir})
+		if err != nil {
+			t.Fatalf("load %d after a lone array pin: %v", i+1, err)
+		}
+		entries, slots := p.objs.RfmIfaceArr.MaxEntries(), len(p.slots.used)
+		if err := p.Close(); err != nil {
+			t.Fatal(err)
+		}
+		if entries != uint32(DefaultIfaceSlots*2*ifaceFamilies) || slots != DefaultIfaceSlots {
+			t.Fatalf("load %d: array of %d entries and %d slots, want %d slots", i+1, entries, slots, DefaultIfaceSlots)
+		}
+	}
+}
+
 // loopbackSamples runs the ingress program n times on an IPv4 frame, which a
 // test run hands in on loopback, and returns how many runs it sampled, the
 // events in the ring buffer plus the ones the ring dropped
