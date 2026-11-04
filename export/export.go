@@ -39,27 +39,6 @@ var (
 		nil, nil,
 	)
 
-	descFlowBytes = prometheus.NewDesc(
-		"rfm_flow_bytes",
-		"Estimated bytes of the live flows of a label tuple, scaled by the sample rate in force.",
-		[]string{"ifname", "direction", "proto", "src_asn", "dst_asn", "src_city", "dst_city"}, nil,
-	)
-	descFlowPackets = prometheus.NewDesc(
-		"rfm_flow_packets",
-		"Estimated packets of the live flows of a label tuple, scaled by the sample rate in force.",
-		[]string{"ifname", "direction", "proto", "src_asn", "dst_asn", "src_city", "dst_city"}, nil,
-	)
-	descFlowSampledBytes = prometheus.NewDesc(
-		"rfm_flow_sampled_bytes",
-		"Sampled bytes of the live flows of a label tuple.",
-		[]string{"ifname", "direction", "proto", "src_asn", "dst_asn", "src_city", "dst_city"}, nil,
-	)
-	descFlowSampledPackets = prometheus.NewDesc(
-		"rfm_flow_sampled_packets",
-		"Sampled packets of the live flows of a label tuple.",
-		[]string{"ifname", "direction", "proto", "src_asn", "dst_asn", "src_city", "dst_city"}, nil,
-	)
-
 	descFlowBytesTotal = prometheus.NewDesc(
 		"rfm_flow_bytes_total",
 		"Estimated bytes recorded per label tuple, scaled by the sample rate in force, never reset by eviction.",
@@ -154,10 +133,6 @@ var (
 		descIfaceTxBytes,
 		descIfaceRxPackets,
 		descIfaceTxPackets,
-		descFlowBytes,
-		descFlowPackets,
-		descFlowSampledBytes,
-		descFlowSampledPackets,
 		descFlowBytesTotal,
 		descFlowPacketsTotal,
 		descFlowSampledBytesTotal,

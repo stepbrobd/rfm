@@ -43,7 +43,7 @@ func newTupleLabels(ifname string, k collector.RollupKey) *tupleLabels {
 	return l
 }
 
-// counterMetric and gaugeMetric write cached labels and a preallocated value
+// counterMetric writes cached labels and a preallocated value
 type counterMetric struct {
 	desc   *prometheus.Desc
 	labels []*dto.LabelPair
@@ -61,24 +61,7 @@ func (m *counterMetric) Write(out *dto.Metric) error {
 	return nil
 }
 
-type gaugeMetric struct {
-	desc   *prometheus.Desc
-	labels []*dto.LabelPair
-	value  float64
-	out    dto.Gauge
-}
-
-func (m *gaugeMetric) Desc() *prometheus.Desc {
-	return m.desc
-}
-
-func (m *gaugeMetric) Write(out *dto.Metric) error {
-	out.Label = m.labels
-	out.Gauge = &m.out
-	return nil
-}
-
-// collectRollups emits every tuple's counters and, for tuples with live flows, its gauges
+// collectRollups emits the counters of every tuple
 func (mc *MetricsCollector) collectRollups(ch chan<- prometheus.Metric) {
 	if mc.col == nil {
 		return
@@ -93,41 +76,19 @@ func (mc *MetricsCollector) collectRollups(ch chan<- prometheus.Metric) {
 		mc.labels = make(map[uint64]*tupleLabels)
 	}
 
-	live := 0
-	for i := range mc.samples {
-		if mc.samples[i].Flows > 0 {
-			live++
-		}
-	}
 	counters := make([]counterMetric, 4*len(mc.samples))
-	gauges := make([]gaugeMetric, 4*live)
 	counter := func(m *counterMetric, desc *prometheus.Desc, labels []*dto.LabelPair, v uint64) {
 		m.desc, m.labels, m.value = desc, labels, float64(v)
 		m.out.Value = &m.value
 	}
-	gauge := func(m *gaugeMetric, desc *prometheus.Desc, labels []*dto.LabelPair, v uint64) {
-		m.desc, m.labels, m.value = desc, labels, float64(v)
-		m.out.Value = &m.value
-	}
-	g := 0
 	for i := range mc.samples {
 		s := &mc.samples[i]
 		labels := mc.tupleLabels(s)
-		if s.Flows > 0 {
-			gauge(&gauges[g], descFlowBytes, labels, s.Live.EstBytes)
-			gauge(&gauges[g+1], descFlowPackets, labels, s.Live.EstPackets)
-			gauge(&gauges[g+2], descFlowSampledBytes, labels, s.Live.Bytes)
-			gauge(&gauges[g+3], descFlowSampledPackets, labels, s.Live.Packets)
-			g += 4
-		}
 		c := counters[4*i : 4*i+4]
 		counter(&c[0], descFlowBytesTotal, labels, s.EstBytes)
 		counter(&c[1], descFlowPacketsTotal, labels, s.EstPackets)
 		counter(&c[2], descFlowSampledBytesTotal, labels, s.Bytes)
 		counter(&c[3], descFlowSampledPacketsTotal, labels, s.Packets)
-	}
-	for i := range gauges {
-		ch <- &gauges[i]
 	}
 	for i := range counters {
 		ch <- &counters[i]

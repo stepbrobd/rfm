@@ -210,10 +210,6 @@ func TestDescribe(t *testing.T) {
 		"rfm_interface_tx_bytes_total",
 		"rfm_interface_rx_packets_total",
 		"rfm_interface_tx_packets_total",
-		"rfm_flow_bytes",
-		"rfm_flow_packets",
-		"rfm_flow_sampled_bytes",
-		"rfm_flow_sampled_packets",
 		"rfm_flow_bytes_total",
 		"rfm_flow_packets_total",
 		"rfm_flow_sampled_bytes_total",
@@ -375,18 +371,20 @@ func TestCollectFlowsNoEnricher(t *testing.T) {
 	})
 
 	mc := New(nil, c)
+	// the first scrape shows the new tuple at zero
+	collectMetrics(t, mc)
 	vals := collectAll(t, mc)
 
-	assertGauge(t, vals, "rfm_flow_bytes", 200)
-	assertGauge(t, vals, "rfm_flow_packets", 1)
-	assertGauge(t, vals, "rfm_flow_sampled_bytes", 200)
-	assertGauge(t, vals, "rfm_flow_sampled_packets", 1)
+	assertCounter(t, vals, "rfm_flow_bytes_total", 200)
+	assertCounter(t, vals, "rfm_flow_packets_total", 1)
+	assertCounter(t, vals, "rfm_flow_sampled_bytes_total", 200)
+	assertCounter(t, vals, "rfm_flow_sampled_packets_total", 1)
 
 	// check labels, enrichment should be empty strings
 	metrics := collectMetrics(t, mc)
 	for _, m := range metrics {
 		name := extractName(m.Desc())
-		if name != "rfm_flow_bytes" {
+		if name != "rfm_flow_bytes_total" {
 			continue
 		}
 		labels := metricLabels(t, m)
@@ -421,12 +419,14 @@ func TestCollectFlowsWithEnricher(t *testing.T) {
 	})
 
 	mc := New(nil, c)
+	// the first scrape shows the new tuple at zero
+	collectMetrics(t, mc)
 	metrics := collectMetrics(t, mc)
 
 	var found bool
 	for _, m := range metrics {
 		name := extractName(m.Desc())
-		if name != "rfm_flow_bytes" {
+		if name != "rfm_flow_bytes_total" {
 			continue
 		}
 		found = true
@@ -450,11 +450,11 @@ func TestCollectFlowsWithEnricher(t *testing.T) {
 
 		val := metricValue(t, m)
 		if val != 64 {
-			t.Errorf("flow_bytes = %g, want 64", val)
+			t.Errorf("rfm_flow_bytes_total = %g, want 64", val)
 		}
 	}
 	if !found {
-		t.Error("rfm_flow_bytes metric not found")
+		t.Error("rfm_flow_bytes_total metric not found")
 	}
 }
 
@@ -476,12 +476,14 @@ func TestCollectFlowsScalesBySampleRate(t *testing.T) {
 	})
 
 	mc := New(src, c)
+	// the first scrape shows the new tuple at zero
+	collectMetrics(t, mc)
 	vals := collectAll(t, mc)
 
-	assertGauge(t, vals, "rfm_flow_sampled_bytes", 200)
-	assertGauge(t, vals, "rfm_flow_sampled_packets", 1)
-	assertGauge(t, vals, "rfm_flow_bytes", 2000)
-	assertGauge(t, vals, "rfm_flow_packets", 10)
+	assertCounter(t, vals, "rfm_flow_sampled_bytes_total", 200)
+	assertCounter(t, vals, "rfm_flow_sampled_packets_total", 1)
+	assertCounter(t, vals, "rfm_flow_bytes_total", 2000)
+	assertCounter(t, vals, "rfm_flow_packets_total", 10)
 	assertGauge(t, vals, "rfm_bpf_sample_rate", 10)
 }
 
@@ -512,27 +514,36 @@ func TestCollectFlowsAggregatesDuplicateLabels(t *testing.T) {
 
 	mc := New(nil, c)
 
-	// use a real registry to verify no duplicate series
+	// use a real registry to verify no duplicate series, the first gather
+	// shows the new tuple at zero
 	reg := prometheus.NewRegistry()
 	reg.MustRegister(mc)
+	if _, err := reg.Gather(); err != nil {
+		t.Fatalf("gather: %v", err)
+	}
 	mfs, err := reg.Gather()
 	if err != nil {
 		t.Fatalf("gather: %v", err)
 	}
 
-	// find rfm_flow_bytes and check it has exactly one series
+	// find rfm_flow_bytes_total and check it has exactly one series
+	var seen int
 	for _, mf := range mfs {
-		if mf.GetName() != "rfm_flow_bytes" &&
-			mf.GetName() != "rfm_flow_sampled_bytes" {
+		if mf.GetName() != "rfm_flow_bytes_total" &&
+			mf.GetName() != "rfm_flow_sampled_bytes_total" {
 			continue
 		}
+		seen++
 		if got := len(mf.GetMetric()); got != 1 {
 			t.Fatalf("%s series count = %d, want 1 (aggregated)", mf.GetName(), got)
 		}
-		val := mf.GetMetric()[0].GetGauge().GetValue()
+		val := mf.GetMetric()[0].GetCounter().GetValue()
 		if val != 300 {
 			t.Fatalf("%s = %g, want 300 (100+200)", mf.GetName(), val)
 		}
+	}
+	if seen != 2 {
+		t.Fatalf("found %d of the 2 byte counter families", seen)
 	}
 }
 
@@ -825,12 +836,12 @@ func TestCollectRollupCountersSurviveEviction(t *testing.T) {
 		t.Fatalf("rfm_flow_bytes_total on the first scrape = %v, want 0", got)
 	}
 
-	// evicting the flows resets the gauges but not the counters
+	// evicting the flows leaves the counters as they are
 	c.Evict(t0 + 5*time.Second)
 
 	vals := collectAll(t, mc)
-	if got := vals["rfm_flow_bytes"]; got != 0 {
-		t.Fatalf("rfm_flow_bytes = %v after eviction, want no live flows", got)
+	if got := vals["rfm_collector_active_flows"]; got != 0 {
+		t.Fatalf("rfm_collector_active_flows = %v after eviction, want 0", got)
 	}
 	if got := vals["rfm_flow_bytes_total"]; got != 2000 {
 		t.Fatalf("rfm_flow_bytes_total = %v, want 2000", got)

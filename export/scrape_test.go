@@ -39,7 +39,7 @@ func tupleEvent(tuple, port int) collector.FlowEvent {
 }
 
 // fleetCollector holds the shape of the busiest fleet node, 10000 label
-// tuples of which 2675 carry 50000 live flows, about 50700 flow series
+// tuples of which 2675 carry 50000 live flows, 40000 flow series
 func fleetCollector(tb testing.TB) *collector.Collector {
 	tb.Helper()
 	c := collector.New(30*time.Second, tupleEnricher{}, config.DefaultMaxFlows)
@@ -115,8 +115,8 @@ func TestScrapeDoesNotRebuildEverySeries(t *testing.T) {
 	// a real dump allocates by the number of links of the host
 	mc.links = func() ([]net.Interface, error) { return []net.Interface{{Index: 2, Name: "eth0"}}, nil }
 	series := len(drainCollect(mc))
-	if series < 5000 {
-		t.Fatalf("series = %d, want the about 5000 of the shape", series)
+	if series < 4000 {
+		t.Fatalf("series = %d, want the about 4000 of the shape", series)
 	}
 
 	// a scrape walks the label tuples, it neither copies the flow table nor
@@ -133,7 +133,7 @@ func TestScrapeDoesNotRebuildEverySeries(t *testing.T) {
 	}
 }
 
-func TestScrapeSeriesMatchFlowsAndRollups(t *testing.T) {
+func TestScrapeSeriesMatchRollups(t *testing.T) {
 	c := smallFleetCollector(t)
 	// a second interface and direction join the mix
 	other := tupleEvent(7, 9)
@@ -161,22 +161,13 @@ func TestScrapeSeriesMatchFlowsAndRollups(t *testing.T) {
 	}
 
 	want := map[id]float64{}
-	keyOf := func(ifindex uint32, dir, proto uint8, src, dst collector.Labels) string {
-		return labelString(map[string]string{
-			"ifname": "if" + strconv.Itoa(int(ifindex)), "direction": collector.Direction(dir), "proto": strconv.Itoa(int(proto)),
-			"src_asn": formatASN(src.ASN), "dst_asn": formatASN(dst.ASN), "src_city": src.City, "dst_city": dst.City,
-		})
-	}
-	for k, e := range c.Flows() {
-		l := keyOf(k.Ifindex, k.Dir, k.Proto, e.Src, e.Dst)
-		want[id{"rfm_flow_bytes", l}] += float64(e.EstBytes)
-		want[id{"rfm_flow_packets", l}] += float64(e.EstPackets)
-		want[id{"rfm_flow_sampled_bytes", l}] += float64(e.Bytes)
-		want[id{"rfm_flow_sampled_packets", l}] += float64(e.Packets)
-	}
 	// both scrapes above showed every tuple, one more shows all they counted
 	for _, r := range c.ScrapeRollups(nil) {
-		l := keyOf(r.Key.Ifindex, r.Key.Dir, r.Key.Proto, r.Key.Src, r.Key.Dst)
+		k := r.Key
+		l := labelString(map[string]string{
+			"ifname": "if" + strconv.Itoa(int(k.Ifindex)), "direction": collector.Direction(k.Dir), "proto": strconv.Itoa(int(k.Proto)),
+			"src_asn": formatASN(k.Src.ASN), "dst_asn": formatASN(k.Dst.ASN), "src_city": k.Src.City, "dst_city": k.Dst.City,
+		})
 		want[id{"rfm_flow_bytes_total", l}] = float64(r.EstBytes)
 		want[id{"rfm_flow_packets_total", l}] = float64(r.EstPackets)
 		want[id{"rfm_flow_sampled_bytes_total", l}] = float64(r.Bytes)
@@ -224,7 +215,6 @@ func TestFlowLabelNamesMatchEveryFlowFamily(t *testing.T) {
 		t.Fatalf("flow label names %v are not sorted", flowLabelNames)
 	}
 	for _, d := range []*prometheus.Desc{
-		descFlowBytes, descFlowPackets, descFlowSampledBytes, descFlowSampledPackets,
 		descFlowBytesTotal, descFlowPacketsTotal, descFlowSampledBytesTotal, descFlowSampledPacketsTotal,
 	} {
 		var out dto.Metric
