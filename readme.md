@@ -245,10 +245,10 @@ shows in `rfm_collector_dropped_events_total`.
 
 `wakeup_batch` (uint32, default 0): The BPF program flags ring buffer submits
 with `BPF_RB_NO_WAKEUP` and forces a wakeup once every N submits on each CPU.
-For an interface with a counter slot the count runs per interface, direction and
-family. The collector drains every ring buffer on any wakeup. Lower values
-reduce flow event delivery latency at the cost of more userspace wakeups. Higher
-values amortize wakeups, and an event submitted without one waits for the
+The count runs over every interface, direction and family of the CPU, as its
+ring buffer does. The collector drains every ring buffer on any wakeup. Lower
+values reduce flow event delivery latency at the cost of more userspace wakeups.
+Higher values amortize wakeups, and an event submitted without one waits for the
 collector's 100 millisecond read deadline at most. `0` derives a quarter of the
 events the ring holds, at 64 bytes an event, 1024 for a ring of 256 KiB. A set
 batch must be at most half of them, since a batch that fills the ring leaves the
@@ -299,11 +299,10 @@ one ring buffer write and its lock per record in place of one per event. A stage
 that does not fill is written by a timer of its CPU 10 milliseconds after the
 timer was armed, so an event waits at most that long before the collector can
 read it. A CPU that goes offline keeps the events of its stage, written or
-dropped by neither, until it runs the programs again after it comes back. With a
-stage, `wakeup_batch` counts the events a CPU writes over all its interfaces
-together. More than 1 needs `bpf_timer_start` to take `BPF_F_TIMER_CPU_PIN`,
-which Linux 6.7 and later do on kernels without PREEMPT_RT, and the agent
-refuses to start otherwise. A change takes effect at the next start.
+dropped by neither, until it runs the programs again after it comes back. More
+than 1 needs `bpf_timer_start` to take `BPF_F_TIMER_CPU_PIN`, which Linux 6.7
+and later do on kernels without PREEMPT_RT, and the agent refuses to start
+otherwise. A change takes effect at the next start.
 
 `pin_path` (string, default ""): A bpffs directory where the interface counters
 are pinned. A restart or upgrade reuses the pinned maps, so the counters stay

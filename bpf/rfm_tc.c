@@ -64,7 +64,7 @@ struct {
 	__type(value, struct rfm_slot_value);
 } rfm_iface_arr SEC(".maps");
 
-// skip count and wakeup countdown per CPU of every draw without a slot
+// skip count per CPU of every draw without a slot, and the wakeup countdown of the CPU's ring
 struct {
 	__uint(type, BPF_MAP_TYPE_PERCPU_ARRAY);
 	__uint(max_entries, 1);
@@ -612,13 +612,16 @@ static __always_inline int rfm_tc(struct __sk_buff *skb, __u8 dir,
 	rfm_fill(ev, bpf_ktime_get_boot_ns(), skb, l3, eth_proto, proto, dir,
 		 l2_len, segs, ports, len);
 
-	// wake the reader once every wakeup_batch events, Load refuses 0
-	__u64 flags = BPF_RB_NO_WAKEUP;
-	if (sval->wake <= 1) {
-		sval->wake = rfm_cfg.wakeup_batch;
-		flags = BPF_RB_FORCE_WAKEUP;
-	} else {
-		sval->wake--;
+	// wake the reader once every wakeup_batch events the CPU writes, Load refuses 0, one countdown per ring, since countdowns per slot that run in step fill it before one comes due
+	__u32 draw_key = 0;
+	struct rfm_slot_value *draw =
+		bpf_map_lookup_elem(&rfm_cpu_draw, &draw_key);
+	__u64 flags = BPF_RB_FORCE_WAKEUP;
+	if (draw && draw->wake > 1) {
+		draw->wake--;
+		flags = BPF_RB_NO_WAKEUP;
+	} else if (draw) {
+		draw->wake = rfm_cfg.wakeup_batch;
 	}
 	bpf_ringbuf_submit(ev, flags);
 

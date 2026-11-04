@@ -29,7 +29,7 @@ struct rfm_iface_value {
 #define RFM_SLOT_IFINDEX_MAX 16384
 #define RFM_FAMILIES 3
 
-// skip counts skbs to the next sample, wake events to the next wakeup
+// skip counts skbs to the next sample, wake events to the next wakeup, which only the CPU's draw entry counts
 struct rfm_slot_value {
 	__u64 packets, bytes;
 	__u64 skip;

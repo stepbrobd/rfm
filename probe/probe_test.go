@@ -2893,30 +2893,33 @@ func TestWakeupCountsDownTheBatch(t *testing.T) {
 	}
 	defer p.Close()
 
-	// the first event wakes the reader and every fourth after it
-	countDown := func(m *ebpf.Map, key uint32) {
+	wakeLeft := func(m *ebpf.Map, key uint32) uint32 {
 		t.Helper()
-		for i, want := range []uint32{4, 3, 2, 1, 4, 3} {
+		var vals []rfmRfmSlotValue
+		if err := m.Lookup(key, &vals); err != nil {
+			t.Fatal(err)
+		}
+		var left uint32
+		for _, v := range vals {
+			left += v.Wake
+		}
+		return left
+	}
+	// the first event wakes the reader and every fourth after it, counted in the draw entry of the CPU
+	countDown := func(want ...uint32) {
+		t.Helper()
+		for i, w := range want {
 			if got := loopbackSamples(t, p, 1); got != 1 {
 				t.Fatalf("event %d: samples = %d, want 1", i+1, got)
 			}
-			var vals []rfmRfmSlotValue
-			if err := m.Lookup(key, &vals); err != nil {
-				t.Fatal(err)
-			}
-			var left uint32
-			for _, v := range vals {
-				left += v.Wake
-			}
-			if left != want {
-				t.Fatalf("after event %d the entry waits %d events to wake, want %d", i+1, left, want)
+			if left := wakeLeft(p.objs.RfmCpuDraw, 0); left != w {
+				t.Fatalf("after event %d the CPU waits %d events to wake, want %d", i+1, left, w)
 			}
 		}
 	}
+	countDown(4, 3, 2, 1, 4, 3)
 
-	// loopback without a slot counts down in the draw entry of the CPU
-	countDown(p.objs.RfmCpuDraw, 0)
-
+	// a slot counts its packets but not the wakeup, the ring of the CPU has one countdown, so slots that run in step cannot fill it before one comes due
 	slotLoopback(t, p)
 	lo, err := netlink.LinkByName("lo")
 	if err != nil {
@@ -2925,7 +2928,10 @@ func TestWakeupCountsDownTheBatch(t *testing.T) {
 	p.mu.Lock()
 	slot := p.slots.held()[uint32(lo.Attrs().Index)]
 	p.mu.Unlock()
-	countDown(p.objs.RfmIfaceArr, slotIndex(slot, 0, 1))
+	countDown(2, 1, 4, 3, 2, 1)
+	if left := wakeLeft(p.objs.RfmIfaceArr, slotIndex(slot, 0, 1)); left != 0 {
+		t.Fatalf("the slot entry waits %d events to wake, want 0", left)
+	}
 }
 
 func TestFlowEventWritesEveryByte(t *testing.T) {

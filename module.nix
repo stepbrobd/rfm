@@ -60,7 +60,7 @@ in
                     wakeup_batch = std.mkOption {
                       type = std.types.ints.unsigned;
                       default = 0;
-                      description = "Force a ring buffer wakeup every N flow events a CPU submits, counted per interface, direction and family for an interface with a counter slot, 0 derives a quarter of the events the ring holds. At most half of them, and a ring_buf_size of 0 grows to hold twice a set batch.";
+                      description = "Force a ring buffer wakeup every N flow events a CPU submits over all its interfaces, 0 derives a quarter of the events the ring holds. At most half of them, and a ring_buf_size of 0 grows to hold twice a set batch.";
                     };
 
                     iface_stats_size = std.mkOption {
