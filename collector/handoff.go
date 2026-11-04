@@ -43,7 +43,7 @@ func (c *Collector) startHandoff() *handoff {
 		done: make(chan struct{}),
 	}
 	for range handoffStages {
-		h.free <- &stage{batch: make([]sample, 0, handoffBatch)}
+		h.free <- &stage{batch: make([]sample, 0, handoffBatch+maxRecordEvents)}
 	}
 	go func() {
 		defer close(h.done)

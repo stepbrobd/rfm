@@ -91,6 +91,9 @@ func DecodeFlowEvents(raw []byte) ([]FlowEvent, error) {
 	return evs, nil
 }
 
+// maxRecordEvents is RFM_STAGE_MAX in bpf/rfm_common.h, the most events the stage programs of the probe write in one record
+const maxRecordEvents = 32
+
 // recordEvents returns how many events a ring buffer record holds, the stage
 // programs of the probe write up to RFM_STAGE_MAX in one record
 func recordEvents(raw []byte) (int, error) {

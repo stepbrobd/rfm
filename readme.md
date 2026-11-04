@@ -93,7 +93,7 @@ rate there without reloading the programs.
    wall clock time. Enrichment labels are resolved once when a flow is created
    and stay with it. An event that fails to decode is counted as a `ring_buffer`
    error and skipped. When reading and recording keep the collector's loop busy
-   for 85% of a 100 millisecond window, the loop hands batches of up to 1024
+   for 85% of a 100 millisecond window, the loop hands batches of about 1024
    events to a second goroutine that records them, so the agent can use more
    than one core, and it records inline again once the two together use less
    than half a core.

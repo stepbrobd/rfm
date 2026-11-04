@@ -770,8 +770,8 @@ func (c *Collector) Run(ctx context.Context, rd Reader) error {
 		}
 	})
 
-	// room for a handed off batch, so no append grows it
-	batch := make([]sample, 0, handoffBatch)
+	// room for a handed off batch and the last record that crosses its limit, so no append grows it
+	batch := make([]sample, 0, handoffBatch+maxRecordEvents)
 	// a table at its cap evicts a flow for each new one, one buffer holds the records and the labels of batch after batch
 	var buf recordBuf
 	// h records the batches while the loop alone cannot keep up, nil while the loop records inline
