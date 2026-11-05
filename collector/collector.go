@@ -467,29 +467,56 @@ func (c *Collector) Evict(now time.Duration) {
 	c.sweep(now, 0)
 }
 
+// sweepChunk bounds the flows one hold of mu sweeps, the run loop records between the holds of a sweep with many flows to end or report
+const sweepChunk = 4096
+
 // sweep is Evict repeated every period, an interval record goes out at the sweep nearest its active timeout
 func (c *Collector) sweep(now, period time.Duration) {
 	cutoff := now - c.timeout
+	// half a period of slack keeps a record from slipping a period when its tick comes early
+	due := c.active - period/2
 	var expired []ExportedFlow
+	idle, active := true, c.active > 0
+	for idle || active {
+		c.mu.Lock()
+		if idle {
+			if expired, idle = c.sweepIdleLocked(cutoff, expired); !idle {
+				c.dropStaleTuplesLocked(now)
+			}
+		} else {
+			expired, active = c.sweepActiveLocked(now, due, expired)
+		}
+		exp := c.exporter
+		c.mu.Unlock()
 
-	c.mu.Lock()
+		c.exportFlows(exp, expired)
+		expired = expired[:0]
+	}
+}
 
-	for {
+// sweepIdleLocked ends up to sweepChunk flows idle since before cutoff and reports whether more are left, a record is built only for an exporter
+// it must be called with mu held
+func (c *Collector) sweepIdleLocked(cutoff time.Duration, expired []ExportedFlow) (_ []ExportedFlow, more bool) {
+	for range sweepChunk {
 		r := c.flows.front(lruList)
 		if r == 0 {
-			break
+			return expired, false
 		}
 		oldest := c.flows.at(r)
 		if oldest.entry.LastSeen >= cutoff {
-			break
+			return expired, false
 		}
-		if oldest.pending() {
+		if c.exporter != nil && oldest.pending() {
 			expired = append(expired, oldest.record(FlowEndReasonIdleTimeout))
 		}
 		c.removeLocked(r)
 	}
+	return expired, true
+}
 
-	// idle tuples are in the order they lost their last flow, a dropped one leaves the scrape
+// dropStaleTuplesLocked drops the shown tuples idle since before the retention, in the order they lost their last flow, a dropped one leaves the scrape
+// it must be called with mu held
+func (c *Collector) dropStaleTuplesLocked(now time.Duration) {
 	stale := now - RollupRetention*c.timeout
 	for r := c.rollups.front(); r != 0; r = c.rollups.front() {
 		if t := c.rollups.at(r); t.lastSeen >= stale || !t.shown {
@@ -497,31 +524,27 @@ func (c *Collector) sweep(now, period time.Duration) {
 		}
 		c.rollups.drop(r)
 	}
+}
 
-	if c.active > 0 {
-		// half a period of slack keeps a record from slipping a period when its tick comes early
-		due := c.active - period/2
-		for {
-			r := c.flows.front(activeList)
-			if r == 0 {
-				break
-			}
-			state := c.flows.at(r)
-			if now-state.intervalStart < due {
-				break
-			}
-			if state.pending() {
-				expired = append(expired, state.record(FlowEndReasonActiveTimeout))
-			}
-			state.mark(now)
-			c.flows.moveToBack(activeList, r)
+// sweepActiveLocked starts a new interval for up to sweepChunk flows whose interval is due at now and reports whether more are left, a record of the old interval is built only for an exporter
+// it must be called with mu held
+func (c *Collector) sweepActiveLocked(now, due time.Duration, expired []ExportedFlow) (_ []ExportedFlow, more bool) {
+	for range sweepChunk {
+		r := c.flows.front(activeList)
+		if r == 0 {
+			return expired, false
 		}
+		state := c.flows.at(r)
+		if now-state.intervalStart < due {
+			return expired, false
+		}
+		if c.exporter != nil && state.pending() {
+			expired = append(expired, state.record(FlowEndReasonActiveTimeout))
+		}
+		state.mark(now)
+		c.flows.moveToBack(activeList, r)
 	}
-
-	exp := c.exporter
-	c.mu.Unlock()
-
-	c.exportFlows(exp, expired)
+	return expired, true
 }
 
 // Flows returns a snapshot of the current flow table
@@ -657,17 +680,20 @@ func (c *Collector) Flush(reason uint8) {
 	var exp FlowExporter
 
 	c.mu.Lock()
+	exp = c.exporter
 	if c.flows.len() > 0 {
-		expired = make([]ExportedFlow, 0, c.flows.len())
+		// a record is built only for an exporter
+		if exp != nil {
+			expired = make([]ExportedFlow, 0, c.flows.len())
+		}
 		for _, state := range c.flows.all() {
-			if state.pending() {
+			if exp != nil && state.pending() {
 				expired = append(expired, state.record(reason))
 			}
 			c.detachLocked(state.rollup)
 		}
 	}
 	c.flows = newFlowTable()
-	exp = c.exporter
 	c.mu.Unlock()
 
 	c.exportFlows(exp, expired)

@@ -7,6 +7,7 @@ import (
 	"net/netip"
 	"os"
 	"reflect"
+	"runtime"
 	"slices"
 	"sync"
 	"sync/atomic"
@@ -1335,6 +1336,83 @@ func TestSweepSendsIntervalRecordsAtTheSweepNearestTheirActiveTimeout(t *testing
 	c.sweep(t0+2*period, period)
 	if got := len(exp.flows); got != 3 {
 		t.Fatalf("records = %d, want two of the flow the first sweep marked and one of the newer flow", got)
+	}
+}
+
+// sweepEvents returns one event at t of each of n flows, told apart by their source ports from 1 on
+func sweepEvents(n int, t time.Duration) []FlowEvent {
+	evs := make([]FlowEvent, n)
+	for i := range evs {
+		evs[i] = FlowEvent{
+			Tstamp: t, Proto: 17, SrcPort: uint16(1 + i), DstPort: 53,
+			SrcAddr: netip.MustParseAddr("10.0.0.1"),
+			DstAddr: netip.MustParseAddr("10.0.0.2"),
+			Segs:    1,
+			Len:     100,
+		}
+	}
+	return evs
+}
+
+func TestSweepEndsAndReportsMoreFlowsThanOneHoldTakes(t *testing.T) {
+	const flows = 2*sweepChunk + 7
+	const period = 10 * time.Second
+	t0 := time.Hour
+	exp := &mockFlowExporter{}
+	c := New(30*time.Second, nil, 4*flows)
+	c.SetFlowExporter(exp)
+	c.SetActiveTimeout(period)
+	c.RecordBatch(sweepEvents(flows, t0))
+
+	// every flow is due at once, the sweep reports them over three holds in the order they came
+	c.sweep(t0+period, period)
+	if got := len(exp.flows); got != flows {
+		t.Fatalf("interval records = %d, want one for each of %d flows", got, flows)
+	}
+	for i, f := range exp.flows {
+		if f.SrcPort != uint16(1+i) || f.EndReason != FlowEndReasonActiveTimeout {
+			t.Fatalf("record %d is of port %d by reason %d, want port %d by its active timeout", i, f.SrcPort, f.EndReason, 1+i)
+		}
+	}
+	if n := c.Stats().ActiveFlows; n != flows {
+		t.Fatalf("active flows = %d after the interval records, want %d", n, flows)
+	}
+
+	// a packet more for each, then every flow idles out over three holds
+	exp.flows = nil
+	c.RecordBatch(sweepEvents(flows, t0+period+time.Second))
+	c.Evict(t0 + period + 32*time.Second)
+	if got := len(exp.flows); got != flows {
+		t.Fatalf("idle records = %d, want one for each of %d flows", got, flows)
+	}
+	for i, f := range exp.flows {
+		if f.SrcPort != uint16(1+i) || f.EndReason != FlowEndReasonIdleTimeout || f.Packets != 1 {
+			t.Fatalf("record %d is of port %d by reason %d with %d packets, want port %d by its idle timeout with the 1 packet since its interval record", i, f.SrcPort, f.EndReason, f.Packets, 1+i)
+		}
+	}
+	if n := c.Stats().ActiveFlows; n != 0 {
+		t.Fatalf("active flows = %d after the idle sweep, want none", n)
+	}
+}
+
+func TestSweepBuildsNoRecordsWithoutAnExporter(t *testing.T) {
+	const flows = 3 * sweepChunk
+	const period = 10 * time.Second
+	t0 := time.Hour
+	c := New(30*time.Second, nil, 2*flows)
+	c.SetActiveTimeout(period)
+	c.RecordBatch(sweepEvents(flows, t0))
+
+	var before, after runtime.MemStats
+	runtime.ReadMemStats(&before)
+	c.sweep(t0+period, period)
+	c.Evict(t0 + 41*time.Second)
+	runtime.ReadMemStats(&after)
+	if n := after.TotalAlloc - before.TotalAlloc; n > 4096 {
+		t.Fatalf("sweeps without an exporter allocated %d bytes for %d flows, want no records", n, flows)
+	}
+	if n := c.Stats().ActiveFlows; n != 0 {
+		t.Fatalf("active flows = %d after the idle sweep, want none", n)
 	}
 }
 
