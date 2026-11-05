@@ -173,13 +173,13 @@ func (t *flowTable) all() iter.Seq2[flowRef, *flowState] {
 	}
 }
 
-// indexCell names the flow in slot ref under the top 32 bits of its table hash, ref 0 marks the cell empty
+// indexCell names the flow in slot ref under the tag of its table hash, ref 0 marks the cell empty
 type indexCell struct {
 	tag uint32
 	ref flowRef
 }
 
-// flowIndex finds a flow's slot by linear probing from the cell the top bits of its tag name, the table hash mixes its top bits as well as the others
+// flowIndex finds a flow's slot by linear probing from the cell the top bits of its tag name
 type flowIndex struct {
 	cells []indexCell
 	// bits is the log2 of the cells
@@ -190,8 +190,13 @@ type flowIndex struct {
 // minIndexBits sizes the index of a table that held no flow yet, 64 cells of 8 bytes
 const minIndexBits = 6
 
-// indexTag returns the tag of table hash h
+// indexTag returns the tag of table hash h, the top half of a bijective mix of all its bits, since the table hash of sequential IPv4 sources can cluster in its own top bits and linear probing slows on clustered homes
 func indexTag(h uint64) uint32 {
+	h ^= h >> 33
+	h *= 0xff51afd7ed558ccd
+	h ^= h >> 33
+	h *= 0xc4ceb9fe1a85ec53
+	h ^= h >> 33
 	return uint32(h >> 32)
 }
 
@@ -229,7 +234,7 @@ func (x *flowIndex) grow() {
 
 // del takes slot r, named under tag, out of the index and moves back the cells after it that probed past its cell, so no lookup stops short of them
 func (x *flowIndex) del(tag uint32, r flowRef) {
-	if x.n == 0 {
+	if x.n == 0 || r == 0 {
 		return
 	}
 	mask := len(x.cells) - 1

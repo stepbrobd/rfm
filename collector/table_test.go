@@ -356,3 +356,40 @@ func TestRollupTableSlotsAreLineAlignedAndItsIndexValuesPointerFree(t *testing.T
 		t.Fatal("the index of the rollup table holds pointers in its values")
 	}
 }
+
+// missCells returns the cells an absent lookup reads on average from a uniform home, up to and with the first empty cell
+func missCells(x *flowIndex) float64 {
+	total, run := 0, 0
+	// the walk starts after an empty cell, so its last run ends in that cell
+	start := slices.IndexFunc(x.cells, func(c indexCell) bool { return c.ref == 0 })
+	for i := range x.cells {
+		if x.cells[(start+1+i)&(len(x.cells)-1)].ref != 0 {
+			run++
+			continue
+		}
+		// a lookup from a cell of a run of k reads k+1 down to 2 cells, one from the empty cell reads 1
+		total += run*(run+3)/2 + 1
+		run = 0
+	}
+	return float64(total) / float64(len(x.cells))
+}
+
+func TestFlowIndexSpreadsSequentialIPv4Sources(t *testing.T) {
+	// under some keys the table hash of sequential IPv4 sources clusters in its own top bits, the tag's mix keeps an absent lookup at three quarters full near the 8.5 cells of uniform homes
+	const flows = 3 << 14
+	rng := rand.New(rand.NewPCG(2026, 12))
+	for key := range 64 {
+		var k flowHash
+		for i := range k {
+			k[i] = rng.Uint64()
+		}
+		var x flowIndex
+		for i := range flows {
+			id := FlowKey{Ifindex: 2, Proto: 6, SrcAddr: netip.AddrFrom4([4]byte{10, 0, byte(i >> 8), byte(i)}), DstAddr: netip.MustParseAddr("192.0.2.1"), SrcPort: uint16(40000 + i>>16), DstPort: 443}.id()
+			x.put(indexTag(k.sum(&id)), flowRef(i+1))
+		}
+		if cells := missCells(&x); cells > 17 {
+			t.Fatalf("key %d: an absent lookup reads %.1f cells on average, want near 8.5", key, cells)
+		}
+	}
+}
