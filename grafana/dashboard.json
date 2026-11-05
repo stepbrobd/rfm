@@ -103,9 +103,17 @@
         "name": "datasource",
         "type": "datasource",
         "query": "prometheus",
-        "current": {},
+        "current": {
+          "selected": true,
+          "text": [
+            "All"
+          ],
+          "value": [
+            "$__all"
+          ]
+        },
         "hide": 0,
-        "includeAll": false,
+        "includeAll": true,
         "multi": true,
         "options": [],
         "refresh": 1,
@@ -142,32 +150,6 @@
         "regex": "",
         "sort": 1,
         "label": "Interface"
-      },
-      {
-        "name": "direction",
-        "type": "custom",
-        "query": "ingress,egress",
-        "current": {
-          "selected": true,
-          "text": "ingress",
-          "value": "ingress"
-        },
-        "hide": 0,
-        "includeAll": false,
-        "multi": false,
-        "options": [
-          {
-            "selected": true,
-            "text": "ingress",
-            "value": "ingress"
-          },
-          {
-            "selected": false,
-            "text": "egress",
-            "value": "egress"
-          }
-        ],
-        "label": "Direction"
       }
     ]
   },
@@ -1576,15 +1558,15 @@
     },
     {
       "type": "piechart",
-      "title": "Traffic by Protocol",
-      "description": "Estimated bytes per IP protocol over the dashboard time range, in the selected direction on the selected interfaces.",
+      "title": "Ingress Traffic by Protocol",
+      "description": "Estimated bytes per IP protocol over the dashboard time range, received on the selected interfaces.",
       "datasource": {
         "type": "datasource",
         "uid": "-- Mixed --"
       },
       "gridPos": {
         "h": 8,
-        "w": 8,
+        "w": 6,
         "x": 0,
         "y": 38
       },
@@ -4216,7 +4198,2682 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum by (proto) (increase(rfm_flow_bytes_total{direction=\"$direction\", ifname=~\"$ifname\"}[$__range]))",
+          "expr": "sum by (proto) (increase(rfm_flow_bytes_total{direction=\"ingress\", ifname=~\"$ifname\"}[$__range]))",
+          "legendFormat": "{{proto}}",
+          "refId": "A",
+          "instant": true
+        }
+      ],
+      "transformations": [
+        {
+          "id": "seriesToRows",
+          "options": {}
+        },
+        {
+          "id": "groupBy",
+          "options": {
+            "fields": {
+              "Metric": {
+                "operation": "groupby"
+              },
+              "Value": {
+                "operation": "aggregate",
+                "aggregations": [
+                  "sum"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "id": "rowsToFields",
+          "options": {}
+        }
+      ]
+    },
+    {
+      "type": "piechart",
+      "title": "Egress Traffic by Protocol",
+      "description": "Estimated bytes per IP protocol over the dashboard time range, sent on the selected interfaces.",
+      "datasource": {
+        "type": "datasource",
+        "uid": "-- Mixed --"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 6,
+        "y": 38
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "HOPOPT"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "1": {
+                  "text": "ICMP"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "2": {
+                  "text": "IGMP"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "3": {
+                  "text": "GGP"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "4": {
+                  "text": "IPv4"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "5": {
+                  "text": "ST"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "6": {
+                  "text": "TCP"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "7": {
+                  "text": "CBT"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "8": {
+                  "text": "EGP"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "10": {
+                  "text": "BBN-RCC-MON"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "11": {
+                  "text": "NVP-II"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "12": {
+                  "text": "PUP"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "14": {
+                  "text": "EMCON"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "15": {
+                  "text": "XNET"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "16": {
+                  "text": "CHAOS"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "17": {
+                  "text": "UDP"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "18": {
+                  "text": "MUX"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "19": {
+                  "text": "DCN-MEAS"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "20": {
+                  "text": "HMP"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "21": {
+                  "text": "PRM"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "22": {
+                  "text": "XNS-IDP"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "23": {
+                  "text": "TRUNK-1"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "24": {
+                  "text": "TRUNK-2"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "25": {
+                  "text": "LEAF-1"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "26": {
+                  "text": "LEAF-2"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "27": {
+                  "text": "RDP"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "28": {
+                  "text": "IRTP"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "29": {
+                  "text": "ISO-TP4"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "30": {
+                  "text": "NETBLT"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "31": {
+                  "text": "MFE-NSP"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "32": {
+                  "text": "MERIT-INP"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "33": {
+                  "text": "DCCP"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "34": {
+                  "text": "3PC"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "35": {
+                  "text": "IDPR"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "36": {
+                  "text": "XTP"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "37": {
+                  "text": "DDP"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "38": {
+                  "text": "IDPR-CMTP"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "39": {
+                  "text": "TP++"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "40": {
+                  "text": "IL"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "41": {
+                  "text": "IPv6"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "42": {
+                  "text": "SDRP"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "43": {
+                  "text": "IPv6-Route"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "44": {
+                  "text": "IPv6-Frag"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "45": {
+                  "text": "IDRP"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "46": {
+                  "text": "RSVP"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "47": {
+                  "text": "GRE"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "48": {
+                  "text": "DSR"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "49": {
+                  "text": "BNA"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "50": {
+                  "text": "ESP"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "51": {
+                  "text": "AH"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "52": {
+                  "text": "I-NLSP"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "54": {
+                  "text": "NARP"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "55": {
+                  "text": "Min-IPv4"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "57": {
+                  "text": "SKIP"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "58": {
+                  "text": "IPv6-ICMP"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "59": {
+                  "text": "IPv6-NoNxt"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "60": {
+                  "text": "IPv6-Opts"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "62": {
+                  "text": "CFTP"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "64": {
+                  "text": "SAT-EXPAK"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "65": {
+                  "text": "KRYPTOLAN"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "66": {
+                  "text": "RVD"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "67": {
+                  "text": "IPPC"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "69": {
+                  "text": "SAT-MON"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "70": {
+                  "text": "VISA"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "71": {
+                  "text": "IPCV"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "72": {
+                  "text": "CPNX"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "73": {
+                  "text": "CPHB"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "74": {
+                  "text": "WSN"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "75": {
+                  "text": "PVP"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "76": {
+                  "text": "BR-SAT-MON"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "77": {
+                  "text": "SUN-ND"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "78": {
+                  "text": "WB-MON"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "79": {
+                  "text": "WB-EXPAK"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "80": {
+                  "text": "ISO-IP"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "81": {
+                  "text": "VMTP"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "82": {
+                  "text": "SECURE-VMTP"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "83": {
+                  "text": "VINES"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "84": {
+                  "text": "IPTM"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "85": {
+                  "text": "NSFNET-IGP"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "86": {
+                  "text": "DGP"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "87": {
+                  "text": "TCF"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "88": {
+                  "text": "EIGRP"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "89": {
+                  "text": "OSPFIGP"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "90": {
+                  "text": "Sprite-RPC"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "91": {
+                  "text": "LARP"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "92": {
+                  "text": "MTP"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "93": {
+                  "text": "AX.25"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "94": {
+                  "text": "IPIP"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "96": {
+                  "text": "SCC-SP"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "97": {
+                  "text": "ETHERIP"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "98": {
+                  "text": "ENCAP"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "100": {
+                  "text": "GMTP"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "101": {
+                  "text": "IFMP"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "102": {
+                  "text": "PNNI"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "103": {
+                  "text": "PIM"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "104": {
+                  "text": "ARIS"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "105": {
+                  "text": "SCPS"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "106": {
+                  "text": "QNX"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "107": {
+                  "text": "A/N"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "108": {
+                  "text": "IPComp"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "109": {
+                  "text": "SNP"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "110": {
+                  "text": "Compaq-Peer"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "111": {
+                  "text": "IPX-in-IP"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "112": {
+                  "text": "VRRP"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "113": {
+                  "text": "PGM"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "115": {
+                  "text": "L2TP"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "116": {
+                  "text": "DDX"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "117": {
+                  "text": "IATP"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "118": {
+                  "text": "STP"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "119": {
+                  "text": "SRP"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "120": {
+                  "text": "UTI"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "121": {
+                  "text": "SMP"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "123": {
+                  "text": "PTP"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "126": {
+                  "text": "CRTP"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "127": {
+                  "text": "CRUDP"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "130": {
+                  "text": "SPS"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "131": {
+                  "text": "PIPE"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "132": {
+                  "text": "SCTP"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "133": {
+                  "text": "FC"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "138": {
+                  "text": "manet"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "139": {
+                  "text": "HIP"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "140": {
+                  "text": "Shim6"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "141": {
+                  "text": "WESP"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "142": {
+                  "text": "ROHC"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "143": {
+                  "text": "Ethernet"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "144": {
+                  "text": "AGGFRAG"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "145": {
+                  "text": "NSH"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "146": {
+                  "text": "Homa"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "147": {
+                  "text": "BIT-EMU"
+                }
+              }
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "0"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "HOPOPT"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "1"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "ICMP"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "2"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "IGMP"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "3"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "GGP"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "4"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "IPv4"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "5"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "ST"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "6"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "TCP"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "7"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "CBT"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "8"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "EGP"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "10"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "BBN-RCC-MON"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "11"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "NVP-II"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "12"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "PUP"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "14"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "EMCON"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "15"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "XNET"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "16"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "CHAOS"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "17"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "UDP"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "18"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "MUX"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "19"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "DCN-MEAS"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "20"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "HMP"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "21"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "PRM"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "22"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "XNS-IDP"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "23"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "TRUNK-1"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "24"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "TRUNK-2"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "25"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "LEAF-1"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "26"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "LEAF-2"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "27"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "RDP"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "28"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "IRTP"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "29"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "ISO-TP4"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "30"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "NETBLT"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "31"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "MFE-NSP"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "32"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "MERIT-INP"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "33"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "DCCP"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "34"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "3PC"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "35"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "IDPR"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "36"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "XTP"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "37"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "DDP"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "38"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "IDPR-CMTP"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "39"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "TP++"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "40"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "IL"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "41"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "IPv6"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "42"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "SDRP"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "43"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "IPv6-Route"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "44"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "IPv6-Frag"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "45"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "IDRP"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "46"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "RSVP"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "47"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "GRE"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "48"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "DSR"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "49"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "BNA"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "50"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "ESP"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "51"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "AH"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "52"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "I-NLSP"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "54"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "NARP"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "55"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Min-IPv4"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "57"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "SKIP"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "58"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "IPv6-ICMP"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "59"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "IPv6-NoNxt"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "60"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "IPv6-Opts"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "62"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "CFTP"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "64"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "SAT-EXPAK"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "65"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "KRYPTOLAN"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "66"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "RVD"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "67"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "IPPC"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "69"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "SAT-MON"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "70"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "VISA"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "71"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "IPCV"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "72"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "CPNX"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "73"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "CPHB"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "74"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "WSN"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "75"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "PVP"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "76"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "BR-SAT-MON"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "77"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "SUN-ND"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "78"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "WB-MON"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "79"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "WB-EXPAK"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "80"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "ISO-IP"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "81"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "VMTP"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "82"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "SECURE-VMTP"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "83"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "VINES"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "84"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "IPTM"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "85"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "NSFNET-IGP"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "86"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "DGP"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "87"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "TCF"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "88"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "EIGRP"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "89"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "OSPFIGP"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "90"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Sprite-RPC"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "91"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "LARP"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "92"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "MTP"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "93"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "AX.25"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "94"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "IPIP"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "96"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "SCC-SP"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "97"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "ETHERIP"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "98"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "ENCAP"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "100"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "GMTP"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "101"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "IFMP"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "102"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "PNNI"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "103"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "PIM"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "104"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "ARIS"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "105"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "SCPS"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "106"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "QNX"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "107"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "A/N"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "108"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "IPComp"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "109"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "SNP"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "110"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Compaq-Peer"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "111"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "IPX-in-IP"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "112"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "VRRP"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "113"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "PGM"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "115"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "L2TP"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "116"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "DDX"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "117"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "IATP"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "118"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "STP"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "119"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "SRP"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "120"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "UTI"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "121"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "SMP"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "123"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "PTP"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "126"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "CRTP"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "127"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "CRUDP"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "130"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "SPS"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "131"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "PIPE"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "132"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "SCTP"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "133"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "FC"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "138"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "manet"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "139"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "HIP"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "140"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Shim6"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "141"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "WESP"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "142"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "ROHC"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "143"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Ethernet"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "144"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "AGGFRAG"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "145"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "NSH"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "146"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Homa"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "147"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "BIT-EMU"
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "pieType": "donut",
+        "tooltip": {
+          "mode": "single"
+        },
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "values": [
+            "value",
+            "percent"
+          ]
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "sum by (proto) (increase(rfm_flow_bytes_total{direction=\"egress\", ifname=~\"$ifname\"}[$__range]))",
           "legendFormat": "{{proto}}",
           "refId": "A",
           "instant": true
@@ -4258,8 +6915,8 @@
       },
       "gridPos": {
         "h": 8,
-        "w": 8,
-        "x": 8,
+        "w": 6,
+        "x": 12,
         "y": 38
       },
       "fieldConfig": {
@@ -4376,8 +7033,8 @@
       },
       "gridPos": {
         "h": 8,
-        "w": 8,
-        "x": 16,
+        "w": 6,
+        "x": 18,
         "y": 38
       },
       "fieldConfig": {
@@ -4487,8 +7144,8 @@
     },
     {
       "type": "bargauge",
-      "title": "Top Source ASNs by Traffic",
-      "description": "Estimated bytes per source ASN over the dashboard time range, in the selected direction on the selected interfaces.",
+      "title": "Ingress Top Source ASNs by Traffic",
+      "description": "Estimated bytes per source ASN over the dashboard time range, received on the selected interfaces.",
       "datasource": {
         "type": "datasource",
         "uid": "-- Mixed --"
@@ -4539,7 +7196,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "topk(20, sum by (src_asn) (increase(rfm_flow_bytes_total{src_asn!=\"\", direction=\"$direction\", ifname=~\"$ifname\"}[$__range])))",
+          "expr": "topk(20, sum by (src_asn) (increase(rfm_flow_bytes_total{src_asn!=\"\", direction=\"ingress\", ifname=~\"$ifname\"}[$__range])))",
           "legendFormat": "{{src_asn}}",
           "refId": "A",
           "instant": true
@@ -4574,8 +7231,8 @@
     },
     {
       "type": "bargauge",
-      "title": "Top Destination ASNs by Traffic",
-      "description": "Estimated bytes per destination ASN over the dashboard time range, in the selected direction on the selected interfaces.",
+      "title": "Egress Top Source ASNs by Traffic",
+      "description": "Estimated bytes per source ASN over the dashboard time range, sent on the selected interfaces.",
       "datasource": {
         "type": "datasource",
         "uid": "-- Mixed --"
@@ -4626,7 +7283,181 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "topk(20, sum by (dst_asn) (increase(rfm_flow_bytes_total{dst_asn!=\"\", direction=\"$direction\", ifname=~\"$ifname\"}[$__range])))",
+          "expr": "topk(20, sum by (src_asn) (increase(rfm_flow_bytes_total{src_asn!=\"\", direction=\"egress\", ifname=~\"$ifname\"}[$__range])))",
+          "legendFormat": "{{src_asn}}",
+          "refId": "A",
+          "instant": true
+        }
+      ],
+      "transformations": [
+        {
+          "id": "seriesToRows",
+          "options": {}
+        },
+        {
+          "id": "groupBy",
+          "options": {
+            "fields": {
+              "Metric": {
+                "operation": "groupby"
+              },
+              "Value": {
+                "operation": "aggregate",
+                "aggregations": [
+                  "sum"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "id": "rowsToFields",
+          "options": {}
+        }
+      ]
+    },
+    {
+      "type": "bargauge",
+      "title": "Ingress Top Destination ASNs by Traffic",
+      "description": "Estimated bytes per destination ASN over the dashboard time range, received on the selected interfaces.",
+      "datasource": {
+        "type": "datasource",
+        "uid": "-- Mixed --"
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 12,
+        "x": 0,
+        "y": 56
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "horizontal",
+        "displayMode": "gradient",
+        "showUnfilled": true,
+        "valueMode": "text",
+        "minVizWidth": 8,
+        "minVizHeight": 16
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "topk(20, sum by (dst_asn) (increase(rfm_flow_bytes_total{dst_asn!=\"\", direction=\"ingress\", ifname=~\"$ifname\"}[$__range])))",
+          "legendFormat": "{{dst_asn}}",
+          "refId": "A",
+          "instant": true
+        }
+      ],
+      "transformations": [
+        {
+          "id": "seriesToRows",
+          "options": {}
+        },
+        {
+          "id": "groupBy",
+          "options": {
+            "fields": {
+              "Metric": {
+                "operation": "groupby"
+              },
+              "Value": {
+                "operation": "aggregate",
+                "aggregations": [
+                  "sum"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "id": "rowsToFields",
+          "options": {}
+        }
+      ]
+    },
+    {
+      "type": "bargauge",
+      "title": "Egress Top Destination ASNs by Traffic",
+      "description": "Estimated bytes per destination ASN over the dashboard time range, sent on the selected interfaces.",
+      "datasource": {
+        "type": "datasource",
+        "uid": "-- Mixed --"
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 12,
+        "x": 12,
+        "y": 56
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "horizontal",
+        "displayMode": "gradient",
+        "showUnfilled": true,
+        "valueMode": "text",
+        "minVizWidth": 8,
+        "minVizHeight": 16
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "topk(20, sum by (dst_asn) (increase(rfm_flow_bytes_total{dst_asn!=\"\", direction=\"egress\", ifname=~\"$ifname\"}[$__range])))",
           "legendFormat": "{{dst_asn}}",
           "refId": "A",
           "instant": true
@@ -4661,17 +7492,17 @@
     },
     {
       "type": "table",
-      "title": "ASN Pair Traffic",
-      "description": "Estimated bytes and packets between source and destination ASNs over the dashboard time range, in the selected direction on the selected interfaces.",
+      "title": "Ingress ASN Pair Traffic",
+      "description": "Estimated bytes and packets between source and destination ASNs over the dashboard time range, received on the selected interfaces.",
       "datasource": {
         "type": "datasource",
         "uid": "-- Mixed --"
       },
       "gridPos": {
         "h": 8,
-        "w": 24,
+        "w": 12,
         "x": 0,
-        "y": 56
+        "y": 66
       },
       "fieldConfig": {
         "defaults": {
@@ -4747,7 +7578,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "topk(50, sum by (src_asn, dst_asn) (increase(rfm_flow_bytes_total{src_asn!=\"\", dst_asn!=\"\", direction=\"$direction\", ifname=~\"$ifname\"}[$__range])))",
+          "expr": "topk(50, sum by (src_asn, dst_asn) (increase(rfm_flow_bytes_total{src_asn!=\"\", dst_asn!=\"\", direction=\"ingress\", ifname=~\"$ifname\"}[$__range])))",
           "legendFormat": "",
           "refId": "A",
           "instant": true,
@@ -4758,7 +7589,161 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "topk(50, sum by (src_asn, dst_asn) (increase(rfm_flow_packets_total{src_asn!=\"\", dst_asn!=\"\", direction=\"$direction\", ifname=~\"$ifname\"}[$__range])))",
+          "expr": "topk(50, sum by (src_asn, dst_asn) (increase(rfm_flow_packets_total{src_asn!=\"\", dst_asn!=\"\", direction=\"ingress\", ifname=~\"$ifname\"}[$__range])))",
+          "legendFormat": "",
+          "refId": "B",
+          "instant": true,
+          "format": "table"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "merge",
+          "options": {}
+        },
+        {
+          "id": "groupBy",
+          "options": {
+            "fields": {
+              "src_asn": {
+                "operation": "groupby"
+              },
+              "dst_asn": {
+                "operation": "groupby"
+              },
+              "Value #A": {
+                "operation": "aggregate",
+                "aggregations": [
+                  "sum"
+                ]
+              },
+              "Value #B": {
+                "operation": "aggregate",
+                "aggregations": [
+                  "sum"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true
+            },
+            "renameByName": {
+              "src_asn": "Source ASN",
+              "dst_asn": "Destination ASN",
+              "Value #A": "Bytes",
+              "Value #A (sum)": "Bytes",
+              "Value #B": "Packets",
+              "Value #B (sum)": "Packets"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "type": "table",
+      "title": "Egress ASN Pair Traffic",
+      "description": "Estimated bytes and packets between source and destination ASNs over the dashboard time range, sent on the selected interfaces.",
+      "datasource": {
+        "type": "datasource",
+        "uid": "-- Mixed --"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 66
+      },
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Bytes"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "bytes"
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-background",
+                  "mode": "gradient"
+                }
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "continuous-GrYlRd"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Packets"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "short"
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "sortBy": [
+          {
+            "displayName": "Bytes",
+            "desc": true
+          }
+        ],
+        "footer": {
+          "show": true,
+          "reducer": [
+            "sum"
+          ]
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "topk(50, sum by (src_asn, dst_asn) (increase(rfm_flow_bytes_total{src_asn!=\"\", dst_asn!=\"\", direction=\"egress\", ifname=~\"$ifname\"}[$__range])))",
+          "legendFormat": "",
+          "refId": "A",
+          "instant": true,
+          "format": "table"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "topk(50, sum by (src_asn, dst_asn) (increase(rfm_flow_packets_total{src_asn!=\"\", dst_asn!=\"\", direction=\"egress\", ifname=~\"$ifname\"}[$__range])))",
           "legendFormat": "",
           "refId": "B",
           "instant": true,
@@ -4815,8 +7800,8 @@
     },
     {
       "type": "bargauge",
-      "title": "Top Source Cities by Traffic",
-      "description": "Estimated bytes per source city over the dashboard time range, in the selected direction on the selected interfaces.",
+      "title": "Ingress Top Source Cities by Traffic",
+      "description": "Estimated bytes per source city over the dashboard time range, received on the selected interfaces.",
       "datasource": {
         "type": "datasource",
         "uid": "-- Mixed --"
@@ -4825,7 +7810,7 @@
         "h": 10,
         "w": 12,
         "x": 0,
-        "y": 64
+        "y": 74
       },
       "fieldConfig": {
         "defaults": {
@@ -4867,7 +7852,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "topk(20, sum by (src_city) (increase(rfm_flow_bytes_total{src_city!=\"\", direction=\"$direction\", ifname=~\"$ifname\"}[$__range])))",
+          "expr": "topk(20, sum by (src_city) (increase(rfm_flow_bytes_total{src_city!=\"\", direction=\"ingress\", ifname=~\"$ifname\"}[$__range])))",
           "legendFormat": "{{src_city}}",
           "refId": "A",
           "instant": true
@@ -4902,8 +7887,8 @@
     },
     {
       "type": "bargauge",
-      "title": "Top Destination Cities by Traffic",
-      "description": "Estimated bytes per destination city over the dashboard time range, in the selected direction on the selected interfaces.",
+      "title": "Egress Top Source Cities by Traffic",
+      "description": "Estimated bytes per source city over the dashboard time range, sent on the selected interfaces.",
       "datasource": {
         "type": "datasource",
         "uid": "-- Mixed --"
@@ -4912,7 +7897,7 @@
         "h": 10,
         "w": 12,
         "x": 12,
-        "y": 64
+        "y": 74
       },
       "fieldConfig": {
         "defaults": {
@@ -4954,7 +7939,181 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "topk(20, sum by (dst_city) (increase(rfm_flow_bytes_total{dst_city!=\"\", direction=\"$direction\", ifname=~\"$ifname\"}[$__range])))",
+          "expr": "topk(20, sum by (src_city) (increase(rfm_flow_bytes_total{src_city!=\"\", direction=\"egress\", ifname=~\"$ifname\"}[$__range])))",
+          "legendFormat": "{{src_city}}",
+          "refId": "A",
+          "instant": true
+        }
+      ],
+      "transformations": [
+        {
+          "id": "seriesToRows",
+          "options": {}
+        },
+        {
+          "id": "groupBy",
+          "options": {
+            "fields": {
+              "Metric": {
+                "operation": "groupby"
+              },
+              "Value": {
+                "operation": "aggregate",
+                "aggregations": [
+                  "sum"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "id": "rowsToFields",
+          "options": {}
+        }
+      ]
+    },
+    {
+      "type": "bargauge",
+      "title": "Ingress Top Destination Cities by Traffic",
+      "description": "Estimated bytes per destination city over the dashboard time range, received on the selected interfaces.",
+      "datasource": {
+        "type": "datasource",
+        "uid": "-- Mixed --"
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 12,
+        "x": 0,
+        "y": 84
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "horizontal",
+        "displayMode": "gradient",
+        "showUnfilled": true,
+        "valueMode": "text",
+        "minVizWidth": 8,
+        "minVizHeight": 16
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "topk(20, sum by (dst_city) (increase(rfm_flow_bytes_total{dst_city!=\"\", direction=\"ingress\", ifname=~\"$ifname\"}[$__range])))",
+          "legendFormat": "{{dst_city}}",
+          "refId": "A",
+          "instant": true
+        }
+      ],
+      "transformations": [
+        {
+          "id": "seriesToRows",
+          "options": {}
+        },
+        {
+          "id": "groupBy",
+          "options": {
+            "fields": {
+              "Metric": {
+                "operation": "groupby"
+              },
+              "Value": {
+                "operation": "aggregate",
+                "aggregations": [
+                  "sum"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "id": "rowsToFields",
+          "options": {}
+        }
+      ]
+    },
+    {
+      "type": "bargauge",
+      "title": "Egress Top Destination Cities by Traffic",
+      "description": "Estimated bytes per destination city over the dashboard time range, sent on the selected interfaces.",
+      "datasource": {
+        "type": "datasource",
+        "uid": "-- Mixed --"
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 12,
+        "x": 12,
+        "y": 84
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "horizontal",
+        "displayMode": "gradient",
+        "showUnfilled": true,
+        "valueMode": "text",
+        "minVizWidth": 8,
+        "minVizHeight": 16
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "topk(20, sum by (dst_city) (increase(rfm_flow_bytes_total{dst_city!=\"\", direction=\"egress\", ifname=~\"$ifname\"}[$__range])))",
           "legendFormat": "{{dst_city}}",
           "refId": "A",
           "instant": true
@@ -4989,17 +8148,17 @@
     },
     {
       "type": "table",
-      "title": "City-to-City Traffic",
-      "description": "Estimated bytes and packets between source and destination cities over the dashboard time range, in the selected direction on the selected interfaces.",
+      "title": "Ingress City-to-City Traffic",
+      "description": "Estimated bytes and packets between source and destination cities over the dashboard time range, received on the selected interfaces.",
       "datasource": {
         "type": "datasource",
         "uid": "-- Mixed --"
       },
       "gridPos": {
         "h": 8,
-        "w": 24,
+        "w": 12,
         "x": 0,
-        "y": 74
+        "y": 94
       },
       "fieldConfig": {
         "defaults": {
@@ -5075,7 +8234,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "topk(50, sum by (src_city, dst_city) (increase(rfm_flow_bytes_total{src_city!=\"\", dst_city!=\"\", direction=\"$direction\", ifname=~\"$ifname\"}[$__range])))",
+          "expr": "topk(50, sum by (src_city, dst_city) (increase(rfm_flow_bytes_total{src_city!=\"\", dst_city!=\"\", direction=\"ingress\", ifname=~\"$ifname\"}[$__range])))",
           "legendFormat": "",
           "refId": "A",
           "instant": true,
@@ -5086,7 +8245,161 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "topk(50, sum by (src_city, dst_city) (increase(rfm_flow_packets_total{src_city!=\"\", dst_city!=\"\", direction=\"$direction\", ifname=~\"$ifname\"}[$__range])))",
+          "expr": "topk(50, sum by (src_city, dst_city) (increase(rfm_flow_packets_total{src_city!=\"\", dst_city!=\"\", direction=\"ingress\", ifname=~\"$ifname\"}[$__range])))",
+          "legendFormat": "",
+          "refId": "B",
+          "instant": true,
+          "format": "table"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "merge",
+          "options": {}
+        },
+        {
+          "id": "groupBy",
+          "options": {
+            "fields": {
+              "src_city": {
+                "operation": "groupby"
+              },
+              "dst_city": {
+                "operation": "groupby"
+              },
+              "Value #A": {
+                "operation": "aggregate",
+                "aggregations": [
+                  "sum"
+                ]
+              },
+              "Value #B": {
+                "operation": "aggregate",
+                "aggregations": [
+                  "sum"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true
+            },
+            "renameByName": {
+              "src_city": "Source City",
+              "dst_city": "Destination City",
+              "Value #A": "Bytes",
+              "Value #A (sum)": "Bytes",
+              "Value #B": "Packets",
+              "Value #B (sum)": "Packets"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "type": "table",
+      "title": "Egress City-to-City Traffic",
+      "description": "Estimated bytes and packets between source and destination cities over the dashboard time range, sent on the selected interfaces.",
+      "datasource": {
+        "type": "datasource",
+        "uid": "-- Mixed --"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 94
+      },
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Bytes"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "bytes"
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-background",
+                  "mode": "gradient"
+                }
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "continuous-GrYlRd"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Packets"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "short"
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "sortBy": [
+          {
+            "displayName": "Bytes",
+            "desc": true
+          }
+        ],
+        "footer": {
+          "show": true,
+          "reducer": [
+            "sum"
+          ]
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "topk(50, sum by (src_city, dst_city) (increase(rfm_flow_bytes_total{src_city!=\"\", dst_city!=\"\", direction=\"egress\", ifname=~\"$ifname\"}[$__range])))",
+          "legendFormat": "",
+          "refId": "A",
+          "instant": true,
+          "format": "table"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "topk(50, sum by (src_city, dst_city) (increase(rfm_flow_packets_total{src_city!=\"\", dst_city!=\"\", direction=\"egress\", ifname=~\"$ifname\"}[$__range])))",
           "legendFormat": "",
           "refId": "B",
           "instant": true,
@@ -5153,7 +8466,7 @@
         "h": 8,
         "w": 8,
         "x": 0,
-        "y": 82
+        "y": 102
       },
       "fieldConfig": {
         "defaults": {
@@ -5232,7 +8545,7 @@
         "h": 8,
         "w": 8,
         "x": 8,
-        "y": 82
+        "y": 102
       },
       "fieldConfig": {
         "defaults": {
@@ -5311,7 +8624,7 @@
         "h": 8,
         "w": 8,
         "x": 16,
-        "y": 82
+        "y": 102
       },
       "fieldConfig": {
         "defaults": {
@@ -5388,7 +8701,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 90
+        "y": 110
       },
       "fieldConfig": {
         "defaults": {
@@ -5459,7 +8772,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 90
+        "y": 110
       },
       "fieldConfig": {
         "defaults": {
@@ -5530,7 +8843,7 @@
         "h": 4,
         "w": 5,
         "x": 0,
-        "y": 98
+        "y": 118
       },
       "fieldConfig": {
         "defaults": {
@@ -5619,7 +8932,7 @@
         "h": 4,
         "w": 5,
         "x": 5,
-        "y": 98
+        "y": 118
       },
       "fieldConfig": {
         "defaults": {
@@ -5708,7 +9021,7 @@
         "h": 4,
         "w": 5,
         "x": 10,
-        "y": 98
+        "y": 118
       },
       "fieldConfig": {
         "defaults": {
@@ -5793,7 +9106,7 @@
         "h": 4,
         "w": 5,
         "x": 15,
-        "y": 98
+        "y": 118
       },
       "fieldConfig": {
         "defaults": {
@@ -5878,7 +9191,7 @@
         "h": 4,
         "w": 4,
         "x": 20,
-        "y": 98
+        "y": 118
       },
       "fieldConfig": {
         "defaults": {

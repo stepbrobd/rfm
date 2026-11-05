@@ -55,17 +55,17 @@ in
       assert reply["status"] == "success", f"{path} {params}: {reply}"
       return reply["data"]["result"] if path == "query" else reply["data"]
 
-    def interpolate(expr: str, direction: str) -> str:
-      # what grafana fills in, a range that covers the whole test, every
-      # interface and one direction
-      values = {"__range": "10m", "__rate_interval": "4s", "ifname": ".*", "direction": direction}
+    def interpolate(expr: str) -> str:
+      # what grafana fills in, a range that covers the whole test and every
+      # interface
+      values = {"__range": "10m", "__rate_interval": "4s", "ifname": ".*"}
       return re.sub(r"\$\{?(\w+)\}?", lambda m: values[m.group(1)], expr)
 
-    def label_values(title: str, label: str, direction: str) -> set[str]:
+    def label_values(title: str, label: str) -> set[str]:
       return {
         series["metric"].get(label, "")
         for target in panels[title]["targets"]
-        for series in prometheus("query", "query=" + interpolate(target["expr"], direction))
+        for series in prometheus("query", "query=" + interpolate(target["expr"]))
       }
 
     def asn_of(ip: str) -> str:
@@ -100,11 +100,15 @@ in
       "rfm flows top 1024 --json > /tmp/flows && ! grep -q '\"dst\": \"8.8.8.8\"' /tmp/flows"
     )
 
-    # every query of the dashboard is valid and finds the series it names
+    # every query of the dashboard is valid and finds the series it names,
+    # but for the ingress rankings by ASN or city, which no public address reaches
     for panel in dashboard["panels"]:
       for target in panel.get("targets", []):
-        expr = interpolate(target["expr"], "egress")
-        assert prometheus("query", "query=" + expr), f"{panel['title']}: no data for {expr}"
+        expr = interpolate(target["expr"])
+        rows = prometheus("query", "query=" + expr)
+        if panel["title"].startswith("Ingress ") and '!=""' in expr:
+          continue
+        assert rows, f"{panel['title']}: no data for {expr}"
 
     for variable in dashboard["templating"]["list"]:
       if variable["type"] == "query":
@@ -114,16 +118,16 @@ in
         found = set(prometheus(f"label/{label}/values", f"match[]={metric}"))
         assert {"eth1", "lo"} <= found, f"variable {variable['name']}: {found}"
 
-    # the rankings count the echo requests over the whole range, and only in
-    # the direction they took
+    # each ranking comes as an ingress and an egress panel, and the egress
+    # one alone counts the echo requests, over the whole range
     for title, label, asn in [
       ("Top Source ASNs by Traffic", "src_asn", src_asn),
       ("Top Destination ASNs by Traffic", "dst_asn", dst_asn),
       ("ASN Pair Traffic", "src_asn", src_asn),
       ("ASN Pair Traffic", "dst_asn", dst_asn),
     ]:
-      assert asn in label_values(title, label, "egress"), f"{title}: {label} {asn} missing from egress"
-      assert asn not in label_values(title, label, "ingress"), f"{title}: {label} {asn} counted as ingress"
+      assert asn in label_values(f"Egress {title}", label), f"{title}: {label} {asn} missing from egress"
+      assert asn not in label_values(f"Ingress {title}", label), f"{title}: {label} {asn} counted as ingress"
 
     for title, label in [
       ("Top Source Cities by Traffic", "src_city"),
@@ -131,9 +135,15 @@ in
       ("City-to-City Traffic", "src_city"),
       ("City-to-City Traffic", "dst_city"),
     ]:
-      assert label_values(title, label, "egress") - {""}, f"{title}: no {label} in egress"
-      assert not label_values(title, label, "ingress") - {""}, f"{title}: {label} counted as ingress"
+      assert label_values(f"Egress {title}", label) - {""}, f"{title}: no {label} in egress"
+      assert not label_values(f"Ingress {title}", label) - {""}, f"{title}: {label} counted as ingress"
 
-    assert "1" in label_values("Traffic by Protocol", "proto", "egress"), "Traffic by Protocol: no icmp in egress"
+    assert "1" in label_values("Egress Traffic by Protocol", "proto"), "Traffic by Protocol: no icmp in egress"
+
+    # no panel asks for a direction to be picked, and every data source can be
+    # shown at once
+    names = {variable["name"]: variable for variable in dashboard["templating"]["list"]}
+    assert "direction" not in names, "a direction variable is back"
+    assert names["datasource"]["includeAll"], "the data source variable has no All"
   '';
 }

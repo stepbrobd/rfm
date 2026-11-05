@@ -648,6 +648,13 @@ RFM exports. Its panels show:
 - ASN and city summaries
 - collector health and error panels
 
+The protocol share and the ASN and city summaries come as a pair of panels, one
+for the traffic the selected interfaces received and one for the traffic they
+sent, since a forwarded packet counts once on each side. The data source and
+interface selectors both offer All. A panel queries every data source selected,
+the rankings add their answers up, and the time series show one line per data
+source.
+
 ## CLI
 
 `rfm agent` runs the daemon, `rfm version` prints the version and
