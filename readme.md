@@ -393,7 +393,9 @@ never fragment.
 The exporter queues up to `max_flows` or 4096 records, whichever is larger,
 enough for one eviction sweep of a full table. A full queue drops the newest
 record and counts it, and flow collection never waits on a slow socket. The
-sender gathers records for up to 1 second before a partial message goes out.
+agent logs the first drop at once and later ones at most once a minute, each
+line with the count since the previous one. The sender gathers records for up to
+1 second before a partial message goes out.
 
 The exporter dials the collector at start and, when that fails, again with
 backoff (1s to 30s), so the agent starts and keeps counting while the collector

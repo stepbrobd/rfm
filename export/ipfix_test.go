@@ -1099,6 +1099,12 @@ func TestIPFIXQueueFullDropsRecords(t *testing.T) {
 	if got := exp.Stats().QueueDropped; got != 2 {
 		t.Fatalf("queue dropped = %d, want 2", got)
 	}
+	// a full queue refuses a record without an allocation, it may refuse millions a minute under load
+	flow := testFlow("::ffff:10.0.0.1", "::ffff:10.0.0.2", 9)
+	// an error, not a fatal, lets the test release the parked sender that Close waits on
+	if n := testing.AllocsPerRun(100, func() { _ = exp.ExportFlow(flow) }); n != 0 {
+		t.Errorf("a refusal allocated %v times, want none", n)
+	}
 
 	close(release)
 	if err := <-flushed; err != nil {

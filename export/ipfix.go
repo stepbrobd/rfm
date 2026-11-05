@@ -21,6 +21,12 @@ import (
 
 var loadIPFIXRegistry sync.Once
 
+// the refusals of ExportFlow, a queue that sheds load returns one a record and allocates nothing for it
+var (
+	errIPFIXClosed    = errors.New("ipfix exporter closed")
+	errIPFIXQueueFull = errors.New("ipfix queue full")
+)
+
 var (
 	ipfixCommonFields = []string{
 		"sourceTransportPort",
@@ -280,7 +286,7 @@ func (e *IPFIXExporter) Flush() error {
 		<-req
 		return nil
 	case <-e.done:
-		return errors.New("ipfix exporter closed")
+		return errIPFIXClosed
 	}
 }
 
@@ -291,7 +297,7 @@ func (e *IPFIXExporter) ExportFlow(flow collector.ExportedFlow) error {
 
 	if e.closed {
 		e.stats.Unsent++
-		return errors.New("ipfix exporter closed")
+		return errIPFIXClosed
 	}
 	if e.isOwnExportFlowLocked(flow) {
 		return nil
@@ -302,7 +308,7 @@ func (e *IPFIXExporter) ExportFlow(flow collector.ExportedFlow) error {
 		return nil
 	default:
 		e.stats.QueueDropped++
-		return errors.New("ipfix queue full")
+		return errIPFIXQueueFull
 	}
 }
 

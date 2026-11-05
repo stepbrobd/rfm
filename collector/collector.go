@@ -54,6 +54,10 @@ type Collector struct {
 	folded      atomic.Uint64
 	ringBufErrs atomic.Uint64
 	bpfMapErrs  atomic.Uint64
+
+	// exportRefused counts the records the exporter refused since the last log of them, exportLogAt is when the next log may come, in unix ns
+	exportRefused atomic.Uint64
+	exportLogAt   atomic.Int64
 }
 
 // New creates a collector that evicts flows idle for timeout and holds at most maxFlows flows, enricher may be nil
@@ -716,19 +720,29 @@ func (c *Collector) exportFlows(exp FlowExporter, flows []ExportedFlow) {
 	if exp == nil {
 		return
 	}
-	var failed int
+	var refused uint64
+	var first error
 	for _, flow := range flows {
 		if err := exp.ExportFlow(flow); err != nil {
-			failed++
-			if failed == 1 {
-				log.Error("export flow", "err", err)
+			if refused == 0 {
+				first = err
 			}
+			refused++
 		}
 	}
-	if failed > 1 {
-		log.Error("export flow batch", "failed", failed, "total", len(flows))
+	if refused == 0 {
+		return
+	}
+	// the exporter counts what it refuses, a log line a batch would flood the log of an exporter that sheds load
+	c.exportRefused.Add(refused)
+	now := time.Now().UnixNano()
+	if at := c.exportLogAt.Load(); now >= at && c.exportLogAt.CompareAndSwap(at, now+int64(exportLogEvery)) {
+		log.Error("export flows", "err", first, "refused", c.exportRefused.Swap(0), "every", exportLogEvery)
 	}
 }
+
+// exportLogEvery spaces the logs of the records an exporter refuses, the first refusal logs at once
+const exportLogEvery = time.Minute
 
 func (c *Collector) pollDrops(rd Reader) {
 	dropped, err := rd.DroppedEvents()
