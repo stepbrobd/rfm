@@ -1412,8 +1412,9 @@ func TestSweepLetsAWaiterTakeTheLockBetweenHolds(t *testing.T) {
 		c.mu.Unlock()
 	}()
 	c.Evict(t0 + 31*time.Second)
-	if n := <-left; n != flows-sweepChunk {
-		t.Fatalf("the waiter took mu with %d flows left, want it after the first hold of the sweep with %d left", n, flows-sweepChunk)
+	// the sweep yields to the global queue, which the scheduler takes first on every 61st tick, and the waiter can then come a hold later
+	if n := <-left; n == 0 || n == flows {
+		t.Fatalf("the waiter took mu with %d of %d flows left, want it between two holds of the sweep", n, flows)
 	}
 	if n := c.Stats().ActiveFlows; n != 0 {
 		t.Fatalf("active flows = %d after the idle sweep, want none", n)
@@ -1433,7 +1434,8 @@ func TestSweepBuildsNoRecordsWithoutAnExporter(t *testing.T) {
 	c.sweep(t0+period, period)
 	c.Evict(t0 + 41*time.Second)
 	runtime.ReadMemStats(&after)
-	if n := after.TotalAlloc - before.TotalAlloc; n > 4096 {
+	// the count takes in what other goroutines allocate while the sweep yields, a record of each flow would take hundreds of KiB
+	if n := after.TotalAlloc - before.TotalAlloc; n > 64<<10 {
 		t.Fatalf("sweeps without an exporter allocated %d bytes for %d flows, want no records", n, flows)
 	}
 	if n := c.Stats().ActiveFlows; n != 0 {
