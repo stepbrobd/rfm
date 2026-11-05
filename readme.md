@@ -253,9 +253,10 @@ wakeups, and an event submitted without one waits for the collector's 100
 millisecond read deadline at most. `0` derives half of the events the ring
 holds, at 64 bytes an event, 2048 for a ring of 256 KiB. A set batch must be at
 most that half, which leaves the collector the other half of the ring to catch
-up in after the wakeup. A set batch with `ring_buf_size` at 0 doubles the
-derived ring until it holds twice the batch, up to 64 MiB, past which a batch
-above 524288 events is refused.
+up in after the wakeup, less the `stage_events` - 1 events the staged record
+that crosses the batch can carry past it. A set batch with `ring_buf_size` at 0
+doubles the derived ring until it holds twice the batch, up to 64 MiB, past
+which a batch above 524288 events is refused.
 
 `iface_stats_size` (int, default 0): Override the BPF iface stats hash map
 capacity, in keys. Up to `iface_slots` attached interfaces with an ifindex below

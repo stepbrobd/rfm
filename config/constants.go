@@ -27,6 +27,8 @@ const (
 	minRingBufSize = 64 << 10
 	// maxDerivedRingBufSize bounds the ring a large wakeup batch derives, a batch past it must set the ring
 	maxDerivedRingBufSize = 64 << 20
+	// maxSetRingBufSize is the largest ring the kernel takes, a power of two in its 32 bit size
+	maxSetRingBufSize = 1 << 31
 	// ringRecordBytes is one flow event of 56 bytes and the 8 byte header of its ring record
 	ringRecordBytes = 64
 	// maxIfaceSlots is RFM_SLOTS in bpf/rfm_common.h, the bound the programs check a slot against

@@ -52,7 +52,7 @@ in
                     };
 
                     ring_buf_size = std.mkOption {
-                      type = std.types.ints.unsigned;
+                      type = std.types.ints.between 0 2147483648;
                       default = 0;
                       description = "Size in bytes of the ring buffer of each CPU, 0 derives it from sample_rate: 256 KiB at 1 in 1, half as much for each doubling of the rate, down to 64 KiB from 1 in 4 on.";
                     };
@@ -64,7 +64,7 @@ in
                     };
 
                     iface_stats_size = std.mkOption {
-                      type = std.types.ints.unsigned;
+                      type = std.types.ints.u32;
                       default = 0;
                       description = "Override the BPF iface stats map capacity, 0 keeps the default of 4096 counter keys or the capacity of a pinned map. A set capacity that differs from the pinned one fails the start until the pin is removed or the host reboots.";
                     };

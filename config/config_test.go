@@ -130,6 +130,10 @@ func TestParseRejects(t *testing.T) {
 		{base + "[agent.bpf]\nring_buf_size = -4096\n", "ring_buf_size must be > 0, or 0 to derive it"},
 		{base + "[agent.bpf]\nring_buf_size = 12345\n", "ring_buf_size must be a power of two"},
 		{base + "[agent.bpf]\nring_buf_size = " + halfPage + "\n", "ring_buf_size must be a multiple of the page size"},
+		// the probe hands the kernel 32 bit sizes, a larger one would wrap
+		{base + "[agent.bpf]\nring_buf_size = 4294967296\n", "ring_buf_size must be at most 2147483648"},
+		{base + "[agent.bpf]\nring_buf_size = 549755813888\n", "ring_buf_size must be at most 2147483648"},
+		{base + "[agent.bpf]\niface_stats_size = 4294971392\n", "iface_stats_size must be between 0 and 4294967295"},
 		// a batch of half the ring and more leaves the reader no room
 		{base + "[agent.bpf]\nring_buf_size = 65536\nwakeup_batch = 1024\n", "wakeup_batch must be at most half the 1024 events"},
 		{base + "[agent.bpf]\nring_buf_size = 16384\nwakeup_batch = 129\n", "wakeup_batch must be at most half the 256 events"},
@@ -139,7 +143,7 @@ func TestParseRejects(t *testing.T) {
 		// a stage holds 32 events at most
 		{base + "[agent.bpf]\nstage_events = 0\n", "stage_events must be between 1 and 32"},
 		{base + "[agent.bpf]\nstage_events = 33\n", "stage_events must be between 1 and 32"},
-		{base + "[agent.bpf]\niface_stats_size = -1\n", "iface_stats_size must be >= 0"},
+		{base + "[agent.bpf]\niface_stats_size = -1\n", "iface_stats_size must be between 0 and 4294967295"},
 		{base + "[agent.bpf]\nsample_rate = 2000\n", "max_sample_rate must be >= sample_rate"},
 		{base + "[agent.bpf]\nmax_sample_rate = 0\n", "max_sample_rate must be >= sample_rate"},
 		// the flow table, the label tuples and the ipfix queue are all sized

@@ -28,7 +28,8 @@ func (r *rateController) step(drops uint64) (uint32, bool) {
 		if r.rate >= r.max {
 			return r.rate, false
 		}
-		r.rate = min(r.rate*2, r.max)
+		// a rate above 2^31 would wrap when doubled in 32 bits
+		r.rate = uint32(min(uint64(r.rate)*2, uint64(r.max)))
 		return r.rate, true
 	}
 

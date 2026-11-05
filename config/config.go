@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"math"
 	"net"
 	"os"
 	"regexp"
@@ -282,6 +283,10 @@ func validate(cfg *Config) error {
 	if a.BPF.RingBufSize&(a.BPF.RingBufSize-1) != 0 {
 		return fmt.Errorf("agent.bpf.ring_buf_size must be a power of two, got %d", a.BPF.RingBufSize)
 	}
+	// the kernel takes the size as a 32 bit power of two
+	if a.BPF.RingBufSize > maxSetRingBufSize {
+		return fmt.Errorf("agent.bpf.ring_buf_size must be at most %d, got %d", maxSetRingBufSize, a.BPF.RingBufSize)
+	}
 	// the kernel rejects ring buffers that are not a whole number of pages
 	if page := os.Getpagesize(); a.BPF.RingBufSize%page != 0 {
 		return fmt.Errorf("agent.bpf.ring_buf_size must be a multiple of the page size %d, got %d", page, a.BPF.RingBufSize)
@@ -293,8 +298,8 @@ func validate(cfg *Config) error {
 	if a.BPF.StageEvents < 1 || a.BPF.StageEvents > maxStageEvents {
 		return fmt.Errorf("agent.bpf.stage_events must be between 1 and %d, got %d", maxStageEvents, a.BPF.StageEvents)
 	}
-	if a.BPF.IfaceStatsSize < 0 {
-		return fmt.Errorf("agent.bpf.iface_stats_size must be >= 0, got %d", a.BPF.IfaceStatsSize)
+	if a.BPF.IfaceStatsSize < 0 || a.BPF.IfaceStatsSize > math.MaxUint32 {
+		return fmt.Errorf("agent.bpf.iface_stats_size must be between 0 and %d, got %d", uint32(math.MaxUint32), a.BPF.IfaceStatsSize)
 	}
 	if a.BPF.IfaceSlots < 0 || a.BPF.IfaceSlots > maxIfaceSlots {
 		return fmt.Errorf("agent.bpf.iface_slots must be between 0 and %d, got %d, 0 keeps the default", maxIfaceSlots, a.BPF.IfaceSlots)

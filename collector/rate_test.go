@@ -57,3 +57,19 @@ func TestRateControllerNeverGoesBelowBase(t *testing.T) {
 		t.Fatalf("rate after two quiet streaks = %d, want the base 100", r.rate)
 	}
 }
+
+func TestRateControllerNeverLowersTheRateUnderDrops(t *testing.T) {
+	// a rate past 2^31 doubled in 32 bits would wrap below itself, it must stop at the max instead
+	r := newRateController(3000000000, 4294967295)
+	prev := r.rate
+	for i := range 4 {
+		rate, _ := r.step(1)
+		if rate < prev {
+			t.Fatalf("step %d under drops lowered the rate from %d to %d", i, prev, rate)
+		}
+		prev = rate
+	}
+	if r.rate != 4294967295 {
+		t.Fatalf("rate under drops = %d, want the max 4294967295", r.rate)
+	}
+}
