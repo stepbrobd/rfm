@@ -317,7 +317,11 @@ func (c *Collector) addLocked(s *sample, ev *FlowEvent, labels map[addrPair]labe
 	now := s.tstamp
 	d, ipBytes := c.countsLocked(s)
 
-	key := newKey(s, ev)
+	// the key's addresses serve only the labels, and its form only an event that named one
+	var key FlowKey
+	if c.enricher != nil || ev != nil {
+		key = newKey(s, ev)
+	}
 	var lp labelPair
 	if c.enricher != nil {
 		var resolved bool
@@ -333,7 +337,7 @@ func (c *Collector) addLocked(s *sample, ev *FlowEvent, labels map[addrPair]labe
 		}
 	}
 
-	rollup := c.rollupLocked(RollupKey{Ifindex: key.Ifindex, Dir: key.Dir, Proto: key.Proto, Src: src, Dst: dst})
+	rollup := c.rollupLocked(RollupKey{Ifindex: s.id.ifIndex(), Dir: s.id.dir, Proto: s.id.proto, Src: src, Dst: dst})
 	c.attachLocked(rollup)
 	c.rollups.at(rollup).add(d, now)
 

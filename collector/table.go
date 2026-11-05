@@ -268,7 +268,9 @@ type rollupLinks struct {
 
 // rollupTable holds the label tuples in chunks that never move and names each by its slot, so a new tuple costs no allocation once the table has grown and a tuple going idle costs none
 type rollupTable struct {
-	index  map[RollupKey]rollupRef
+	index map[RollupKey]rollupRef
+	// recent holds the slots of recent tuples by a hash of their numbers, a hit skips the map's hash of the city strings
+	recent [recentTuples]recentTuple
 	chunks []*[tableChunk]rollupState
 	// idle lists every tuple without live flows by when it lost its last one, oldest first, a new tuple waits there for its first flow
 	idle struct{ head, tail rollupRef }
@@ -294,9 +296,39 @@ func (t *rollupTable) len() int {
 	return len(t.index)
 }
 
-// get returns the slot of the tuple under k
+// recentBits sizes the cache of recent tuples, which holds recentTuples slots
+const (
+	recentBits   = 6
+	recentTuples = 1 << recentBits
+)
+
+// recentTuple is one slot of the cache of recent tuples, the tag tells most other tuples apart before their slot is read
+type recentTuple struct {
+	tag uint32
+	ref rollupRef
+}
+
+// recentSlot returns where the cache of recent tuples keeps k and the tag it keeps k under, tuples that differ only in their cities share both
+func recentSlot(k *RollupKey) (uint, uint32) {
+	x := uint64(k.Ifindex)<<16 | uint64(k.Dir)<<8 | uint64(k.Proto)
+	x ^= (uint64(k.Src.ASN)<<32 | uint64(k.Dst.ASN)) * 0x9e3779b97f4a7c15
+	x *= 0xff51afd7ed558ccd
+	return uint(x >> (64 - recentBits)), uint32(x >> (32 - recentBits))
+}
+
+// get returns the slot of the tuple under k and writes the cache of recent tuples, its caller holds mu for writing
 func (t *rollupTable) get(k RollupKey) (rollupRef, bool) {
+	i, tag := recentSlot(&k)
+	// a dropped slot reads id 0, and a slot taken again holds its new tuple's key
+	if c := t.recent[i]; c.ref != 0 && c.tag == tag {
+		if s := t.at(c.ref); s.id != 0 && s.key == k {
+			return c.ref, true
+		}
+	}
 	r, ok := t.index[k]
+	if ok {
+		t.recent[i] = recentTuple{tag, r}
+	}
 	return r, ok
 }
 
@@ -315,6 +347,8 @@ func (t *rollupTable) add(k RollupKey) rollupRef {
 	t.ids++
 	*t.at(r) = rollupState{key: k, id: t.ids}
 	t.index[k] = r
+	i, tag := recentSlot(&k)
+	t.recent[i] = recentTuple{tag, r}
 	t.pushBack(r)
 	return r
 }

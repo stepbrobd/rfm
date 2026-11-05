@@ -93,11 +93,16 @@ func (k FlowKey) id() flowID {
 	return id
 }
 
+// ifIndex returns the interface index of id
+func (id *flowID) ifIndex() uint32 {
+	return binary.NativeEndian.Uint32(id.ifindex[:])
+}
+
 // key returns the flow key of id, its addresses in their 16 byte form
 func (id *flowID) key() FlowKey {
 	ne := binary.NativeEndian
 	return FlowKey{
-		Ifindex: ne.Uint32(id.ifindex[:]),
+		Ifindex: id.ifIndex(),
 		Dir:     id.dir,
 		Proto:   id.proto,
 		SrcAddr: netip.AddrFrom16([16]byte(id.addrs[:16])),

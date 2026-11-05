@@ -328,6 +328,46 @@ func TestRollupTableReusesTheSlotOfADroppedTuple(t *testing.T) {
 	}
 }
 
+func TestRollupTableGetMatchesAMapUnderRandomUse(t *testing.T) {
+	// tuples that differ only in their cities share a slot of the recent cache, dropped slots are taken again, and the zero key a free slot holds is looked up too
+	cities := []string{"", "a", "b"}
+	key := func(rng *rand.Rand) RollupKey {
+		return RollupKey{
+			Ifindex: uint32(rng.IntN(2)),
+			Dir:     uint8(rng.IntN(2)),
+			Proto:   []uint8{0, 17}[rng.IntN(2)],
+			Src:     Labels{ASN: uint32(rng.IntN(2)), City: cities[rng.IntN(len(cities))]},
+			Dst:     Labels{ASN: uint32(rng.IntN(2)), City: cities[rng.IntN(2)]},
+		}
+	}
+	for seed := range uint64(40) {
+		rng := rand.New(rand.NewPCG(seed, 2))
+		tab := newRollupTable()
+		want := map[RollupKey]rollupRef{}
+		for step := range 2000 {
+			k := key(rng)
+			switch r, ok := want[k]; {
+			case !ok && rng.IntN(2) == 0:
+				want[k] = tab.add(k)
+			case ok && rng.IntN(3) == 0:
+				tab.drop(r)
+				delete(want, k)
+			}
+			// a lookup of every key, held or not, agrees with the map
+			for range 4 {
+				k := key(rng)
+				r, ok := tab.get(k)
+				if w, wok := want[k]; ok != wok || r != w {
+					t.Fatalf("seed %d step %d: get(%+v) = %d %v, want %d %v", seed, step, k, r, ok, w, wok)
+				}
+			}
+		}
+		if tab.len() != len(want) {
+			t.Fatalf("seed %d: table holds %d tuples, want %d", seed, tab.len(), len(want))
+		}
+	}
+}
+
 func TestRollupTableKeepsNothingOfADroppedTupleAlive(t *testing.T) {
 	tab := newRollupTable()
 	r := tab.add(rollupKey(1))
