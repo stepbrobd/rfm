@@ -3,9 +3,11 @@ package collector
 import (
 	"context"
 	"fmt"
+	"math/rand/v2"
 	"net/netip"
 	"os"
 	"runtime"
+	"slices"
 	"sync"
 	"testing"
 	"time"
@@ -94,6 +96,19 @@ func BenchmarkHeldFlows(b *testing.B) {
 	runEvents(b, c, events, b.N)
 	// a timer reset drops the metrics reported before it
 	b.ReportMetric(float64(int64(after.HeapAlloc)-int64(before.HeapAlloc))/heldFlows, "heap-B/flow")
+}
+
+// BenchmarkHeldFlowsShuffled times events of held flows in a random order, as the rings of many cpus give them, where BenchmarkHeldFlows walks the table in the order it was filled
+func BenchmarkHeldFlowsShuffled(b *testing.B) {
+	events := heldEvents()
+	c := New(time.Hour, nil, 2*heldFlows)
+	runEvents(b, c, events, heldFlows)
+	shuffled := slices.Clone(events)
+	rand.New(rand.NewPCG(1, 2)).Shuffle(len(shuffled), func(i, j int) { shuffled[i], shuffled[j] = shuffled[j], shuffled[i] })
+
+	b.ReportAllocs()
+	b.ResetTimer()
+	runEvents(b, c, shuffled, b.N)
 }
 
 // runEvents runs c over n events, taken from events in turn

@@ -1,6 +1,9 @@
 package collector
 
-import "iter"
+import (
+	"iter"
+	"sync/atomic"
+)
 
 // flowRef names a slot of the flow table, 0 names none
 type flowRef uint32
@@ -40,6 +43,43 @@ type flowTable struct {
 	free flowRef
 	// next is the first slot never handed out, slot 0 stays unused so that 0 names none
 	next flowRef
+}
+
+// warmFrom is how many flows the table holds before a batch warms its lookups, the slots of a smaller table stay in the last level cache and a full default table of 65536 churns, where a warm pass finds nothing to warm
+const warmFrom = 1 << 18
+
+// warmed keeps the loads of warm from being optimized away, an atomic store keeps the tables of concurrent tests from racing on it
+var warmed atomic.Uint32
+
+// warmGroup is how many events one warm pass covers, few enough that the loads of a pass fit in the window the core runs ahead in
+const warmGroup = 8
+
+// warm loads the home cells of the hashes of batch, then the first line of the slot that each one's first cell of a matching tag names, so the lookups that follow wait on neither, the loads of a pass overlap where lookups one at a time wait on each in turn
+func (t *flowTable) warm(batch []sample) {
+	x := &t.index
+	if x.n == 0 {
+		return
+	}
+	var sink uint32
+	// the cells first, without a branch on what they hold, so every load of the pass is out at once
+	for i := range batch {
+		sink += uint32(x.cells[x.home(indexTag(batch[i].hash))].ref)
+	}
+	mask := len(x.cells) - 1
+	for i := range batch {
+		tag := indexTag(batch[i].hash)
+		for j, n := x.home(tag), 0; n < 4; j, n = (j+1)&mask, n+1 {
+			c := x.cells[j]
+			if c.ref == 0 {
+				break
+			}
+			if c.tag == tag {
+				sink += uint32(t.at(c.ref).id.proto)
+				break
+			}
+		}
+	}
+	warmed.Store(sink)
 }
 
 func newFlowTable() flowTable {

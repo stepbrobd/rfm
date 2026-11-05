@@ -227,9 +227,17 @@ func (c *Collector) record(batch []sample, evs []FlowEvent, buf *recordBuf) {
 	}
 
 	c.mu.Lock()
+	// a table past the cache warms the lookups of the next group of events before the events of this one
+	warm := c.flows.len() >= warmFrom
+	if warm {
+		c.flows.warm(batch[:min(warmGroup, len(batch))])
+	}
 	// a run of events of one flow, as the ring of a bulk transfer holds, looks the flow up once, the hashes tell most events of other flows apart
 	var last flowRef
 	for i := range batch {
+		if warm && i%warmGroup == 0 && i+warmGroup < len(batch) {
+			c.flows.warm(batch[i+warmGroup : min(i+2*warmGroup, len(batch))])
+		}
 		s := &batch[i]
 		if last == 0 || s.hash != batch[i-1].hash || !s.id.equal(&batch[i-1].id) {
 			var found bool
