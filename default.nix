@@ -10,6 +10,7 @@
 buildGoApplication (
   lib.fix (finalAttrs: {
     meta.mainProgram = finalAttrs.pname;
+    meta.platforms = lib.platforms.linux;
     pname = "rfm";
     version = lib.fileContents ./version.txt;
 
