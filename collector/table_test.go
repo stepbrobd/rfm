@@ -433,3 +433,54 @@ func TestFlowIndexSpreadsSequentialIPv4Sources(t *testing.T) {
 		}
 	}
 }
+
+func TestRecordCountsEveryEventOnceTheTableWarmsItsLookups(t *testing.T) {
+	// past warmFrom flows a batch warms the lookups of its next events, which must change no count
+	const flows = warmFrom + 1000
+	c := New(time.Hour, nil, 2*flows)
+	key := func(i int) FlowEvent {
+		return FlowEvent{
+			Tstamp:  time.Hour,
+			Ifindex: 1,
+			Proto:   17,
+			SrcAddr: netip.AddrFrom4([4]byte{10, byte(i >> 16), byte(i >> 8), byte(i)}),
+			DstAddr: netip.MustParseAddr("192.0.2.1"),
+			SrcPort: 1024,
+			DstPort: 53,
+			Segs:    1,
+			Len:     100,
+		}
+	}
+	evs := make([]FlowEvent, flows)
+	for i := range evs {
+		evs[i] = key(i)
+	}
+	c.RecordBatch(evs)
+	if n := c.Stats().ActiveFlows; n != flows {
+		t.Fatalf("table holds %d flows, want %d", n, flows)
+	}
+
+	// batches of every length around the warm group, of flows held and new ones, in a random order
+	rng := rand.New(rand.NewPCG(3, 4))
+	want := map[FlowKey]uint64{}
+	for i := range evs {
+		want[evs[i].Key()] = 1
+	}
+	for size := 1; size <= 4*warmGroup+3; size++ {
+		batch := make([]FlowEvent, size)
+		for j := range batch {
+			batch[j] = key(rng.IntN(flows + 50))
+			want[batch[j].Key()]++
+		}
+		c.RecordBatch(batch)
+	}
+	got := c.Flows()
+	if len(got) != len(want) {
+		t.Fatalf("table holds %d flows, want %d", len(got), len(want))
+	}
+	for k, n := range want {
+		if got[k].Packets != n {
+			t.Fatalf("flow %v counts %d packets, want %d", k, got[k].Packets, n)
+		}
+	}
+}
