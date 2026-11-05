@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/netip"
 	"os"
+	"runtime"
 	"sort"
 	"sync"
 	"sync/atomic"
@@ -499,6 +500,10 @@ func (c *Collector) sweep(now, period time.Duration) {
 
 		c.exportFlows(exp, expired)
 		expired = expired[:0]
+		// the unlock woke a recorder that waits on mu, a yield lets it take mu before the next hold instead of after the millisecond a waiter waits before mu turns fair
+		if idle || active {
+			runtime.Gosched()
+		}
 	}
 }
 

@@ -1395,6 +1395,31 @@ func TestSweepEndsAndReportsMoreFlowsThanOneHoldTakes(t *testing.T) {
 	}
 }
 
+func TestSweepLetsAWaiterTakeTheLockBetweenHolds(t *testing.T) {
+	// on one p the waiter runs only once the sweep yields it the p
+	defer runtime.GOMAXPROCS(runtime.GOMAXPROCS(1))
+	const flows = 3 * sweepChunk
+	t0 := time.Hour
+	c := New(30*time.Second, nil, 2*flows)
+	c.RecordBatch(sweepEvents(flows, t0))
+
+	left := make(chan int, 1)
+	// a fresh slice of the p keeps a preemption from running the waiter before the sweep takes mu
+	runtime.Gosched()
+	go func() {
+		c.mu.Lock()
+		left <- c.flows.len()
+		c.mu.Unlock()
+	}()
+	c.Evict(t0 + 31*time.Second)
+	if n := <-left; n != flows-sweepChunk {
+		t.Fatalf("the waiter took mu with %d flows left, want it after the first hold of the sweep with %d left", n, flows-sweepChunk)
+	}
+	if n := c.Stats().ActiveFlows; n != 0 {
+		t.Fatalf("active flows = %d after the idle sweep, want none", n)
+	}
+}
+
 func TestSweepBuildsNoRecordsWithoutAnExporter(t *testing.T) {
 	const flows = 3 * sweepChunk
 	const period = 10 * time.Second
