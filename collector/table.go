@@ -30,10 +30,8 @@ const tableChunk = 1 << tableChunkBits
 
 // flowTable holds the flows in chunks that never move and names each by its slot, so a flow costs no allocation once the table has grown and its index holds no pointers
 type flowTable struct {
-	// index names each flow under the table hash of its id, but for a flow whose hash it already gives to another
-	index map[uint64]flowRef
-	// overflow names by id the flows whose hash the index gave to another flow, which takes a collision of 64 bit hashes
-	overflow map[flowID]flowRef
+	// index finds a flow's slot from the table hash of its id
+	index flowIndex
 	// keys holds the key of a flow whose event named an address in a form its id does not keep, 4 byte, zoned or invalid, events from the rings never do
 	keys   map[flowRef]FlowKey
 	chunks []*[tableChunk]flowState
@@ -45,7 +43,7 @@ type flowTable struct {
 }
 
 func newFlowTable() flowTable {
-	return flowTable{index: make(map[uint64]flowRef), overflow: make(map[flowID]flowRef), keys: make(map[flowRef]FlowKey), next: 1}
+	return flowTable{keys: make(map[flowRef]FlowKey), next: 1}
 }
 
 // at returns the flow in slot r
@@ -55,19 +53,26 @@ func (t *flowTable) at(r flowRef) *flowState {
 
 // len returns the number of flows
 func (t *flowTable) len() int {
-	return len(t.index) + len(t.overflow)
+	return t.index.n
 }
 
 // get returns the slot of the flow under id, whose hash is h, the id it compares sits on the lines a hit goes on to update
 func (t *flowTable) get(h uint64, id *flowID) (flowRef, bool) {
-	if r, ok := t.index[h]; ok && t.at(r).id.equal(id) {
-		return r, true
-	}
-	if len(t.overflow) == 0 {
+	x := &t.index
+	if x.n == 0 {
 		return 0, false
 	}
-	r, ok := t.overflow[*id]
-	return r, ok
+	tag, mask := indexTag(h), len(x.cells)-1
+	// a cell of another tag costs no read of its slot, flows whose hashes collide probe on by id
+	for i := x.home(tag); ; i = (i + 1) & mask {
+		c := x.cells[i]
+		if c.ref == 0 {
+			return 0, false
+		}
+		if c.tag == tag && t.at(c.ref).id.equal(id) {
+			return c.ref, true
+		}
+	}
 }
 
 // add stores s, which carries its id and its hash, as the newest flow of both lists and returns its slot
@@ -83,11 +88,7 @@ func (t *flowTable) add(s *flowState) flowRef {
 		t.next++
 	}
 	*t.at(r) = *s
-	if _, taken := t.index[s.hash]; taken {
-		t.overflow[s.id] = r
-	} else {
-		t.index[s.hash] = r
-	}
+	t.index.put(indexTag(s.hash), r)
 	t.pushBack(lruList, r)
 	t.pushBack(activeList, r)
 	return r
@@ -113,12 +114,7 @@ func (t *flowTable) remove(r flowRef) {
 	s := t.at(r)
 	t.unlink(lruList, r)
 	t.unlink(activeList, r)
-	// the index names the flow under its hash unless the flow is in overflow
-	if len(t.overflow) != 0 && t.index[s.hash] != r {
-		delete(t.overflow, s.id)
-	} else {
-		delete(t.index, s.hash)
-	}
+	t.index.del(indexTag(s.hash), r)
 	if len(t.keys) != 0 {
 		delete(t.keys, r)
 	}
@@ -166,20 +162,95 @@ func (t *flowTable) unlink(l int, r flowRef) {
 	}
 }
 
-// all yields every flow with its slot, in no fixed order
+// all yields every flow with its slot, in no fixed order, a flow removed while it runs may move another past it
 func (t *flowTable) all() iter.Seq2[flowRef, *flowState] {
 	return func(yield func(flowRef, *flowState) bool) {
-		for _, r := range t.index {
-			if !yield(r, t.at(r)) {
-				return
-			}
-		}
-		for _, r := range t.overflow {
-			if !yield(r, t.at(r)) {
+		for _, c := range t.index.cells {
+			if c.ref != 0 && !yield(c.ref, t.at(c.ref)) {
 				return
 			}
 		}
 	}
+}
+
+// indexCell names the flow in slot ref under the top 32 bits of its table hash, ref 0 marks the cell empty
+type indexCell struct {
+	tag uint32
+	ref flowRef
+}
+
+// flowIndex finds a flow's slot by linear probing from the cell the top bits of its tag name, the table hash mixes its top bits as well as the others
+type flowIndex struct {
+	cells []indexCell
+	// bits is the log2 of the cells
+	bits uint8
+	n    int
+}
+
+// minIndexBits sizes the index of a table that held no flow yet, 64 cells of 8 bytes
+const minIndexBits = 6
+
+// indexTag returns the tag of table hash h
+func indexTag(h uint64) uint32 {
+	return uint32(h >> 32)
+}
+
+// home returns the first cell a lookup of tag probes
+func (x *flowIndex) home(tag uint32) int {
+	return int(tag >> (32 - x.bits))
+}
+
+// put names slot r under tag, growing the cells to keep them at most three quarters full
+func (x *flowIndex) put(tag uint32, r flowRef) {
+	if (x.n+1)*4 > len(x.cells)*3 {
+		x.grow()
+	}
+	mask := len(x.cells) - 1
+	i := x.home(tag)
+	for x.cells[i].ref != 0 {
+		i = (i + 1) & mask
+	}
+	x.cells[i] = indexCell{tag: tag, ref: r}
+	x.n++
+}
+
+// grow doubles the cells and names every slot again
+func (x *flowIndex) grow() {
+	old := x.cells
+	x.bits = max(x.bits+1, minIndexBits)
+	x.cells = make([]indexCell, 1<<x.bits)
+	x.n = 0
+	for _, c := range old {
+		if c.ref != 0 {
+			x.put(c.tag, c.ref)
+		}
+	}
+}
+
+// del takes slot r, named under tag, out of the index and moves back the cells after it that probed past its cell, so no lookup stops short of them
+func (x *flowIndex) del(tag uint32, r flowRef) {
+	if x.n == 0 {
+		return
+	}
+	mask := len(x.cells) - 1
+	i := x.home(tag)
+	for x.cells[i].ref != r {
+		// an empty cell ends the probe of a slot the index does not name
+		if x.cells[i].ref == 0 {
+			return
+		}
+		i = (i + 1) & mask
+	}
+	for j := (i + 1) & mask; x.cells[j].ref != 0; j = (j + 1) & mask {
+		// the cell at j stays where it is when its home lies cyclically after i and up to j
+		if k := x.home(x.cells[j].tag); (i < j && i < k && k <= j) || (i > j && (k <= j || i < k)) {
+			continue
+		}
+		x.cells[i] = x.cells[j]
+		i = j
+	}
+	x.cells[i] = indexCell{}
+	x.n--
 }
 
 // rollupRef names a slot of the rollup table, 0 names none

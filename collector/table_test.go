@@ -1,6 +1,8 @@
 package collector
 
 import (
+	"maps"
+	"math/rand/v2"
 	"net/netip"
 	"reflect"
 	"slices"
@@ -80,13 +82,13 @@ func TestFlowTableMovesAFlowToTheBackOfOneList(t *testing.T) {
 }
 
 func TestFlowTableKeepsFlowsWhoseHashesCollideApart(t *testing.T) {
-	// three flows under one hash, the index names the first and overflow the others
+	// three flows under one hash take three cells, a lookup probes past the others by id
 	tab := newFlowTable()
 	a := tab.add(tableFlow(1, 7))
 	b := tab.add(tableFlow(2, 7))
 	c := tab.add(tableFlow(3, 7))
-	if len(tab.index) != 1 || len(tab.overflow) != 2 || tab.len() != 3 {
-		t.Fatalf("index %d and overflow %d of len %d, want 1 and 2 of 3", len(tab.index), len(tab.overflow), tab.len())
+	if tab.len() != 3 {
+		t.Fatalf("len %d, want 3", tab.len())
 	}
 	found := func(i int, want flowRef) {
 		t.Helper()
@@ -105,18 +107,15 @@ func TestFlowTableKeepsFlowsWhoseHashesCollideApart(t *testing.T) {
 	found(3, c)
 	gone(4)
 
-	// the flow the index names leaves, the others stay found and the next flow under the hash takes the name
+	// the first flow under the hash leaves, the others stay found and a new one joins them
 	tab.remove(a)
 	gone(1)
 	found(2, b)
 	found(3, c)
 	d := tab.add(tableFlow(4, 7))
-	if tab.index[7] != d {
-		t.Fatalf("index names %d under the hash, want the new flow %d", tab.index[7], d)
-	}
 	found(4, d)
 
-	// a flow leaves overflow by its id
+	// a flow in the middle of the run leaves by its slot
 	tab.remove(c)
 	gone(3)
 	found(2, b)
@@ -131,8 +130,68 @@ func TestFlowTableKeepsFlowsWhoseHashesCollideApart(t *testing.T) {
 	}
 	tab.remove(b)
 	tab.remove(d)
-	if tab.len() != 0 || len(tab.index) != 0 || len(tab.overflow) != 0 {
-		t.Fatalf("emptied table has index %d and overflow %d", len(tab.index), len(tab.overflow))
+	if tab.len() != 0 {
+		t.Fatalf("emptied table has len %d", tab.len())
+	}
+	for _, cell := range tab.index.cells {
+		if cell.ref != 0 {
+			t.Fatalf("emptied table still names slot %d", cell.ref)
+		}
+	}
+}
+
+func TestFlowIndexMatchesAMapUnderRandomUse(t *testing.T) {
+	// a few tags in a small space make long runs that wrap past the last cell, so every move of a delete runs
+	for seed := range uint64(60) {
+		rng := rand.New(rand.NewPCG(seed, 1))
+		tags := 1 + rng.IntN(64)
+		var x flowIndex
+		want := map[flowRef]uint32{}
+		next := flowRef(1)
+		for step := range 1000 {
+			if len(want) > 0 && rng.IntN(5) < 2 {
+				// delete a named slot
+				keys := slices.Sorted(maps.Keys(want))
+				r := keys[rng.IntN(len(keys))]
+				x.del(want[r], r)
+				delete(want, r)
+			} else {
+				// a tag near the top of the space homes on the last cells, so its run wraps
+				tag := uint32(rng.IntN(tags)) << 26
+				if rng.IntN(2) == 0 {
+					tag = ^uint32(0) - uint32(rng.IntN(tags))
+				}
+				x.put(tag, next)
+				want[next] = tag
+				next++
+			}
+			if x.n != len(want) {
+				t.Fatalf("seed %d step %d: index holds %d, want %d", seed, step, x.n, len(want))
+			}
+			// every named slot is found from its home before an empty cell
+			for r, tag := range want {
+				mask := len(x.cells) - 1
+				i := x.home(tag)
+				for x.cells[i].ref != r {
+					if x.cells[i].ref == 0 {
+						t.Fatalf("seed %d step %d: slot %d under tag %#x is not found from its home", seed, step, r, tag)
+					}
+					i = (i + 1) & mask
+				}
+			}
+			seen := 0
+			for _, c := range x.cells {
+				if c.ref != 0 {
+					if want[c.ref] != c.tag {
+						t.Fatalf("seed %d step %d: cell names slot %d under tag %#x, want %#x", seed, step, c.ref, c.tag, want[c.ref])
+					}
+					seen++
+				}
+			}
+			if seen != len(want) {
+				t.Fatalf("seed %d step %d: %d cells are taken, want %d", seed, step, seen, len(want))
+			}
+		}
 	}
 }
 
@@ -195,8 +254,11 @@ func TestFlowTableSlotsAreLineAlignedAndItsIndexPointerFree(t *testing.T) {
 		t.Fatalf("the fields a hit touches end at byte %d, past the first two lines", end)
 	}
 	// an index without pointers is one the garbage collector never scans
-	if typ := reflect.TypeFor[map[uint64]flowRef](); hasPointers(typ.Key()) || hasPointers(typ.Elem()) {
+	if hasPointers(reflect.TypeFor[indexCell]()) {
 		t.Fatal("the index of the flow table holds pointers")
+	}
+	if size := unsafe.Sizeof(indexCell{}); size != 8 {
+		t.Fatalf("an index cell is %d bytes, want 8", size)
 	}
 }
 

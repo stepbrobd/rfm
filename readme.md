@@ -335,9 +335,9 @@ Must be greater than 0. When the table is full, the flow that went longest
 without an event, to within 1/32 of the eviction timeout, is forcibly evicted
 and, with IPFIX enabled, exported with flowEndReason 0x05. The same number
 limits the room for new label tuples with enrichment labels in the flow metrics,
-see [Prometheus metrics](#prometheus-metrics). A held flow takes about 300 bytes
+see [Prometheus metrics](#prometheus-metrics). A held flow takes about 270 bytes
 of the agent's memory, garbage collector headroom included, so a full default
-table holds about 20 MB.
+table holds about 18 MB.
 
 `eviction_timeout` (string, default "30s"): How long a flow can be idle before
 eviction. Accepts any Go duration string (e.g. "10s", "1m", "2s"). Minimum value

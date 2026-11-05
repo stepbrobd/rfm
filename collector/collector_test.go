@@ -2092,6 +2092,19 @@ func TestChurnThroughLabeledTuplesAllocatesNothing(t *testing.T) {
 	}
 }
 
+// sharedHashes returns how many flows of the table share their hash with a flow before them
+func sharedHashes(t *flowTable) int {
+	seen := map[uint64]bool{}
+	n := 0
+	for _, s := range t.all() {
+		if seen[s.hash] {
+			n++
+		}
+		seen[s.hash] = true
+	}
+	return n
+}
+
 func TestCollidingHashesRecordLikeDistinctOnes(t *testing.T) {
 	// thirteen sources on five ports through a table of eight with runs,
 	// sweeps and interval records, the enricher sends every new flow through
@@ -2137,7 +2150,7 @@ func TestCollidingHashesRecordLikeDistinctOnes(t *testing.T) {
 		var buf recordBuf
 		for _, b := range batches {
 			c.record(b, nil, &buf)
-			res.overflowed = max(res.overflowed, len(c.flows.overflow))
+			res.overflowed = max(res.overflowed, sharedHashes(&c.flows))
 			c.Evict(b[len(b)-1].tstamp)
 		}
 		res.flows, res.top, res.records = c.Flows(), c.TopFlows(4, false), exp.flows
@@ -2153,7 +2166,7 @@ func TestCollidingHashesRecordLikeDistinctOnes(t *testing.T) {
 
 	want := run(newFlowHash().sum)
 	if want.overflowed != 0 || len(want.records) == 0 || want.stats.ForcedEvictions == 0 {
-		t.Fatalf("keyed hash put %d flows in overflow and exported %d records with %d forced out, want none, some and some", want.overflowed, len(want.records), want.stats.ForcedEvictions)
+		t.Fatalf("keyed hash gave %d flows the hash of another and exported %d records with %d forced out, want none, some and some", want.overflowed, len(want.records), want.stats.ForcedEvictions)
 	}
 	for name, hash := range map[string]func(*flowID) uint64{
 		"one hash for every flow":    func(*flowID) uint64 { return 1 },
@@ -2161,7 +2174,7 @@ func TestCollidingHashesRecordLikeDistinctOnes(t *testing.T) {
 	} {
 		got := run(hash)
 		if got.overflowed == 0 {
-			t.Fatalf("%s: no flow went to overflow", name)
+			t.Fatalf("%s: no flow shared its hash", name)
 		}
 		got.overflowed = want.overflowed
 		if !reflect.DeepEqual(got, want) {
