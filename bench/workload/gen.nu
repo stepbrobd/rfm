@@ -39,6 +39,7 @@ def main [
   --dst6: string = ""            # DUT IPv6 address, sends IPv6 in place of IPv4 when set
   --src6: string = ""            # generator IPv6 source address for --dst6
   --vlan: int = -1               # 802.1Q VLAN id of every frame, -1 sends untagged
+  --queue-xmit                   # send through dev_queue_xmit, so tc egress and the qdisc see every packet, where the default hands them to the driver
 ] {
     ^modprobe pktgen
     let spmin = 10000
@@ -80,6 +81,7 @@ def main [
     pg $d $"udp_src_max ($spmax)"
     pg $d "flag UDPSRC_RND"
     if $burst > 1 { pg $d $"burst ($burst)" }
+    if $queue_xmit { pg $d "xmit_mode queue_xmit" }
     if $rate > 0 { pg $d $"rate ($rate)" }
   }
     pg $"($env.PG)/pgctrl" "start"
