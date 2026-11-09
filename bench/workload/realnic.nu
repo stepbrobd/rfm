@@ -54,12 +54,14 @@ def main [
   --ns: string = "10 100 1000"  # sample rates to sweep (base-10; N=1 excluded at line rate)
   --secs: int = 15                # measurement window per N
   --warmup: int = 3               # settle time after rfm attach
+  --bpf: string = ""              # toml lines appended under [agent.bpf], \n between lines, such as "stage_events=32\nring_buf_size=1048576"
   --extra: string = ""            # toml appended to the agent config after [agent.prometheus], \n between lines, such as "[agent.collector]\nmax_flows=2097152"
   --drop                          # drop every ingress packet in a clsact filter after the tcx programs while each agent runs
 ] {
     let clk = (^getconf CLK_TCK | into int)
     let ns = $ns | split row ' ' | each {|x| $x | into int}
     let extra = $extra | str replace --all '\n' (char newline)
+    let bpf = $bpf | str replace --all '\n' (char newline)
     # a stray agent, or a drop filter left by a killed --drop run, would skew every row
     ^pkill -KILL -f "rfm agent" | complete | ignore
     ^tc qdisc del dev $iface clsact | complete | ignore
@@ -71,6 +73,7 @@ def main [
 interfaces=["($iface)"]
 [agent.bpf]
 sample_rate=($n)
+($bpf)
 [agent.prometheus]
 host="127.0.0.1"
 port=9669

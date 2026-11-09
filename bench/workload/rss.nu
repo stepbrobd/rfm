@@ -24,7 +24,9 @@ def main [
   --ns: string = "100 1"                  # sample rates
   --secs: int = 12                        # window per cell
   --warmup: int = 4                       # settle after rfm attach
+  --bpf: string = ""                      # toml lines appended under [agent.bpf], \n between lines
 ] {
+    let bpf = $bpf | str replace --all '\n' (char newline)
     let clk = (^getconf CLK_TCK | into int)
     let queues = $queues | split row ' ' | each {|x| $x | into int}
     let ns = $ns | split row ' ' | each {|x| $x | into int}
@@ -37,6 +39,7 @@ def main [
 interfaces=["($iface)"]
 [agent.bpf]
 sample_rate=($n)
+($bpf)
 [agent.prometheus]
 host="127.0.0.1"
 port=9669
