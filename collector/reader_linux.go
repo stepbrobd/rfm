@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"os"
 	"slices"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/cilium/ebpf"
@@ -30,6 +32,12 @@ type ringReader struct {
 	held     *eventRing
 	deadline time.Time
 	events   []unix.EpollEvent
+
+	// added holds the rings AddRing mapped since the last scan, which takes
+	// them into rings, guarded by mu, pending tells a scan there are some
+	mu      sync.Mutex
+	added   []*eventRing
+	pending atomic.Bool
 }
 
 // rescanEvery bounds how many records the live rings give before a ring that turned busy joins them
@@ -93,8 +101,35 @@ func (r *ringReader) ReadRawEvent() ([]byte, error) {
 	}
 }
 
+// AddRing reads ring too from the next scan on, the ring of a CPU that came
+// online after the reader opened, it is safe beside a read in progress
+func (r *ringReader) AddRing(ring *ebpf.Map) error {
+	rd, err := newEventRing(ring)
+	if err != nil {
+		return fmt.Errorf("map ring buffer: %w", err)
+	}
+	// the ring is watched before a scan can take it, a wait it ends finds it at the scan after
+	ev := unix.EpollEvent{Events: unix.EPOLLIN}
+	if err := unix.EpollCtl(r.epfd, unix.EPOLL_CTL_ADD, ring.FD(), &ev); err != nil {
+		rd.Close()
+		return fmt.Errorf("watch ring buffer: %w", err)
+	}
+	r.mu.Lock()
+	r.added = append(r.added, rd)
+	r.pending.Store(true)
+	r.mu.Unlock()
+	return nil
+}
+
 // scan commits every ring and lists the ones that hold records, the others cost no read until the next scan
 func (r *ringReader) scan() bool {
+	if r.pending.Load() {
+		r.mu.Lock()
+		r.rings = append(r.rings, r.added...)
+		r.added = nil
+		r.pending.Store(false)
+		r.mu.Unlock()
+	}
 	r.live = r.live[:0]
 	for i, ring := range r.rings {
 		ring.commit()
@@ -167,7 +202,9 @@ func (r *ringReader) DroppedEvents() (uint64, error) {
 
 func (r *ringReader) Close() error {
 	var errs []error
-	for _, rd := range r.rings {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for _, rd := range slices.Concat(r.rings, r.added) {
 		errs = append(errs, rd.Close())
 	}
 	errs = append(errs, unix.Close(r.epfd))

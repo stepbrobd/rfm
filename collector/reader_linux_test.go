@@ -315,3 +315,40 @@ func TestRingReaderWaitsForAnyRing(t *testing.T) {
 		t.Fatalf("read returned %v after the record was written", waited)
 	}
 }
+
+func TestRingReaderReadsARingAddedWhileItWaits(t *testing.T) {
+	_, rd := testRings(t, 1)
+	ring, err := ebpf.NewMap(&ebpf.MapSpec{Type: ebpf.RingBuf, MaxEntries: 1 << 16})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { ring.Close() })
+
+	// the read waits on the first ring alone, the added ring's first record ends the wait
+	type read struct {
+		raw []byte
+		err error
+	}
+	got := make(chan read, 1)
+	rd.SetDeadline(time.Now().Add(5 * time.Second))
+	go func() {
+		raw, err := rd.ReadRawEvent()
+		got <- read{slices.Clone(raw), err}
+	}()
+	time.Sleep(50 * time.Millisecond)
+	if err := rd.(*ringReader).AddRing(ring); err != nil {
+		t.Fatal(err)
+	}
+	start := time.Now()
+	produce(t, ring, 7, 1)
+	r := <-got
+	if r.err != nil {
+		t.Fatalf("read after the ring was added: %v", r.err)
+	}
+	if mark := binary.NativeEndian.Uint64(r.raw); mark != 7 {
+		t.Fatalf("record marked %d, want 7", mark)
+	}
+	if d := time.Since(start); d > time.Second {
+		t.Fatalf("the added ring's record took %v to end the wait", d)
+	}
+}
