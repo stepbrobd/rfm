@@ -9,6 +9,8 @@
 #   production port, test traffic over ens1f0np0 in the kavlan only.
 # phases, in this order by default:
 #   setup b5 b1 b3 b4 b7 b2 b12 b8 b9 b10 b11 more more2
+# and pm, the B3 cells with the dut at its default power settings and with turbo and C6 off,
+# named on its own
 # SRC names a directory on the frontend that holds workload/ and progbench/. DRY=1 runs every
 # phase with one round and windows of a few seconds, to check the commands before a night.
 set -u
@@ -181,6 +183,20 @@ quiet() {
     dut "pkill -KILL -f '^$PB/progbench '; sysctl -qw kernel.bpf_stats_enabled=0; ethtool -K $IF gro on tso on gso on; ethtool -L $IF combined 63; true"
 }
 fetch() { $SCP root@"$DUTC":'/root/res/*' "$OUT/res/" >> "$LOG" 2>&1; }
+# the dut's power settings: dflt is the image's (turbo on, every C-state enabled), fixed turns turbo
+# off and disables C6 and deeper, the generator keeps its own so the offered load stays the same.
+# It fails when the dut reads back other settings, as one without intel_pstate or a C6 state would
+power() { # dflt or fixed
+    local turbo=0 deep=0 got
+    [ "$1" = fixed ] && turbo=1 deep=1
+    dut "echo $turbo > /sys/devices/system/cpu/intel_pstate/no_turbo; for s in /sys/devices/system/cpu/cpu*/cpuidle/state*; do case \$(cat \$s/name) in C6* | C7* | C8* | C9* | C10*) echo $deep > \$s/disable ;; *) echo 0 > \$s/disable ;; esac; done; echo no_turbo \$(cat /sys/devices/system/cpu/intel_pstate/no_turbo) disabled \$(cat /sys/devices/system/cpu/cpu*/cpuidle/state*/disable | sort | uniq -c | tr -s ' \n' ' ')"
+    got=$(dutq "cat /sys/devices/system/cpu/intel_pstate/no_turbo; for s in /sys/devices/system/cpu/cpu*/cpuidle/state*; do case \$(cat \$s/name) in C6* | C7* | C8* | C9* | C10*) cat \$s/disable ;; esac; done | sort -u" | tr '\n' ' ')
+    if [ "$got" != "$turbo $deep " ]; then
+        log "power $1 reads back no_turbo and C6 disable '$got', want '$turbo $deep '"
+        return 1
+    fi
+    sleep 5
+}
 
 # one measure.nu call; the variant names an rfm configuration or a monitor
 m() { # phase label variant n [extra measure.nu flags]
@@ -476,6 +492,24 @@ for ph in $PHASES; do
                 done
             done
         done
+        quiet
+        ;;
+    pm)
+        # the b3 cells of the eBPF monitors in pairs of power settings, alternated in each round
+        for load in "1 100" "1 10" "1 1" "4 100" "4 10"; do
+            read -r T N <<< "$load"
+            gen_start "$T"
+            for r in $R3; do
+                for st in $(shuf_words dflt fixed); do
+                    power "$st" || break 3
+                    for v in $(shuf_words none rfm rfm_sampled netobserv); do
+                        [ "$N" = 1 ] && [ "$v" = rfm ] && v=rfm_n1
+                        m pm "pm $st t$T N$N r$r" "$v" "$N" --warmup 10 --secs 30 --stat-secs 8
+                    done
+                done
+            done
+        done
+        power dflt
         quiet
         ;;
     *) log "unknown phase $ph" ;;
