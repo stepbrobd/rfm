@@ -117,25 +117,8 @@ func insitu(obj, label, iface, ingress, egress string, n, ringOrder, stage uint3
 			return fmt.Errorf("%s has no %s or %s program", obj, ingress, egress)
 		}
 
-		// the agent anchors ingress at the head and egress at the tail
-		var in link.Link
-		if inProg.Type() == ebpf.XDP {
-			res.XDP = true
-			in, err = link.AttachXDP(link.XDPOptions{Program: inProg, Interface: ifc.Index, Flags: link.XDPDriverMode})
-		} else {
-			in, err = link.AttachTCX(link.TCXOptions{Interface: ifc.Index, Program: inProg, Attach: ebpf.AttachTCXIngress, Anchor: link.Head()})
-		}
-		if err != nil {
-			return fmt.Errorf("attach ingress: %w", err)
-		}
-		defer in.Close()
-		out, err := link.AttachTCX(link.TCXOptions{Interface: ifc.Index, Program: outProg, Attach: ebpf.AttachTCXEgress, Anchor: link.Tail()})
-		if err != nil {
-			return fmt.Errorf("attach egress: %w", err)
-		}
-		defer out.Close()
-
-		// a reader per ring, each drains its ring until it is closed
+		// a reader per ring, each drains its ring until it is closed, opened
+		// before the attach so the links detach before the readers close
 		for _, ring := range rings {
 			rd, err := ringbuf.NewReader(ring)
 			if err != nil {
@@ -157,6 +140,24 @@ func insitu(obj, label, iface, ingress, egress string, n, ringOrder, stage uint3
 				}
 			}()
 		}
+
+		// the agent anchors ingress at the head and egress at the tail
+		var in link.Link
+		if inProg.Type() == ebpf.XDP {
+			res.XDP = true
+			in, err = link.AttachXDP(link.XDPOptions{Program: inProg, Interface: ifc.Index, Flags: link.XDPDriverMode})
+		} else {
+			in, err = link.AttachTCX(link.TCXOptions{Interface: ifc.Index, Program: inProg, Attach: ebpf.AttachTCXIngress, Anchor: link.Head()})
+		}
+		if err != nil {
+			return fmt.Errorf("attach ingress: %w", err)
+		}
+		defer in.Close()
+		out, err := link.AttachTCX(link.TCXOptions{Interface: ifc.Index, Program: outProg, Attach: ebpf.AttachTCXEgress, Anchor: link.Tail()})
+		if err != nil {
+			return fmt.Errorf("attach egress: %w", err)
+		}
+		defer out.Close()
 	}
 
 	time.Sleep(warmup)
