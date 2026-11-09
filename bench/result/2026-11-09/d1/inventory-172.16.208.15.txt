@@ -1,0 +1,391 @@
+spirou-7-eth1
+Linux spirou-7-eth1 7.3.1 #1-NixOS SMP PREEMPT_DYNAMIC @1793362192 x86_64 GNU/Linux
+root=UUID=f7c7a023-88b4-487a-a13d-4bf1d8c7e93f console=tty0 console=ttyS0,115200 init=/nix/store/p39s8zw6w8rw64ri7h7kfjj8agjkh7xh-nixos-system-unnamed-26.11.20261106.0dea955/init rw console=tty0 console=ttyS0,115200 
+Architecture:                            x86_64
+CPU op-mode(s):                          32-bit, 64-bit
+Address sizes:                           46 bits physical, 57 bits virtual
+Byte Order:                              Little Endian
+CPU(s):                                  96
+On-line CPU(s) list:                     0-95
+Vendor ID:                               GenuineIntel
+Model name:                              Intel(R) Xeon(R) Gold 5318Y CPU @ 2.10GHz
+CPU family:                              6
+Model:                                   106
+Thread(s) per core:                      2
+Core(s) per socket:                      24
+Socket(s):                               2
+Stepping:                                6
+Microcode version:                       0xd000410
+CPU(s) scaling MHz:                      94%
+CPU max MHz:                             3400.0000
+CPU min MHz:                             800.0000
+BogoMIPS:                                4200.00
+Flags:                                   fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush dts acpi mmx fxsr sse sse2 ss ht tm pbe syscall nx pdpe1gb rdtscp lm constant_tsc art arch_perfmon pebs bts rep_good nopl xtopology nonstop_tsc cpuid aperfmperf pni pclmulqdq dtes64 monitor ds_cpl vmx smx est tm2 ssse3 sdbg fma cx16 xtpr pdcm pcid dca sse4_1 sse4_2 x2apic movbe popcnt tsc_deadline_timer aes xsave avx f16c rdrand lahf_lm abm 3dnowprefetch cpuid_fault epb cat_l3 intel_ppin ssbd mba ibrs ibpb stibp ibrs_enhanced tpr_shadow flexpriority ept vpid ept_ad fsgsbase tsc_adjust sgx bmi1 hle avx2 smep bmi2 erms invpcid rtm cqm rdt_a avx512f avx512dq rdseed adx smap avx512ifma clflushopt clwb intel_pt avx512cd sha_ni avx512bw avx512vl xsaveopt xsavec xgetbv1 xsaves cqm_llc cqm_occup_llc cqm_mbm_total cqm_mbm_local split_lock_detect wbnoinvd dtherm ida arat pln pts hwp hwp_act_window hwp_epp hwp_pkg_req vnmi avx512vbmi umip pku ospke avx512_vbmi2 gfni vaes vpclmulqdq avx512_vnni avx512_bitalg tme avx512_vpopcntdq la57 rdpid sgx_lc fsrm md_clear pconfig flush_l1d arch_capabilities
+Virtualization:                          VT-x
+L1d cache:                               2.3 MiB (48 instances)
+L1i cache:                               1.5 MiB (48 instances)
+L2 cache:                                60 MiB (48 instances)
+L3 cache:                                72 MiB (2 instances)
+NUMA node(s):                            2
+NUMA node0 CPU(s):                       0-23,48-71
+NUMA node1 CPU(s):                       24-47,72-95
+Vulnerability Gather data sampling:      Mitigation; Microcode
+Vulnerability Ghostwrite:                Not affected
+Vulnerability Indirect target selection: Mitigation; Aligned branch/return thunks
+Vulnerability Itlb multihit:             Not affected
+Vulnerability L1tf:                      Not affected
+Vulnerability Mds:                       Not affected
+Vulnerability Meltdown:                  Not affected
+Vulnerability Mmio stale data:           Mitigation; Clear CPU buffers; SMT vulnerable
+Vulnerability Old microcode:             Not affected
+Vulnerability Reg file data sampling:    Not affected
+Vulnerability Retbleed:                  Not affected
+Vulnerability Spec rstack overflow:      Not affected
+Vulnerability Spec store bypass:         Mitigation; Speculative Store Bypass disabled via prctl
+Vulnerability Spectre v1:                Mitigation; usercopy/swapgs barriers and __user pointer sanitization
+Vulnerability Spectre v2:                Mitigation; Enhanced / Automatic IBRS; IBPB conditional; PBRSB-eIBRS SW sequence; BHI SW loop, KVM SW loop
+Vulnerability Srbds:                     Not affected
+Vulnerability Tsa:                       Not affected
+Vulnerability Tsx async abort:           Not affected
+Vulnerability Vmscape:                   Not affected
+               total        used        free      shared  buff/cache   available
+Mem:             247           4         244           0           0         243
+Swap:              3           0           3
+driver: mlx5_core
+version: 7.3.1
+firmware-version: 22.31.1014 (LNV0000000029)
+expansion-rom-version: 
+bus-info: 0000:4b:00.0
+supports-statistics: yes
+supports-test: yes
+supports-eeprom-access: no
+supports-register-dump: no
+supports-priv-flags: yes
+Features for ens1f0np0:
+rx-checksumming: on
+tx-checksumming: on
+	tx-checksum-ipv4: off [fixed]
+	tx-checksum-ip-generic: on
+	tx-checksum-ipv6: off [fixed]
+	tx-checksum-fcoe-crc: off [fixed]
+	tx-checksum-sctp: off [fixed]
+scatter-gather: on
+	tx-scatter-gather: on
+	tx-scatter-gather-fraglist: off [fixed]
+tcp-segmentation-offload: on
+	tx-tcp-segmentation: on
+	tx-tcp-ecn-segmentation: off [fixed]
+	tx-tcp-mangleid-segmentation: off
+	tx-tcp6-segmentation: on
+	tx-tcp-accecn-segmentation: off [fixed]
+generic-segmentation-offload: on
+generic-receive-offload: on
+large-receive-offload: off
+rx-vlan-offload: on
+tx-vlan-offload: on
+ntuple-filters: off
+receive-hashing: on
+highdma: on [fixed]
+rx-vlan-filter: on
+vlan-challenged: off [fixed]
+tx-gso-robust: off [fixed]
+tx-fcoe-segmentation: off [fixed]
+tx-gre-segmentation: on
+tx-gre-csum-segmentation: on
+tx-ipxip4-segmentation: on
+tx-ipxip6-segmentation: on
+tx-udp_tnl-segmentation: on
+tx-udp_tnl-csum-segmentation: on
+tx-gso-partial: on
+tx-tunnel-remcsum-segmentation: off [fixed]
+tx-sctp-segmentation: off [fixed]
+tx-esp-segmentation: off [fixed]
+tx-udp-segmentation: on
+tx-gso-list: off [fixed]
+tx-nocache-copy: off
+loopback: off [fixed]
+rx-fcs: off
+rx-all: on
+tx-vlan-stag-hw-insert: on
+rx-vlan-stag-hw-parse: off [fixed]
+rx-vlan-stag-filter: on [fixed]
+l2-fwd-offload: off [fixed]
+hw-tc-offload: on
+esp-hw-offload: off [fixed]
+esp-tx-csum-hw-offload: off [fixed]
+rx-udp_tunnel-port-offload: on
+tls-hw-tx-offload: off [fixed]
+tls-hw-rx-offload: off [fixed]
+rx-gro-hw: off [fixed]
+rx-gro-list: off
+macsec-hw-offload: off [fixed]
+rx-udp-gro-forwarding: off
+hsr-tag-ins-offload: off [fixed]
+hsr-tag-rm-offload: off [fixed]
+hsr-fwd-offload: off [fixed]
+hsr-dup-offload: off [fixed]
+Ring parameters for ens1f0np0:
+Pre-set maximums:
+RX:			8192
+RX Mini:		n/a
+RX Jumbo:		n/a
+TX:			8192
+TX push buff len:	n/a
+HDS thresh:		0
+Current hardware settings:
+RX:			8192
+RX Mini:		n/a
+RX Jumbo:		n/a
+TX:			8192
+RX Buf Len:		n/a
+CQE Size:		n/a
+TX Push:		off
+RX Push:		off
+TX push buff len:	n/a
+TCP data split:		n/a
+HDS thresh:		0
+Channel parameters for ens1f0np0:
+Pre-set maximums:
+RX:		n/a
+TX:		n/a
+Other:		n/a
+Combined:	63
+Current hardware settings:
+RX:		n/a
+TX:		n/a
+Other:		n/a
+Combined:	63
+Coalesce parameters for ens1f0np0:
+Adaptive RX: on  TX: on
+stats-block-usecs:	n/a
+sample-interval:	n/a
+pkt-rate-low:		n/a
+pkt-rate-high:		n/a
+
+rx-usecs:	8
+rx-frames:	128
+rx-usecs-irq:	n/a
+rx-frames-irq:	n/a
+
+tx-usecs:	8
+tx-frames:	128
+tx-usecs-irq:	n/a
+tx-frames-irq:	n/a
+
+rx-usecs-low:	n/a
+rx-frame-low:	n/a
+tx-usecs-low:	n/a
+tx-frame-low:	n/a
+
+rx-usecs-high:	n/a
+rx-frame-high:	n/a
+tx-usecs-high:	n/a
+tx-frame-high:	n/a
+
+CQE mode RX: on  TX: off
+
+tx-aggr-max-bytes:	n/a
+tx-aggr-max-frames:	n/a
+tx-aggr-time-usecs:	n/a
+
+rx-cqe-frames:		n/a
+rx-cqe-nsecs:		n/a
+
+performance
+0
+POLL
+C1
+C1E
+C6
+0
+0
+0
+0
+inactive
+net.core.bpf_jit_enable = 1
+net.core.bpf_jit_harden = 0
+net.core.bpf_jit_kallsyms = 1
+net.core.bpf_jit_limit = 528482304
+net.core.busy_poll = 0
+net.core.busy_read = 0
+net.core.bypass_prot_mem = 0
+net.core.default_qdisc = fq_codel
+net.core.dev_weight = 64
+net.core.dev_weight_rx_bias = 1
+net.core.dev_weight_tx_bias = 1
+net.core.devconf_inherit_init_net = 0
+net.core.fb_tunnels_only_for_init_net = 0
+net.core.flow_limit_cpu_bitmap = 00000000,00000000,00000000
+net.core.flow_limit_table_len = 4096
+net.core.gro_normal_batch = 8
+net.core.high_order_alloc_disable = 0
+net.core.max_skb_frags = 17
+net.core.mem_pcpu_rsv = 256
+net.core.message_burst = 10
+net.core.message_cost = 5
+net.core.netdev_budget = 300
+net.core.netdev_budget_usecs = 2000
+net.core.netdev_max_backlog = 1000
+net.core.netdev_rss_key = e5:29:ec:57:db:fb:fe:a4:a3:90:e4:fb:0e:db:48:30:a7:86:6e:69:a3:8b:d5:c6:47:9d:34:68:de:73:05:b8:0e:3b:97:d7:c7:e8:f9:fd:20:bf:56:c1:f3:ce:f7:d7:38:6f:f7:37:18:f7:f5:73:c2:15:51:a0:dd:70:7e:de:e8:f9:b1:8b:ca:87:58:71:0f:14:63:59:41:9a:e5:5b:e4:15:2f:df:e0:48:ea:ad:46:32:5a:be:d9:24:66:48:5d:e5:bc:ae:8c:79:d0:05:bf:30:1a:b4:e7:40:68:d4:6d:24:95:7a:3f:cd:1a:01:5a:bc:42:40:5d:20:95:75:ac:a5:37:57:8a:75:ac:90:48:58:4b:56:bc:38:44:87:fe:02:f4:6b:a6:89:4e:2f:2e:ce:65:34:2d:66:a1:0e:d8:b8:34:d6:9a:da:6f:09:3a:f3:2d:12:d8:2e:6d:c0:5d:f2:ec:57:11:71:39:05:b7:1f:b9:b4:c7:96:43:54:8e:9d:82:09:74:2e:f0:a2:61:bb:71:72:4f:54:78:77:ed:e3:64:f0:00:09:cb:74:48:69:02:26:49:37:62:44:ae:91:ea:9b:9b:33:df:1d:13:04:5a:2f:20:0a:cb:b8:43:68:48:a6:01:ad:f3:45:b0:72:39:44:e6:61:bf:02
+net.core.netdev_tstamp_prequeue = 1
+net.core.netdev_unregister_timeout_secs = 10
+net.core.optmem_max = 131072
+net.core.qdisc_max_burst = 1000
+net.core.rmem_default = 212992
+net.core.rmem_max = 4194304
+net.core.rps_default_mask = 00000000,00000000,00000000
+net.core.rps_sock_flow_entries = 0
+net.core.skb_defer_max = 128
+net.core.somaxconn = 4096
+net.core.tstamp_allow_data = 1
+net.core.txq_reselection_ms = 1000
+net.core.txrehash = 1
+net.core.warnings = 0
+net.core.wmem_default = 212992
+net.core.wmem_max = 4194304
+net.core.xfrm_acq_expires = 30
+net.core.xfrm_aevent_etime = 10
+net.core.xfrm_aevent_rseqth = 2
+net.core.xfrm_larval_drop = 1
+net.ipv4.conf.ens1f0np0.rp_filter = 2
+net.ipv4.icmp_msgs_per_sec = 10000
+default via 172.16.223.254 dev ens1f1np1 proto dhcp src 172.16.208.15 metric 100 
+default via 10.48.63.254 dev ens1f0np0 proto dhcp src 10.48.0.7 metric 101 
+blackhole 10.0.0.0/8 
+10.48.0.0/18 dev ens1f0np0 proto kernel scope link src 10.48.0.7 metric 101 
+172.16.208.0/20 dev ens1f1np1 proto kernel scope link src 172.16.208.15 metric 100 
+2026.1105.0
+iperf 3.21 (cJSON 1.7.15)
+Linux spirou-7-eth1 7.3.1 #1-NixOS SMP PREEMPT_DYNAMIC @1793362192 x86_64
+Optional features available: CPU affinity setting, IPv6 flow label, SCTP, TCP congestion algorithm setting, sendfile / zerocopy, socket pacing, authentication, bind to device, support IPv4 don't fragment, POSIX threads, GSO/GRO support
+0.116.1
+Promiscuous Mode Accounting Daemon, pmacctd 1.7.9-git [RELEASE]
+
+softflowd: option requires an argument -- 'v'
+Invalid commandline option.
+irq 160 0
+irq 162 0
+irq 183 1
+irq 184 2
+irq 185 3
+irq 186 4
+irq 187 5
+irq 188 6
+irq 189 7
+irq 190 8
+irq 191 9
+irq 192 10
+irq 193 11
+irq 194 12
+irq 195 13
+irq 196 14
+irq 197 15
+irq 198 16
+irq 199 17
+irq 200 18
+irq 201 19
+irq 202 20
+irq 203 21
+irq 204 22
+irq 205 23
+irq 206 48
+irq 207 49
+irq 208 50
+irq 209 51
+irq 210 52
+irq 211 53
+irq 212 54
+irq 213 55
+irq 214 56
+irq 215 57
+irq 216 58
+irq 217 59
+irq 218 60
+irq 219 61
+irq 220 62
+irq 221 63
+irq 222 64
+irq 223 65
+irq 224 66
+irq 225 67
+irq 226 68
+irq 227 69
+irq 228 70
+irq 229 71
+irq 230 24
+irq 231 25
+irq 232 26
+irq 233 27
+irq 234 28
+irq 235 29
+irq 236 30
+irq 237 31
+irq 238 32
+irq 239 33
+irq 240 34
+irq 241 35
+irq 242 36
+irq 243 37
+irq 244 38
+irq 245 1
+irq 246 2
+irq 247 3
+irq 248 4
+irq 249 5
+irq 250 6
+irq 251 7
+irq 252 8
+irq 253 9
+irq 254 10
+irq 255 11
+irq 256 12
+irq 257 13
+irq 258 14
+irq 259 15
+irq 260 16
+irq 261 17
+irq 262 18
+irq 263 19
+irq 264 20
+irq 265 21
+irq 266 22
+irq 267 23
+irq 268 48
+irq 269 49
+irq 270 50
+irq 271 51
+irq 272 52
+irq 273 53
+irq 274 54
+irq 275 55
+irq 276 56
+irq 277 57
+irq 278 58
+irq 279 59
+irq 280 60
+irq 281 61
+irq 282 62
+irq 283 63
+irq 284 64
+irq 285 65
+irq 286 66
+irq 287 67
+irq 288 68
+irq 289 69
+irq 290 70
+irq 291 71
+irq 292 24
+irq 293 25
+irq 294 26
+irq 295 27
+irq 296 28
+irq 297 29
+irq 298 30
+irq 299 31
+irq 300 32
+irq 301 33
+irq 302 34
+irq 303 35
+irq 304 36
+irq 305 37
+irq 306 38

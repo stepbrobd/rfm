@@ -1,0 +1,16 @@
+# 2026-11-09 16:3x, rfm process fdinfo, deduplicated by map id: total BPF map memlock, ring maps and their memlock, possible and online CPUs
+isere maps_kb 660 rings 4 rings_kb 450 possible 0-3 online 0-3
+lagern maps_kb 357 rings 2 rings_kb 153 possible 0-1 online 0-1
+morasko maps_kb 357 rings 2 rings_kb 153 possible 0-1 online 0-1
+walberla maps_kb 517 rings 4 rings_kb 306 possible 0-3 online 0-3
+butte maps_kb 357 rings 2 rings_kb 153 possible 0-1 online 0-1
+highline maps_kb 357 rings 2 rings_kb 153 possible 0-1 online 0-1
+rysy maps_kb 2746 rings 32 rings_kb 2450 possible 0-31 online 0-1
+kongo maps_kb 278 rings 1 rings_kb 77 possible 0 online 0
+toompea maps_kb 517 rings 4 rings_kb 306 possible 0-3 online 0-3
+timah maps_kb 5294 rings 64 rings_kb 4900 possible 0-63 online 0
+baldy maps_kb 2746 rings 32 rings_kb 2450 possible 0-31 online 0-1
+roraima maps_kb 2746 rings 32 rings_kb 2450 possible 0-31 online 0-1
+lantau maps_kb 2746 rings 32 rings_kb 2450 possible 0-31 online 0-1
+odake maps_kb 835 rings 8 rings_kb 612 possible 0-7 online 0-7
+cradle maps_kb 10389 rings 128 rings_kb 9799 possible 0-127 online 0-1

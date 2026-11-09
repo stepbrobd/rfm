@@ -1,0 +1,9 @@
+round 1 none done
+round 1 sampled_skip done
+round 1 agent_v1 done
+round 1 xdp_empty done
+round 1 skip_array_lazy_nowake done
+round 1 xdp_skip_array done
+round 1 empty done
+round 1 agent_v3 done
+wrote /root/res/b8-hi.jsonl

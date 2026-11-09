@@ -1,0 +1,11 @@
+Error: nu::shell::terminated_by_signal
+
+  x External command was terminated by a signal
+    ,-[/root/workload/progbench_insitu.nu:34:18]
+ 33 |             let line = (
+ 34 |                 ^$"($dir)/progbench" -obj $obj -label $l -attach $iface -progs $progs -n $n -warmup $warmup -window $window
+    :                  ^^^^^^^^^|^^^^^^^^^
+    :                           `-- terminated by SIGKILL (9)
+ 35 |                 | str trim
+    `----
+
