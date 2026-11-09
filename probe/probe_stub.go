@@ -5,6 +5,7 @@ package probe
 import (
 	"context"
 	"errors"
+	"time"
 
 	"github.com/cilium/ebpf"
 )
@@ -44,6 +45,8 @@ func (p *Probe) FlowRings() []*ebpf.Map {
 func (p *Probe) FlowDrops() *ebpf.Map {
 	return nil
 }
+
+func (p *Probe) WatchCPUs(context.Context, time.Duration, func(*ebpf.Map) error) {}
 
 func (p *Probe) Attached() []int {
 	return nil

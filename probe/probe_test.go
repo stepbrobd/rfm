@@ -2690,7 +2690,7 @@ func loopbackSamples(t *testing.T, p *Probe, n uint32) int {
 		t.Fatal(err)
 	}
 	// the stage programs write or drop what they staged by the flush of each stage
-	for cpu := range p.FlowRings() {
+	for cpu := range len(p.rings) {
 		waitStageIdle(t, p, cpu)
 	}
 	samples := int(flowDrops(t, p) - before)

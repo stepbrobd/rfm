@@ -57,13 +57,13 @@ func NewReader(rings []*ebpf.Map, drops *ebpf.Map) (Reader, error) {
 		rd, err := newEventRing(ring)
 		if err != nil {
 			r.Close()
-			return nil, fmt.Errorf("map ring buffer of cpu %d: %w", i, err)
+			return nil, fmt.Errorf("map ring buffer %d: %w", i, err)
 		}
 		r.rings = append(r.rings, rd)
 		ev := unix.EpollEvent{Events: unix.EPOLLIN, Fd: int32(i)}
 		if err := unix.EpollCtl(epfd, unix.EPOLL_CTL_ADD, ring.FD(), &ev); err != nil {
 			r.Close()
-			return nil, fmt.Errorf("watch ring buffer of cpu %d: %w", i, err)
+			return nil, fmt.Errorf("watch ring buffer %d: %w", i, err)
 		}
 	}
 	return r, nil

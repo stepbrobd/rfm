@@ -88,7 +88,7 @@ struct {
 	__type(value, __u64);
 } rfm_gso_hdr_errors SEC(".maps");
 
-// a ring per possible CPU, indexed by CPU id, filled by Load
+// a slot per possible CPU, indexed by CPU id, Load and WatchCPUs put a ring in the slot of each online CPU
 struct {
 	__uint(type, BPF_MAP_TYPE_ARRAY_OF_MAPS);
 	__uint(max_entries, 1);

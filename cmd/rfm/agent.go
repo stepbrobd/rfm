@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/charmbracelet/log"
+	"github.com/cilium/ebpf"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/collectors"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -63,6 +64,8 @@ type agentProbe interface {
 	Synced() <-chan struct{}
 	// Events opens the reader of the sampled flow events
 	Events() (collector.Reader, error)
+	// WatchCPUs gives a CPU that comes online its event ring, read by rd, until ctx is done
+	WatchCPUs(ctx context.Context, rd collector.Reader)
 }
 
 // agentDeps is what the agent needs privileges or a fixed address for
@@ -91,6 +94,15 @@ func loadProbe(cfg probe.Config) (agentProbe, error) {
 
 func (p kernelProbe) Events() (collector.Reader, error) {
 	return collector.NewReader(p.FlowRings(), p.FlowDrops())
+}
+
+// cpuCheckEvery is how often the agent looks for a CPU that came online, whose events count as drops until its ring is in place
+const cpuCheckEvery = time.Second
+
+func (p kernelProbe) WatchCPUs(ctx context.Context, rd collector.Reader) {
+	if adder, ok := rd.(interface{ AddRing(*ebpf.Map) error }); ok {
+		p.Probe.WatchCPUs(ctx, cpuCheckEvery, adder.AddRing)
+	}
 }
 
 // runAgent runs the agent the file at path configures until ctx is done
@@ -192,7 +204,7 @@ func runAgent(ctx context.Context, path string, deps agentDeps) error {
 	}
 	mc.AddErrors("netlink", func() uint64 { st := p.WatchState(); return st.Errors + st.Resubscribes })
 	mc.AddErrors("attach", func() uint64 { return p.WatchState().AttachErrors })
-	mc.AddErrors("bpf_map", func() uint64 { return p.WatchState().PruneErrors })
+	mc.AddErrors("bpf_map", func() uint64 { st := p.WatchState(); return st.PruneErrors + st.RingErrors })
 	if backends != nil && backends.RIB != nil {
 		bmp := backends.RIB
 		mc.AddErrors("bmp", func() uint64 {
@@ -233,6 +245,8 @@ func runAgent(ctx context.Context, path string, deps agentDeps) error {
 			fail(fmt.Errorf("collector: %w", err))
 		}
 	})
+
+	wg.Go(func() { p.WatchCPUs(run, rd) })
 
 	if ctlSrv != nil {
 		wg.Go(func() {

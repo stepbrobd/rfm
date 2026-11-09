@@ -231,17 +231,23 @@ A value of 1 samples every skb. Higher values reduce ring buffer throughput at
 the cost of flow granularity.
 
 `ring_buf_size` (int, default 0): Size in bytes of the BPF ring buffer of each
-CPU. The agent creates one ring buffer per possible CPU, and together they take
-this size times the CPU count. `0` derives it from `sample_rate`: 256 KiB at 1
-in 1, half as much for each doubling of the rate, and 64 KiB from 1 in 4 on, so
-a ring holds about as long a burst of one CPU's packets up to 1 in 4, and its
-batch of 512 events keeps the wakeups of a busy CPU few at higher rates. The
-derived size is never below the page size. A set size must be a power of two and
-a multiple of the page size, and invalid values are rejected at config load
-time. Larger buffers reduce the chance of dropped events under burst traffic.
-The size follows the configured `sample_rate`, so a rate lowered at run time
-with `rfm set sample-rate` can overflow a ring sized for a higher one, which
-shows in `rfm_collector_dropped_events_total`.
+CPU. The agent creates one ring buffer for each online CPU, and together they
+take this size times their count, so a VM that advertises spare hotplug CPUs
+pays only for those it runs. A CPU that comes online later, or that the online
+list misses and drops an event, gets its ring buffer within a second, its events
+until then count in `rfm_collector_dropped_events_total`, and a CPU taken
+offline keeps its ring buffer. When the online list cannot be read from sysfs,
+as inside a container whose view of it lists only its own CPUs, every possible
+CPU gets one. `0` derives it from `sample_rate`: 256 KiB at 1 in 1, half as much
+for each doubling of the rate, and 64 KiB from 1 in 4 on, so a ring holds about
+as long a burst of one CPU's packets up to 1 in 4, and its batch of 512 events
+keeps the wakeups of a busy CPU few at higher rates. The derived size is never
+below the page size. A set size must be a power of two and a multiple of the
+page size, and invalid values are rejected at config load time. Larger buffers
+reduce the chance of dropped events under burst traffic. The size follows the
+configured `sample_rate`, so a rate lowered at run time with
+`rfm set sample-rate` can overflow a ring sized for a higher one, which shows in
+`rfm_collector_dropped_events_total`.
 
 `wakeup_batch` (uint32, default 0): The BPF program flags ring buffer submits
 with `BPF_RB_NO_WAKEUP` and forces a wakeup once every N events on each CPU, a
@@ -592,7 +598,7 @@ Collector health:
   rates from adaptive sampling that the probe refused, and failed tries after a
   link dump to delete the pinned counters of every interface the agent neither
   attached nor keeps retrying, while a failed delete of the counters of a link
-  that goes away is only logged
+  that goes away is only logged, and failed tries to give a CPU its ring buffer
 - `ring_buffer`: flow events that failed to decode, and a failed ring buffer
   read, which also stops the agent
 - `ipfix`: IPFIX records lost, the sum of `rfm_ipfix_dropped_records_total` over

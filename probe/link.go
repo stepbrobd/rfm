@@ -31,6 +31,9 @@ type WatchState struct {
 	// of a link that stays pending counts again, an attach that finds the
 	// link gone does not count
 	AttachErrors uint64
+	// RingErrors counts the failed tries to give a CPU its event ring, every
+	// try of a CPU that stays without one counts again
+	RingErrors uint64
 	// LastError describes the latest failed subscription or dropped message
 	LastError string
 }

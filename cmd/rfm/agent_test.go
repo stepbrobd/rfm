@@ -156,6 +156,8 @@ func (f *fakeProbe) Events() (collector.Reader, error) {
 	return &fakeReader{events: f.events, err: f.readErr}, nil
 }
 
+func (f *fakeProbe) WatchCPUs(context.Context, collector.Reader) {}
+
 // Counters reports one received ipv4 packet on every attached interface
 func (f *fakeProbe) Counters() ([]probe.IfaceCounter, error) {
 	var out []probe.IfaceCounter

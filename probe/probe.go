@@ -3,12 +3,15 @@
 package probe
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"math/rand/v2"
 	"os"
 	"path/filepath"
+	"slices"
 	"sync"
+	"time"
 
 	"github.com/charmbracelet/log"
 	"github.com/cilium/ebpf"
@@ -28,8 +31,11 @@ type Probe struct {
 	objs *rfmObjects
 	// ingress and egress are the program pair Load loaded for the mode
 	ingress, egress *ebpf.Program
-	// rings holds the event ring of every possible CPU, by CPU
+	// rings holds the event ring of every CPU that was online at Load or
+	// came online since, by CPU, nil for the others, guarded by mu
 	rings []*ebpf.Map
+	// ringSpec is the spec of every event ring
+	ringSpec *ebpf.MapSpec
 
 	mu    sync.Mutex
 	links map[int]ifaceLinks
@@ -72,10 +78,19 @@ func Load(cfg Config) (*Probe, error) {
 		return nil, fmt.Errorf("load BPF spec: %w", err)
 	}
 
-	// a ring per possible CPU, each of RingBufSize bytes
+	// a slot per possible CPU in the ring array, a ring of RingBufSize bytes
+	// for each online one, WatchCPUs adds the ring of a CPU that comes online
 	ncpu, err := ebpf.PossibleCPU()
 	if err != nil {
 		return nil, fmt.Errorf("count CPUs: %w", err)
+	}
+	online, err := readOnline()
+	if err != nil || len(online) == 0 {
+		log.Warn("cannot read the online CPUs, every possible CPU takes a ring", "err", err)
+		online = nil
+		for cpu := range ncpu {
+			online = append(online, cpu)
+		}
 	}
 	ringSpec := spec.Maps["rfm_flow_rings"].InnerMap.Copy()
 	spec.Maps["rfm_flow_rings"].MaxEntries = uint32(ncpu)
@@ -140,13 +155,14 @@ func Load(cfg Config) (*Probe, error) {
 		ingress, egress = "rfm_tc_ingress_staged", "rfm_tc_egress_staged"
 	}
 	p := &Probe{
-		objs:    new(rfmObjects),
-		rings:   make([]*ebpf.Map, 0, ncpu),
-		links:   make(map[int]ifaceLinks),
-		skipped: make(map[int]bool),
-		pending: make(map[int]string),
-		synced:  make(chan struct{}),
-		slots:   newSlotAlloc(int(spec.Maps[pinArr].MaxEntries)/(2*ifaceFamilies), spec.Maps[pinSlot].MaxEntries),
+		objs:     new(rfmObjects),
+		rings:    make([]*ebpf.Map, ncpu),
+		ringSpec: ringSpec,
+		links:    make(map[int]ifaceLinks),
+		skipped:  make(map[int]bool),
+		pending:  make(map[int]string),
+		synced:   make(chan struct{}),
+		slots:    newSlotAlloc(int(spec.Maps[pinArr].MaxEntries)/(2*ifaceFamilies), spec.Maps[pinSlot].MaxEntries),
 	}
 	p.ingress, p.egress, err = loadObjects(spec, opts, p.objs, ingress, egress)
 	// the collection holds its own handles now
@@ -183,15 +199,13 @@ func Load(cfg Config) (*Probe, error) {
 		return nil, fmt.Errorf("write config: %w", err)
 	}
 
-	for cpu := range ncpu {
-		ring, err := ebpf.NewMap(ringSpec)
-		if err == nil {
-			p.rings = append(p.rings, ring)
-			err = p.objs.RfmFlowRings.Put(uint32(cpu), ring)
+	for _, cpu := range online {
+		if cpu >= ncpu {
+			continue
 		}
-		if err != nil {
+		if err := p.addRing(cpu, nil); err != nil {
 			p.Close()
-			return nil, fmt.Errorf("event ring of cpu %d: %w", cpu, err)
+			return nil, err
 		}
 	}
 
@@ -423,7 +437,9 @@ func (p *Probe) Close() error {
 		delete(p.links, ifindex)
 	}
 	for _, ring := range p.rings {
-		errs = append(errs, ring.Close())
+		if ring != nil {
+			errs = append(errs, ring.Close())
+		}
 	}
 	errs = append(errs, p.objs.Close(), p.ingress.Close(), p.egress.Close())
 	return errors.Join(errs...)
@@ -638,9 +654,108 @@ func sumCPUs(m *ebpf.Map) (uint64, error) {
 	return total, nil
 }
 
-// FlowRings returns the event ring of every possible CPU, by CPU
+// FlowRings returns the event rings of the CPUs that have one, in CPU order,
+// those Load created and those WatchCPUs added since
 func (p *Probe) FlowRings() []*ebpf.Map {
-	return p.rings
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return slices.DeleteFunc(slices.Clone(p.rings), func(m *ebpf.Map) bool { return m == nil })
+}
+
+// addRing creates the event ring of cpu, hands it to add when set and then
+// puts it in the ring array, from which the programs of cpu write to it, a
+// CPU without a ring counts its events as drops
+func (p *Probe) addRing(cpu int, add func(*ebpf.Map) error) error {
+	ring, err := ebpf.NewMap(p.ringSpec)
+	if err != nil {
+		return fmt.Errorf("event ring of cpu %d: %w", cpu, err)
+	}
+	if add != nil {
+		if err := add(ring); err != nil {
+			ring.Close()
+			return fmt.Errorf("read event ring of cpu %d: %w", cpu, err)
+		}
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	// a ring the reader took stays with the probe for Close even when the put fails, which leaves the CPU without a ring for good
+	p.rings[cpu] = ring
+	if err := p.objs.RfmFlowRings.Put(uint32(cpu), ring); err != nil {
+		return fmt.Errorf("event ring of cpu %d: %w", cpu, err)
+	}
+	return nil
+}
+
+// hasRing reports whether cpu has its event ring
+func (p *Probe) hasRing(cpu int) bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return cpu < len(p.rings) && p.rings[cpu] != nil
+}
+
+// WatchCPUs checks the CPUs every interval until ctx is done and gives each
+// CPU without a ring that is online or dropped an event its ring, handed to
+// add before the programs write to it, a CPU whose ring cannot be created or
+// handed to add counts its events as drops and is tried again at the next
+// check
+func (p *Probe) WatchCPUs(ctx context.Context, every time.Duration, add func(*ebpf.Map) error) {
+	t := time.NewTicker(every)
+	defer t.Stop()
+	failed := make(map[int]bool)
+	readFailed := false
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+		}
+		online, err := readOnline()
+		if err != nil && !readFailed {
+			log.Warn("cannot read the online CPUs, a CPU without a ring gets one once it drops an event", "err", err)
+		}
+		readFailed = err != nil
+		// a CPU the online list misses still drops its events, only a CPU without a ring has drops and no ring
+		dropping, err := p.droppingCPUs()
+		if err != nil {
+			log.Warn("read the ring drops per CPU", "err", err)
+		}
+		for _, cpu := range slices.Compact(slices.Sorted(slices.Values(slices.Concat(online, dropping)))) {
+			if cpu < 0 || cpu >= len(p.rings) || p.hasRing(cpu) {
+				continue
+			}
+			if err := p.addRing(cpu, add); err != nil {
+				p.mu.Lock()
+				p.watchState.RingErrors++
+				p.mu.Unlock()
+				if !failed[cpu] {
+					log.Warn("a CPU is without its event ring, its events count as drops", "cpu", cpu, "err", err)
+				}
+				failed[cpu] = true
+				continue
+			}
+			delete(failed, cpu)
+			if slices.Contains(online, cpu) {
+				log.Info("event ring of a CPU that came online", "cpu", cpu)
+			} else {
+				log.Info("event ring of a CPU missing from the online list that dropped events", "cpu", cpu)
+			}
+		}
+	}
+}
+
+// droppingCPUs lists the CPUs that dropped an event since Load
+func (p *Probe) droppingCPUs() ([]int, error) {
+	var vals []uint64
+	if err := p.objs.RfmFlowDrops.Lookup(uint32(0), &vals); err != nil {
+		return nil, err
+	}
+	var cpus []int
+	for cpu, n := range vals {
+		if n > 0 {
+			cpus = append(cpus, cpu)
+		}
+	}
+	return cpus, nil
 }
 
 func (p *Probe) FlowDrops() *ebpf.Map {

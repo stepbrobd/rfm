@@ -4,7 +4,7 @@ package probe
 type Config struct {
 	SampleRate  uint32
 	WakeupBatch uint32
-	// RingBufSize is the size in bytes of the event ring of each possible
+	// RingBufSize is the size in bytes of the event ring of each online
 	// CPU, 0 keeps the 256 KiB of the object
 	RingBufSize int
 	// IfaceStatsSize is the capacity of the counter hash, 0 keeps the 4096 of
