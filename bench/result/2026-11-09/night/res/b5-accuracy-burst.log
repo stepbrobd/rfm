@@ -1,0 +1,21 @@
+agent_v3 N=100 M=1000 burst done
+thresh_array N=100 M=1000 burst done
+skip_array N=100 M=1000 burst done
+sampled_thresh N=100 M=1000 burst done
+sampled_skip N=100 M=1000 burst done
+agent_v3 N=100 M=10000 burst done
+thresh_array N=100 M=10000 burst done
+skip_array N=100 M=10000 burst done
+sampled_thresh N=100 M=10000 burst done
+sampled_skip N=100 M=10000 burst done
+agent_v3 N=10 M=100 burst done
+thresh_array N=10 M=100 burst done
+skip_array N=10 M=100 burst done
+sampled_thresh N=10 M=100 burst done
+sampled_skip N=10 M=100 burst done
+agent_v3 N=10 M=1000 burst done
+thresh_array N=10 M=1000 burst done
+skip_array N=10 M=1000 burst done
+sampled_thresh N=10 M=1000 burst done
+sampled_skip N=10 M=1000 burst done
+wrote /tmp/progbench_accuracy_burst.jsonl

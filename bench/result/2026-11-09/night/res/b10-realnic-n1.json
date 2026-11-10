@@ -1,0 +1,18 @@
+[
+  {
+    "N": 1,
+    "rx pps": 0,
+    "ring drops": 1419465779,
+    "ns/pkt": 0,
+    "kern cores": 0.0,
+    "user cores": 1.861,
+    "cores/Mpps": 0,
+    "window drops": 1224329565,
+    "drops at start": 191959999,
+    "sys cores": 0.019,
+    "rss MB": 78.4,
+    "active flows": 719,
+    "forced evictions": 0,
+    "nic drops/s": 53333937
+  }
+]

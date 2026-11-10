@@ -133,3 +133,25 @@ elsewhere, estimated over exact packets 0.9961 to 1.0047 per node, while
 with 10 or more samples carry 99.8% of the estimated packets. BPF map memory is
 278 to 835 KB where possible equals online CPUs and 2.7 to 10.4 MB on VMs that
 advertise 32 to 128 possible CPUs, since rfm creates one ring per possible CPU.
+
+## Night run (`night/`)
+
+OAR job 20519, spirou-7 (DUT) and spirou-8 (generator) in KaVLAN 4, from 19:00
+on 2026-11-09, on the same image and settings as above (rfm 2026.1105.0). The
+driver ran from a frozen copy of the harness at `9d05bad`:
+
+```
+SRC=~/rfm-night-src campaign.sh 20519 ~/rfm-night
+```
+
+with the default phases `setup b5 b1 b3 b4 b7 b2 b12 b8 b9 b10 b11 more more2`
+and the night configurations of `campaign.sh`. Every phase finished, at 03:05,
+and no `measure.nu` call failed. `night/campaign.log` holds every remote
+command with its time, `night/res/` the JSON lines and logs per phase.
+
+The base N100 and N10 cells of rounds 4 and 5 in `night/res/b3.jsonl`, 32
+windows labelled `base N100 r4`, `base N100 r5`, `base N10 r4` and
+`base N10 r5`, ran with the iperf3 stream of the last B1 cell of the `more`
+phase still up, which held pktgen at 1.2 to 1.3 Mpps in place of 2.63. They
+are not results and are left out of every table. The `more2` cells and
+rounds 1 to 3 are clean. `f91816d` stops the stream in the harness.

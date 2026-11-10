@@ -1,0 +1,1435 @@
+2026-11-09 19:03:30 job 20519 vlan 4 dut spirou-7 gen spirou-8 phases: setup b5 b1 b3 b4 b7 b2 b12 b8 b9 b10 b11 more more2
+2026-11-09 19:03:32 dut ctl 172.16.208.15 test 10.48.0.7 e8:eb:d3:fd:ce:ac, gen ctl 172.16.208.16 test 10.48.0.8 e8:eb:d3:fd:cf:0c pci 0000:4b:00.0
+2026-11-09 19:03:33 === phase setup
+2026-11-09 19:03:40 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+bash: line 1: /proc/net/pktgen/pgctrl: No such file or directory
+2026-11-09 19:03:40 dut: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+bash: line 1: /proc/net/pktgen/pgctrl: No such file or directory
+2026-11-09 19:03:41 dut: pkill -x iperf3; true
+2026-11-09 19:03:41 gen: pkill -x iperf3; true
+2026-11-09 19:03:43 dut: pkill -KILL -f '^/root/progbench/progbench '; sysctl -qw kernel.bpf_stats_enabled=0; ethtool -K ens1f0np0 gro on tso on gso on; ethtool -L ens1f0np0 combined 63; true
+Actual changes:
+tx-tcp-ecn-segmentation: off [requested on]
+tx-tcp-mangleid-segmentation: on
+tx-tcp-accecn-segmentation: off [requested on]
+scp: /root/res/*: No such file or directory
+2026-11-09 19:03:43 === phase setup done
+2026-11-09 19:03:43 === phase b5
+2026-11-09 19:03:43 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+bash: line 1: /proc/net/pktgen/pgctrl: No such file or directory
+2026-11-09 19:03:44 dut: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+bash: line 1: /proc/net/pktgen/pgctrl: No such file or directory
+2026-11-09 19:03:44 dut: pkill -x iperf3; true
+2026-11-09 19:03:44 gen: pkill -x iperf3; true
+2026-11-09 19:03:46 dut: pkill -KILL -f '^/root/progbench/progbench '; sysctl -qw kernel.bpf_stats_enabled=0; ethtool -K ens1f0np0 gro on tso on gso on; ethtool -L ens1f0np0 combined 63; true
+Actual changes:
+tx-tcp-ecn-segmentation: off [requested on]
+tx-tcp-accecn-segmentation: off [requested on]
+2026-11-09 19:03:46 dut: timeout 2400 nu /root/workload/progbench.nu --dir /root/progbench --ns '100 1000 1' --trials 7 --cpu 2 > /root/res/b5-progbench.log 2>&1; cp /tmp/progbench.jsonl /root/res/b5-progbench.jsonl
+2026-11-09 19:11:08 dut: timeout 2400 nu /root/workload/progbench_accuracy.nu --dir /root/progbench --flows 1000 --order round_robin --cpu 2 > /root/res/b5-accuracy-round_robin.log 2>&1; cp /tmp/progbench_accuracy_round_robin.jsonl /root/res/b5-accuracy-round_robin.jsonl
+2026-11-09 19:12:07 dut: timeout 2400 nu /root/workload/progbench_accuracy.nu --dir /root/progbench --flows 1000 --order burst --cpu 2 > /root/res/b5-accuracy-burst.log 2>&1; cp /tmp/progbench_accuracy_burst.jsonl /root/res/b5-accuracy-burst.jsonl
+2026-11-09 19:13:06 === phase b5 done
+2026-11-09 19:13:06 === phase b1
+2026-11-09 19:13:06 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+bash: line 1: /proc/net/pktgen/pgctrl: No such file or directory
+2026-11-09 19:13:06 dut: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+bash: line 1: /proc/net/pktgen/pgctrl: No such file or directory
+2026-11-09 19:13:06 dut: pkill -x iperf3; true
+2026-11-09 19:13:06 gen: pkill -x iperf3; true
+2026-11-09 19:13:08 dut: pkill -KILL -f '^/root/progbench/progbench '; sysctl -qw kernel.bpf_stats_enabled=0; ethtool -K ens1f0np0 gro on tso on gso on; ethtool -L ens1f0np0 combined 63; true
+Actual changes:
+tx-tcp-ecn-segmentation: off [requested on]
+tx-tcp-accecn-segmentation: off [requested on]
+2026-11-09 19:13:09 dut: pkill -x iperf3; true
+2026-11-09 19:13:09 gen: pkill -x iperf3; true
+2026-11-09 19:13:11 dut: iperf3 -s -D
+2026-11-09 19:13:11 gen: setsid nohup iperf3 -c 10.48.0.7 -P 8  -t 86400 > /tmp/iperf.log 2>&1 < /dev/null &
+2026-11-09 19:13:21 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label rx_gro\ r1\ rfm_acc --out /root/res/b1.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --counts --warmup 12 --secs 45 --stat-secs 5 > /dev/null 2>> /root/res/b1.err; echo exit=$?
+exit=0
+2026-11-09 19:14:32 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 100 --label rx_gro\ r1\ netobserv --out /root/res/b1.jsonl --counts --warmup 12 --secs 45 --stat-secs 5 > /dev/null 2>> /root/res/b1.err; echo exit=$?
+exit=0
+2026-11-09 19:15:41 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent hsflowd --n 100 --label rx_gro\ r1\ hsflowd --out /root/res/b1.jsonl --counts --warmup 12 --secs 45 --stat-secs 5 > /dev/null 2>> /root/res/b1.err; echo exit=$?
+exit=0
+2026-11-09 19:16:53 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 100 --label rx_gro\ r2\ netobserv --out /root/res/b1.jsonl --counts --warmup 12 --secs 45 --stat-secs 5 > /dev/null 2>> /root/res/b1.err; echo exit=$?
+exit=0
+2026-11-09 19:18:02 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label rx_gro\ r2\ rfm_acc --out /root/res/b1.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --counts --warmup 12 --secs 45 --stat-secs 5 > /dev/null 2>> /root/res/b1.err; echo exit=$?
+exit=0
+2026-11-09 19:19:12 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent hsflowd --n 100 --label rx_gro\ r2\ hsflowd --out /root/res/b1.jsonl --counts --warmup 12 --secs 45 --stat-secs 5 > /dev/null 2>> /root/res/b1.err; echo exit=$?
+exit=0
+2026-11-09 19:20:25 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label rx_gro\ r3\ rfm_acc --out /root/res/b1.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --counts --warmup 12 --secs 45 --stat-secs 5 > /dev/null 2>> /root/res/b1.err; echo exit=$?
+exit=0
+2026-11-09 19:21:35 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 100 --label rx_gro\ r3\ netobserv --out /root/res/b1.jsonl --counts --warmup 12 --secs 45 --stat-secs 5 > /dev/null 2>> /root/res/b1.err; echo exit=$?
+exit=0
+2026-11-09 19:22:44 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent hsflowd --n 100 --label rx_gro\ r3\ hsflowd --out /root/res/b1.jsonl --counts --warmup 12 --secs 45 --stat-secs 5 > /dev/null 2>> /root/res/b1.err; echo exit=$?
+exit=0
+2026-11-09 19:23:57 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+bash: line 1: /proc/net/pktgen/pgctrl: No such file or directory
+2026-11-09 19:23:57 dut: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+bash: line 1: /proc/net/pktgen/pgctrl: No such file or directory
+2026-11-09 19:23:57 dut: pkill -x iperf3; true
+2026-11-09 19:23:58 gen: pkill -x iperf3; true
+2026-11-09 19:24:00 dut: pkill -KILL -f '^/root/progbench/progbench '; sysctl -qw kernel.bpf_stats_enabled=0; ethtool -K ens1f0np0 gro on tso on gso on; ethtool -L ens1f0np0 combined 63; true
+Actual changes:
+tx-tcp-ecn-segmentation: off [requested on]
+tx-tcp-accecn-segmentation: off [requested on]
+2026-11-09 19:24:00 dut: ethtool -K ens1f0np0 gro off
+2026-11-09 19:24:00 dut: pkill -x iperf3; true
+2026-11-09 19:24:00 gen: pkill -x iperf3; true
+2026-11-09 19:24:03 dut: iperf3 -s -D
+2026-11-09 19:24:03 gen: setsid nohup iperf3 -c 10.48.0.7 -P 8  -t 86400 > /tmp/iperf.log 2>&1 < /dev/null &
+2026-11-09 19:24:13 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent hsflowd --n 100 --label rx_nogro\ r1\ hsflowd --out /root/res/b1.jsonl --counts --warmup 12 --secs 45 --stat-secs 5 > /dev/null 2>> /root/res/b1.err; echo exit=$?
+exit=0
+2026-11-09 19:26:41 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 100 --label rx_nogro\ r1\ netobserv --out /root/res/b1.jsonl --counts --warmup 12 --secs 45 --stat-secs 5 > /dev/null 2>> /root/res/b1.err; echo exit=$?
+exit=0
+2026-11-09 19:27:50 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label rx_nogro\ r1\ rfm_acc --out /root/res/b1.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --counts --warmup 12 --secs 45 --stat-secs 5 > /dev/null 2>> /root/res/b1.err; echo exit=$?
+exit=0
+2026-11-09 19:29:01 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label rx_nogro\ r2\ rfm_acc --out /root/res/b1.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --counts --warmup 12 --secs 45 --stat-secs 5 > /dev/null 2>> /root/res/b1.err; echo exit=$?
+exit=0
+2026-11-09 19:30:11 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 100 --label rx_nogro\ r2\ netobserv --out /root/res/b1.jsonl --counts --warmup 12 --secs 45 --stat-secs 5 > /dev/null 2>> /root/res/b1.err; echo exit=$?
+exit=0
+2026-11-09 19:31:20 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent hsflowd --n 100 --label rx_nogro\ r2\ hsflowd --out /root/res/b1.jsonl --counts --warmup 12 --secs 45 --stat-secs 5 > /dev/null 2>> /root/res/b1.err; echo exit=$?
+exit=0
+2026-11-09 19:33:48 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent hsflowd --n 100 --label rx_nogro\ r3\ hsflowd --out /root/res/b1.jsonl --counts --warmup 12 --secs 45 --stat-secs 5 > /dev/null 2>> /root/res/b1.err; echo exit=$?
+exit=0
+2026-11-09 19:36:17 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label rx_nogro\ r3\ rfm_acc --out /root/res/b1.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --counts --warmup 12 --secs 45 --stat-secs 5 > /dev/null 2>> /root/res/b1.err; echo exit=$?
+exit=0
+2026-11-09 19:37:27 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 100 --label rx_nogro\ r3\ netobserv --out /root/res/b1.jsonl --counts --warmup 12 --secs 45 --stat-secs 5 > /dev/null 2>> /root/res/b1.err; echo exit=$?
+exit=0
+2026-11-09 19:38:36 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+bash: line 1: /proc/net/pktgen/pgctrl: No such file or directory
+2026-11-09 19:38:36 dut: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+bash: line 1: /proc/net/pktgen/pgctrl: No such file or directory
+2026-11-09 19:38:37 dut: pkill -x iperf3; true
+2026-11-09 19:38:37 gen: pkill -x iperf3; true
+2026-11-09 19:38:39 dut: pkill -KILL -f '^/root/progbench/progbench '; sysctl -qw kernel.bpf_stats_enabled=0; ethtool -K ens1f0np0 gro on tso on gso on; ethtool -L ens1f0np0 combined 63; true
+Actual changes:
+rx-gro: on
+tx-tcp-ecn-segmentation: off [requested on]
+tx-tcp-accecn-segmentation: off [requested on]
+2026-11-09 19:38:39 dut: pkill -x iperf3; true
+2026-11-09 19:38:39 gen: pkill -x iperf3; true
+2026-11-09 19:38:42 gen: iperf3 -s -D
+2026-11-09 19:38:42 dut: setsid nohup iperf3 -c 10.48.0.8 -P 8  -t 86400 > /tmp/iperf.log 2>&1 < /dev/null &
+2026-11-09 19:38:52 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label tx_tso\ r1\ rfm_acc --out /root/res/b1.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --counts --warmup 12 --secs 45 --stat-secs 5 > /dev/null 2>> /root/res/b1.err; echo exit=$?
+exit=0
+2026-11-09 19:40:02 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 100 --label tx_tso\ r1\ netobserv --out /root/res/b1.jsonl --counts --warmup 12 --secs 45 --stat-secs 5 > /dev/null 2>> /root/res/b1.err; echo exit=$?
+exit=0
+2026-11-09 19:41:11 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent hsflowd --n 100 --label tx_tso\ r1\ hsflowd --out /root/res/b1.jsonl --counts --warmup 12 --secs 45 --stat-secs 5 > /dev/null 2>> /root/res/b1.err; echo exit=$?
+exit=0
+2026-11-09 19:42:24 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent hsflowd --n 100 --label tx_tso\ r2\ hsflowd --out /root/res/b1.jsonl --counts --warmup 12 --secs 45 --stat-secs 5 > /dev/null 2>> /root/res/b1.err; echo exit=$?
+exit=0
+2026-11-09 19:43:36 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label tx_tso\ r2\ rfm_acc --out /root/res/b1.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --counts --warmup 12 --secs 45 --stat-secs 5 > /dev/null 2>> /root/res/b1.err; echo exit=$?
+exit=0
+2026-11-09 19:44:46 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 100 --label tx_tso\ r2\ netobserv --out /root/res/b1.jsonl --counts --warmup 12 --secs 45 --stat-secs 5 > /dev/null 2>> /root/res/b1.err; echo exit=$?
+exit=0
+2026-11-09 19:45:55 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent hsflowd --n 100 --label tx_tso\ r3\ hsflowd --out /root/res/b1.jsonl --counts --warmup 12 --secs 45 --stat-secs 5 > /dev/null 2>> /root/res/b1.err; echo exit=$?
+exit=0
+2026-11-09 19:47:07 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 100 --label tx_tso\ r3\ netobserv --out /root/res/b1.jsonl --counts --warmup 12 --secs 45 --stat-secs 5 > /dev/null 2>> /root/res/b1.err; echo exit=$?
+exit=0
+2026-11-09 19:48:16 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label tx_tso\ r3\ rfm_acc --out /root/res/b1.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --counts --warmup 12 --secs 45 --stat-secs 5 > /dev/null 2>> /root/res/b1.err; echo exit=$?
+exit=0
+2026-11-09 19:49:27 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+bash: line 1: /proc/net/pktgen/pgctrl: No such file or directory
+2026-11-09 19:49:27 dut: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+bash: line 1: /proc/net/pktgen/pgctrl: No such file or directory
+2026-11-09 19:49:27 dut: pkill -x iperf3; true
+2026-11-09 19:49:27 gen: pkill -x iperf3; true
+2026-11-09 19:49:29 dut: pkill -KILL -f '^/root/progbench/progbench '; sysctl -qw kernel.bpf_stats_enabled=0; ethtool -K ens1f0np0 gro on tso on gso on; ethtool -L ens1f0np0 combined 63; true
+Actual changes:
+tx-tcp-ecn-segmentation: off [requested on]
+tx-tcp-accecn-segmentation: off [requested on]
+2026-11-09 19:49:30 dut: ethtool -K ens1f0np0 tso off gso off
+2026-11-09 19:49:30 dut: pkill -x iperf3; true
+2026-11-09 19:49:30 gen: pkill -x iperf3; true
+2026-11-09 19:49:32 gen: iperf3 -s -D
+2026-11-09 19:49:32 dut: setsid nohup iperf3 -c 10.48.0.8 -P 8  -t 86400 > /tmp/iperf.log 2>&1 < /dev/null &
+2026-11-09 19:49:42 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 100 --label tx_notso\ r1\ netobserv --out /root/res/b1.jsonl --counts --warmup 12 --secs 45 --stat-secs 5 > /dev/null 2>> /root/res/b1.err; echo exit=$?
+exit=0
+2026-11-09 19:50:51 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent hsflowd --n 100 --label tx_notso\ r1\ hsflowd --out /root/res/b1.jsonl --counts --warmup 12 --secs 45 --stat-secs 5 > /dev/null 2>> /root/res/b1.err; echo exit=$?
+exit=0
+2026-11-09 19:52:04 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label tx_notso\ r1\ rfm_acc --out /root/res/b1.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --counts --warmup 12 --secs 45 --stat-secs 5 > /dev/null 2>> /root/res/b1.err; echo exit=$?
+exit=0
+2026-11-09 19:53:14 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label tx_notso\ r2\ rfm_acc --out /root/res/b1.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --counts --warmup 12 --secs 45 --stat-secs 5 > /dev/null 2>> /root/res/b1.err; echo exit=$?
+exit=0
+2026-11-09 19:54:24 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 100 --label tx_notso\ r2\ netobserv --out /root/res/b1.jsonl --counts --warmup 12 --secs 45 --stat-secs 5 > /dev/null 2>> /root/res/b1.err; echo exit=$?
+exit=0
+2026-11-09 19:55:33 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent hsflowd --n 100 --label tx_notso\ r2\ hsflowd --out /root/res/b1.jsonl --counts --warmup 12 --secs 45 --stat-secs 5 > /dev/null 2>> /root/res/b1.err; echo exit=$?
+exit=0
+2026-11-09 19:56:46 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label tx_notso\ r3\ rfm_acc --out /root/res/b1.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --counts --warmup 12 --secs 45 --stat-secs 5 > /dev/null 2>> /root/res/b1.err; echo exit=$?
+exit=0
+2026-11-09 19:57:56 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 100 --label tx_notso\ r3\ netobserv --out /root/res/b1.jsonl --counts --warmup 12 --secs 45 --stat-secs 5 > /dev/null 2>> /root/res/b1.err; echo exit=$?
+exit=0
+2026-11-09 19:59:05 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent hsflowd --n 100 --label tx_notso\ r3\ hsflowd --out /root/res/b1.jsonl --counts --warmup 12 --secs 45 --stat-secs 5 > /dev/null 2>> /root/res/b1.err; echo exit=$?
+exit=0
+2026-11-09 20:00:17 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+bash: line 1: /proc/net/pktgen/pgctrl: No such file or directory
+2026-11-09 20:00:17 dut: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+bash: line 1: /proc/net/pktgen/pgctrl: No such file or directory
+2026-11-09 20:00:17 dut: pkill -x iperf3; true
+2026-11-09 20:00:18 gen: pkill -x iperf3; true
+2026-11-09 20:00:20 dut: pkill -KILL -f '^/root/progbench/progbench '; sysctl -qw kernel.bpf_stats_enabled=0; ethtool -K ens1f0np0 gro on tso on gso on; ethtool -L ens1f0np0 combined 63; true
+Actual changes:
+tx-generic-segmentation: on
+tx-tcp-segmentation: on
+tx-tcp-ecn-segmentation: off [requested on]
+tx-tcp-mangleid-segmentation: on
+tx-tcp6-segmentation: on
+tx-tcp-accecn-segmentation: off [requested on]
+2026-11-09 20:00:20 === phase b1 done
+2026-11-09 20:00:20 === phase b3
+2026-11-09 20:00:20 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; setsid nohup nu /root/workload/gen.nu --iface ens1f0np0 --dst 10.48.0.7 --dstmac e8:eb:d3:fd:ce:ac --count 4000000000 --threads 1  > /tmp/gen.log 2>&1 < /dev/null &
+bash: line 1: /proc/net/pktgen/pgctrl: No such file or directory
+2026-11-09 20:00:39 dut rx pps 2624587
+2026-11-09 20:00:39 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 1000 --label base\ N1000\ r1\ rfm_sampled --out /root/res/b3.jsonl --rfm-bpf sampled_only=true\\nstage_events=32\\nring_buf_size=16384 --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-09 20:01:32 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 1000 --label base\ N1000\ r1\ rfm --out /root/res/b3.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-09 20:02:26 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent hsflowd --n 1000 --label base\ N1000\ r1\ hsflowd --out /root/res/b3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-09 20:03:17 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 1000 --label base\ N1000\ r1\ rfm_default --out /root/res/b3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-09 20:04:11 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent pmacctd --n 1000 --label base\ N1000\ r1\ pmacctd --out /root/res/b3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-09 20:04:54 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 1000 --label base\ N1000\ r1\ netobserv --out /root/res/b3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-09 20:05:45 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent softflowd --n 1000 --label base\ N1000\ r1\ softflowd --out /root/res/b3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-09 20:06:28 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent none --n 1000 --label base\ N1000\ r1\ none --out /root/res/b3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-09 20:07:11 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent hsflowd --n 1000 --label base\ N1000\ r2\ hsflowd --out /root/res/b3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-09 20:08:03 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 1000 --label base\ N1000\ r2\ rfm_sampled --out /root/res/b3.jsonl --rfm-bpf sampled_only=true\\nstage_events=32\\nring_buf_size=16384 --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-09 20:08:56 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 1000 --label base\ N1000\ r2\ rfm --out /root/res/b3.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-09 20:09:49 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 1000 --label base\ N1000\ r2\ netobserv --out /root/res/b3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-09 20:10:41 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent none --n 1000 --label base\ N1000\ r2\ none --out /root/res/b3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-09 20:11:24 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent softflowd --n 1000 --label base\ N1000\ r2\ softflowd --out /root/res/b3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-09 20:12:07 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent pmacctd --n 1000 --label base\ N1000\ r2\ pmacctd --out /root/res/b3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-09 20:12:49 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 1000 --label base\ N1000\ r2\ rfm_default --out /root/res/b3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-09 20:13:43 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 1000 --label base\ N1000\ r3\ rfm --out /root/res/b3.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-09 20:14:36 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 1000 --label base\ N1000\ r3\ netobserv --out /root/res/b3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-09 20:15:28 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent softflowd --n 1000 --label base\ N1000\ r3\ softflowd --out /root/res/b3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-09 20:16:11 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 1000 --label base\ N1000\ r3\ rfm_default --out /root/res/b3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-09 20:17:04 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent hsflowd --n 1000 --label base\ N1000\ r3\ hsflowd --out /root/res/b3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-09 20:17:56 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent pmacctd --n 1000 --label base\ N1000\ r3\ pmacctd --out /root/res/b3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-09 20:18:39 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent none --n 1000 --label base\ N1000\ r3\ none --out /root/res/b3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-09 20:19:21 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 1000 --label base\ N1000\ r3\ rfm_sampled --out /root/res/b3.jsonl --rfm-bpf sampled_only=true\\nstage_events=32\\nring_buf_size=16384 --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-09 20:20:15 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; setsid nohup nu /root/workload/gen.nu --iface ens1f0np0 --dst 10.48.0.7 --dstmac e8:eb:d3:fd:ce:ac --count 4000000000 --threads 1  > /tmp/gen.log 2>&1 < /dev/null &
+2026-11-09 20:20:33 dut rx pps 2627773
+2026-11-09 20:20:33 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent softflowd --n 100 --label base\ N100\ r1\ softflowd --out /root/res/b3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-09 20:21:16 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label base\ N100\ r1\ rfm_sampled --out /root/res/b3.jsonl --rfm-bpf sampled_only=true\\nstage_events=32\\nring_buf_size=16384 --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-09 20:22:09 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent pmacctd --n 100 --label base\ N100\ r1\ pmacctd --out /root/res/b3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-09 20:22:52 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent hsflowd --n 100 --label base\ N100\ r1\ hsflowd --out /root/res/b3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-09 20:23:44 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label base\ N100\ r1\ rfm --out /root/res/b3.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-09 20:24:37 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label base\ N100\ r1\ rfm_default --out /root/res/b3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-09 20:25:31 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent none --n 100 --label base\ N100\ r1\ none --out /root/res/b3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-09 20:26:13 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 100 --label base\ N100\ r1\ netobserv --out /root/res/b3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-09 20:27:05 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent hsflowd --n 100 --label base\ N100\ r2\ hsflowd --out /root/res/b3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-09 20:27:57 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label base\ N100\ r2\ rfm_default --out /root/res/b3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-09 20:28:51 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent pmacctd --n 100 --label base\ N100\ r2\ pmacctd --out /root/res/b3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-09 20:29:33 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 100 --label base\ N100\ r2\ netobserv --out /root/res/b3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-09 20:30:25 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent softflowd --n 100 --label base\ N100\ r2\ softflowd --out /root/res/b3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-09 20:31:08 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label base\ N100\ r2\ rfm_sampled --out /root/res/b3.jsonl --rfm-bpf sampled_only=true\\nstage_events=32\\nring_buf_size=16384 --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-09 20:32:01 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label base\ N100\ r2\ rfm --out /root/res/b3.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-09 20:32:55 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent none --n 100 --label base\ N100\ r2\ none --out /root/res/b3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-09 20:33:37 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 100 --label base\ N100\ r3\ netobserv --out /root/res/b3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-09 20:34:29 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label base\ N100\ r3\ rfm --out /root/res/b3.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-09 20:35:23 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label base\ N100\ r3\ rfm_default --out /root/res/b3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-09 20:36:16 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent softflowd --n 100 --label base\ N100\ r3\ softflowd --out /root/res/b3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-09 20:36:59 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent hsflowd --n 100 --label base\ N100\ r3\ hsflowd --out /root/res/b3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-09 20:37:50 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent none --n 100 --label base\ N100\ r3\ none --out /root/res/b3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-09 20:38:33 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label base\ N100\ r3\ rfm_sampled --out /root/res/b3.jsonl --rfm-bpf sampled_only=true\\nstage_events=32\\nring_buf_size=16384 --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-09 20:39:27 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent pmacctd --n 100 --label base\ N100\ r3\ pmacctd --out /root/res/b3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-09 20:40:09 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; setsid nohup nu /root/workload/gen.nu --iface ens1f0np0 --dst 10.48.0.7 --dstmac e8:eb:d3:fd:ce:ac --count 4000000000 --threads 1  > /tmp/gen.log 2>&1 < /dev/null &
+2026-11-09 20:40:28 dut rx pps 2628529
+2026-11-09 20:40:28 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 10 --label base\ N10\ r1\ netobserv --out /root/res/b3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-09 20:41:20 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 10 --label base\ N10\ r1\ rfm_sampled --out /root/res/b3.jsonl --rfm-bpf sampled_only=true\\nstage_events=32\\nring_buf_size=16384 --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-09 20:42:13 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent softflowd --n 10 --label base\ N10\ r1\ softflowd --out /root/res/b3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-09 20:42:56 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 10 --label base\ N10\ r1\ rfm --out /root/res/b3.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-09 20:43:49 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent hsflowd --n 10 --label base\ N10\ r1\ hsflowd --out /root/res/b3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-09 20:44:41 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent pmacctd --n 10 --label base\ N10\ r1\ pmacctd --out /root/res/b3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-09 20:45:24 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 10 --label base\ N10\ r1\ rfm_default --out /root/res/b3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-09 20:46:17 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent none --n 10 --label base\ N10\ r1\ none --out /root/res/b3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-09 20:47:00 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent softflowd --n 10 --label base\ N10\ r2\ softflowd --out /root/res/b3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-09 20:47:43 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent hsflowd --n 10 --label base\ N10\ r2\ hsflowd --out /root/res/b3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-09 20:48:35 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 10 --label base\ N10\ r2\ rfm --out /root/res/b3.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-09 20:49:28 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 10 --label base\ N10\ r2\ rfm_sampled --out /root/res/b3.jsonl --rfm-bpf sampled_only=true\\nstage_events=32\\nring_buf_size=16384 --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-09 20:50:21 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent none --n 10 --label base\ N10\ r2\ none --out /root/res/b3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-09 20:51:04 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 10 --label base\ N10\ r2\ netobserv --out /root/res/b3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-09 20:51:56 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 10 --label base\ N10\ r2\ rfm_default --out /root/res/b3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-09 20:52:49 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent pmacctd --n 10 --label base\ N10\ r2\ pmacctd --out /root/res/b3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-09 20:53:32 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent none --n 10 --label base\ N10\ r3\ none --out /root/res/b3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-09 20:54:15 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 10 --label base\ N10\ r3\ rfm_sampled --out /root/res/b3.jsonl --rfm-bpf sampled_only=true\\nstage_events=32\\nring_buf_size=16384 --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-09 20:55:08 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent softflowd --n 10 --label base\ N10\ r3\ softflowd --out /root/res/b3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-09 20:55:51 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent hsflowd --n 10 --label base\ N10\ r3\ hsflowd --out /root/res/b3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-09 20:56:43 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 10 --label base\ N10\ r3\ rfm --out /root/res/b3.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-09 20:57:36 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 10 --label base\ N10\ r3\ netobserv --out /root/res/b3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-09 20:58:28 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent pmacctd --n 10 --label base\ N10\ r3\ pmacctd --out /root/res/b3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-09 20:59:10 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 10 --label base\ N10\ r3\ rfm_default --out /root/res/b3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-09 21:00:04 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; setsid nohup nu /root/workload/gen.nu --iface ens1f0np0 --dst 10.48.0.7 --dstmac e8:eb:d3:fd:ce:ac --count 4000000000 --threads 1  > /tmp/gen.log 2>&1 < /dev/null &
+2026-11-09 21:00:22 dut rx pps 2630528
+2026-11-09 21:00:22 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent softflowd --n 1 --label base\ N1\ r1\ softflowd --out /root/res/b3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-09 21:01:05 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent pmacctd --n 1 --label base\ N1\ r1\ pmacctd --out /root/res/b3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-09 21:01:48 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 1 --label base\ N1\ r1\ rfm_default --out /root/res/b3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-09 21:02:42 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent none --n 1 --label base\ N1\ r1\ none --out /root/res/b3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-09 21:03:24 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 1 --label base\ N1\ r1\ netobserv --out /root/res/b3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-09 21:04:16 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 1 --label base\ N1\ r1\ rfm_sampled --out /root/res/b3.jsonl --rfm-bpf sampled_only=true\\nstage_events=32\\nring_buf_size=16384 --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-09 21:05:10 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 1 --label base\ N1\ r1\ rfm_n1 --out /root/res/b3.jsonl --rfm-bpf stage_events=32\\niface_slots=1 --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-09 21:06:03 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent hsflowd --n 1 --label base\ N1\ r1\ hsflowd --out /root/res/b3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-09 21:06:55 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent pmacctd --n 1 --label base\ N1\ r2\ pmacctd --out /root/res/b3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-09 21:07:38 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent softflowd --n 1 --label base\ N1\ r2\ softflowd --out /root/res/b3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-09 21:08:20 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 1 --label base\ N1\ r2\ netobserv --out /root/res/b3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-09 21:09:12 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 1 --label base\ N1\ r2\ rfm_sampled --out /root/res/b3.jsonl --rfm-bpf sampled_only=true\\nstage_events=32\\nring_buf_size=16384 --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-09 21:10:05 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 1 --label base\ N1\ r2\ rfm_default --out /root/res/b3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-09 21:10:59 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent none --n 1 --label base\ N1\ r2\ none --out /root/res/b3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-09 21:11:42 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent hsflowd --n 1 --label base\ N1\ r2\ hsflowd --out /root/res/b3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-09 21:12:33 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 1 --label base\ N1\ r2\ rfm_n1 --out /root/res/b3.jsonl --rfm-bpf stage_events=32\\niface_slots=1 --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-09 21:13:27 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 1 --label base\ N1\ r3\ rfm_n1 --out /root/res/b3.jsonl --rfm-bpf stage_events=32\\niface_slots=1 --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-09 21:14:20 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent softflowd --n 1 --label base\ N1\ r3\ softflowd --out /root/res/b3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-09 21:15:03 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent none --n 1 --label base\ N1\ r3\ none --out /root/res/b3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-09 21:15:46 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 1 --label base\ N1\ r3\ netobserv --out /root/res/b3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-09 21:16:38 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 1 --label base\ N1\ r3\ rfm_sampled --out /root/res/b3.jsonl --rfm-bpf sampled_only=true\\nstage_events=32\\nring_buf_size=16384 --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-09 21:17:31 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent hsflowd --n 1 --label base\ N1\ r3\ hsflowd --out /root/res/b3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-09 21:18:23 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 1 --label base\ N1\ r3\ rfm_default --out /root/res/b3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-09 21:19:16 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent pmacctd --n 1 --label base\ N1\ r3\ pmacctd --out /root/res/b3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-09 21:19:59 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; setsid nohup nu /root/workload/gen.nu --iface ens1f0np0 --dst 10.48.0.7 --dstmac e8:eb:d3:fd:ce:ac --count 4000000000 --threads 4  > /tmp/gen.log 2>&1 < /dev/null &
+2026-11-09 21:20:18 dut rx pps 9095297
+2026-11-09 21:20:18 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label hi\ N100\ r1\ rfm --out /root/res/b3.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-09 21:21:11 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 100 --label hi\ N100\ r1\ netobserv --out /root/res/b3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-09 21:22:03 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label hi\ N100\ r1\ rfm_sampled --out /root/res/b3.jsonl --rfm-bpf sampled_only=true\\nstage_events=32\\nring_buf_size=16384 --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-09 21:22:56 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent hsflowd --n 100 --label hi\ N100\ r1\ hsflowd --out /root/res/b3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-09 21:23:48 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent none --n 100 --label hi\ N100\ r1\ none --out /root/res/b3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-09 21:24:31 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label hi\ N100\ r2\ rfm_sampled --out /root/res/b3.jsonl --rfm-bpf sampled_only=true\\nstage_events=32\\nring_buf_size=16384 --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-09 21:25:24 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent hsflowd --n 100 --label hi\ N100\ r2\ hsflowd --out /root/res/b3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-09 21:26:16 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent none --n 100 --label hi\ N100\ r2\ none --out /root/res/b3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-09 21:26:58 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label hi\ N100\ r2\ rfm --out /root/res/b3.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-09 21:27:52 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 100 --label hi\ N100\ r2\ netobserv --out /root/res/b3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-09 21:28:44 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label hi\ N100\ r3\ rfm_sampled --out /root/res/b3.jsonl --rfm-bpf sampled_only=true\\nstage_events=32\\nring_buf_size=16384 --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-09 21:29:37 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent hsflowd --n 100 --label hi\ N100\ r3\ hsflowd --out /root/res/b3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-09 21:30:29 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 100 --label hi\ N100\ r3\ netobserv --out /root/res/b3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-09 21:31:21 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label hi\ N100\ r3\ rfm --out /root/res/b3.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-09 21:32:14 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent none --n 100 --label hi\ N100\ r3\ none --out /root/res/b3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-09 21:32:57 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; setsid nohup nu /root/workload/gen.nu --iface ens1f0np0 --dst 10.48.0.7 --dstmac e8:eb:d3:fd:ce:ac --count 4000000000 --threads 4  > /tmp/gen.log 2>&1 < /dev/null &
+2026-11-09 21:33:15 dut rx pps 8614928
+2026-11-09 21:33:15 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent hsflowd --n 10 --label hi\ N10\ r1\ hsflowd --out /root/res/b3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-09 21:34:07 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent none --n 10 --label hi\ N10\ r1\ none --out /root/res/b3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-09 21:34:50 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 10 --label hi\ N10\ r1\ rfm_sampled --out /root/res/b3.jsonl --rfm-bpf sampled_only=true\\nstage_events=32\\nring_buf_size=16384 --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-09 21:35:43 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 10 --label hi\ N10\ r1\ netobserv --out /root/res/b3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-09 21:36:35 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 10 --label hi\ N10\ r1\ rfm --out /root/res/b3.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-09 21:37:28 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 10 --label hi\ N10\ r2\ netobserv --out /root/res/b3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-09 21:38:20 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent hsflowd --n 10 --label hi\ N10\ r2\ hsflowd --out /root/res/b3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-09 21:39:12 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 10 --label hi\ N10\ r2\ rfm_sampled --out /root/res/b3.jsonl --rfm-bpf sampled_only=true\\nstage_events=32\\nring_buf_size=16384 --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-09 21:40:05 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent none --n 10 --label hi\ N10\ r2\ none --out /root/res/b3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-09 21:40:48 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 10 --label hi\ N10\ r2\ rfm --out /root/res/b3.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-09 21:41:41 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 10 --label hi\ N10\ r3\ rfm_sampled --out /root/res/b3.jsonl --rfm-bpf sampled_only=true\\nstage_events=32\\nring_buf_size=16384 --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-09 21:42:35 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 10 --label hi\ N10\ r3\ netobserv --out /root/res/b3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-09 21:43:26 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent hsflowd --n 10 --label hi\ N10\ r3\ hsflowd --out /root/res/b3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-09 21:44:18 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent none --n 10 --label hi\ N10\ r3\ none --out /root/res/b3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-09 21:45:01 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 10 --label hi\ N10\ r3\ rfm --out /root/res/b3.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-09 21:45:54 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; setsid nohup nu /root/workload/gen.nu --iface ens1f0np0 --dst 10.48.0.7 --dstmac e8:eb:d3:fd:ce:ac --count 4000000000 --threads 8  > /tmp/gen.log 2>&1 < /dev/null &
+2026-11-09 21:46:13 dut rx pps 17097076
+2026-11-09 21:46:13 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 100 --label top\ N100\ r1\ netobserv --out /root/res/b3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-09 21:47:05 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label top\ N100\ r1\ rfm --out /root/res/b3.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-09 21:47:58 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent hsflowd --n 100 --label top\ N100\ r1\ hsflowd --out /root/res/b3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-09 21:48:50 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label top\ N100\ r1\ rfm_sampled --out /root/res/b3.jsonl --rfm-bpf sampled_only=true\\nstage_events=32\\nring_buf_size=16384 --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-09 21:49:44 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent none --n 100 --label top\ N100\ r1\ none --out /root/res/b3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-09 21:50:26 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent hsflowd --n 100 --label top\ N100\ r2\ hsflowd --out /root/res/b3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-09 21:51:18 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent none --n 100 --label top\ N100\ r2\ none --out /root/res/b3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-09 21:52:01 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label top\ N100\ r2\ rfm_sampled --out /root/res/b3.jsonl --rfm-bpf sampled_only=true\\nstage_events=32\\nring_buf_size=16384 --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-09 21:52:54 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 100 --label top\ N100\ r2\ netobserv --out /root/res/b3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-09 21:53:46 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label top\ N100\ r2\ rfm --out /root/res/b3.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-09 21:54:40 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+2026-11-09 21:54:40 dut: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+bash: line 1: /proc/net/pktgen/pgctrl: No such file or directory
+2026-11-09 21:54:40 dut: pkill -x iperf3; true
+2026-11-09 21:54:40 gen: pkill -x iperf3; true
+2026-11-09 21:54:43 dut: pkill -KILL -f '^/root/progbench/progbench '; sysctl -qw kernel.bpf_stats_enabled=0; ethtool -K ens1f0np0 gro on tso on gso on; ethtool -L ens1f0np0 combined 63; true
+Actual changes:
+tx-tcp-ecn-segmentation: off [requested on]
+tx-tcp-accecn-segmentation: off [requested on]
+2026-11-09 21:54:43 === phase b3 done
+2026-11-09 21:54:43 === phase b4
+2026-11-09 21:54:43 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; setsid nohup nu /root/workload/gen.nu --iface ens1f0np0 --dst 10.48.0.7 --dstmac e8:eb:d3:fd:ce:ac --count 4000000000 --threads 1 --flows 1000 > /tmp/gen.log 2>&1 < /dev/null &
+2026-11-09 21:55:02 dut rx pps 2631080
+2026-11-09 21:55:02 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label flows1000\ rfm_default --out /root/res/b4.jsonl --tables --warmup 15 --secs 20 --stat-secs 0 > /dev/null 2>> /root/res/b4.err; echo exit=$?
+exit=0
+2026-11-09 21:55:41 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 100 --label flows1000\ netobserv --out /root/res/b4.jsonl --tables --warmup 15 --secs 20 --stat-secs 0 > /dev/null 2>> /root/res/b4.err; echo exit=$?
+exit=0
+2026-11-09 21:56:19 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent hsflowd --n 100 --label flows1000\ hsflowd --out /root/res/b4.jsonl --tables --warmup 15 --secs 20 --stat-secs 0 > /dev/null 2>> /root/res/b4.err; echo exit=$?
+exit=0
+2026-11-09 21:56:56 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label flows1000\ rfm_mem --out /root/res/b4.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=4096 --tables --warmup 15 --secs 20 --stat-secs 0 > /dev/null 2>> /root/res/b4.err; echo exit=$?
+exit=0
+2026-11-09 21:57:36 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label flows1000\ rfm --out /root/res/b4.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --tables --warmup 15 --secs 20 --stat-secs 0 > /dev/null 2>> /root/res/b4.err; echo exit=$?
+exit=0
+2026-11-09 21:58:15 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 100 --label flows1000\ netobserv_sized --out /root/res/b4.jsonl --neto-cache 1000 --tables --warmup 15 --secs 20 --stat-secs 0 > /dev/null 2>> /root/res/b4.err; echo exit=$?
+exit=0
+2026-11-09 21:58:53 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; setsid nohup nu /root/workload/gen.nu --iface ens1f0np0 --dst 10.48.0.7 --dstmac e8:eb:d3:fd:ce:ac --count 4000000000 --threads 1 --flows 5000 > /tmp/gen.log 2>&1 < /dev/null &
+2026-11-09 21:59:11 dut rx pps 2630218
+2026-11-09 21:59:11 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent hsflowd --n 100 --label flows5000\ hsflowd --out /root/res/b4.jsonl --tables --warmup 15 --secs 20 --stat-secs 0 > /dev/null 2>> /root/res/b4.err; echo exit=$?
+exit=0
+2026-11-09 21:59:49 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 100 --label flows5000\ netobserv --out /root/res/b4.jsonl --tables --warmup 15 --secs 20 --stat-secs 0 > /dev/null 2>> /root/res/b4.err; echo exit=$?
+exit=0
+2026-11-09 22:00:27 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label flows5000\ rfm --out /root/res/b4.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --tables --warmup 15 --secs 20 --stat-secs 0 > /dev/null 2>> /root/res/b4.err; echo exit=$?
+exit=0
+2026-11-09 22:01:06 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label flows5000\ rfm_mem --out /root/res/b4.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=4096 --tables --warmup 15 --secs 20 --stat-secs 0 > /dev/null 2>> /root/res/b4.err; echo exit=$?
+exit=0
+2026-11-09 22:01:46 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 100 --label flows5000\ netobserv_sized --out /root/res/b4.jsonl --neto-cache 5000 --tables --warmup 15 --secs 20 --stat-secs 0 > /dev/null 2>> /root/res/b4.err; echo exit=$?
+exit=0
+2026-11-09 22:02:24 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label flows5000\ rfm_default --out /root/res/b4.jsonl --tables --warmup 15 --secs 20 --stat-secs 0 > /dev/null 2>> /root/res/b4.err; echo exit=$?
+exit=0
+2026-11-09 22:03:03 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; setsid nohup nu /root/workload/gen.nu --iface ens1f0np0 --dst 10.48.0.7 --dstmac e8:eb:d3:fd:ce:ac --count 4000000000 --threads 1 --flows 20000 > /tmp/gen.log 2>&1 < /dev/null &
+2026-11-09 22:03:22 dut rx pps 2679764
+2026-11-09 22:03:22 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label flows20000\ rfm --out /root/res/b4.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --tables --warmup 15 --secs 20 --stat-secs 0 > /dev/null 2>> /root/res/b4.err; echo exit=$?
+exit=0
+2026-11-09 22:04:01 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 100 --label flows20000\ netobserv --out /root/res/b4.jsonl --tables --warmup 15 --secs 20 --stat-secs 0 > /dev/null 2>> /root/res/b4.err; echo exit=$?
+exit=0
+2026-11-09 22:04:39 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label flows20000\ rfm_default --out /root/res/b4.jsonl --tables --warmup 15 --secs 20 --stat-secs 0 > /dev/null 2>> /root/res/b4.err; echo exit=$?
+exit=0
+2026-11-09 22:05:18 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label flows20000\ rfm_mem --out /root/res/b4.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=4096 --tables --warmup 15 --secs 20 --stat-secs 0 > /dev/null 2>> /root/res/b4.err; echo exit=$?
+exit=0
+2026-11-09 22:05:58 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent hsflowd --n 100 --label flows20000\ hsflowd --out /root/res/b4.jsonl --tables --warmup 15 --secs 20 --stat-secs 0 > /dev/null 2>> /root/res/b4.err; echo exit=$?
+exit=0
+2026-11-09 22:06:35 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 100 --label flows20000\ netobserv_sized --out /root/res/b4.jsonl --neto-cache 20000 --tables --warmup 15 --secs 20 --stat-secs 0 > /dev/null 2>> /root/res/b4.err; echo exit=$?
+exit=0
+2026-11-09 22:07:13 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; setsid nohup nu /root/workload/gen.nu --iface ens1f0np0 --dst 10.48.0.7 --dstmac e8:eb:d3:fd:ce:ac --count 4000000000 --threads 1 --flows 1000 --srcips 100 > /tmp/gen.log 2>&1 < /dev/null &
+2026-11-09 22:07:32 dut rx pps 2469645
+2026-11-09 22:07:32 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 100 --label flows100000\ netobserv_sized --out /root/res/b4.jsonl --neto-cache 100000 --tables --warmup 15 --secs 20 --stat-secs 0 > /dev/null 2>> /root/res/b4.err; echo exit=$?
+exit=0
+2026-11-09 22:08:10 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label flows100000\ rfm_default --out /root/res/b4.jsonl --tables --warmup 15 --secs 20 --stat-secs 0 --rfm-extra \[agent.collector\]\\nmax_flows=2097152 > /dev/null 2>> /root/res/b4.err; echo exit=$?
+exit=0
+2026-11-09 22:08:49 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label flows100000\ rfm --out /root/res/b4.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --tables --warmup 15 --secs 20 --stat-secs 0 --rfm-extra \[agent.collector\]\\nmax_flows=2097152 > /dev/null 2>> /root/res/b4.err; echo exit=$?
+exit=0
+2026-11-09 22:09:29 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 100 --label flows100000\ netobserv --out /root/res/b4.jsonl --tables --warmup 15 --secs 20 --stat-secs 0 > /dev/null 2>> /root/res/b4.err; echo exit=$?
+exit=0
+2026-11-09 22:10:06 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label flows100000\ rfm_mem --out /root/res/b4.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=4096 --tables --warmup 15 --secs 20 --stat-secs 0 --rfm-extra \[agent.collector\]\\nmax_flows=2097152 > /dev/null 2>> /root/res/b4.err; echo exit=$?
+exit=0
+2026-11-09 22:10:46 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent hsflowd --n 100 --label flows100000\ hsflowd --out /root/res/b4.jsonl --tables --warmup 15 --secs 20 --stat-secs 0 > /dev/null 2>> /root/res/b4.err; echo exit=$?
+exit=0
+2026-11-09 22:11:23 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; setsid nohup nu /root/workload/gen.nu --iface ens1f0np0 --dst 10.48.0.7 --dstmac e8:eb:d3:fd:ce:ac --count 4000000000 --threads 1 --flows 1000 --srcips 1000 > /tmp/gen.log 2>&1 < /dev/null &
+2026-11-09 22:11:42 dut rx pps 2491335
+2026-11-09 22:11:42 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label flows1000000\ rfm_default --out /root/res/b4.jsonl --tables --warmup 15 --secs 20 --stat-secs 0 --rfm-extra \[agent.collector\]\\nmax_flows=2097152 > /dev/null 2>> /root/res/b4.err; echo exit=$?
+exit=0
+2026-11-09 22:12:21 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label flows1000000\ rfm --out /root/res/b4.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --tables --warmup 15 --secs 20 --stat-secs 0 --rfm-extra \[agent.collector\]\\nmax_flows=2097152 > /dev/null 2>> /root/res/b4.err; echo exit=$?
+exit=0
+2026-11-09 22:13:01 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 100 --label flows1000000\ netobserv_sized --out /root/res/b4.jsonl --neto-cache 1000000 --tables --warmup 15 --secs 20 --stat-secs 0 > /dev/null 2>> /root/res/b4.err; echo exit=$?
+exit=0
+2026-11-09 22:13:39 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 100 --label flows1000000\ netobserv --out /root/res/b4.jsonl --tables --warmup 15 --secs 20 --stat-secs 0 > /dev/null 2>> /root/res/b4.err; echo exit=$?
+exit=0
+2026-11-09 22:14:17 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label flows1000000\ rfm_mem --out /root/res/b4.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=4096 --tables --warmup 15 --secs 20 --stat-secs 0 --rfm-extra \[agent.collector\]\\nmax_flows=2097152 > /dev/null 2>> /root/res/b4.err; echo exit=$?
+exit=0
+2026-11-09 22:14:56 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent hsflowd --n 100 --label flows1000000\ hsflowd --out /root/res/b4.jsonl --tables --warmup 15 --secs 20 --stat-secs 0 > /dev/null 2>> /root/res/b4.err; echo exit=$?
+exit=0
+2026-11-09 22:15:34 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 1 --label flows1000000\ held\ rfm_n1 --out /root/res/b4.jsonl --rfm-bpf stage_events=32\\niface_slots=1 --rfm-extra \[agent.collector\]\\nmax_flows=2097152 --warmup 15 --secs 30 --stat-secs 0 > /dev/null 2>> /root/res/b4.err; echo exit=$?
+exit=0
+2026-11-09 22:16:23 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 1 --label flows1000000\ churn\ rfm_n1 --out /root/res/b4.jsonl --rfm-bpf stage_events=32\\niface_slots=1 --warmup 15 --secs 30 --stat-secs 0 > /dev/null 2>> /root/res/b4.err; echo exit=$?
+exit=0
+2026-11-09 22:17:13 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; setsid nohup nu /root/workload/gen.nu --iface ens1f0np0 --dst 10.48.0.7 --dstmac e8:eb:d3:fd:ce:ac --count 4000000000 --threads 1  > /tmp/gen.log 2>&1 < /dev/null &
+2026-11-09 22:17:31 dut rx pps 2671603
+2026-11-09 22:17:31 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label ring4096\ N100\ r1\ rfm_default --out /root/res/b4ring.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=4096 --warmup 10 --secs 30 --stat-secs 0 > /dev/null 2>> /root/res/b4ring.err; echo exit=$?
+exit=0
+2026-11-09 22:18:16 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 10 --label ring4096\ N10\ r1\ rfm_default --out /root/res/b4ring.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=4096 --warmup 10 --secs 30 --stat-secs 0 > /dev/null 2>> /root/res/b4ring.err; echo exit=$?
+exit=0
+2026-11-09 22:19:00 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label ring16384\ N100\ r1\ rfm_default --out /root/res/b4ring.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --warmup 10 --secs 30 --stat-secs 0 > /dev/null 2>> /root/res/b4ring.err; echo exit=$?
+exit=0
+2026-11-09 22:19:44 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 10 --label ring16384\ N10\ r1\ rfm_default --out /root/res/b4ring.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --warmup 10 --secs 30 --stat-secs 0 > /dev/null 2>> /root/res/b4ring.err; echo exit=$?
+exit=0
+2026-11-09 22:20:29 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label ring65536\ N100\ r1\ rfm_default --out /root/res/b4ring.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=65536 --warmup 10 --secs 30 --stat-secs 0 > /dev/null 2>> /root/res/b4ring.err; echo exit=$?
+exit=0
+2026-11-09 22:21:13 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 10 --label ring65536\ N10\ r1\ rfm_default --out /root/res/b4ring.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=65536 --warmup 10 --secs 30 --stat-secs 0 > /dev/null 2>> /root/res/b4ring.err; echo exit=$?
+exit=0
+2026-11-09 22:21:57 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label ring262144\ N100\ r1\ rfm_default --out /root/res/b4ring.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=262144 --warmup 10 --secs 30 --stat-secs 0 > /dev/null 2>> /root/res/b4ring.err; echo exit=$?
+exit=0
+2026-11-09 22:22:42 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 10 --label ring262144\ N10\ r1\ rfm_default --out /root/res/b4ring.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=262144 --warmup 10 --secs 30 --stat-secs 0 > /dev/null 2>> /root/res/b4ring.err; echo exit=$?
+exit=0
+2026-11-09 22:23:26 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label ring4096\ N100\ r2\ rfm_default --out /root/res/b4ring.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=4096 --warmup 10 --secs 30 --stat-secs 0 > /dev/null 2>> /root/res/b4ring.err; echo exit=$?
+exit=0
+2026-11-09 22:24:10 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 10 --label ring4096\ N10\ r2\ rfm_default --out /root/res/b4ring.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=4096 --warmup 10 --secs 30 --stat-secs 0 > /dev/null 2>> /root/res/b4ring.err; echo exit=$?
+exit=0
+2026-11-09 22:24:54 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label ring16384\ N100\ r2\ rfm_default --out /root/res/b4ring.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --warmup 10 --secs 30 --stat-secs 0 > /dev/null 2>> /root/res/b4ring.err; echo exit=$?
+exit=0
+2026-11-09 22:25:39 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 10 --label ring16384\ N10\ r2\ rfm_default --out /root/res/b4ring.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --warmup 10 --secs 30 --stat-secs 0 > /dev/null 2>> /root/res/b4ring.err; echo exit=$?
+exit=0
+2026-11-09 22:26:23 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label ring65536\ N100\ r2\ rfm_default --out /root/res/b4ring.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=65536 --warmup 10 --secs 30 --stat-secs 0 > /dev/null 2>> /root/res/b4ring.err; echo exit=$?
+exit=0
+2026-11-09 22:27:07 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 10 --label ring65536\ N10\ r2\ rfm_default --out /root/res/b4ring.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=65536 --warmup 10 --secs 30 --stat-secs 0 > /dev/null 2>> /root/res/b4ring.err; echo exit=$?
+exit=0
+2026-11-09 22:27:52 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label ring262144\ N100\ r2\ rfm_default --out /root/res/b4ring.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=262144 --warmup 10 --secs 30 --stat-secs 0 > /dev/null 2>> /root/res/b4ring.err; echo exit=$?
+exit=0
+2026-11-09 22:28:36 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 10 --label ring262144\ N10\ r2\ rfm_default --out /root/res/b4ring.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=262144 --warmup 10 --secs 30 --stat-secs 0 > /dev/null 2>> /root/res/b4ring.err; echo exit=$?
+exit=0
+2026-11-09 22:29:20 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+2026-11-09 22:29:21 dut: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+bash: line 1: /proc/net/pktgen/pgctrl: No such file or directory
+2026-11-09 22:29:21 dut: pkill -x iperf3; true
+2026-11-09 22:29:21 gen: pkill -x iperf3; true
+2026-11-09 22:29:23 dut: pkill -KILL -f '^/root/progbench/progbench '; sysctl -qw kernel.bpf_stats_enabled=0; ethtool -K ens1f0np0 gro on tso on gso on; ethtool -L ens1f0np0 combined 63; true
+Actual changes:
+tx-tcp-ecn-segmentation: off [requested on]
+tx-tcp-accecn-segmentation: off [requested on]
+2026-11-09 22:29:24 === phase b4 done
+2026-11-09 22:29:24 === phase b7
+2026-11-09 22:29:24 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+2026-11-09 22:29:24 dut: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+bash: line 1: /proc/net/pktgen/pgctrl: No such file or directory
+2026-11-09 22:29:24 dut: pkill -x iperf3; true
+2026-11-09 22:29:24 gen: pkill -x iperf3; true
+2026-11-09 22:29:27 dut: pkill -KILL -f '^/root/progbench/progbench '; sysctl -qw kernel.bpf_stats_enabled=0; ethtool -K ens1f0np0 gro on tso on gso on; ethtool -L ens1f0np0 combined 63; true
+Actual changes:
+tx-tcp-ecn-segmentation: off [requested on]
+tx-tcp-accecn-segmentation: off [requested on]
+2026-11-09 22:29:27 dut: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; setsid nohup nu /root/workload/gen.nu --iface ens1f0np0 --dst 10.48.0.8 --dstmac e8:eb:d3:fd:cf:0c --count 4000000000 --threads 1 --queue-xmit > /tmp/gen.log 2>&1 < /dev/null &
+bash: line 1: /proc/net/pktgen/pgctrl: No such file or directory
+2026-11-09 22:29:45 dut tx pps 2047846
+2026-11-09 22:29:45 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent hsflowd --n 100 --label udp\ tx\ N100\ r1\ hsflowd --out /root/res/b7.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b7.err; echo exit=$?
+exit=0
+2026-11-09 22:30:37 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label udp\ tx\ N100\ r1\ rfm_sampled --out /root/res/b7.jsonl --rfm-bpf sampled_only=true\\nstage_events=32\\nring_buf_size=16384 --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b7.err; echo exit=$?
+exit=0
+2026-11-09 22:31:30 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 100 --label udp\ tx\ N100\ r1\ netobserv --out /root/res/b7.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b7.err; echo exit=$?
+exit=0
+2026-11-09 22:32:22 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label udp\ tx\ N100\ r1\ rfm --out /root/res/b7.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b7.err; echo exit=$?
+exit=0
+2026-11-09 22:33:15 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent none --n 100 --label udp\ tx\ N100\ r1\ none --out /root/res/b7.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b7.err; echo exit=$?
+exit=0
+2026-11-09 22:33:58 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label udp\ tx\ N100\ r2\ rfm --out /root/res/b7.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b7.err; echo exit=$?
+exit=0
+2026-11-09 22:34:51 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 100 --label udp\ tx\ N100\ r2\ netobserv --out /root/res/b7.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b7.err; echo exit=$?
+exit=0
+2026-11-09 22:35:43 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent none --n 100 --label udp\ tx\ N100\ r2\ none --out /root/res/b7.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b7.err; echo exit=$?
+exit=0
+2026-11-09 22:36:26 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent hsflowd --n 100 --label udp\ tx\ N100\ r2\ hsflowd --out /root/res/b7.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b7.err; echo exit=$?
+exit=0
+2026-11-09 22:37:18 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label udp\ tx\ N100\ r2\ rfm_sampled --out /root/res/b7.jsonl --rfm-bpf sampled_only=true\\nstage_events=32\\nring_buf_size=16384 --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b7.err; echo exit=$?
+exit=0
+2026-11-09 22:38:11 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label udp\ tx\ N100\ r3\ rfm --out /root/res/b7.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b7.err; echo exit=$?
+exit=0
+2026-11-09 22:39:04 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent hsflowd --n 100 --label udp\ tx\ N100\ r3\ hsflowd --out /root/res/b7.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b7.err; echo exit=$?
+exit=0
+2026-11-09 22:39:56 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent none --n 100 --label udp\ tx\ N100\ r3\ none --out /root/res/b7.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b7.err; echo exit=$?
+exit=0
+2026-11-09 22:40:39 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 100 --label udp\ tx\ N100\ r3\ netobserv --out /root/res/b7.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b7.err; echo exit=$?
+exit=0
+2026-11-09 22:41:31 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label udp\ tx\ N100\ r3\ rfm_sampled --out /root/res/b7.jsonl --rfm-bpf sampled_only=true\\nstage_events=32\\nring_buf_size=16384 --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b7.err; echo exit=$?
+exit=0
+2026-11-09 22:42:24 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 10 --label udp\ tx\ N10\ r1\ netobserv --out /root/res/b7.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b7.err; echo exit=$?
+exit=0
+2026-11-09 22:43:16 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 10 --label udp\ tx\ N10\ r1\ rfm_sampled --out /root/res/b7.jsonl --rfm-bpf sampled_only=true\\nstage_events=32\\nring_buf_size=16384 --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b7.err; echo exit=$?
+exit=0
+2026-11-09 22:44:09 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent none --n 10 --label udp\ tx\ N10\ r1\ none --out /root/res/b7.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b7.err; echo exit=$?
+exit=0
+2026-11-09 22:44:52 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 10 --label udp\ tx\ N10\ r1\ rfm --out /root/res/b7.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b7.err; echo exit=$?
+exit=0
+2026-11-09 22:45:45 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent hsflowd --n 10 --label udp\ tx\ N10\ r1\ hsflowd --out /root/res/b7.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b7.err; echo exit=$?
+exit=0
+2026-11-09 22:46:37 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 10 --label udp\ tx\ N10\ r2\ rfm_sampled --out /root/res/b7.jsonl --rfm-bpf sampled_only=true\\nstage_events=32\\nring_buf_size=16384 --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b7.err; echo exit=$?
+exit=0
+2026-11-09 22:47:30 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 10 --label udp\ tx\ N10\ r2\ rfm --out /root/res/b7.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b7.err; echo exit=$?
+exit=0
+2026-11-09 22:48:23 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent hsflowd --n 10 --label udp\ tx\ N10\ r2\ hsflowd --out /root/res/b7.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b7.err; echo exit=$?
+exit=0
+2026-11-09 22:49:15 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 10 --label udp\ tx\ N10\ r2\ netobserv --out /root/res/b7.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b7.err; echo exit=$?
+exit=0
+2026-11-09 22:50:07 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent none --n 10 --label udp\ tx\ N10\ r2\ none --out /root/res/b7.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b7.err; echo exit=$?
+exit=0
+2026-11-09 22:50:50 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 10 --label udp\ tx\ N10\ r3\ netobserv --out /root/res/b7.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b7.err; echo exit=$?
+exit=0
+2026-11-09 22:51:41 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent none --n 10 --label udp\ tx\ N10\ r3\ none --out /root/res/b7.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b7.err; echo exit=$?
+exit=0
+2026-11-09 22:52:24 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent hsflowd --n 10 --label udp\ tx\ N10\ r3\ hsflowd --out /root/res/b7.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b7.err; echo exit=$?
+exit=0
+2026-11-09 22:53:16 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 10 --label udp\ tx\ N10\ r3\ rfm --out /root/res/b7.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b7.err; echo exit=$?
+exit=0
+2026-11-09 22:54:09 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 10 --label udp\ tx\ N10\ r3\ rfm_sampled --out /root/res/b7.jsonl --rfm-bpf sampled_only=true\\nstage_events=32\\nring_buf_size=16384 --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b7.err; echo exit=$?
+exit=0
+2026-11-09 22:55:03 dut: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+2026-11-09 22:55:03 dut: pkill -x iperf3; true
+2026-11-09 22:55:03 gen: pkill -x iperf3; true
+2026-11-09 22:55:05 gen: iperf3 -s -D
+2026-11-09 22:55:05 dut: setsid nohup iperf3 -c 10.48.0.8 -P 8  -t 86400 > /tmp/iperf.log 2>&1 < /dev/null &
+2026-11-09 22:55:16 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label tso\ tx\ N100\ r1\ rfm --out /root/res/b7.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b7.err; echo exit=$?
+exit=0
+2026-11-09 22:56:09 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent none --n 100 --label tso\ tx\ N100\ r1\ none --out /root/res/b7.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b7.err; echo exit=$?
+exit=0
+2026-11-09 22:56:52 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent hsflowd --n 100 --label tso\ tx\ N100\ r1\ hsflowd --out /root/res/b7.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b7.err; echo exit=$?
+exit=0
+2026-11-09 22:57:44 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 100 --label tso\ tx\ N100\ r1\ netobserv --out /root/res/b7.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b7.err; echo exit=$?
+exit=0
+2026-11-09 22:58:36 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent hsflowd --n 100 --label tso\ tx\ N100\ r2\ hsflowd --out /root/res/b7.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b7.err; echo exit=$?
+exit=0
+2026-11-09 22:59:27 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label tso\ tx\ N100\ r2\ rfm --out /root/res/b7.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b7.err; echo exit=$?
+exit=0
+2026-11-09 23:00:21 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent none --n 100 --label tso\ tx\ N100\ r2\ none --out /root/res/b7.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b7.err; echo exit=$?
+exit=0
+2026-11-09 23:01:04 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 100 --label tso\ tx\ N100\ r2\ netobserv --out /root/res/b7.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b7.err; echo exit=$?
+exit=0
+2026-11-09 23:01:55 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+2026-11-09 23:01:56 dut: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+2026-11-09 23:01:56 dut: pkill -x iperf3; true
+2026-11-09 23:01:56 gen: pkill -x iperf3; true
+2026-11-09 23:01:58 dut: pkill -KILL -f '^/root/progbench/progbench '; sysctl -qw kernel.bpf_stats_enabled=0; ethtool -K ens1f0np0 gro on tso on gso on; ethtool -L ens1f0np0 combined 63; true
+Actual changes:
+tx-tcp-ecn-segmentation: off [requested on]
+tx-tcp-accecn-segmentation: off [requested on]
+2026-11-09 23:01:59 === phase b7 done
+2026-11-09 23:01:59 === phase b2
+2026-11-09 23:01:59 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+2026-11-09 23:01:59 dut: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+2026-11-09 23:01:59 dut: pkill -x iperf3; true
+2026-11-09 23:01:59 gen: pkill -x iperf3; true
+2026-11-09 23:02:02 dut: pkill -KILL -f '^/root/progbench/progbench '; sysctl -qw kernel.bpf_stats_enabled=0; ethtool -K ens1f0np0 gro on tso on gso on; ethtool -L ens1f0np0 combined 63; true
+Actual changes:
+tx-tcp-ecn-segmentation: off [requested on]
+tx-tcp-accecn-segmentation: off [requested on]
+2026-11-09 23:02:02 dut: pkill -x iperf3; true
+2026-11-09 23:02:02 gen: pkill -x iperf3; true
+2026-11-09 23:02:04 dut: iperf3 -s -D
+2026-11-09 23:02:04 gen: setsid nohup iperf3 -c 10.48.0.7 -P 1  -t 86400 > /tmp/iperf.log 2>&1 < /dev/null &
+2026-11-09 23:02:15 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 100 --label rx\ P1\ max\ r1\ netobserv --out /root/res/b2.jsonl --counts --warmup 12 --secs 30 --stat-secs 5 > /dev/null 2>> /root/res/b2.err; echo exit=$?
+exit=0
+2026-11-09 23:03:08 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label rx\ P1\ max\ r1\ rfm_acc --out /root/res/b2.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --counts --warmup 12 --secs 30 --stat-secs 5 > /dev/null 2>> /root/res/b2.err; echo exit=$?
+exit=0
+2026-11-09 23:04:04 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent hsflowd --n 100 --label rx\ P1\ max\ r1\ hsflowd --out /root/res/b2.jsonl --counts --warmup 12 --secs 30 --stat-secs 5 > /dev/null 2>> /root/res/b2.err; echo exit=$?
+exit=0
+2026-11-09 23:04:59 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent hsflowd --n 100 --label rx\ P1\ max\ r2\ hsflowd --out /root/res/b2.jsonl --counts --warmup 12 --secs 30 --stat-secs 5 > /dev/null 2>> /root/res/b2.err; echo exit=$?
+exit=0
+2026-11-09 23:05:54 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 100 --label rx\ P1\ max\ r2\ netobserv --out /root/res/b2.jsonl --counts --warmup 12 --secs 30 --stat-secs 5 > /dev/null 2>> /root/res/b2.err; echo exit=$?
+exit=0
+2026-11-09 23:06:47 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label rx\ P1\ max\ r2\ rfm_acc --out /root/res/b2.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --counts --warmup 12 --secs 30 --stat-secs 5 > /dev/null 2>> /root/res/b2.err; echo exit=$?
+exit=0
+2026-11-09 23:07:43 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+2026-11-09 23:07:43 dut: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+2026-11-09 23:07:43 dut: pkill -x iperf3; true
+2026-11-09 23:07:43 gen: pkill -x iperf3; true
+2026-11-09 23:07:46 dut: pkill -KILL -f '^/root/progbench/progbench '; sysctl -qw kernel.bpf_stats_enabled=0; ethtool -K ens1f0np0 gro on tso on gso on; ethtool -L ens1f0np0 combined 63; true
+Actual changes:
+tx-tcp-ecn-segmentation: off [requested on]
+tx-tcp-accecn-segmentation: off [requested on]
+2026-11-09 23:07:46 dut: pkill -x iperf3; true
+2026-11-09 23:07:46 gen: pkill -x iperf3; true
+2026-11-09 23:07:48 dut: iperf3 -s -D
+2026-11-09 23:07:48 gen: setsid nohup iperf3 -c 10.48.0.7 -P 16  -t 86400 > /tmp/iperf.log 2>&1 < /dev/null &
+2026-11-09 23:07:58 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent hsflowd --n 100 --label rx\ P16\ max\ r1\ hsflowd --out /root/res/b2.jsonl --counts --warmup 12 --secs 30 --stat-secs 5 > /dev/null 2>> /root/res/b2.err; echo exit=$?
+exit=0
+2026-11-09 23:08:55 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label rx\ P16\ max\ r1\ rfm_acc --out /root/res/b2.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --counts --warmup 12 --secs 30 --stat-secs 5 > /dev/null 2>> /root/res/b2.err; echo exit=$?
+exit=0
+2026-11-09 23:09:51 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 100 --label rx\ P16\ max\ r1\ netobserv --out /root/res/b2.jsonl --counts --warmup 12 --secs 30 --stat-secs 5 > /dev/null 2>> /root/res/b2.err; echo exit=$?
+exit=0
+2026-11-09 23:10:45 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label rx\ P16\ max\ r2\ rfm_acc --out /root/res/b2.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --counts --warmup 12 --secs 30 --stat-secs 5 > /dev/null 2>> /root/res/b2.err; echo exit=$?
+exit=0
+2026-11-09 23:11:40 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 100 --label rx\ P16\ max\ r2\ netobserv --out /root/res/b2.jsonl --counts --warmup 12 --secs 30 --stat-secs 5 > /dev/null 2>> /root/res/b2.err; echo exit=$?
+exit=0
+2026-11-09 23:12:34 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent hsflowd --n 100 --label rx\ P16\ max\ r2\ hsflowd --out /root/res/b2.jsonl --counts --warmup 12 --secs 30 --stat-secs 5 > /dev/null 2>> /root/res/b2.err; echo exit=$?
+exit=0
+2026-11-09 23:13:31 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+2026-11-09 23:13:32 dut: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+2026-11-09 23:13:32 dut: pkill -x iperf3; true
+2026-11-09 23:13:32 gen: pkill -x iperf3; true
+2026-11-09 23:13:34 dut: pkill -KILL -f '^/root/progbench/progbench '; sysctl -qw kernel.bpf_stats_enabled=0; ethtool -K ens1f0np0 gro on tso on gso on; ethtool -L ens1f0np0 combined 63; true
+Actual changes:
+tx-tcp-ecn-segmentation: off [requested on]
+tx-tcp-accecn-segmentation: off [requested on]
+2026-11-09 23:13:34 dut: pkill -x iperf3; true
+2026-11-09 23:13:35 gen: pkill -x iperf3; true
+2026-11-09 23:13:37 dut: iperf3 -s -D
+2026-11-09 23:13:37 gen: setsid nohup iperf3 -c 10.48.0.7 -P 64 -b 1G -t 86400 > /tmp/iperf.log 2>&1 < /dev/null &
+2026-11-09 23:13:47 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label rx\ P64\ -b\ 1G\ r1\ rfm_acc --out /root/res/b2.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --counts --warmup 12 --secs 30 --stat-secs 5 > /dev/null 2>> /root/res/b2.err; echo exit=$?
+exit=0
+2026-11-09 23:14:43 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent hsflowd --n 100 --label rx\ P64\ -b\ 1G\ r1\ hsflowd --out /root/res/b2.jsonl --counts --warmup 12 --secs 30 --stat-secs 5 > /dev/null 2>> /root/res/b2.err; echo exit=$?
+exit=0
+2026-11-09 23:15:41 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 100 --label rx\ P64\ -b\ 1G\ r1\ netobserv --out /root/res/b2.jsonl --counts --warmup 12 --secs 30 --stat-secs 5 > /dev/null 2>> /root/res/b2.err; echo exit=$?
+exit=0
+2026-11-09 23:16:36 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 100 --label rx\ P64\ -b\ 1G\ r2\ netobserv --out /root/res/b2.jsonl --counts --warmup 12 --secs 30 --stat-secs 5 > /dev/null 2>> /root/res/b2.err; echo exit=$?
+exit=0
+2026-11-09 23:17:30 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label rx\ P64\ -b\ 1G\ r2\ rfm_acc --out /root/res/b2.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --counts --warmup 12 --secs 30 --stat-secs 5 > /dev/null 2>> /root/res/b2.err; echo exit=$?
+exit=0
+2026-11-09 23:18:26 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent hsflowd --n 100 --label rx\ P64\ -b\ 1G\ r2\ hsflowd --out /root/res/b2.jsonl --counts --warmup 12 --secs 30 --stat-secs 5 > /dev/null 2>> /root/res/b2.err; echo exit=$?
+exit=0
+2026-11-09 23:19:25 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+2026-11-09 23:19:25 dut: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+2026-11-09 23:19:25 dut: pkill -x iperf3; true
+2026-11-09 23:19:25 gen: pkill -x iperf3; true
+2026-11-09 23:19:27 dut: pkill -KILL -f '^/root/progbench/progbench '; sysctl -qw kernel.bpf_stats_enabled=0; ethtool -K ens1f0np0 gro on tso on gso on; ethtool -L ens1f0np0 combined 63; true
+Actual changes:
+tx-tcp-ecn-segmentation: off [requested on]
+tx-tcp-accecn-segmentation: off [requested on]
+2026-11-09 23:19:28 dut: pkill -x iperf3; true
+2026-11-09 23:19:28 gen: pkill -x iperf3; true
+2026-11-09 23:19:30 dut: iperf3 -s -D
+2026-11-09 23:19:30 gen: setsid nohup iperf3 -c 10.48.0.7 -P 128 -b 100M -t 86400 > /tmp/iperf.log 2>&1 < /dev/null &
+2026-11-09 23:19:40 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent hsflowd --n 100 --label rx\ P128\ -b\ 100M\ r1\ hsflowd --out /root/res/b2.jsonl --counts --warmup 12 --secs 30 --stat-secs 5 > /dev/null 2>> /root/res/b2.err; echo exit=$?
+exit=0
+2026-11-09 23:20:35 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label rx\ P128\ -b\ 100M\ r1\ rfm_acc --out /root/res/b2.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --counts --warmup 12 --secs 30 --stat-secs 5 > /dev/null 2>> /root/res/b2.err; echo exit=$?
+exit=0
+2026-11-09 23:21:31 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 100 --label rx\ P128\ -b\ 100M\ r1\ netobserv --out /root/res/b2.jsonl --counts --warmup 12 --secs 30 --stat-secs 5 > /dev/null 2>> /root/res/b2.err; echo exit=$?
+exit=0
+2026-11-09 23:22:26 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent hsflowd --n 100 --label rx\ P128\ -b\ 100M\ r2\ hsflowd --out /root/res/b2.jsonl --counts --warmup 12 --secs 30 --stat-secs 5 > /dev/null 2>> /root/res/b2.err; echo exit=$?
+exit=0
+2026-11-09 23:23:21 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 100 --label rx\ P128\ -b\ 100M\ r2\ netobserv --out /root/res/b2.jsonl --counts --warmup 12 --secs 30 --stat-secs 5 > /dev/null 2>> /root/res/b2.err; echo exit=$?
+exit=0
+2026-11-09 23:24:16 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label rx\ P128\ -b\ 100M\ r2\ rfm_acc --out /root/res/b2.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --counts --warmup 12 --secs 30 --stat-secs 5 > /dev/null 2>> /root/res/b2.err; echo exit=$?
+exit=0
+2026-11-09 23:25:11 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+2026-11-09 23:25:11 dut: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+2026-11-09 23:25:11 dut: pkill -x iperf3; true
+2026-11-09 23:25:12 gen: pkill -x iperf3; true
+2026-11-09 23:25:14 dut: pkill -KILL -f '^/root/progbench/progbench '; sysctl -qw kernel.bpf_stats_enabled=0; ethtool -K ens1f0np0 gro on tso on gso on; ethtool -L ens1f0np0 combined 63; true
+Actual changes:
+tx-tcp-ecn-segmentation: off [requested on]
+tx-tcp-accecn-segmentation: off [requested on]
+2026-11-09 23:25:14 dut: pkill -x iperf3; true
+2026-11-09 23:25:14 gen: pkill -x iperf3; true
+2026-11-09 23:25:16 dut: iperf3 -s -D
+2026-11-09 23:25:17 gen: setsid nohup iperf3 -c 10.48.0.7 -P 128 -b 10M -N -l 1448 -t 86400 > /tmp/iperf.log 2>&1 < /dev/null &
+2026-11-09 23:25:27 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label rx\ P128\ -b\ 10M\ -N\ -l\ 1448\ r1\ rfm_acc --out /root/res/b2.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --counts --warmup 12 --secs 30 --stat-secs 5 > /dev/null 2>> /root/res/b2.err; echo exit=$?
+exit=0
+2026-11-09 23:26:22 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 100 --label rx\ P128\ -b\ 10M\ -N\ -l\ 1448\ r1\ netobserv --out /root/res/b2.jsonl --counts --warmup 12 --secs 30 --stat-secs 5 > /dev/null 2>> /root/res/b2.err; echo exit=$?
+exit=0
+2026-11-09 23:27:17 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent hsflowd --n 100 --label rx\ P128\ -b\ 10M\ -N\ -l\ 1448\ r1\ hsflowd --out /root/res/b2.jsonl --counts --warmup 12 --secs 30 --stat-secs 5 > /dev/null 2>> /root/res/b2.err; echo exit=$?
+exit=0
+2026-11-09 23:28:13 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label rx\ P128\ -b\ 10M\ -N\ -l\ 1448\ r2\ rfm_acc --out /root/res/b2.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --counts --warmup 12 --secs 30 --stat-secs 5 > /dev/null 2>> /root/res/b2.err; echo exit=$?
+exit=0
+2026-11-09 23:29:08 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent hsflowd --n 100 --label rx\ P128\ -b\ 10M\ -N\ -l\ 1448\ r2\ hsflowd --out /root/res/b2.jsonl --counts --warmup 12 --secs 30 --stat-secs 5 > /dev/null 2>> /root/res/b2.err; echo exit=$?
+exit=0
+2026-11-09 23:30:04 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 100 --label rx\ P128\ -b\ 10M\ -N\ -l\ 1448\ r2\ netobserv --out /root/res/b2.jsonl --counts --warmup 12 --secs 30 --stat-secs 5 > /dev/null 2>> /root/res/b2.err; echo exit=$?
+exit=0
+2026-11-09 23:30:59 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+2026-11-09 23:30:59 dut: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+2026-11-09 23:30:59 dut: pkill -x iperf3; true
+2026-11-09 23:31:00 gen: pkill -x iperf3; true
+2026-11-09 23:31:02 dut: pkill -KILL -f '^/root/progbench/progbench '; sysctl -qw kernel.bpf_stats_enabled=0; ethtool -K ens1f0np0 gro on tso on gso on; ethtool -L ens1f0np0 combined 63; true
+Actual changes:
+tx-tcp-ecn-segmentation: off [requested on]
+tx-tcp-accecn-segmentation: off [requested on]
+2026-11-09 23:31:02 dut: pkill -x iperf3; true
+2026-11-09 23:31:02 gen: pkill -x iperf3; true
+2026-11-09 23:31:04 dut: iperf3 -s -D
+2026-11-09 23:31:05 gen: setsid nohup iperf3 -c 10.48.0.7 -P 128 -b 2M -N -l 1448 -t 86400 > /tmp/iperf.log 2>&1 < /dev/null &
+2026-11-09 23:31:15 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 100 --label rx\ P128\ -b\ 2M\ -N\ -l\ 1448\ r1\ netobserv --out /root/res/b2.jsonl --counts --warmup 12 --secs 30 --stat-secs 5 > /dev/null 2>> /root/res/b2.err; echo exit=$?
+exit=0
+2026-11-09 23:32:09 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent hsflowd --n 100 --label rx\ P128\ -b\ 2M\ -N\ -l\ 1448\ r1\ hsflowd --out /root/res/b2.jsonl --counts --warmup 12 --secs 30 --stat-secs 5 > /dev/null 2>> /root/res/b2.err; echo exit=$?
+exit=0
+2026-11-09 23:33:04 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label rx\ P128\ -b\ 2M\ -N\ -l\ 1448\ r1\ rfm_acc --out /root/res/b2.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --counts --warmup 12 --secs 30 --stat-secs 5 > /dev/null 2>> /root/res/b2.err; echo exit=$?
+exit=0
+2026-11-09 23:33:59 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent hsflowd --n 100 --label rx\ P128\ -b\ 2M\ -N\ -l\ 1448\ r2\ hsflowd --out /root/res/b2.jsonl --counts --warmup 12 --secs 30 --stat-secs 5 > /dev/null 2>> /root/res/b2.err; echo exit=$?
+exit=0
+2026-11-09 23:34:53 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 100 --label rx\ P128\ -b\ 2M\ -N\ -l\ 1448\ r2\ netobserv --out /root/res/b2.jsonl --counts --warmup 12 --secs 30 --stat-secs 5 > /dev/null 2>> /root/res/b2.err; echo exit=$?
+exit=0
+2026-11-09 23:35:48 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label rx\ P128\ -b\ 2M\ -N\ -l\ 1448\ r2\ rfm_acc --out /root/res/b2.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --counts --warmup 12 --secs 30 --stat-secs 5 > /dev/null 2>> /root/res/b2.err; echo exit=$?
+exit=0
+2026-11-09 23:36:43 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+2026-11-09 23:36:43 dut: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+2026-11-09 23:36:44 dut: pkill -x iperf3; true
+2026-11-09 23:36:44 gen: pkill -x iperf3; true
+2026-11-09 23:36:46 dut: pkill -KILL -f '^/root/progbench/progbench '; sysctl -qw kernel.bpf_stats_enabled=0; ethtool -K ens1f0np0 gro on tso on gso on; ethtool -L ens1f0np0 combined 63; true
+Actual changes:
+tx-tcp-ecn-segmentation: off [requested on]
+tx-tcp-accecn-segmentation: off [requested on]
+2026-11-09 23:36:46 dut: pkill -x iperf3; true
+2026-11-09 23:36:46 gen: pkill -x iperf3; true
+2026-11-09 23:36:49 gen: iperf3 -s -D
+2026-11-09 23:36:49 dut: setsid nohup iperf3 -c 10.48.0.8 -P 8 -N -l 1448 -b 100M -t 86400 > /tmp/iperf.log 2>&1 < /dev/null &
+2026-11-09 23:36:59 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent hsflowd --n 100 --label tx\ P8\ -N\ -l\ 1448\ -b\ 100M\ r1\ hsflowd --out /root/res/b2.jsonl --counts --warmup 12 --secs 30 --stat-secs 5 > /dev/null 2>> /root/res/b2.err; echo exit=$?
+exit=0
+2026-11-09 23:37:54 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 100 --label tx\ P8\ -N\ -l\ 1448\ -b\ 100M\ r1\ netobserv --out /root/res/b2.jsonl --counts --warmup 12 --secs 30 --stat-secs 5 > /dev/null 2>> /root/res/b2.err; echo exit=$?
+exit=0
+2026-11-09 23:38:47 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label tx\ P8\ -N\ -l\ 1448\ -b\ 100M\ r1\ rfm_acc --out /root/res/b2.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --counts --warmup 12 --secs 30 --stat-secs 5 > /dev/null 2>> /root/res/b2.err; echo exit=$?
+exit=0
+2026-11-09 23:39:43 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent hsflowd --n 100 --label tx\ P8\ -N\ -l\ 1448\ -b\ 100M\ r2\ hsflowd --out /root/res/b2.jsonl --counts --warmup 12 --secs 30 --stat-secs 5 > /dev/null 2>> /root/res/b2.err; echo exit=$?
+exit=0
+2026-11-09 23:40:38 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label tx\ P8\ -N\ -l\ 1448\ -b\ 100M\ r2\ rfm_acc --out /root/res/b2.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --counts --warmup 12 --secs 30 --stat-secs 5 > /dev/null 2>> /root/res/b2.err; echo exit=$?
+exit=0
+2026-11-09 23:41:33 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 100 --label tx\ P8\ -N\ -l\ 1448\ -b\ 100M\ r2\ netobserv --out /root/res/b2.jsonl --counts --warmup 12 --secs 30 --stat-secs 5 > /dev/null 2>> /root/res/b2.err; echo exit=$?
+exit=0
+2026-11-09 23:42:27 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+2026-11-09 23:42:27 dut: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+2026-11-09 23:42:27 dut: pkill -x iperf3; true
+2026-11-09 23:42:27 gen: pkill -x iperf3; true
+2026-11-09 23:42:30 dut: pkill -KILL -f '^/root/progbench/progbench '; sysctl -qw kernel.bpf_stats_enabled=0; ethtool -K ens1f0np0 gro on tso on gso on; ethtool -L ens1f0np0 combined 63; true
+Actual changes:
+tx-tcp-ecn-segmentation: off [requested on]
+tx-tcp-accecn-segmentation: off [requested on]
+2026-11-09 23:42:30 dut: pkill -x iperf3; true
+2026-11-09 23:42:30 gen: pkill -x iperf3; true
+2026-11-09 23:42:32 gen: iperf3 -s -D
+2026-11-09 23:42:32 dut: setsid nohup iperf3 -c 10.48.0.8 -P 8 -N -l 8K -b 100M -t 86400 > /tmp/iperf.log 2>&1 < /dev/null &
+2026-11-09 23:42:43 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 100 --label tx\ P8\ -N\ -l\ 8K\ -b\ 100M\ r1\ netobserv --out /root/res/b2.jsonl --counts --warmup 12 --secs 30 --stat-secs 5 > /dev/null 2>> /root/res/b2.err; echo exit=$?
+exit=0
+2026-11-09 23:43:36 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent hsflowd --n 100 --label tx\ P8\ -N\ -l\ 8K\ -b\ 100M\ r1\ hsflowd --out /root/res/b2.jsonl --counts --warmup 12 --secs 30 --stat-secs 5 > /dev/null 2>> /root/res/b2.err; echo exit=$?
+exit=0
+2026-11-09 23:44:30 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label tx\ P8\ -N\ -l\ 8K\ -b\ 100M\ r1\ rfm_acc --out /root/res/b2.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --counts --warmup 12 --secs 30 --stat-secs 5 > /dev/null 2>> /root/res/b2.err; echo exit=$?
+exit=0
+2026-11-09 23:45:26 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent hsflowd --n 100 --label tx\ P8\ -N\ -l\ 8K\ -b\ 100M\ r2\ hsflowd --out /root/res/b2.jsonl --counts --warmup 12 --secs 30 --stat-secs 5 > /dev/null 2>> /root/res/b2.err; echo exit=$?
+exit=0
+2026-11-09 23:46:20 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label tx\ P8\ -N\ -l\ 8K\ -b\ 100M\ r2\ rfm_acc --out /root/res/b2.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --counts --warmup 12 --secs 30 --stat-secs 5 > /dev/null 2>> /root/res/b2.err; echo exit=$?
+exit=0
+2026-11-09 23:47:15 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 100 --label tx\ P8\ -N\ -l\ 8K\ -b\ 100M\ r2\ netobserv --out /root/res/b2.jsonl --counts --warmup 12 --secs 30 --stat-secs 5 > /dev/null 2>> /root/res/b2.err; echo exit=$?
+exit=0
+2026-11-09 23:48:09 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+2026-11-09 23:48:09 dut: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+2026-11-09 23:48:09 dut: pkill -x iperf3; true
+2026-11-09 23:48:10 gen: pkill -x iperf3; true
+2026-11-09 23:48:12 dut: pkill -KILL -f '^/root/progbench/progbench '; sysctl -qw kernel.bpf_stats_enabled=0; ethtool -K ens1f0np0 gro on tso on gso on; ethtool -L ens1f0np0 combined 63; true
+Actual changes:
+tx-tcp-ecn-segmentation: off [requested on]
+tx-tcp-accecn-segmentation: off [requested on]
+2026-11-09 23:48:12 dut: pkill -x iperf3; true
+2026-11-09 23:48:12 gen: pkill -x iperf3; true
+2026-11-09 23:48:14 gen: iperf3 -s -D
+2026-11-09 23:48:15 dut: setsid nohup iperf3 -c 10.48.0.8 -P 8 -N -l 32K -b 300M -t 86400 > /tmp/iperf.log 2>&1 < /dev/null &
+2026-11-09 23:48:25 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 100 --label tx\ P8\ -N\ -l\ 32K\ -b\ 300M\ r1\ netobserv --out /root/res/b2.jsonl --counts --warmup 12 --secs 30 --stat-secs 5 > /dev/null 2>> /root/res/b2.err; echo exit=$?
+exit=0
+2026-11-09 23:49:19 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label tx\ P8\ -N\ -l\ 32K\ -b\ 300M\ r1\ rfm_acc --out /root/res/b2.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --counts --warmup 12 --secs 30 --stat-secs 5 > /dev/null 2>> /root/res/b2.err; echo exit=$?
+exit=0
+2026-11-09 23:50:14 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent hsflowd --n 100 --label tx\ P8\ -N\ -l\ 32K\ -b\ 300M\ r1\ hsflowd --out /root/res/b2.jsonl --counts --warmup 12 --secs 30 --stat-secs 5 > /dev/null 2>> /root/res/b2.err; echo exit=$?
+exit=0
+2026-11-09 23:51:08 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent hsflowd --n 100 --label tx\ P8\ -N\ -l\ 32K\ -b\ 300M\ r2\ hsflowd --out /root/res/b2.jsonl --counts --warmup 12 --secs 30 --stat-secs 5 > /dev/null 2>> /root/res/b2.err; echo exit=$?
+exit=0
+2026-11-09 23:52:02 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label tx\ P8\ -N\ -l\ 32K\ -b\ 300M\ r2\ rfm_acc --out /root/res/b2.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --counts --warmup 12 --secs 30 --stat-secs 5 > /dev/null 2>> /root/res/b2.err; echo exit=$?
+exit=0
+2026-11-09 23:52:57 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 100 --label tx\ P8\ -N\ -l\ 32K\ -b\ 300M\ r2\ netobserv --out /root/res/b2.jsonl --counts --warmup 12 --secs 30 --stat-secs 5 > /dev/null 2>> /root/res/b2.err; echo exit=$?
+exit=0
+2026-11-09 23:53:51 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+2026-11-09 23:53:51 dut: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+2026-11-09 23:53:51 dut: pkill -x iperf3; true
+2026-11-09 23:53:52 gen: pkill -x iperf3; true
+2026-11-09 23:53:54 dut: pkill -KILL -f '^/root/progbench/progbench '; sysctl -qw kernel.bpf_stats_enabled=0; ethtool -K ens1f0np0 gro on tso on gso on; ethtool -L ens1f0np0 combined 63; true
+Actual changes:
+tx-tcp-ecn-segmentation: off [requested on]
+tx-tcp-accecn-segmentation: off [requested on]
+2026-11-09 23:53:54 dut: pkill -x iperf3; true
+2026-11-09 23:53:54 gen: pkill -x iperf3; true
+2026-11-09 23:53:56 gen: iperf3 -s -D
+2026-11-09 23:53:57 dut: setsid nohup iperf3 -c 10.48.0.8 -P 8 -N -l 64K -b 1G -t 86400 > /tmp/iperf.log 2>&1 < /dev/null &
+2026-11-09 23:54:07 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent hsflowd --n 100 --label tx\ P8\ -N\ -l\ 64K\ -b\ 1G\ r1\ hsflowd --out /root/res/b2.jsonl --counts --warmup 12 --secs 30 --stat-secs 5 > /dev/null 2>> /root/res/b2.err; echo exit=$?
+exit=0
+2026-11-09 23:55:01 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 100 --label tx\ P8\ -N\ -l\ 64K\ -b\ 1G\ r1\ netobserv --out /root/res/b2.jsonl --counts --warmup 12 --secs 30 --stat-secs 5 > /dev/null 2>> /root/res/b2.err; echo exit=$?
+exit=0
+2026-11-09 23:55:55 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label tx\ P8\ -N\ -l\ 64K\ -b\ 1G\ r1\ rfm_acc --out /root/res/b2.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --counts --warmup 12 --secs 30 --stat-secs 5 > /dev/null 2>> /root/res/b2.err; echo exit=$?
+exit=0
+2026-11-09 23:56:50 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent hsflowd --n 100 --label tx\ P8\ -N\ -l\ 64K\ -b\ 1G\ r2\ hsflowd --out /root/res/b2.jsonl --counts --warmup 12 --secs 30 --stat-secs 5 > /dev/null 2>> /root/res/b2.err; echo exit=$?
+exit=0
+2026-11-09 23:57:44 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label tx\ P8\ -N\ -l\ 64K\ -b\ 1G\ r2\ rfm_acc --out /root/res/b2.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --counts --warmup 12 --secs 30 --stat-secs 5 > /dev/null 2>> /root/res/b2.err; echo exit=$?
+exit=0
+2026-11-09 23:58:40 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 100 --label tx\ P8\ -N\ -l\ 64K\ -b\ 1G\ r2\ netobserv --out /root/res/b2.jsonl --counts --warmup 12 --secs 30 --stat-secs 5 > /dev/null 2>> /root/res/b2.err; echo exit=$?
+exit=0
+2026-11-09 23:59:34 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+2026-11-09 23:59:34 dut: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+2026-11-09 23:59:34 dut: pkill -x iperf3; true
+2026-11-09 23:59:34 gen: pkill -x iperf3; true
+2026-11-09 23:59:36 dut: pkill -KILL -f '^/root/progbench/progbench '; sysctl -qw kernel.bpf_stats_enabled=0; ethtool -K ens1f0np0 gro on tso on gso on; ethtool -L ens1f0np0 combined 63; true
+Actual changes:
+tx-tcp-ecn-segmentation: off [requested on]
+tx-tcp-accecn-segmentation: off [requested on]
+2026-11-09 23:59:37 === phase b2 done
+2026-11-09 23:59:37 === phase b12
+2026-11-09 23:59:37 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+2026-11-09 23:59:37 dut: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+2026-11-09 23:59:37 dut: pkill -x iperf3; true
+2026-11-09 23:59:38 gen: pkill -x iperf3; true
+2026-11-09 23:59:40 dut: pkill -KILL -f '^/root/progbench/progbench '; sysctl -qw kernel.bpf_stats_enabled=0; ethtool -K ens1f0np0 gro on tso on gso on; ethtool -L ens1f0np0 combined 63; true
+Actual changes:
+tx-tcp-ecn-segmentation: off [requested on]
+tx-tcp-accecn-segmentation: off [requested on]
+2026-11-09 23:59:40 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; setsid nohup nu /root/workload/gen.nu --iface ens1f0np0 --dst 10.48.0.7 --dstmac e8:eb:d3:fd:ce:ac --count 4000000000 --threads 1 --flows 20000 --rate 1000 > /tmp/gen.log 2>&1 < /dev/null &
+2026-11-09 23:59:59 dut rx pps 2086968
+2026-11-09 23:59:59 dut: pkill -x iperf3; true
+2026-11-09 23:59:59 gen: pkill -x iperf3; true
+2026-11-10 00:00:01 dut: iperf3 -s -D
+2026-11-10 00:00:01 gen: setsid nohup iperf3 -c 10.48.0.7 -P 8  -t 86400 > /tmp/iperf.log 2>&1 < /dev/null &
+2026-11-10 00:00:11 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label mixed\ r1\ rfm_acc --out /root/res/b12.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --counts --warmup 12 --secs 45 --stat-secs 5 > /dev/null 2>> /root/res/b12.err; echo exit=$?
+exit=0
+2026-11-10 00:01:22 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent hsflowd --n 100 --label mixed\ r1\ hsflowd --out /root/res/b12.jsonl --counts --warmup 12 --secs 45 --stat-secs 5 > /dev/null 2>> /root/res/b12.err; echo exit=$?
+exit=0
+2026-11-10 00:02:46 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 100 --label mixed\ r1\ netobserv --out /root/res/b12.jsonl --counts --warmup 12 --secs 45 --stat-secs 5 > /dev/null 2>> /root/res/b12.err; echo exit=$?
+exit=0
+2026-11-10 00:04:23 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label mixed\ r2\ rfm_acc --out /root/res/b12.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --counts --warmup 12 --secs 45 --stat-secs 5 > /dev/null 2>> /root/res/b12.err; echo exit=$?
+exit=0
+2026-11-10 00:05:33 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent hsflowd --n 100 --label mixed\ r2\ hsflowd --out /root/res/b12.jsonl --counts --warmup 12 --secs 45 --stat-secs 5 > /dev/null 2>> /root/res/b12.err; echo exit=$?
+exit=0
+2026-11-10 00:06:58 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 100 --label mixed\ r2\ netobserv --out /root/res/b12.jsonl --counts --warmup 12 --secs 45 --stat-secs 5 > /dev/null 2>> /root/res/b12.err; echo exit=$?
+exit=0
+2026-11-10 00:08:38 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 100 --label mixed\ r3\ netobserv --out /root/res/b12.jsonl --counts --warmup 12 --secs 45 --stat-secs 5 > /dev/null 2>> /root/res/b12.err; echo exit=$?
+exit=0
+2026-11-10 00:10:15 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent hsflowd --n 100 --label mixed\ r3\ hsflowd --out /root/res/b12.jsonl --counts --warmup 12 --secs 45 --stat-secs 5 > /dev/null 2>> /root/res/b12.err; echo exit=$?
+exit=0
+2026-11-10 00:11:40 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label mixed\ r3\ rfm_acc --out /root/res/b12.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --counts --warmup 12 --secs 45 --stat-secs 5 > /dev/null 2>> /root/res/b12.err; echo exit=$?
+exit=0
+2026-11-10 00:12:51 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+2026-11-10 00:12:51 dut: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+2026-11-10 00:12:51 dut: pkill -x iperf3; true
+2026-11-10 00:12:51 gen: pkill -x iperf3; true
+2026-11-10 00:12:54 dut: pkill -KILL -f '^/root/progbench/progbench '; sysctl -qw kernel.bpf_stats_enabled=0; ethtool -K ens1f0np0 gro on tso on gso on; ethtool -L ens1f0np0 combined 63; true
+Actual changes:
+tx-tcp-ecn-segmentation: off [requested on]
+tx-tcp-accecn-segmentation: off [requested on]
+2026-11-10 00:12:54 === phase b12 done
+2026-11-10 00:12:54 === phase b8
+2026-11-10 00:12:54 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+2026-11-10 00:12:54 dut: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+2026-11-10 00:12:55 dut: pkill -x iperf3; true
+2026-11-10 00:12:55 gen: pkill -x iperf3; true
+2026-11-10 00:12:57 dut: pkill -KILL -f '^/root/progbench/progbench '; sysctl -qw kernel.bpf_stats_enabled=0; ethtool -K ens1f0np0 gro on tso on gso on; ethtool -L ens1f0np0 combined 63; true
+Actual changes:
+tx-tcp-ecn-segmentation: off [requested on]
+tx-tcp-accecn-segmentation: off [requested on]
+2026-11-10 00:12:57 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; setsid nohup nu /root/workload/gen.nu --iface ens1f0np0 --dst 10.48.0.7 --dstmac e8:eb:d3:fd:ce:ac --count 4000000000 --threads 1  > /tmp/gen.log 2>&1 < /dev/null &
+2026-11-10 00:13:16 dut rx pps 2660883
+2026-11-10 00:13:16 dut: timeout 900 nu /root/workload/progbench_insitu.nu --dir /root/progbench --iface ens1f0np0 --n 100 --rounds 3 --window 20s --out /root/res/b8-n100.jsonl > /root/res/b8-n100.log 2>&1
+2026-11-10 00:28:16 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; setsid nohup nu /root/workload/gen.nu --iface ens1f0np0 --dst 10.48.0.7 --dstmac e8:eb:d3:fd:ce:ac --count 4000000000 --threads 4  > /tmp/gen.log 2>&1 < /dev/null &
+2026-11-10 00:28:35 dut rx pps 8667387
+2026-11-10 00:28:35 dut: timeout 900 nu /root/workload/progbench_insitu.nu --dir /root/progbench --iface ens1f0np0 --n 100 --rounds 3 --window 20s --labels 'none empty agent_v1 agent_v3 skip_array_lazy_nowake sampled_skip xdp_empty xdp_skip_array' --out /root/res/b8-hi.jsonl > /root/res/b8-hi.log 2>&1
+2026-11-10 00:39:01 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+2026-11-10 00:39:01 dut: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+2026-11-10 00:39:02 dut: pkill -x iperf3; true
+2026-11-10 00:39:02 gen: pkill -x iperf3; true
+2026-11-10 00:39:04 dut: pkill -KILL -f '^/root/progbench/progbench '; sysctl -qw kernel.bpf_stats_enabled=0; ethtool -K ens1f0np0 gro on tso on gso on; ethtool -L ens1f0np0 combined 63; true
+Actual changes:
+tx-tcp-ecn-segmentation: off [requested on]
+tx-tcp-accecn-segmentation: off [requested on]
+2026-11-10 00:39:05 === phase b8 done
+2026-11-10 00:39:05 === phase b9
+2026-11-10 00:39:05 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+2026-11-10 00:39:05 dut: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+2026-11-10 00:39:05 dut: pkill -x iperf3; true
+2026-11-10 00:39:05 gen: pkill -x iperf3; true
+2026-11-10 00:39:07 dut: pkill -KILL -f '^/root/progbench/progbench '; sysctl -qw kernel.bpf_stats_enabled=0; ethtool -K ens1f0np0 gro on tso on gso on; ethtool -L ens1f0np0 combined 63; true
+Actual changes:
+tx-tcp-ecn-segmentation: off [requested on]
+tx-tcp-accecn-segmentation: off [requested on]
+2026-11-10 00:39:08 dut: pkill -x iperf3; true
+2026-11-10 00:39:08 gen: pkill -x iperf3; true
+2026-11-10 00:39:10 dut: iperf3 -s -D
+2026-11-10 00:39:10 gen: setsid nohup iperf3 -c 10.48.0.7 -P 8  -t 86400 > /tmp/iperf.log 2>&1 < /dev/null &
+2026-11-10 00:39:20 dut: timeout 900 nu /root/workload/progbench_offload.nu --dir /root/progbench --iface ens1f0np0 --n 1000 --rounds 3 --window 20s > /root/res/b9.log 2>&1; cp /tmp/progbench_offload.jsonl /root/res/b9.jsonl
+2026-11-10 00:46:41 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+2026-11-10 00:46:41 dut: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+2026-11-10 00:46:41 dut: pkill -x iperf3; true
+2026-11-10 00:46:41 gen: pkill -x iperf3; true
+2026-11-10 00:46:44 dut: pkill -KILL -f '^/root/progbench/progbench '; sysctl -qw kernel.bpf_stats_enabled=0; ethtool -K ens1f0np0 gro on tso on gso on; ethtool -L ens1f0np0 combined 63; true
+Actual changes:
+tx-tcp-ecn-segmentation: off [requested on]
+tx-tcp-accecn-segmentation: off [requested on]
+2026-11-10 00:46:44 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; setsid nohup nu /root/workload/gen.nu --iface ens1f0np0 --dst 10.48.0.7 --dstmac e8:eb:d3:fd:ce:ac --count 4000000000 --threads 8  > /tmp/gen.log 2>&1 < /dev/null &
+2026-11-10 00:47:02 dut rx pps 17344367
+2026-11-10 00:47:02 dut: timeout 900 nu /root/workload/progbench_insitu.nu --dir /root/progbench --iface ens1f0np0 --n 1000 --rounds 3 --window 20s --labels 'none agent_v1 skip_array_lazy_nowake xdp_empty xdp_skip_array' --out /root/res/b9-flood.jsonl > /root/res/b9-flood.log 2>&1
+2026-11-10 00:53:46 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+2026-11-10 00:53:46 dut: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+2026-11-10 00:53:46 dut: pkill -x iperf3; true
+2026-11-10 00:53:46 gen: pkill -x iperf3; true
+2026-11-10 00:53:49 dut: pkill -KILL -f '^/root/progbench/progbench '; sysctl -qw kernel.bpf_stats_enabled=0; ethtool -K ens1f0np0 gro on tso on gso on; ethtool -L ens1f0np0 combined 63; true
+Actual changes:
+tx-tcp-ecn-segmentation: off [requested on]
+tx-tcp-accecn-segmentation: off [requested on]
+2026-11-10 00:53:49 === phase b9 done
+2026-11-10 00:53:49 === phase b10
+2026-11-10 00:53:49 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+2026-11-10 00:53:49 dut: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+2026-11-10 00:53:50 dut: pkill -x iperf3; true
+2026-11-10 00:53:50 gen: pkill -x iperf3; true
+2026-11-10 00:53:52 dut: pkill -KILL -f '^/root/progbench/progbench '; sysctl -qw kernel.bpf_stats_enabled=0; ethtool -K ens1f0np0 gro on tso on gso on; ethtool -L ens1f0np0 combined 63; true
+Actual changes:
+tx-tcp-ecn-segmentation: off [requested on]
+tx-tcp-accecn-segmentation: off [requested on]
+2026-11-10 00:54:07 dut: nu /root/workload/realnic.nu --iface ens1f0np0 --ns '1000 100 10' --secs 20 --drop --bpf 'stage_events=32\niface_slots=1\nring_buf_size=16384' --extra '[agent.collector]\nmax_flows=2097152' > /root/res/b10-realnic.log 2>&1; cp /tmp/realnic.json /root/res/b10-realnic.json
+2026-11-10 00:55:21 dut: nu /root/workload/realnic.nu --iface ens1f0np0 --ns '1' --secs 20 --drop --bpf 'stage_events=32\niface_slots=1' --extra '[agent.collector]\nmax_flows=2097152' > /root/res/b10-realnic-n1.log 2>&1; cp /tmp/realnic.json /root/res/b10-realnic-n1.json
+2026-11-10 00:55:47 dut: nu /root/workload/realnic.nu --iface ens1f0np0 --ns '100 1' --secs 20 --drop --extra '[agent.collector]\nmax_flows=2097152' > /root/res/b10-realnic-default.log 2>&1; cp /tmp/realnic.json /root/res/b10-realnic-default.json
+2026-11-10 00:56:38 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; setsid nohup nu /root/workload/gen.nu --iface ens1f0np0 --dst 10.48.0.7 --dstmac e8:eb:d3:fd:ce:ac --count 4000000000 --threads 8  > /tmp/gen.log 2>&1 < /dev/null &
+2026-11-10 00:56:56 dut rx pps 17362777
+2026-11-10 00:56:56 dut: nu /root/workload/rss.nu --iface ens1f0np0 --queues '1 2 4 8 16 32 63' --ns '100' --secs 20 --bpf 'stage_events=32\niface_slots=1\nring_buf_size=16384' > /root/res/b10-rss.log 2>&1; cp /tmp/rss.json /root/res/b10-rss.json
+2026-11-10 01:00:16 dut: nu /root/workload/rss.nu --iface ens1f0np0 --queues '1 2 4 8 16 32 63' --ns '1' --secs 20 --bpf 'stage_events=32\niface_slots=1' > /root/res/b10-rss-n1.log 2>&1; cp /tmp/rss.json /root/res/b10-rss-n1.json
+2026-11-10 01:03:36 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+2026-11-10 01:03:36 dut: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+2026-11-10 01:03:36 dut: pkill -x iperf3; true
+2026-11-10 01:03:36 gen: pkill -x iperf3; true
+2026-11-10 01:03:38 dut: pkill -KILL -f '^/root/progbench/progbench '; sysctl -qw kernel.bpf_stats_enabled=0; ethtool -K ens1f0np0 gro on tso on gso on; ethtool -L ens1f0np0 combined 63; true
+Actual changes:
+tx-tcp-ecn-segmentation: off [requested on]
+tx-tcp-accecn-segmentation: off [requested on]
+2026-11-10 01:03:39 === phase b10 done
+2026-11-10 01:03:39 === phase b11
+2026-11-10 01:03:39 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+2026-11-10 01:03:39 dut: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+2026-11-10 01:03:40 dut: pkill -x iperf3; true
+2026-11-10 01:03:40 gen: pkill -x iperf3; true
+2026-11-10 01:03:42 dut: pkill -KILL -f '^/root/progbench/progbench '; sysctl -qw kernel.bpf_stats_enabled=0; ethtool -K ens1f0np0 gro on tso on gso on; ethtool -L ens1f0np0 combined 63; true
+Actual changes:
+tx-tcp-ecn-segmentation: off [requested on]
+tx-tcp-accecn-segmentation: off [requested on]
+2026-11-10 01:03:42 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; setsid nohup nu /root/workload/gen.nu --iface ens1f0np0 --dst 10.48.0.7 --dstmac e8:eb:d3:fd:ce:ac --count 4000000000 --threads 1  > /tmp/gen.log 2>&1 < /dev/null &
+2026-11-10 01:04:01 dut rx pps 2649383
+2026-11-10 01:04:01 dut: nu /root/workload/control.nu --iface ens1f0np0 --n 100 --bpf 'stage_events=32\niface_slots=1\nring_buf_size=16384' --changes 12 --label 'control r1' --out /root/res/b11.jsonl > /root/res/b11-control.log 2>&1
+2026-11-10 01:05:31 dut: nu /root/workload/control.nu --iface ens1f0np0 --n 100 --bpf 'stage_events=32\niface_slots=1\nring_buf_size=16384' --changes 12 --label 'control r2' --out /root/res/b11.jsonl > /root/res/b11-control.log 2>&1
+2026-11-10 01:07:02 dut: nu /root/workload/control.nu --iface ens1f0np0 --n 100 --bpf 'stage_events=32\niface_slots=1\nring_buf_size=16384' --changes 12 --label 'control r3' --out /root/res/b11.jsonl > /root/res/b11-control.log 2>&1
+2026-11-10 01:08:32 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; setsid nohup nu /root/workload/gen.nu --iface ens1f0np0 --dst 10.48.0.7 --dstmac e8:eb:d3:fd:ce:ac --count 4000000000 --threads 1  > /tmp/gen.log 2>&1 < /dev/null &
+2026-11-10 01:08:51 dut rx pps 2646671
+2026-11-10 01:08:51 dut: setsid nohup nu /root/workload/control.nu --iface ens1f0np0 --n 1 --bpf 'stage_events=32\niface_slots=1' --timeline  --secs 160 --label 'ramp static r1' --out /root/res/b11.jsonl > /root/res/b11-ramp.log 2>&1 < /dev/null &
+2026-11-10 01:09:13 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; setsid nohup nu /root/workload/gen.nu --iface ens1f0np0 --dst 10.48.0.7 --dstmac e8:eb:d3:fd:ce:ac --count 4000000000 --threads 2  > /tmp/gen.log 2>&1 < /dev/null &
+2026-11-10 01:09:31 dut rx pps 4556900
+2026-11-10 01:09:53 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; setsid nohup nu /root/workload/gen.nu --iface ens1f0np0 --dst 10.48.0.7 --dstmac e8:eb:d3:fd:ce:ac --count 4000000000 --threads 4  > /tmp/gen.log 2>&1 < /dev/null &
+2026-11-10 01:10:12 dut rx pps 8868728
+2026-11-10 01:10:34 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; setsid nohup nu /root/workload/gen.nu --iface ens1f0np0 --dst 10.48.0.7 --dstmac e8:eb:d3:fd:ce:ac --count 4000000000 --threads 8  > /tmp/gen.log 2>&1 < /dev/null &
+2026-11-10 01:10:52 dut rx pps 17527877
+2026-11-10 01:11:55 dut: pkill -f '^nu /root/workload/control.nu'; pkill -f '^[^ ]*rfm agent'; true
+2026-11-10 01:11:55 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; setsid nohup nu /root/workload/gen.nu --iface ens1f0np0 --dst 10.48.0.7 --dstmac e8:eb:d3:fd:ce:ac --count 4000000000 --threads 1  > /tmp/gen.log 2>&1 < /dev/null &
+2026-11-10 01:12:14 dut rx pps 2649041
+2026-11-10 01:12:14 dut: setsid nohup nu /root/workload/control.nu --iface ens1f0np0 --n 1 --bpf 'stage_events=32\niface_slots=1' --timeline --adaptive --secs 160 --label 'ramp adaptive r1' --out /root/res/b11.jsonl > /root/res/b11-ramp.log 2>&1 < /dev/null &
+2026-11-10 01:12:36 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; setsid nohup nu /root/workload/gen.nu --iface ens1f0np0 --dst 10.48.0.7 --dstmac e8:eb:d3:fd:ce:ac --count 4000000000 --threads 2  > /tmp/gen.log 2>&1 < /dev/null &
+2026-11-10 01:12:54 dut rx pps 4470775
+2026-11-10 01:13:16 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; setsid nohup nu /root/workload/gen.nu --iface ens1f0np0 --dst 10.48.0.7 --dstmac e8:eb:d3:fd:ce:ac --count 4000000000 --threads 4  > /tmp/gen.log 2>&1 < /dev/null &
+2026-11-10 01:13:35 dut rx pps 8647711
+2026-11-10 01:13:57 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; setsid nohup nu /root/workload/gen.nu --iface ens1f0np0 --dst 10.48.0.7 --dstmac e8:eb:d3:fd:ce:ac --count 4000000000 --threads 8  > /tmp/gen.log 2>&1 < /dev/null &
+2026-11-10 01:14:15 dut rx pps 17190073
+2026-11-10 01:15:18 dut: pkill -f '^nu /root/workload/control.nu'; pkill -f '^[^ ]*rfm agent'; true
+2026-11-10 01:15:18 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; setsid nohup nu /root/workload/gen.nu --iface ens1f0np0 --dst 10.48.0.7 --dstmac e8:eb:d3:fd:ce:ac --count 4000000000 --threads 1  > /tmp/gen.log 2>&1 < /dev/null &
+2026-11-10 01:15:37 dut rx pps 2644181
+2026-11-10 01:15:37 dut: setsid nohup nu /root/workload/control.nu --iface ens1f0np0 --n 1 --bpf 'stage_events=32\niface_slots=1' --timeline  --secs 160 --label 'ramp static r2' --out /root/res/b11.jsonl > /root/res/b11-ramp.log 2>&1 < /dev/null &
+2026-11-10 01:15:59 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; setsid nohup nu /root/workload/gen.nu --iface ens1f0np0 --dst 10.48.0.7 --dstmac e8:eb:d3:fd:ce:ac --count 4000000000 --threads 2  > /tmp/gen.log 2>&1 < /dev/null &
+2026-11-10 01:16:17 dut rx pps 4472562
+2026-11-10 01:16:39 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; setsid nohup nu /root/workload/gen.nu --iface ens1f0np0 --dst 10.48.0.7 --dstmac e8:eb:d3:fd:ce:ac --count 4000000000 --threads 4  > /tmp/gen.log 2>&1 < /dev/null &
+2026-11-10 01:16:58 dut rx pps 8712134
+2026-11-10 01:17:20 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; setsid nohup nu /root/workload/gen.nu --iface ens1f0np0 --dst 10.48.0.7 --dstmac e8:eb:d3:fd:ce:ac --count 4000000000 --threads 8  > /tmp/gen.log 2>&1 < /dev/null &
+2026-11-10 01:17:38 dut rx pps 17574483
+2026-11-10 01:18:46 dut: pkill -f '^nu /root/workload/control.nu'; pkill -f '^[^ ]*rfm agent'; true
+2026-11-10 01:18:46 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; setsid nohup nu /root/workload/gen.nu --iface ens1f0np0 --dst 10.48.0.7 --dstmac e8:eb:d3:fd:ce:ac --count 4000000000 --threads 1  > /tmp/gen.log 2>&1 < /dev/null &
+2026-11-10 01:19:05 dut rx pps 2644172
+2026-11-10 01:19:05 dut: setsid nohup nu /root/workload/control.nu --iface ens1f0np0 --n 1 --bpf 'stage_events=32\niface_slots=1' --timeline --adaptive --secs 160 --label 'ramp adaptive r2' --out /root/res/b11.jsonl > /root/res/b11-ramp.log 2>&1 < /dev/null &
+2026-11-10 01:19:27 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; setsid nohup nu /root/workload/gen.nu --iface ens1f0np0 --dst 10.48.0.7 --dstmac e8:eb:d3:fd:ce:ac --count 4000000000 --threads 2  > /tmp/gen.log 2>&1 < /dev/null &
+2026-11-10 01:19:45 dut rx pps 4472792
+2026-11-10 01:20:07 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; setsid nohup nu /root/workload/gen.nu --iface ens1f0np0 --dst 10.48.0.7 --dstmac e8:eb:d3:fd:ce:ac --count 4000000000 --threads 4  > /tmp/gen.log 2>&1 < /dev/null &
+2026-11-10 01:20:26 dut rx pps 8842555
+2026-11-10 01:20:48 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; setsid nohup nu /root/workload/gen.nu --iface ens1f0np0 --dst 10.48.0.7 --dstmac e8:eb:d3:fd:ce:ac --count 4000000000 --threads 8  > /tmp/gen.log 2>&1 < /dev/null &
+2026-11-10 01:21:06 dut rx pps 17174443
+2026-11-10 01:22:14 dut: pkill -f '^nu /root/workload/control.nu'; pkill -f '^[^ ]*rfm agent'; true
+2026-11-10 01:22:14 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+2026-11-10 01:22:14 dut: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+2026-11-10 01:22:15 dut: pkill -x iperf3; true
+2026-11-10 01:22:15 gen: pkill -x iperf3; true
+2026-11-10 01:22:17 dut: pkill -KILL -f '^/root/progbench/progbench '; sysctl -qw kernel.bpf_stats_enabled=0; ethtool -K ens1f0np0 gro on tso on gso on; ethtool -L ens1f0np0 combined 63; true
+Actual changes:
+tx-tcp-ecn-segmentation: off [requested on]
+tx-tcp-accecn-segmentation: off [requested on]
+2026-11-10 01:22:18 === phase b11 done
+2026-11-10 01:22:18 === phase more
+2026-11-10 01:22:18 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+2026-11-10 01:22:18 dut: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+2026-11-10 01:22:18 dut: pkill -x iperf3; true
+2026-11-10 01:22:18 gen: pkill -x iperf3; true
+2026-11-10 01:22:21 dut: pkill -KILL -f '^/root/progbench/progbench '; sysctl -qw kernel.bpf_stats_enabled=0; ethtool -K ens1f0np0 gro on tso on gso on; ethtool -L ens1f0np0 combined 63; true
+Actual changes:
+tx-tcp-ecn-segmentation: off [requested on]
+tx-tcp-accecn-segmentation: off [requested on]
+2026-11-10 01:22:21 dut: pkill -x iperf3; true
+2026-11-10 01:22:21 gen: pkill -x iperf3; true
+2026-11-10 01:22:23 dut: iperf3 -s -D
+2026-11-10 01:22:23 gen: setsid nohup iperf3 -c 10.48.0.7 -P 8  -t 86400 > /tmp/iperf.log 2>&1 < /dev/null &
+2026-11-10 01:22:34 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label rx_gro\ r4\ rfm_acc --out /root/res/b1.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --counts --warmup 12 --secs 45 --stat-secs 5 > /dev/null 2>> /root/res/b1.err; echo exit=$?
+exit=0
+2026-11-10 01:23:44 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 100 --label rx_gro\ r4\ netobserv --out /root/res/b1.jsonl --counts --warmup 12 --secs 45 --stat-secs 5 > /dev/null 2>> /root/res/b1.err; echo exit=$?
+exit=0
+2026-11-10 01:24:53 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent hsflowd --n 100 --label rx_gro\ r4\ hsflowd --out /root/res/b1.jsonl --counts --warmup 12 --secs 45 --stat-secs 5 > /dev/null 2>> /root/res/b1.err; echo exit=$?
+exit=0
+2026-11-10 01:26:05 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent hsflowd --n 100 --label rx_gro\ r5\ hsflowd --out /root/res/b1.jsonl --counts --warmup 12 --secs 45 --stat-secs 5 > /dev/null 2>> /root/res/b1.err; echo exit=$?
+exit=0
+2026-11-10 01:27:18 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label rx_gro\ r5\ rfm_acc --out /root/res/b1.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --counts --warmup 12 --secs 45 --stat-secs 5 > /dev/null 2>> /root/res/b1.err; echo exit=$?
+exit=0
+2026-11-10 01:28:28 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 100 --label rx_gro\ r5\ netobserv --out /root/res/b1.jsonl --counts --warmup 12 --secs 45 --stat-secs 5 > /dev/null 2>> /root/res/b1.err; echo exit=$?
+exit=0
+2026-11-10 01:29:37 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+2026-11-10 01:29:37 dut: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+2026-11-10 01:29:38 dut: pkill -x iperf3; true
+2026-11-10 01:29:38 gen: pkill -x iperf3; true
+2026-11-10 01:29:40 dut: pkill -KILL -f '^/root/progbench/progbench '; sysctl -qw kernel.bpf_stats_enabled=0; ethtool -K ens1f0np0 gro on tso on gso on; ethtool -L ens1f0np0 combined 63; true
+Actual changes:
+tx-tcp-ecn-segmentation: off [requested on]
+tx-tcp-accecn-segmentation: off [requested on]
+2026-11-10 01:29:40 dut: pkill -x iperf3; true
+2026-11-10 01:29:40 gen: pkill -x iperf3; true
+2026-11-10 01:29:43 gen: iperf3 -s -D
+2026-11-10 01:29:43 dut: setsid nohup iperf3 -c 10.48.0.8 -P 8  -t 86400 > /tmp/iperf.log 2>&1 < /dev/null &
+2026-11-10 01:29:53 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label tx_tso\ r4\ rfm_acc --out /root/res/b1.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --counts --warmup 12 --secs 45 --stat-secs 5 > /dev/null 2>> /root/res/b1.err; echo exit=$?
+exit=0
+2026-11-10 01:31:03 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 100 --label tx_tso\ r4\ netobserv --out /root/res/b1.jsonl --counts --warmup 12 --secs 45 --stat-secs 5 > /dev/null 2>> /root/res/b1.err; echo exit=$?
+exit=0
+2026-11-10 01:32:12 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent hsflowd --n 100 --label tx_tso\ r4\ hsflowd --out /root/res/b1.jsonl --counts --warmup 12 --secs 45 --stat-secs 5 > /dev/null 2>> /root/res/b1.err; echo exit=$?
+exit=0
+2026-11-10 01:33:24 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 100 --label tx_tso\ r5\ netobserv --out /root/res/b1.jsonl --counts --warmup 12 --secs 45 --stat-secs 5 > /dev/null 2>> /root/res/b1.err; echo exit=$?
+exit=0
+2026-11-10 01:34:33 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent hsflowd --n 100 --label tx_tso\ r5\ hsflowd --out /root/res/b1.jsonl --counts --warmup 12 --secs 45 --stat-secs 5 > /dev/null 2>> /root/res/b1.err; echo exit=$?
+exit=0
+2026-11-10 01:35:45 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label tx_tso\ r5\ rfm_acc --out /root/res/b1.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --counts --warmup 12 --secs 45 --stat-secs 5 > /dev/null 2>> /root/res/b1.err; echo exit=$?
+exit=0
+2026-11-10 01:36:56 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; setsid nohup nu /root/workload/gen.nu --iface ens1f0np0 --dst 10.48.0.7 --dstmac e8:eb:d3:fd:ce:ac --count 4000000000 --threads 1  > /tmp/gen.log 2>&1 < /dev/null &
+2026-11-10 01:37:14 dut rx pps 1229218
+2026-11-10 01:37:14 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent hsflowd --n 100 --label base\ N100\ r4\ hsflowd --out /root/res/b3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-10 01:38:06 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label base\ N100\ r4\ rfm_default --out /root/res/b3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-10 01:39:00 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent softflowd --n 100 --label base\ N100\ r4\ softflowd --out /root/res/b3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-10 01:39:43 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent pmacctd --n 100 --label base\ N100\ r4\ pmacctd --out /root/res/b3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-10 01:40:26 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent none --n 100 --label base\ N100\ r4\ none --out /root/res/b3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-10 01:41:09 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label base\ N100\ r4\ rfm_sampled --out /root/res/b3.jsonl --rfm-bpf sampled_only=true\\nstage_events=32\\nring_buf_size=16384 --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-10 01:42:03 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 100 --label base\ N100\ r4\ netobserv --out /root/res/b3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-10 01:42:55 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label base\ N100\ r4\ rfm --out /root/res/b3.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-10 01:43:48 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label base\ N100\ r5\ rfm_sampled --out /root/res/b3.jsonl --rfm-bpf sampled_only=true\\nstage_events=32\\nring_buf_size=16384 --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-10 01:44:42 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label base\ N100\ r5\ rfm_default --out /root/res/b3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-10 01:45:36 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent pmacctd --n 100 --label base\ N100\ r5\ pmacctd --out /root/res/b3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-10 01:46:19 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label base\ N100\ r5\ rfm --out /root/res/b3.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-10 01:47:12 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent softflowd --n 100 --label base\ N100\ r5\ softflowd --out /root/res/b3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-10 01:47:55 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent hsflowd --n 100 --label base\ N100\ r5\ hsflowd --out /root/res/b3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-10 01:48:47 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent none --n 100 --label base\ N100\ r5\ none --out /root/res/b3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-10 01:49:30 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 100 --label base\ N100\ r5\ netobserv --out /root/res/b3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-10 01:50:22 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; setsid nohup nu /root/workload/gen.nu --iface ens1f0np0 --dst 10.48.0.7 --dstmac e8:eb:d3:fd:ce:ac --count 4000000000 --threads 1  > /tmp/gen.log 2>&1 < /dev/null &
+2026-11-10 01:50:41 dut rx pps 1313776
+2026-11-10 01:50:41 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 10 --label base\ N10\ r4\ rfm --out /root/res/b3.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-10 01:51:34 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 10 --label base\ N10\ r4\ rfm_default --out /root/res/b3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-10 01:52:28 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent none --n 10 --label base\ N10\ r4\ none --out /root/res/b3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-10 01:53:11 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent hsflowd --n 10 --label base\ N10\ r4\ hsflowd --out /root/res/b3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-10 01:54:03 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent pmacctd --n 10 --label base\ N10\ r4\ pmacctd --out /root/res/b3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-10 01:54:46 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent softflowd --n 10 --label base\ N10\ r4\ softflowd --out /root/res/b3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-10 01:55:29 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 10 --label base\ N10\ r4\ rfm_sampled --out /root/res/b3.jsonl --rfm-bpf sampled_only=true\\nstage_events=32\\nring_buf_size=16384 --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-10 01:56:23 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 10 --label base\ N10\ r4\ netobserv --out /root/res/b3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-10 01:57:15 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent softflowd --n 10 --label base\ N10\ r5\ softflowd --out /root/res/b3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-10 01:57:58 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent none --n 10 --label base\ N10\ r5\ none --out /root/res/b3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-10 01:58:41 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 10 --label base\ N10\ r5\ netobserv --out /root/res/b3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-10 01:59:33 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 10 --label base\ N10\ r5\ rfm_default --out /root/res/b3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-10 02:00:26 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 10 --label base\ N10\ r5\ rfm --out /root/res/b3.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-10 02:01:20 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent hsflowd --n 10 --label base\ N10\ r5\ hsflowd --out /root/res/b3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-10 02:02:12 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent pmacctd --n 10 --label base\ N10\ r5\ pmacctd --out /root/res/b3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-10 02:02:55 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 10 --label base\ N10\ r5\ rfm_sampled --out /root/res/b3.jsonl --rfm-bpf sampled_only=true\\nstage_events=32\\nring_buf_size=16384 --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-10 02:03:49 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+2026-11-10 02:03:49 dut: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+2026-11-10 02:03:49 dut: pkill -x iperf3; true
+2026-11-10 02:03:49 gen: pkill -x iperf3; true
+2026-11-10 02:03:52 dut: pkill -KILL -f '^/root/progbench/progbench '; sysctl -qw kernel.bpf_stats_enabled=0; ethtool -K ens1f0np0 gro on tso on gso on; ethtool -L ens1f0np0 combined 63; true
+Actual changes:
+tx-tcp-ecn-segmentation: off [requested on]
+tx-tcp-accecn-segmentation: off [requested on]
+2026-11-10 02:03:52 === phase more done
+2026-11-10 02:03:52 === phase more2
+2026-11-10 02:03:52 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; setsid nohup nu /root/workload/gen.nu --iface ens1f0np0 --dst 10.48.0.7 --dstmac e8:eb:d3:fd:ce:ac --count 4000000000 --threads 1  > /tmp/gen.log 2>&1 < /dev/null &
+2026-11-10 02:04:11 dut rx pps 2634735
+2026-11-10 02:04:11 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent none --n 1000 --label base\ N1000\ r4\ none --out /root/res/b3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-10 02:04:54 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 1000 --label base\ N1000\ r4\ rfm_sampled --out /root/res/b3.jsonl --rfm-bpf sampled_only=true\\nstage_events=32\\nring_buf_size=16384 --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-10 02:05:47 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent hsflowd --n 1000 --label base\ N1000\ r4\ hsflowd --out /root/res/b3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-10 02:06:39 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 1000 --label base\ N1000\ r4\ rfm --out /root/res/b3.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-10 02:07:32 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent pmacctd --n 1000 --label base\ N1000\ r4\ pmacctd --out /root/res/b3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-10 02:08:15 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent softflowd --n 1000 --label base\ N1000\ r4\ softflowd --out /root/res/b3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-10 02:08:58 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 1000 --label base\ N1000\ r4\ rfm_default --out /root/res/b3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-10 02:09:51 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 1000 --label base\ N1000\ r4\ netobserv --out /root/res/b3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-10 02:10:43 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent none --n 1000 --label base\ N1000\ r5\ none --out /root/res/b3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-10 02:11:26 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent pmacctd --n 1000 --label base\ N1000\ r5\ pmacctd --out /root/res/b3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-10 02:12:09 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent softflowd --n 1000 --label base\ N1000\ r5\ softflowd --out /root/res/b3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-10 02:12:51 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 1000 --label base\ N1000\ r5\ rfm --out /root/res/b3.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-10 02:13:45 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent hsflowd --n 1000 --label base\ N1000\ r5\ hsflowd --out /root/res/b3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-10 02:14:37 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 1000 --label base\ N1000\ r5\ netobserv --out /root/res/b3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-10 02:15:28 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 1000 --label base\ N1000\ r5\ rfm_default --out /root/res/b3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-10 02:16:22 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 1000 --label base\ N1000\ r5\ rfm_sampled --out /root/res/b3.jsonl --rfm-bpf sampled_only=true\\nstage_events=32\\nring_buf_size=16384 --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-10 02:17:15 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; setsid nohup nu /root/workload/gen.nu --iface ens1f0np0 --dst 10.48.0.7 --dstmac e8:eb:d3:fd:ce:ac --count 4000000000 --threads 1  > /tmp/gen.log 2>&1 < /dev/null &
+2026-11-10 02:17:34 dut rx pps 2634332
+2026-11-10 02:17:34 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 1 --label base\ N1\ r4\ netobserv --out /root/res/b3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-10 02:18:26 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 1 --label base\ N1\ r4\ rfm_n1 --out /root/res/b3.jsonl --rfm-bpf stage_events=32\\niface_slots=1 --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-10 02:19:19 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent softflowd --n 1 --label base\ N1\ r4\ softflowd --out /root/res/b3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-10 02:20:02 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent none --n 1 --label base\ N1\ r4\ none --out /root/res/b3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-10 02:20:45 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent hsflowd --n 1 --label base\ N1\ r4\ hsflowd --out /root/res/b3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-10 02:21:36 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent pmacctd --n 1 --label base\ N1\ r4\ pmacctd --out /root/res/b3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-10 02:22:19 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 1 --label base\ N1\ r4\ rfm_default --out /root/res/b3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-10 02:23:13 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 1 --label base\ N1\ r4\ rfm_sampled --out /root/res/b3.jsonl --rfm-bpf sampled_only=true\\nstage_events=32\\nring_buf_size=16384 --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-10 02:24:06 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent pmacctd --n 1 --label base\ N1\ r5\ pmacctd --out /root/res/b3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-10 02:24:49 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent none --n 1 --label base\ N1\ r5\ none --out /root/res/b3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-10 02:25:32 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent hsflowd --n 1 --label base\ N1\ r5\ hsflowd --out /root/res/b3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-10 02:26:24 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 1 --label base\ N1\ r5\ netobserv --out /root/res/b3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-10 02:27:16 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 1 --label base\ N1\ r5\ rfm_n1 --out /root/res/b3.jsonl --rfm-bpf stage_events=32\\niface_slots=1 --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-10 02:28:09 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 1 --label base\ N1\ r5\ rfm_default --out /root/res/b3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-10 02:29:03 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 1 --label base\ N1\ r5\ rfm_sampled --out /root/res/b3.jsonl --rfm-bpf sampled_only=true\\nstage_events=32\\nring_buf_size=16384 --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-10 02:29:56 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent softflowd --n 1 --label base\ N1\ r5\ softflowd --out /root/res/b3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-10 02:30:39 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; setsid nohup nu /root/workload/gen.nu --iface ens1f0np0 --dst 10.48.0.7 --dstmac e8:eb:d3:fd:ce:ac --count 4000000000 --threads 4  > /tmp/gen.log 2>&1 < /dev/null &
+2026-11-10 02:30:58 dut rx pps 8778900
+2026-11-10 02:30:58 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 100 --label hi\ N100\ r4\ netobserv --out /root/res/b3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-10 02:31:49 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent hsflowd --n 100 --label hi\ N100\ r4\ hsflowd --out /root/res/b3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-10 02:32:41 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label hi\ N100\ r4\ rfm_sampled --out /root/res/b3.jsonl --rfm-bpf sampled_only=true\\nstage_events=32\\nring_buf_size=16384 --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-10 02:33:35 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label hi\ N100\ r4\ rfm --out /root/res/b3.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-10 02:34:28 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent none --n 100 --label hi\ N100\ r4\ none --out /root/res/b3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-10 02:35:11 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent none --n 100 --label hi\ N100\ r5\ none --out /root/res/b3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-10 02:35:54 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label hi\ N100\ r5\ rfm --out /root/res/b3.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-10 02:36:47 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 100 --label hi\ N100\ r5\ netobserv --out /root/res/b3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-10 02:37:39 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label hi\ N100\ r5\ rfm_sampled --out /root/res/b3.jsonl --rfm-bpf sampled_only=true\\nstage_events=32\\nring_buf_size=16384 --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-10 02:38:33 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent hsflowd --n 100 --label hi\ N100\ r5\ hsflowd --out /root/res/b3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-10 02:39:24 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; setsid nohup nu /root/workload/gen.nu --iface ens1f0np0 --dst 10.48.0.7 --dstmac e8:eb:d3:fd:ce:ac --count 4000000000 --threads 4  > /tmp/gen.log 2>&1 < /dev/null &
+2026-11-10 02:39:43 dut rx pps 8859402
+2026-11-10 02:39:43 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 10 --label hi\ N10\ r4\ netobserv --out /root/res/b3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-10 02:40:35 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 10 --label hi\ N10\ r4\ rfm --out /root/res/b3.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-10 02:41:28 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 10 --label hi\ N10\ r4\ rfm_sampled --out /root/res/b3.jsonl --rfm-bpf sampled_only=true\\nstage_events=32\\nring_buf_size=16384 --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-10 02:42:22 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent none --n 10 --label hi\ N10\ r4\ none --out /root/res/b3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-10 02:43:05 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent hsflowd --n 10 --label hi\ N10\ r4\ hsflowd --out /root/res/b3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-10 02:43:56 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 10 --label hi\ N10\ r5\ rfm_sampled --out /root/res/b3.jsonl --rfm-bpf sampled_only=true\\nstage_events=32\\nring_buf_size=16384 --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-10 02:44:50 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent none --n 10 --label hi\ N10\ r5\ none --out /root/res/b3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-10 02:45:33 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent hsflowd --n 10 --label hi\ N10\ r5\ hsflowd --out /root/res/b3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-10 02:46:25 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 10 --label hi\ N10\ r5\ netobserv --out /root/res/b3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-10 02:47:16 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 10 --label hi\ N10\ r5\ rfm --out /root/res/b3.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b3.err; echo exit=$?
+exit=0
+2026-11-10 02:48:10 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+2026-11-10 02:48:10 dut: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+2026-11-10 02:48:10 dut: pkill -x iperf3; true
+2026-11-10 02:48:10 gen: pkill -x iperf3; true
+2026-11-10 02:48:13 dut: pkill -KILL -f '^/root/progbench/progbench '; sysctl -qw kernel.bpf_stats_enabled=0; ethtool -K ens1f0np0 gro on tso on gso on; ethtool -L ens1f0np0 combined 63; true
+Actual changes:
+tx-tcp-ecn-segmentation: off [requested on]
+tx-tcp-accecn-segmentation: off [requested on]
+2026-11-10 02:48:13 dut: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; setsid nohup nu /root/workload/gen.nu --iface ens1f0np0 --dst 10.48.0.8 --dstmac e8:eb:d3:fd:cf:0c --count 4000000000 --threads 1 --queue-xmit > /tmp/gen.log 2>&1 < /dev/null &
+2026-11-10 02:48:31 dut tx pps 2061681
+2026-11-10 02:48:31 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent hsflowd --n 100 --label udp\ tx\ N100\ r4\ hsflowd --out /root/res/b7.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b7.err; echo exit=$?
+exit=0
+2026-11-10 02:49:23 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 100 --label udp\ tx\ N100\ r4\ netobserv --out /root/res/b7.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b7.err; echo exit=$?
+exit=0
+2026-11-10 02:50:15 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label udp\ tx\ N100\ r4\ rfm --out /root/res/b7.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b7.err; echo exit=$?
+exit=0
+2026-11-10 02:51:08 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent none --n 100 --label udp\ tx\ N100\ r4\ none --out /root/res/b7.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b7.err; echo exit=$?
+exit=0
+2026-11-10 02:51:51 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label udp\ tx\ N100\ r4\ rfm_sampled --out /root/res/b7.jsonl --rfm-bpf sampled_only=true\\nstage_events=32\\nring_buf_size=16384 --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b7.err; echo exit=$?
+exit=0
+2026-11-10 02:52:44 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label udp\ tx\ N100\ r5\ rfm_sampled --out /root/res/b7.jsonl --rfm-bpf sampled_only=true\\nstage_events=32\\nring_buf_size=16384 --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b7.err; echo exit=$?
+exit=0
+2026-11-10 02:53:37 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent hsflowd --n 100 --label udp\ tx\ N100\ r5\ hsflowd --out /root/res/b7.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b7.err; echo exit=$?
+exit=0
+2026-11-10 02:54:29 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 100 --label udp\ tx\ N100\ r5\ netobserv --out /root/res/b7.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b7.err; echo exit=$?
+exit=0
+2026-11-10 02:55:21 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent none --n 100 --label udp\ tx\ N100\ r5\ none --out /root/res/b7.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b7.err; echo exit=$?
+exit=0
+2026-11-10 02:56:03 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label udp\ tx\ N100\ r5\ rfm --out /root/res/b7.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b7.err; echo exit=$?
+exit=0
+2026-11-10 02:56:57 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 10 --label udp\ tx\ N10\ r4\ rfm_sampled --out /root/res/b7.jsonl --rfm-bpf sampled_only=true\\nstage_events=32\\nring_buf_size=16384 --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b7.err; echo exit=$?
+exit=0
+2026-11-10 02:57:50 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent none --n 10 --label udp\ tx\ N10\ r4\ none --out /root/res/b7.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b7.err; echo exit=$?
+exit=0
+2026-11-10 02:58:33 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent hsflowd --n 10 --label udp\ tx\ N10\ r4\ hsflowd --out /root/res/b7.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b7.err; echo exit=$?
+exit=0
+2026-11-10 02:59:25 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 10 --label udp\ tx\ N10\ r4\ rfm --out /root/res/b7.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b7.err; echo exit=$?
+exit=0
+2026-11-10 03:00:18 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 10 --label udp\ tx\ N10\ r4\ netobserv --out /root/res/b7.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b7.err; echo exit=$?
+exit=0
+2026-11-10 03:01:10 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent hsflowd --n 10 --label udp\ tx\ N10\ r5\ hsflowd --out /root/res/b7.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b7.err; echo exit=$?
+exit=0
+2026-11-10 03:02:01 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 10 --label udp\ tx\ N10\ r5\ netobserv --out /root/res/b7.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b7.err; echo exit=$?
+exit=0
+2026-11-10 03:02:53 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 10 --label udp\ tx\ N10\ r5\ rfm --out /root/res/b7.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b7.err; echo exit=$?
+exit=0
+2026-11-10 03:03:47 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent none --n 10 --label udp\ tx\ N10\ r5\ none --out /root/res/b7.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b7.err; echo exit=$?
+exit=0
+2026-11-10 03:04:29 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 10 --label udp\ tx\ N10\ r5\ rfm_sampled --out /root/res/b7.jsonl --rfm-bpf sampled_only=true\\nstage_events=32\\nring_buf_size=16384 --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/b7.err; echo exit=$?
+exit=0
+2026-11-10 03:05:23 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+2026-11-10 03:05:23 dut: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+2026-11-10 03:05:23 dut: pkill -x iperf3; true
+2026-11-10 03:05:23 gen: pkill -x iperf3; true
+2026-11-10 03:05:26 dut: pkill -KILL -f '^/root/progbench/progbench '; sysctl -qw kernel.bpf_stats_enabled=0; ethtool -K ens1f0np0 gro on tso on gso on; ethtool -L ens1f0np0 combined 63; true
+Actual changes:
+tx-tcp-ecn-segmentation: off [requested on]
+tx-tcp-accecn-segmentation: off [requested on]
+2026-11-10 03:05:26 === phase more2 done
+2026-11-10 03:05:26 campaign done

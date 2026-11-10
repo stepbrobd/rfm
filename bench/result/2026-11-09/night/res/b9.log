@@ -1,0 +1,19 @@
+gro=on round 1 agent_v3 done
+gro=on round 1 skip_array_lazy_nowake done
+gro=on round 1 xdp_skip_array done
+gro=on round 2 agent_v3 done
+gro=on round 2 skip_array_lazy_nowake done
+gro=on round 2 xdp_skip_array done
+gro=on round 3 agent_v3 done
+gro=on round 3 skip_array_lazy_nowake done
+gro=on round 3 xdp_skip_array done
+gro=off round 1 agent_v3 done
+gro=off round 1 skip_array_lazy_nowake done
+gro=off round 1 xdp_skip_array done
+gro=off round 2 agent_v3 done
+gro=off round 2 skip_array_lazy_nowake done
+gro=off round 2 xdp_skip_array done
+gro=off round 3 agent_v3 done
+gro=off round 3 skip_array_lazy_nowake done
+gro=off round 3 xdp_skip_array done
+wrote /tmp/progbench_offload.jsonl

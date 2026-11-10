@@ -1,0 +1,34 @@
+[
+  {
+    "N": 100,
+    "rx pps": 95377114,
+    "ring drops": 0,
+    "ns/pkt": 51.0,
+    "kern cores": 4.861,
+    "user cores": 0.2,
+    "cores/Mpps": 0.053,
+    "window drops": 0,
+    "drops at start": 0,
+    "sys cores": 0.008,
+    "rss MB": 36.4,
+    "active flows": 1024,
+    "forced evictions": 0,
+    "nic drops/s": 46710484
+  },
+  {
+    "N": 1,
+    "rx pps": 87291628,
+    "ring drops": 1709905655,
+    "ns/pkt": 118.7,
+    "kern cores": 10.362,
+    "user cores": 1.676,
+    "cores/Mpps": 0.138,
+    "window drops": 1477364454,
+    "drops at start": 228919067,
+    "sys cores": 0.026,
+    "rss MB": 78.4,
+    "active flows": 433,
+    "forced evictions": 0,
+    "nic drops/s": 54816276
+  }
+]

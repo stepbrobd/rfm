@@ -1,0 +1,16 @@
+round 1 xdp_empty done
+round 1 none done
+round 1 skip_array_lazy_nowake done
+round 1 agent_v1 done
+round 1 xdp_skip_array done
+round 2 none done
+round 2 agent_v1 done
+round 2 xdp_empty done
+round 2 skip_array_lazy_nowake done
+round 2 xdp_skip_array done
+round 3 xdp_skip_array done
+round 3 agent_v1 done
+round 3 xdp_empty done
+round 3 skip_array_lazy_nowake done
+round 3 none done
+wrote /root/res/b9-flood.jsonl

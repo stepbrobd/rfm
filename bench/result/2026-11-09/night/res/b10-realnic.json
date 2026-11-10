@@ -1,0 +1,50 @@
+[
+  {
+    "N": 1000,
+    "rx pps": 0,
+    "ring drops": 0,
+    "ns/pkt": 0,
+    "kern cores": 0.0,
+    "user cores": 0.032,
+    "cores/Mpps": 0,
+    "window drops": 0,
+    "drops at start": 0,
+    "sys cores": 0.009,
+    "rss MB": 33.0,
+    "active flows": 1024,
+    "forced evictions": 0,
+    "nic drops/s": 45247088
+  },
+  {
+    "N": 100,
+    "rx pps": 0,
+    "ring drops": 0,
+    "ns/pkt": 0,
+    "kern cores": 0.0,
+    "user cores": 0.146,
+    "cores/Mpps": 0,
+    "window drops": 0,
+    "drops at start": 0,
+    "sys cores": 0.027,
+    "rss MB": 33.2,
+    "active flows": 1024,
+    "forced evictions": 0,
+    "nic drops/s": 45684659
+  },
+  {
+    "N": 10,
+    "rx pps": 0,
+    "ring drops": 0,
+    "ns/pkt": 0,
+    "kern cores": 0.0,
+    "user cores": 1.069,
+    "cores/Mpps": 0,
+    "window drops": 0,
+    "drops at start": 0,
+    "sys cores": 0.097,
+    "rss MB": 33.7,
+    "active flows": 1024,
+    "forced evictions": 0,
+    "nic drops/s": 47468814
+  }
+]
