@@ -454,6 +454,8 @@ for ph in $PHASES; do
                 done
             done
         done
+        # the iperf3 stream of the last accuracy cell stops before the pktgen ones
+        quiet
         for N in 100 10; do
             gen_start 1
             for r in 4 5; do
