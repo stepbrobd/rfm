@@ -9,8 +9,8 @@
 #   production port, test traffic over ens1f0np0 in the kavlan only.
 # phases, in this order by default:
 #   setup b5 b1 b3 b4 b7 b2 b12 b8 b9 b10 b11 more more2
-# and pm, the B3 cells with the dut at its default power settings and with turbo and C6 off,
-# named on its own
+# and pm, the B3 cells with the dut at its default power settings and with turbo and C6 off, and
+# sparse, the B3 cells at N of 10000 and 100000 and the B1 ones at 10000, each named on its own
 # SRC names a directory on the frontend that holds workload/ and progbench/. DRY=1 runs every
 # phase with one round and windows of a few seconds, to check the commands before a night.
 set -u
@@ -212,6 +212,10 @@ m() { # phase label variant n [extra measure.nu flags]
     rfm_mem) a=rfm; bpf=$RFM_MEM ;;
     netobserv_sized) a=netobserv ;;
     esac
+    # rfm refuses a rate above max_sample_rate, 1000 unless set
+    if [ "$a" = rfm ] && [ "$n" -gt 1000 ]; then
+        bpf="${bpf:+$bpf\n}max_sample_rate=$n"
+    fi
     local args=(--iface "$IF" --agent "$a" --n "$n" --label "$lb $v" --out "/root/res/$ph.jsonl")
     [ -n "$bpf" ] && args+=(--rfm-bpf "$bpf")
     if [ "${DRY:-0}" = 1 ]; then
@@ -512,6 +516,34 @@ for ph in $PHASES; do
             done
         done
         power dflt
+        quiet
+        ;;
+    sparse)
+        # sparse sampling as on fast links: the b3 cost cells at N of 10000 and 100000 and the b1
+        # accuracy cells at 10000
+        for load in "1 10000" "4 10000" "1 100000"; do
+            read -r T N <<< "$load"
+            cell=base
+            [ "$T" = 4 ] && cell=hi
+            gen_start "$T"
+            for r in $R3; do
+                for v in $(shuf_words none rfm rfm_sampled netobserv hsflowd); do
+                    m b3 "$cell N$N r$r" "$v" "$N" --warmup 10 --secs 30 --stat-secs 8
+                done
+            done
+        done
+        for sc in rx_gro tx_tso; do
+            quiet
+            case $sc in
+            rx_gro) iperf_rx 8 ;;
+            tx_tso) iperf_tx 8 ;;
+            esac
+            for r in $R3; do
+                for v in $(shuf_words rfm_acc netobserv hsflowd); do
+                    m b1 "$sc N10000 r$r" "$v" 10000 --counts --warmup 12 --secs 45 --stat-secs 5
+                done
+            done
+        done
         quiet
         ;;
     *) log "unknown phase $ph" ;;
