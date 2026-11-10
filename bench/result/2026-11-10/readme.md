@@ -42,3 +42,29 @@ C6 off, at 8.4 Mpps the settings change them by under 5%.
 the exact configuration), RSS and active flows at 1M offered flows, and its
 estimated and exact counts against the wire under GRO and TSO, match the
 night's within the round to round spread.
+
+## Job 20520 (`job20520/`)
+
+OAR job 20520, spirou-7 (DUT) and spirou-8 (generator) in KaVLAN 4, 09:05 to
+12:05, deployed on the same image, with `job20520/launch.sh`:
+
+```
+SRC=~/rfm-d2-src campaign.sh 20520 ~/rfm-d2 setup sparse pm
+```
+
+from the harness at `fc30367`, which adds `sparse` and gives rfm
+`max_sample_rate=N` above 1000, a rate rfm refuses otherwise. It ran from
+09:08 to 11:55 without a failed `measure.nu` call.
+
+`sparse` runs the B3 cells of rfm exact, rfm `sampled_only`, NetObserv,
+hsflowd and an empty baseline at N=10000 with 1 and 4 pktgen threads and at
+N=100000 with 1, three rounds, labelled `base N10000`, `hi N10000` and
+`base N100000` like the night's B3 cells, and the B1 GRO and TSO cells at
+N=10000. Past N=1000 every monitor's cost per packet stays flat: at 2.65 Mpps
+rfm exact 68.6 and 69.4 ns at N=10000 and 100000, rfm `sampled_only` 44.2 and
+45.0, NetObserv 59.9 and 60.1, hsflowd 95.9 and 98.2. At N=10000 rfm's exact
+counters read 1.0001 of the wire in both directions, and its estimates
+scatter by 0.7 to 3% a window from the fewer samples.
+
+`pm` repeats the slack run's pass. The two replicates agree within their
+round to round spread in every cell.
