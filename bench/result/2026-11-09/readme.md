@@ -32,6 +32,20 @@ added to this directory when it ends.
 - spirou-8, 10.48.0.8, `e8:eb:d3:fd:cf:0c`, PCI `0000:4b:00.0`: pktgen and
   iperf3 generator.
 
+## Tables
+
+`measure_tables.py` turns `measure.nu` JSON lines into the tables of this
+directory and of `../2026-11-10/`, one per cell with every variant's mean and
+spread over its rounds, busy cores over the same round's empty baseline, and
+the counts against the wire where the window kept them:
+
+```
+python3 -I measure_tables.py night/res/b3.jsonl
+```
+
+The deploy logs of the three jobs are `d1/kadeploy-20518.log`,
+`night/kadeploy-20519.log` and `../2026-11-10/job20520/kadeploy-20520.log`.
+
 ## T0, the tuning pass (`t0/`)
 
 60 byte frames over 1000 flows, one pktgen thread (2.62 Mpps) or four (8.9
@@ -89,7 +103,7 @@ The configurations picked for the night, the defaults of `campaign.sh`:
 on the frontend, from 14:37 to 15:44: one round, one trial, 3 to 4 s windows,
 so the numbers check the harness and are not results. `d1/campaign.log` is the
 driver's log with every remote command, `d1/res/` the per phase JSON lines and
-stderr as copied from the DUT, `d1/res/t2.jsonl` the two paced B2 points
+stderr as copied from the DUT (with `dry.jsonl` and `dryacc.jsonl`, the first smoke checks of `measure.nu` that afternoon), `d1/res/t2.jsonl` the two paced B2 points
 checked by hand with `d1/t2.sh` after the driver stopped in B9 (a progbench in
 situ stall), so B10 and B11 did not run in D1. What changed after it: B7 uses
 `gen.nu --queue-xmit` (pktgen's default `start_xmit` skips TC egress), the B2

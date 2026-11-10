@@ -1,0 +1,45 @@
+Warning[env_desc]: Unused field 'author'
+Deployment #D-08f274ff-3ab5-4069-8e52-4e11ce77872e started
+Grab the key file /home/yisun/.ssh/authorized_keys
+Grab the tarball file /home/yisun/g5k-image/nixos-x86_64-linux.tar.xz
+Grab the postinstall file server:///grid5000/postinstalls/g5k-postinstall.tgz
+Launching a deployment of nixos-x86_64-linux:yisun:x86_64:1 on spirou-[7-8].louvain.grid5000.fr
+Performing a Deploy[SetDeploymentMiniOSTrusted] step
+  switch_pxe
+  send_deployment_kernel
+  set_default_vlan
+  kexec
+  wait_reboot
+  startup_script
+  send_key_in_deploy_env
+  create_partition_table
+  format_deploy_part
+  mount_deploy_part
+  format_tmp_part
+  format_swap_part
+End of step Deploy[SetDeploymentMiniOSTrusted] after 87s
+Performing a Deploy[BroadcastEnvKascade] step
+  send_environment
+   * Broadcast time: 14s
+  manage_user_post_install
+  check_kernel_files
+  send_key
+  sync
+  install_bootloader
+End of step Deploy[BroadcastEnvKascade] after 33s
+Performing a Deploy[BootNewEnvKexec] step
+  switch_pxe
+  umount_deploy_part
+  mount_deploy_part
+  kexec
+  set_vlan
+  wait_reboot
+End of step Deploy[BootNewEnvKexec] after 41s
+End of deployment for spirou-[7-8].louvain.grid5000.fr after 161s
+End of deployment on cluster spirou after 161s
+Deployment #D-08f274ff-3ab5-4069-8e52-4e11ce77872e done
+
+The deployment is successful on nodes
+spirou-7.louvain.grid5000.fr
+spirou-8.louvain.grid5000.fr
+deploy exit=0 vlan=4
