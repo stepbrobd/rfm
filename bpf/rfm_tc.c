@@ -287,13 +287,28 @@ static __always_inline __u64 rfm_gap(__u32 n)
 	return ((__u64)bpf_get_prandom_u32() * (2 * (__u64)n - 1)) >> 32;
 }
 
+// rfm_gap_first draws the skip to the first sample of a slot and to the first one after a rate change
+// it is the smaller of two distinct draws from 0 to 2n - 1, a skip of j with weight 2n - 1 - j, the stationary distribution of the gaps
+// a uniform first skip samples the first skbs at about half the rate, this one samples every skb with probability 1/n
+static __always_inline __u64 rfm_gap_first(__u32 n)
+{
+	if (n <= 1)
+		return 0;
+	__u64 m = 2 * (__u64)n - 1;
+	__u64 a = ((__u64)bpf_get_prandom_u32() * (m + 1)) >> 32;
+	__u64 b = a + 1 + (((__u64)bpf_get_prandom_u32() * m) >> 32);
+	if (b > m)
+		b -= m + 1;
+	return a < b ? a : b;
+}
+
 // rfm_take redraws after a sample and when the rate gen changed
 static __always_inline bool rfm_take(struct rfm_slot_value *s, __u32 rate)
 {
 	__u32 gen = rfm_cfg.gen;
 	if (s->gen != gen) {
 		s->gen = gen;
-		s->skip = rfm_gap(rate);
+		s->skip = rfm_gap_first(rate);
 	}
 	if (s->skip) {
 		s->skip--;
