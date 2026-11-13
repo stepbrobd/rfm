@@ -31,13 +31,24 @@ with open(sys.argv[1], "w") as out:
                         p = o + 44
                         src = st << 24 | si
                     flen = 0
+                    proto = -1
                     for _ in range(nr):
                         rf, rl = struct.unpack_from(">II", d, p)
                         # a raw packet header record carries the length of the frame it was cut from
                         if rf == 1:
-                            flen = struct.unpack_from(">4I", d, p + 8)[1]
+                            hp, flen, _, hs = struct.unpack_from(">4I", d, p + 8)
+                            # the IP protocol of an Ethernet header, for the cells that split a load by cohort
+                            h = d[p + 24 : p + 24 + hs]
+                            if hp == 1 and len(h) >= 14:
+                                e = 12
+                                while len(h) >= e + 6 and h[e : e + 2] in (b"\x81\x00", b"\x88\xa8"):
+                                    e += 4
+                                if h[e : e + 2] == b"\x08\x00" and len(h) > e + 11:
+                                    proto = h[e + 11]
+                                elif h[e : e + 2] == b"\x86\xdd" and len(h) > e + 8:
+                                    proto = h[e + 8]
                         p += 8 + rl
-                    out.write(json.dumps({"t": t, "src": src, "rate": rate, "pool": pool, "drops": drops, "in": inp, "out": outp, "flen": flen}) + "\n")
+                    out.write(json.dumps({"t": t, "src": src, "rate": rate, "pool": pool, "drops": drops, "in": inp, "out": outp, "flen": flen, "proto": proto}) + "\n")
                 o = end
         except struct.error as e:
             out.write(json.dumps({"t": t, "error": str(e), "len": len(d)}) + "\n")

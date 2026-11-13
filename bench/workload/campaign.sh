@@ -9,7 +9,8 @@
 #   production port, test traffic over ens1f0np0 in the kavlan only.
 # phases, in this order by default:
 #   setup b5 b1 b3 b4 b7 b2 b12 b8 b9 b10 b11 more more2
-# and pm, the B3 cells with the dut at its default power settings and with turbo and C6 off, and
+# and pm, the B3 cells with the dut at its default power settings and with turbo and C6 off, pm6,
+# the base cells of all six monitors with them off, and
 # sparse, the B3 cells at N of 10000 and 100000 and the B1 ones at 10000, each named on its own
 # SRC names a directory on the frontend that holds workload/ and progbench/. DRY=1 runs every
 # phase with one round and windows of a few seconds, to check the commands before a night.
@@ -19,8 +20,15 @@ JOB=$1
 OUT=$2
 shift 2
 PHASES=${*:-"setup b5 b1 b3 b4 b7 b2 b12 b8 b9 b10 b11 more more2"}
-IF=ens1f0np0
-CTL_IF=ens1f1np1
+# the site and its nodes from the environment, spirou at louvain by default, with the test port,
+# the production port for control (empty on a single port node such as dahu, where control rides
+# the kavlan names), the channel count and the ring size (empty leaves the NIC's own)
+SITE=${SITE:-louvain}
+IF=${IF:-ens1f0np0}
+CTL_IF=${CTL_IF-ens1f1np1}
+CH=${CH-63}
+RING=${RING-8192}
+IMG=${IMG:-$HOME/g5k-image}
 SRC=${SRC:-$HOME/rfm-bench}
 W=/root/workload
 PB=/root/progbench
@@ -37,8 +45,13 @@ RFM_MEM=${RFM_MEM:-'stage_events=32\niface_slots=1\nring_buf_size=4096'}
 RFM_ENV=${RFM_ENV:-''}
 BIG='[agent.collector]\nmax_flows=2097152'
 
-R3="1 2 3"
-R2="1 2"
+# rounds, R3 and R2 of most phases, RB4 of the memory points, and the monitors of the accuracy
+# phases b1, b2 and b12, where pmacctd and softflowd can join, all taken from the environment
+R5=${R5:-"1 2 3 4 5"}
+R3=${R3:-"1 2 3"}
+R2=${R2:-"1 2"}
+RB4=${RB4:-1}
+ACC=${ACC:-"rfm_acc netobserv hsflowd"}
 TRIALS=7
 ROUNDS=3
 WIN=20s
@@ -47,8 +60,10 @@ QS='1 2 4 8 16 32 63'
 CHANGES=12
 STEP=40
 if [ "${DRY:-0}" = 1 ]; then
+    R5=1
     R3=1
     R2=1
+    RB4=1
     TRIALS=1
     ROUNDS=1
     WIN=3s
@@ -84,7 +99,7 @@ if ! grep -q 'deploy exit=0' ~/rfm-kavlan-"$JOB".log; then
     # one more deploy of the same image on both nodes
     log "deploy failed: $(tail -1 ~/rfm-kavlan-"$JOB".log), retrying"
     printf '%s\n' $HOSTS > "$OUT/nodes"
-    OAR_JOB_ID=$JOB kadeploy3 -a ~/g5k-image/nixos-x86_64-linux.yaml -f "$OUT/nodes" --vlan "$VLAN" >> "$LOG" 2>&1 || {
+    OAR_JOB_ID=$JOB kadeploy3 -a "$IMG"/nixos-x86_64-linux.yaml -f "$OUT/nodes" --vlan "$VLAN" >> "$LOG" 2>&1 || {
         log "deploy retry failed"
         exit 1
     }
@@ -92,24 +107,32 @@ fi
 DUTN=$(echo "$HOSTS" | awk '{print $1}' | cut -d. -f1)
 GENN=$(echo "$HOSTS" | awk '{print $2}' | cut -d. -f1)
 log "job $JOB vlan $VLAN dut $DUTN gen $GENN phases: $PHASES"
+log "rounds R5 '$R5' R3 '$R3' R2 '$R2' RB4 '$RB4' accuracy monitors '$ACC'"
 
 # the production address of a node for control, read through its kavlan name
-prod() { $SSH root@"$1"-kavlan-"$VLAN".louvain.grid5000.fr "ip -4 -j addr show $CTL_IF | jq -r '.[0].addr_info[0].local'" < /dev/null 2> /dev/null; }
+prod() { $SSH root@"$1"-kavlan-"$VLAN".$SITE.grid5000.fr "ip -4 -j addr show $CTL_IF | jq -r '.[0].addr_info[0].local'" < /dev/null 2> /dev/null; }
 DUTC=""
 GENC=""
 for _ in $(seq 1 20); do
+    [ -z "$CTL_IF" ] && break
     DUTC=$(prod "$DUTN")
     GENC=$(prod "$GENN")
     [ -n "$DUTC" ] && [ -n "$GENC" ] && break
     sleep 30
 done
-case "$DUTC $GENC" in
-172.16.*" "172.16.*) ;;
-*)
-    log "refusing: no production control address, dut '$DUTC' gen '$GENC'"
-    exit 1
-    ;;
-esac
+if [ -z "$CTL_IF" ]; then
+    # on a one port node the kavlan names carry control as well as the test traffic
+    DUTC=$DUTN-kavlan-$VLAN.$SITE.grid5000.fr
+    GENC=$GENN-kavlan-$VLAN.$SITE.grid5000.fr
+else
+    case "$DUTC $GENC" in
+    172.16.*" "172.16.*) ;;
+    *)
+        log "refusing: no production control address, dut '$DUTC' gen '$GENC'"
+        exit 1
+        ;;
+    esac
+fi
 dut() { log "dut: $*"; timeout 3600 $SSH root@"$DUTC" "$@" < /dev/null >> "$LOG" 2>&1; }
 gen() { log "gen: $*"; timeout 3600 $SSH root@"$GENC" "$@" < /dev/null >> "$LOG" 2>&1; }
 dutq() { $SSH root@"$DUTC" "$@" < /dev/null 2> /dev/null; }
@@ -131,11 +154,11 @@ for a in "$DUTIP" "$GENIP"; do
         ;;
     esac
 done
-[ "$(getent hosts "$DUTN-kavlan-$VLAN.louvain.grid5000.fr" | awk '{print $1}')" = "$DUTIP" ] || {
+[ "$(getent hosts "$DUTN-kavlan-$VLAN.$SITE.grid5000.fr" | awk '{print $1}')" = "$DUTIP" ] || {
     log "refusing: $DUTIP is not $DUTN's kavlan address"
     exit 1
 }
-[ "$(getent hosts "$GENN-kavlan-$VLAN.louvain.grid5000.fr" | awk '{print $1}')" = "$GENIP" ] || {
+[ "$(getent hosts "$GENN-kavlan-$VLAN.$SITE.grid5000.fr" | awk '{print $1}')" = "$GENIP" ] || {
     log "refusing: $GENIP is not $GENN's kavlan address"
     exit 1
 }
@@ -151,14 +174,16 @@ for c in "$DUTC" "$GENC"; do
     fi
 done
 
+# pktgen runs until stopped with count 0, since 4e9 packets a thread ran out after 25 minutes at
+# 2.65 Mpps, inside the fifth round of a cell with seven monitors
 gen_start() { # threads [extra gen.nu flags]
-    gen "echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu $W/gen.nu'; setsid nohup nu $W/gen.nu --iface $IF --dst $DUTIP --dstmac $DUTMAC --count 4000000000 --threads $1 ${2:-} > /tmp/gen.log 2>&1 < /dev/null &"
+    gen "echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu $W/gen.nu'; setsid nohup nu $W/gen.nu --iface $IF --dst $DUTIP --dstmac $DUTMAC --count 0 --threads $1 ${2:-} > /tmp/gen.log 2>&1 < /dev/null &"
     sleep 15
     log "dut rx pps $(dutq "a=\$(cat /sys/class/net/$IF/statistics/rx_packets); sleep 3; b=\$(cat /sys/class/net/$IF/statistics/rx_packets); echo \$(( (b-a)/3 ))")"
 }
 gen_stop() { gen "echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu $W/gen.nu'; true"; }
 dutgen_start() { # threads, the dut sends to the generator through tc egress
-    dut "echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu $W/gen.nu'; setsid nohup nu $W/gen.nu --iface $IF --dst $GENIP --dstmac $GENMAC --count 4000000000 --threads $1 --queue-xmit > /tmp/gen.log 2>&1 < /dev/null &"
+    dut "echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu $W/gen.nu'; setsid nohup nu $W/gen.nu --iface $IF --dst $GENIP --dstmac $GENMAC --count 0 --threads $1 --queue-xmit > /tmp/gen.log 2>&1 < /dev/null &"
     sleep 15
     log "dut tx pps $(dutq "a=\$(cat /sys/class/net/$IF/statistics/tx_packets); sleep 3; b=\$(cat /sys/class/net/$IF/statistics/tx_packets); echo \$(( (b-a)/3 ))")"
 }
@@ -180,7 +205,7 @@ quiet() {
     gen_stop
     dutgen_stop
     iperf_stop
-    dut "pkill -KILL -f '^$PB/progbench '; sysctl -qw kernel.bpf_stats_enabled=0; ethtool -K $IF gro on tso on gso on; ethtool -L $IF combined 63; true"
+    dut "pkill -KILL -f '^$PB/progbench '; sysctl -qw kernel.bpf_stats_enabled=0; ethtool -K $IF gro on tso on gso on; ${CH:+ethtool -L $IF combined $CH;} true"
 }
 fetch() { $SCP root@"$DUTC":'/root/res/*' "$OUT/res/" >> "$LOG" 2>&1; }
 # the dut's power settings: dflt is the image's (turbo on, every C-state enabled), fixed turns turbo
@@ -188,7 +213,11 @@ fetch() { $SCP root@"$DUTC":'/root/res/*' "$OUT/res/" >> "$LOG" 2>&1; }
 # It fails when the dut reads back other settings, as one without intel_pstate or a C6 state would
 power() { # dflt or fixed
     local turbo=0 deep=0 got
-    [ "$1" = fixed ] && turbo=1 deep=1
+    case $1 in
+    fixed) turbo=1 deep=1 ;;
+    noturbo) turbo=1 ;;
+    noc6) deep=1 ;;
+    esac
     dut "echo $turbo > /sys/devices/system/cpu/intel_pstate/no_turbo; for s in /sys/devices/system/cpu/cpu*/cpuidle/state*; do case \$(cat \$s/name) in C6* | C7* | C8* | C9* | C10*) echo $deep > \$s/disable ;; *) echo 0 > \$s/disable ;; esac; done; echo no_turbo \$(cat /sys/devices/system/cpu/intel_pstate/no_turbo) disabled \$(cat /sys/devices/system/cpu/cpu*/cpuidle/state*/disable | sort | uniq -c | tr -s ' \n' ' ')"
     got=$(dutq "cat /sys/devices/system/cpu/intel_pstate/no_turbo; for s in /sys/devices/system/cpu/cpu*/cpuidle/state*; do case \$(cat \$s/name) in C6* | C7* | C8* | C9* | C10*) cat \$s/disable ;; esac; done | sort -u" | tr '\n' ' ')
     if [ "$got" != "$turbo $deep " ]; then
@@ -196,6 +225,11 @@ power() { # dflt or fixed
         return 1
     fi
     sleep 5
+}
+
+# microseconds every idle state has been resident, summed over the dut's CPUs, and the time read
+cstates() {
+    dutq "date +%s.%N; for s in /sys/devices/system/cpu/cpu0/cpuidle/state*; do echo \$(cat \$s/name)=\$(cat /sys/devices/system/cpu/cpu*/cpuidle/\${s##*/}/time | awk '{t+=\$1} END{print t}'); done" | tr '\n' ' '
 }
 
 # one measure.nu call; the variant names an rfm configuration or a monitor
@@ -243,7 +277,7 @@ for ph in $PHASES; do
             $SSH root@"$c" "rm -rf $W $PB; mkdir -p /root/res" < /dev/null >> "$LOG" 2>&1
             $SCP -r "$SRC/workload" root@"$c":$W >> "$LOG" 2>&1
             $SCP -r "$SRC/progbench" root@"$c":$PB >> "$LOG" 2>&1
-            $SSH root@"$c" "ethtool -G $IF rx 8192 tx 8192; for g in /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor; do echo performance > \$g; done; sysctl -qw kernel.bpf_stats_enabled=0; pkill -x iperf3; true" < /dev/null >> "$LOG" 2>&1
+            $SSH root@"$c" "${RING:+ethtool -G $IF rx $RING tx $RING;} for g in /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor; do echo performance > \$g; done; sysctl -qw kernel.bpf_stats_enabled=0; pkill -x iperf3; true" < /dev/null >> "$LOG" 2>&1
             $SSH root@"$c" "hostname; uname -a; cat /proc/cmdline; lscpu; free -g; ethtool -i $IF; ethtool -k $IF; ethtool -g $IF; ethtool -l $IF; ethtool -c $IF; cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor /sys/devices/system/cpu/intel_pstate/no_turbo; cat /sys/devices/system/cpu/cpu0/cpuidle/state*/name /sys/devices/system/cpu/cpu0/cpuidle/state*/disable; systemctl is-active irqbalance; sysctl net.core net.ipv4.conf.$IF.rp_filter net.ipv4.icmp_msgs_per_sec; ip route; rfm version; iperf3 --version; nu --version; pmacctd -V 2>&1 | head -2; softflowd -v 2>&1 | head -2; for i in \$(grep mlx5_comp /proc/interrupts | cut -d: -f1); do echo irq \$i \$(cat /proc/irq/\$i/smp_affinity_list); done" < /dev/null > "$OUT/inventory-$c.txt" 2>&1
         done
         quiet
@@ -265,7 +299,7 @@ for ph in $PHASES; do
             tx_notso) dut "ethtool -K $IF tso off gso off"; iperf_tx 8 ;;
             esac
             for r in $R3; do
-                for v in $(shuf_words rfm_acc netobserv hsflowd); do
+                for v in $(shuf_words $ACC); do
                     m b1 "$sc r$r" "$v" 100 --counts --warmup 12 --secs 45 --stat-secs 5
                 done
             done
@@ -307,12 +341,16 @@ for ph in $PHASES; do
             esac
             big=()
             [ "$F" -gt 60000 ] && big=(--rfm-extra "$BIG")
-            for v in $(shuf_words rfm rfm_mem rfm_default netobserv netobserv_sized hsflowd); do
-                case $v in
-                netobserv_sized) m b4 "flows$F" "$v" 100 --neto-cache "$F" --tables --warmup 15 --secs 20 --stat-secs 0 ;;
-                rfm*) m b4 "flows$F" "$v" 100 --tables --warmup 15 --secs 20 --stat-secs 0 "${big[@]}" ;;
-                *) m b4 "flows$F" "$v" 100 --tables --warmup 15 --secs 20 --stat-secs 0 ;;
-                esac
+            for r in $RB4; do
+                lb="flows$F"
+                [ "$RB4" = 1 ] || lb="flows$F r$r"
+                for v in $(shuf_words rfm rfm_mem rfm_default netobserv netobserv_sized hsflowd); do
+                    case $v in
+                    netobserv_sized) m b4 "$lb" "$v" 100 --neto-cache "$F" --tables --warmup 15 --secs 20 --stat-secs 0 ;;
+                    rfm*) m b4 "$lb" "$v" 100 --tables --warmup 15 --secs 20 --stat-secs 0 "${big[@]}" ;;
+                    *) m b4 "$lb" "$v" 100 --tables --warmup 15 --secs 20 --stat-secs 0 ;;
+                    esac
+                done
             done
             if [ "$F" = 1000000 ]; then
                 m b4 "flows$F held" rfm_n1 1 --rfm-extra "$BIG" --warmup 15 --secs 30 --stat-secs 0
@@ -357,7 +395,7 @@ for ph in $PHASES; do
             quiet
             iperf_rx "$P" "$X"
             for r in $R2; do
-                for v in $(shuf_words rfm_acc netobserv hsflowd); do
+                for v in $(shuf_words $ACC); do
                     m b2 "rx P$P ${X:-max} r$r" "$v" 100 --counts --warmup 12 --secs 30 --stat-secs 5
                 done
             done
@@ -368,11 +406,48 @@ for ph in $PHASES; do
             quiet
             iperf_tx 8 "$X"
             for r in $R2; do
-                for v in $(shuf_words rfm_acc netobserv hsflowd); do
+                for v in $(shuf_words $ACC); do
                     m b2 "tx P8 $X r$r" "$v" 100 --counts --warmup 12 --secs 30 --stat-secs 5
                 done
             done
         done
+        quiet
+        ;;
+    b13)
+        # two cohorts on one link, 8 bulk TCP connections that GRO merges and a paced flood of small
+        # UDP packets that it leaves alone, the flood swept so the true packet share of each moves
+        # the port counts the total and the stack's UDP counters the flood per packet (nic.udp_in),
+        # and --counts splits what each monitor reports by protocol
+        quiet
+        iperf_rx 8
+        for R in ${B13_RATES:-100 300 1000 3000}; do
+            gen_start 1 "--flows 20000 --rate $R"
+            for r in $R3; do
+                for v in $(shuf_words $ACC); do
+                    m b13 "cohort u$R r$r" "$v" 100 --counts --warmup 12 --secs 45 --stat-secs 5
+                done
+            done
+        done
+        quiet
+        ;;
+    pm3)
+        # the pm cells with turbo and the deep idle states switched one at a time, and the idle
+        # time of every state summed over the CPUs logged around each window
+        for load in "1 100" "1 10"; do
+            read -r T N <<< "$load"
+            gen_start "$T"
+            for r in $R3; do
+                for st in $(shuf_words dflt fixed noturbo noc6); do
+                    power "$st" || break 3
+                    for v in $(shuf_words none rfm netobserv hsflowd); do
+                        log "cstate pm3 $st t$T N$N r$r $v before: $(cstates)"
+                        m pm3 "pm3 $st t$T N$N r$r" "$v" "$N" --warmup 10 --secs 30 --stat-secs 8
+                        log "cstate pm3 $st t$T N$N r$r $v after: $(cstates)"
+                    done
+                done
+            done
+        done
+        power dflt
         quiet
         ;;
     b12)
@@ -380,7 +455,7 @@ for ph in $PHASES; do
         gen_start 1 "--flows 20000 --rate 1000"
         iperf_rx 8
         for r in $R3; do
-            for v in $(shuf_words rfm_acc netobserv hsflowd); do
+            for v in $(shuf_words $ACC); do
                 m b12 "mixed r$r" "$v" 100 --counts --warmup 12 --secs 45 --stat-secs 5
             done
         done
@@ -508,7 +583,7 @@ for ph in $PHASES; do
             for r in $R3; do
                 for st in $(shuf_words dflt fixed); do
                     power "$st" || break 3
-                    for v in $(shuf_words none rfm rfm_sampled netobserv); do
+                    for v in $(shuf_words none rfm rfm_sampled netobserv hsflowd); do
                         [ "$N" = 1 ] && [ "$v" = rfm ] && v=rfm_n1
                         m pm "pm $st t$T N$N r$r" "$v" "$N" --warmup 10 --secs 30 --stat-secs 8
                     done
@@ -516,6 +591,46 @@ for ph in $PHASES; do
             done
         done
         power dflt
+        quiet
+        ;;
+    pm6)
+        # the b3 base cells of all six monitors with turbo and C6 off, so the busy cores of the
+        # libpcap monitors and hsflowd compare with the fixed cells of pm
+        # N of 1000 comes last, a walltime that cuts the phase short then costs the cell pm never had
+        power fixed || continue
+        for N in 100 10 1 1000; do
+            gen_start 1
+            for r in $R5; do
+                for v in $(shuf_words none rfm rfm_sampled netobserv hsflowd pmacctd softflowd); do
+                    [ "$N" = 1 ] && [ "$v" = rfm ] && v=rfm_n1
+                    m pm6 "pm fixed t1 N$N r$r" "$v" "$N" --warmup 10 --secs 30 --stat-secs 8
+                done
+            done
+        done
+        power dflt
+        quiet
+        ;;
+    b4cov)
+        # flow coverage as the distinct flows netobserv writes to its flow log over the window, at its
+        # default table and with the table sized to the offered flows, and the flows rfm holds
+        for F in 1000 5000 20000 100000 1000000; do
+            case $F in
+            100000) gen_start 1 "--flows 1000 --srcips 100" ;;
+            1000000) gen_start 1 "--flows 1000 --srcips 1000" ;;
+            *) gen_start 1 "--flows $F" ;;
+            esac
+            big=()
+            [ "$F" -gt 60000 ] && big=(--rfm-extra "$BIG")
+            for r in $R3; do
+                for v in $(shuf_words rfm netobserv netobserv_sized); do
+                    case $v in
+                    netobserv_sized) m b4cov "flows$F r$r" "$v" 100 --neto-cache "$F" --flows-seen --tables --warmup 15 --secs 30 --stat-secs 0 ;;
+                    netobserv) m b4cov "flows$F r$r" "$v" 100 --flows-seen --tables --warmup 15 --secs 30 --stat-secs 0 ;;
+                    *) m b4cov "flows$F r$r" "$v" 100 --tables --warmup 15 --secs 30 --stat-secs 0 "${big[@]}" ;;
+                    esac
+                done
+            done
+        done
         quiet
         ;;
     sparse)

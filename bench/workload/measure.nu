@@ -17,7 +17,10 @@
 #
 # Accuracy (--counts) needs a short export interval, so netobserv runs with a
 # 1 s active timeout there and its default otherwise. hsflowd's sFlow goes to
-# sflow_decode.py. The libpcap tools have no counts here.
+# sflow_decode.py. pmacctd adds a print plugin that appends its renormalized
+# flows every second, and softflowd answers softflowctl statistics, whose
+# "Packets processed" counts every packet libpcap handed it before sampling.
+# Both also give libpcap's received and dropped totals.
 
 const LIB = path self | path dirname | path join "lib.nu"
 use $LIB *
@@ -82,17 +85,34 @@ def nic [iface: string] {
         tx_packets
         rx_bytes
         tx_bytes
+        # i40e names its port counters with a prefix and splits packets by cast
+        port.rx_bytes
+        port.tx_bytes
+        port.rx_unicast
+        port.rx_multicast
+        port.rx_broadcast
+        port.tx_unicast
+        port.tx_multicast
+        port.tx_broadcast
+        port.rx_dropped
     ]
     let r = ^ethtool -S $iface | complete
     if $r.exit_code != 0 {
         error make {msg: $"ethtool -S ($iface) failed: ($r.stderr | str trim)"}
     }
-    let kv = $r.stdout | lines | parse --regex '^\s+(?<k>[a-z0-9_]+):\s+(?<v>\d+)$'
+    let kv = $r.stdout | lines | parse --regex '^\s+(?<k>[a-z0-9_.]+):\s+(?<v>\d+)$'
     let sel = $kv | where {|x| $x.k in $keep }
     let rec = $sel | reduce --fold {} {|x, acc| $acc | upsert $x.k ($x.v | into int) }
     let sysrx = open --raw $"/sys/class/net/($iface)/statistics/rx_packets" | str trim | into int
     let systx = open --raw $"/sys/class/net/($iface)/statistics/tx_packets" | str trim | into int
-    $rec | upsert dev_rx_packets $sysrx | upsert dev_tx_packets $systx
+    # the UDP datagrams the stack received and sent, counted per packet after GRO, which leaves
+    # pktgen's UDP alone, so they are the wire count of an unmerged UDP cohort that no monitor produces
+    let snmp = open --raw /proc/net/snmp | lines | where {|l| $l | str starts-with "Udp:" }
+    let uk = $snmp | get 0 | split row " " | skip 1
+    let uv = $snmp | get 1 | split row " " | skip 1 | each {|x| $x | into int }
+    let udp = $uk | zip $uv | reduce --fold {} {|x, acc| $acc | upsert $x.0 $x.1 }
+    let udp_in = ($udp | get -o InDatagrams | default 0) + ($udp | get -o NoPorts | default 0) + ($udp | get -o InErrors | default 0)
+    $rec | upsert dev_rx_packets $sysrx | upsert dev_tx_packets $systx | upsert udp_in $udp_in | upsert udp_out ($udp | get -o OutDatagrams | default 0)
 }
 
 def delta [a: record, b: record] {
@@ -123,9 +143,12 @@ def rfm-counts [] {
     let keyed = $rows | each {|r|
         let d = $r.labels | parse --regex 'direction="(?<d>\w+)"' | get d.0? | default ""
         let f = $r.labels | parse --regex 'family="(?<f>\w+)"' | get f.0? | default ""
+        let p = $r.labels | parse --regex 'proto="(?<p>\w+)"' | get p.0? | default ""
         let k = if ($d | is-empty) { $"($r.name).($f)" } else { $"($r.name).($d)" }
-        {k: $k, v: ($r.v | into float)}
-    }
+        let v = $r.v | into float
+        # the flow series again per protocol, for the cells that split a mixed load into cohorts
+        if ($d | is-empty) or ($p | is-empty) { [{k: $k, v: $v}] } else { [{k: $k, v: $v}, {k: $"($k).($p)", v: $v}] }
+    } | flatten
     $keyed | group-by k | items {|k, xs| {k: $k, v: ($xs | get v | math sum)} } | reduce --fold {} {|x, acc| $acc | upsert $x.k $x.v }
 }
 
@@ -145,13 +168,24 @@ def neto-counts [file: string, t0: float, t1: float] {
         let s = $r.Sampling? | default 1
         let s1 = if $s == 0 { 1 } else { $s }
         let dirs = $r.IfDirections? | default [($r.FlowDirection? | default (-1))] | uniq
-        $dirs | each {|d| {d: $d, p: (($r.Packets? | default 0) * $s1), b: (($r.Bytes? | default 0) * $s1), s: $s1} }
+        $dirs | each {|d| {d: $d, proto: ($r.Proto? | default (-1)), p: (($r.Packets? | default 0) * $s1), b: (($r.Bytes? | default 0) * $s1), s: $s1} }
     } | flatten
+    let byp = $flat | group-by {|x| $"d($x.d)_p($x.proto)" } | items {|k, xs| {k: $k, packets: ($xs | get p | math sum), bytes: ($xs | get b | math sum)} }
     let by = $flat | group-by d | items {|d, xs| {d: $d, packets: ($xs | get p | math sum), bytes: ($xs | get b | math sum), rates: ($xs | get s | uniq)} }
     {
         records: ($inwin | length)
         by_direction: $by
+        by_proto: $byp
     }
+}
+
+# distinct 5-tuples among the flow log records that end inside the window, counted by jq and sort since a
+# window at a million flows writes more lines than nu parses in minutes
+def neto-flows [file: string, t0: float, t1: float] {
+    if not ($file | path exists) { return (-1) }
+    let sel = "select((.TimeFlowEndMs // 0) / 1000 > " + ($t0 | into string) + " and (.TimeFlowEndMs // 0) / 1000 <= " + ($t1 | into string) + ") | [.SrcAddr, .DstAddr, .SrcPort, .DstPort, .Proto] | @tsv"
+    let r = ^bash -c ("grep '^{' " + $file + " | jq -r '" + $sel + "' | sort -u | wc -l") | complete
+    $r.stdout | str trim | into int
 }
 
 def hsf-counts [file: string, t0: float, t1: float] {
@@ -160,7 +194,78 @@ def hsf-counts [file: string, t0: float, t1: float] {
     let errs = $recs | where {|r| $r.error? != null } | length
     let inwin = $recs | where {|r| $r.error? == null and $r.t > $t0 and $r.t <= $t1 }
     let by = $inwin | group-by {|r| $"in($r.in)_out($r.out)" } | items {|k, xs| {k: $k, samples: ($xs | length), packets: ($xs | get rate | math sum), bytes: ($xs | each {|r| $r.rate * $r.flen } | math sum), rates: ($xs | get rate | uniq)} }
-    {errors: $errs, by_port: $by}
+    let byp = $inwin | group-by {|r| $"in($r.in)_out($r.out)_p($r.proto? | default (-1))" } | items {|k, xs| {k: $k, samples: ($xs | length), packets: ($xs | get rate | math sum), bytes: ($xs | each {|r| $r.rate * $r.flen } | math sum)} }
+    {errors: $errs, by_port: $by, by_proto: $byp}
+}
+
+# size of a file in bytes, 0 when it is missing
+def fsize [file: string] {
+    if ($file | path exists) {
+        ls $file | get 0.size | into int
+    } else {
+        0
+    }
+}
+
+# pmacctd's print plugin appends the flows of each second, so the bytes written between two offsets
+# hold the window's counts within a second at each end
+# the log holds one pcap stats line per SIGUSR1
+def pmd-counts [
+    file: string
+    o0: int
+    o1: int
+    log: string
+] {
+    let recs = if $o1 > $o0 {
+        ^bash -c $"tail -c +($o0 + 1) ($file) | head -c ($o1 - $o0)" | lines | each {|l| try { $l | from json } catch { null } } | compact
+    } else { [] }
+    let st = open --raw $log | lines | parse --regex 'received_packets=(?<r>\d+) dropped_packets=(?<d>\d+)'
+    let pcap = if ($st | length) >= 2 {
+        let a = $st | first
+        let b = $st | last
+        {
+            received: (($b.r | into int) - ($a.r | into int))
+            dropped: (($b.d | into int) - ($a.d | into int))
+        }
+    } else { {} }
+    {
+        records: ($recs | length)
+        packets: ($recs | each {|r| $r.packets? | default 0 } | math sum)
+        bytes: ($recs | each {|r| $r.bytes? | default 0 } | math sum)
+        renormalized: true
+        # per source address, which separates the two directions of a window
+        by_src: (if ($recs | is-empty) { [] } else {
+            $recs | group-by {|r| $r.ip_src? | default "" } | items {|k, xs| {src: $k, packets: ($xs | each {|r| $r.packets? | default 0 } | math sum), bytes: ($xs | each {|r| $r.bytes? | default 0 } | math sum)} }
+        })
+        pcap: $pcap
+    }
+}
+
+# a monitor's own counters at one end of the main window, where it has any to read at that moment
+def own-mark [agent: string, pid: int] {
+    match $agent {
+        "rfm" => (rfm-counts)
+        "softflowd" => (sfd-stats)
+        "pmacctd" => {
+            ^kill -USR1 $pid | complete | ignore
+            {
+                o: (fsize /tmp/measure-pmd.jsonl)
+            }
+        }
+        _ => { {} }
+    }
+}
+
+# softflowd's accumulated totals, read over its control socket
+def sfd-stats [] {
+    let r = ^softflowctl -c /tmp/measure-sfd.ctl statistics | complete
+    if $r.exit_code != 0 {
+        error make {msg: $"softflowctl statistics failed: ($r.stderr | str trim)"}
+    }
+    $r.stdout
+    | lines
+    | parse --regex '(?<k>Packets processed|Packets non-sampled|Packets received by libpcap|Packets dropped by libpcap|Packets dropped by interface): (?<v>\d+)'
+    | reduce --fold {} {|x, acc| $acc | upsert ($x.k | str replace --all --regex '[ -]' '_') ($x.v | into int) }
 }
 
 def main [
@@ -174,6 +279,7 @@ def main [
   --rfm-extra: string = ""      # extra tables appended to rfm's config
   --neto-cache: int = 0         # netobserv CACHE_MAX_FLOWS, 0 keeps its default
   --counts                      # collect the monitor's own counts over the main window
+  --flows-seen                  # netobserv only: count the distinct flows its flow log holds for the main window, at its own export timing
   --tables                      # dump the monitor's flow tables at the end of the main window
   --label: string = ""
   --out: string = "/tmp/measure.jsonl"
@@ -211,9 +317,9 @@ def main [
             $p
         }
         "netobserv" => {
-            let out = if $counts { "/tmp/measure-neto.jsonl" } else { "/dev/null" }
+            let out = if $counts or $flows_seen { "/tmp/measure-neto.jsonl" } else { "/dev/null" }
             ^rm -f /tmp/measure-neto.jsonl
-            let fmt = if $counts { ',"stdout":{"format":"json"}' } else { "" }
+            let fmt = if $counts or $flows_seen { ',"stdout":{"format":"json"}' } else { "" }
             let flp = $'{"pipeline":[{"name":"writer","follows":"preset-ingester"}],"parameters":[{"name":"writer","write":{"type":"stdout"($fmt)}}]}'
             let cache = if $neto_cache > 0 { $"export CACHE_MAX_FLOWS=($neto_cache)\n" } else { "" }
             let timeout = if $counts { "export CACHE_ACTIVE_TIMEOUT=1s\n" } else { "" }
@@ -232,11 +338,15 @@ def main [
             spawn $"hsflowd -d -f /tmp/measure-hsflowd.conf -l ($mod)" /tmp/measure-hsf.log
         }
         "pmacctd" => {
-            $"pcap_interface: ($iface)\naggregate: src_host,dst_host,src_port,dst_port,proto\nplugins: nfprobe\nnfprobe_receiver: 127.0.0.1:9995\nnfprobe_version: 10\nsampling_rate: ($n)\n" | save --raw --force /tmp/measure-pmacctd.conf
+            ^rm -f /tmp/measure-pmd.jsonl
+            let plugins = if $counts { "nfprobe, print" } else { "nfprobe" }
+            let print = if $counts { "pmacctd_renormalize: true\nprint_refresh_time: 1\nprint_output: json\nprint_output_file: /tmp/measure-pmd.jsonl\nprint_output_file_append: true\n" } else { "" }
+            $"pcap_interface: ($iface)\naggregate: src_host,dst_host,src_port,dst_port,proto\nplugins: ($plugins)\nnfprobe_receiver: 127.0.0.1:9995\nnfprobe_version: 10\nsampling_rate: ($n)\n($print)" | save --raw --force /tmp/measure-pmacctd.conf
             spawn "pmacctd -f /tmp/measure-pmacctd.conf" /tmp/measure-pmd.log
         }
         "softflowd" => {
-            spawn $"softflowd -i ($iface) -n 127.0.0.1:9995 -v 10 -s ($n) -d" /tmp/measure-sfd.log
+            let ctl = if $counts { " -c /tmp/measure-sfd.ctl -p /tmp/measure-sfd.pid" } else { "" }
+            spawn $"softflowd -i ($iface) -n 127.0.0.1:9995 -v 10 -s ($n) -d($ctl)" /tmp/measure-sfd.log
         }
     }
     sleep ($warmup * 1sec)
@@ -257,7 +367,7 @@ def main [
         0
     }
     # the same order at both ends, so the scrape and the port read share one skew
-    let c0 = if $agent == "rfm" and $counts { rfm-counts } else { {} }
+    let c0 = if $counts { own-mark $agent $pid } else { {} }
     let n0 = nic $iface
     let b0 = cpu-busy
     let p0 = if $pid > 0 { proc-cpu $pid } else { 0 }
@@ -266,7 +376,7 @@ def main [
     let t1 = (date now | into int) / 1e9
     let b1 = cpu-busy
     let p1 = if $pid > 0 { proc-cpu $pid } else { 0 }
-    let c1 = if $agent == "rfm" and $counts { rfm-counts } else { {} }
+    let c1 = if $counts { own-mark $agent $pid } else { {} }
     let n1 = nic $iface
     let d1 = if $agent == "rfm" {
         flow-drops | get drops | math sum
@@ -314,6 +424,8 @@ def main [
 
     # let the exporters flush the window's last records, then stop
     if $counts { sleep 3sec }
+    # netobserv flushes its map every 5 s by default, so the window's last flows are written by then
+    if $flows_seen { sleep 7sec }
     kill-all
     bpf-stats false
 
@@ -322,9 +434,17 @@ def main [
             "rfm" => (delta $c0 $c1)
             "netobserv" => (neto-counts /tmp/measure-neto.jsonl $t0 $t1)
             "hsflowd" => (hsf-counts /tmp/measure-hsf.jsonl $t0 $t1)
+            "pmacctd" => ((pmd-counts
+                /tmp/measure-pmd.jsonl
+                $c0.o
+                $c1.o
+                /tmp/measure-pmd.log
+            ))
+            "softflowd" => (delta $c0 $c1)
             _ => { }
         }
     }
+    let seen = if $flows_seen and $agent == "netobserv" { neto-flows /tmp/measure-neto.jsonl $t0 $t1 } else { -1 }
     let row = {
         label: $label
         agent: $agent
@@ -342,6 +462,7 @@ def main [
         nic: (delta $n0 $n1)
         prog: $st
         counts: $own
+        flows_seen: $seen
         rfm_bpf: $rfm_bpf
         rfm_extra: $rfm_extra
         neto_cache: $neto_cache
