@@ -22,6 +22,10 @@
 // RFM_LAZY     1 egress parses the GSO header only when gso_segs is 0
 // RFM_XDP      1 ingress runs as an XDP program instead of TCX ingress, the
 //                exact profile with the array counter, egress stays on TCX
+// RFM_UNIT     1 counts one packet and skb->len per program run, the unit of
+//                the surveyed monitors, in place of the wire packets and bytes
+//                of the skb, so the difference to RFM_UNIT 0 is the cost of the
+//                unit alone
 #include "rfm_common.h"
 #include <bpf/bpf_endian.h>
 #include <bpf/bpf_helpers.h>
@@ -46,6 +50,9 @@
 #endif
 #ifndef RFM_XDP
 #define RFM_XDP 0
+#endif
+#ifndef RFM_UNIT
+#define RFM_UNIT 0
 #endif
 
 #if RFM_XDP && RFM_CTR != 1
@@ -435,6 +442,7 @@ static __always_inline int rfm_tc(struct __sk_buff *skb, __u8 dir)
 
 	__u32 len = skb->len;
 	__u32 segs = 1;
+#if !RFM_UNIT
 	if (skb->gso_size && iface_proto) {
 		segs = skb->gso_segs;
 		__u32 hdr_len = 0;
@@ -458,6 +466,7 @@ static __always_inline int rfm_tc(struct __sk_buff *skb, __u8 dir)
 			len += (segs - 1) * hdr_len;
 	}
 
+#endif
 	__u32 l2_len = l3_off;
 	if (skb->vlan_present) {
 		l2_len += sizeof(struct rfm_vlan_hdr);

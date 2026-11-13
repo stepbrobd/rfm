@@ -46,6 +46,8 @@ def main [--out: string = "result-progbench"] {
         [sampled_thresh, v3, [RFM_SAMPLED=1 RFM_DRAW=1]]
         [sampled_skip, v3, [RFM_SAMPLED=1 RFM_DRAW=2]]
         [sampled_thresh_lazy_nowake, v3, [RFM_SAMPLED=1 RFM_DRAW=1 RFM_LAZY=1 RFM_WAKE=1]]
+        [skb_unit_array, v3, [RFM_DRAW=2 RFM_CTR=1 RFM_LAZY=1 RFM_WAKE=1 RFM_UNIT=1]]
+        [sampled_skip_skb, v3, [RFM_SAMPLED=1 RFM_DRAW=2 RFM_UNIT=1]]
         [xdp_empty, v3, [RFM_XDP=1 RFM_EMPTY=1 RFM_CTR=1]]
         [xdp_skip_array, v3, [RFM_XDP=1 RFM_CTR=1 RFM_DRAW=2 RFM_LAZY=1 RFM_WAKE=1]]
     ]
