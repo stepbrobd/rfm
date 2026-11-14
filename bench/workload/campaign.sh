@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # rfm campaign driver for two spirou nodes in a routed kavlan, run detached on the louvain
 # frontend. It only loops over the nu harness calls (measure.nu, gen.nu, progbench*.nu, realnic.nu,
-# rss.nu, dpdk.nu, percpu.nu) and the iperf3 generator, which has no harness, logs every remote
-# command, and copies the json lines to <outdir> after each phase.
+# rss.nu, dpdk.nu, percpu.nu, kprofile.nu) and the iperf3 generator, which has no harness, logs
+# every remote command, and copies the json lines to <outdir> after each phase.
 #
 # usage: campaign.sh <job id> <outdir> [phase ...]
 #   the first host of the job is the dut, the second the generator. Control goes over the
@@ -12,12 +12,13 @@
 # and pm, the B3 cells with the dut at its default power settings and with turbo and C6 off, pm6,
 # the base cells of all six monitors with them off, and
 # sparse, the B3 cells at N of 10000 and 100000 and the B1 ones at 10000, each named on its own
-# and the controls b1c, the B1 receive cells with systemd's accounting programs on and off the socket
-# path and with 8 to 64 connections, b9s, the B9 bulk windows with the run time statistics on and
-# off, b13s, the top cohort mix with netobserv's table enlarged, b13p, the cohort mixes past it with
-# more flood threads, pm3s, the pm3 cells with rfm's stage on and off, b8s, the flood windows of the
-# XDP comparison with the statistics on and off, ramp, the adaptive against static half of b11 alone,
-# and env, a record of the nodes for the archive
+# and the controls b1c, the B1 receive cells with systemd's accounting programs on and off the
+# socket path and with 8 to 64 connections, b9s, the B9 bulk windows with the run time statistics on
+# and off, b13s, the top cohort mix with netobserv's table enlarged, b13p, the cohort mixes past it
+# with more flood threads, pm3s, the pm3 cells with rfm's stage on and off, b8s, the flood windows
+# of the XDP comparison with the statistics on and off, b9p, a kernel profile of its bulk windows,
+# ramp, the adaptive against static half of b11 alone, and env, a record of the nodes for the
+# archive
 # SRC names a directory on the frontend that holds workload/ and progbench/. DRY=1 runs every
 # phase with one round and windows of a few seconds, to check the commands before a night.
 set -u
@@ -613,13 +614,20 @@ for ph in $PHASES; do
         quiet
         ;;
     b9s)
-        # the b9 bulk windows with the run time statistics on and off and with nothing attached, since
-        # the statistics add two clock reads to every program run and XDP runs once per packet
+        # the b9 bulk windows with the run time statistics on and off and with nothing attached,
+        # since the statistics add two clock reads to every program run and XDP runs once per
+        # packet, with GRO on the programs that do nothing run as well, which splits the cost of
+        # a hook from the cost of the program on it, and each GRO setting is a call of its own
         # PWR names the power settings of the dut for the phase and its result files
+        # a run with GRO off has taken three times its 23 s of warm-up and window, as it does
+        # when a flow keeps the CPU busy that progbench pins itself to, and the timeouts allow
+        # for it
         power "${PWR:-dflt}" || continue
         quiet
         iperf_rx 8
-        dut "timeout 2400 nu $W/progbench_offload.nu --dir $PB --iface $IF --n 1000 --rounds $ROUNDS --window $WIN --labels 'none skip_array_lazy_nowake xdp_skip_array' --stats 'on off' > /root/res/b9s${PWR:+-$PWR}.log 2>&1; cp /tmp/progbench_offload.jsonl /root/res/b9s${PWR:+-$PWR}.jsonl"
+        f=/root/res/b9s${PWR:+-$PWR}
+        dut "rm -f /tmp/progbench_offload.jsonl; timeout 3300 nu $W/progbench_offload.nu --dir $PB --iface $IF --n 1000 --rounds $ROUNDS --window $WIN --gro on --labels 'none empty skip_array_lazy_nowake xdp_empty xdp_skip_array' --stats 'on off' > $f.log 2>&1; cp /tmp/progbench_offload.jsonl $f.jsonl"
+        dut "rm -f /tmp/progbench_offload.jsonl; timeout 3300 nu $W/progbench_offload.nu --dir $PB --iface $IF --n 1000 --rounds $ROUNDS --window $WIN --gro off --labels 'none skip_array_lazy_nowake xdp_skip_array' --stats 'on off' >> $f.log 2>&1; cat /tmp/progbench_offload.jsonl >> $f.jsonl"
         power dflt
         quiet
         ;;
@@ -650,8 +658,28 @@ for ph in $PHASES; do
             gen_start "$T"
             n=100
             [ "$T" = 8 ] && n=1000
-            dut "timeout 2400 nu $W/progbench_insitu.nu --dir $PB --iface $IF --n $n --rounds $ROUNDS --window $WIN --stats 'off on' --labels 'none empty skip_array_lazy_nowake xdp_empty xdp_skip_array' --out /root/res/b8s${PWR:+-$PWR}-t$T.jsonl > /root/res/b8s${PWR:+-$PWR}-t$T.log 2>&1"
+            dut "timeout 3300 nu $W/progbench_insitu.nu --dir $PB --iface $IF --n $n --rounds $ROUNDS --window $WIN --stats 'off on' --labels 'none empty skip_array_lazy_nowake xdp_empty xdp_skip_array' --out /root/res/b8s${PWR:+-$PWR}-t$T.jsonl > /root/res/b8s${PWR:+-$PWR}-t$T.log 2>&1"
         done
+        power dflt
+        quiet
+        ;;
+    b9p)
+        # where the busy cores of the bulk TCP windows go, as a kernel profile by function with
+        # nothing attached, with the exact profile at TCX and at XDP and with an XDP program
+        # that does nothing, statistics off
+        power "${PWR:-dflt}" || continue
+        quiet
+        iperf_rx 8
+        # kprofile.nu lifts the limits of the kernel on sampling for a profile and puts them back,
+        # and they are put back here once more in case a profile was cut short
+        lim=$(dutq "sysctl -n kernel.perf_event_max_sample_rate kernel.perf_cpu_time_max_percent" | tr '\n' ' ')
+        for l in none skip_array_lazy_nowake xdp_empty xdp_skip_array; do
+            dut "timeout 600 nu $W/kprofile.nu --dir $PB --iface $IF --label $l --secs $SECS --out /root/res/b9p${PWR:+-$PWR}-$l > /root/res/b9p${PWR:+-$PWR}-$l.log 2>&1; echo exit=\$?"
+        done
+        read -r rate pct <<< "$lim"
+        if [ -n "$pct" ]; then
+            dut "sysctl -qw kernel.perf_cpu_time_max_percent=25; sysctl -qw kernel.perf_event_max_sample_rate=$rate; sysctl -qw kernel.perf_cpu_time_max_percent=$pct; sysctl kernel.perf_event_max_sample_rate kernel.perf_cpu_time_max_percent"
+        fi
         power dflt
         quiet
         ;;

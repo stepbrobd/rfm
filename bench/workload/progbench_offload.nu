@@ -14,6 +14,9 @@
 # both, since they add two clock reads to every run of every loaded program
 # and an XDP program runs once per packet where a TCX one runs once per skb
 #
+# --gro names the GRO settings to run, so that a caller can give each setting
+# its own labels in a call of its own, and GRO is back on when the script ends
+#
 # the label none attaches nothing, as the baseline for busy cores, and the
 # order within a round is shuffled so drift in the stream favours no cell
 
@@ -26,6 +29,7 @@ def main [
     --window: string = "15s" # measurement window
     --labels: string = "agent_v3 skip_array_lazy_nowake xdp_skip_array" # space separated
     --stats: string = "on" # space separated, on and off
+    --gro: string = "on off" # space separated, the GRO settings to run
 ] {
     let out = "/tmp/progbench_offload.jsonl"
     "" | save -f $out
@@ -34,18 +38,18 @@ def main [
         let ss = if $l == "none" { ["off"] } else { $stats | split row " " }
         $ss | each {|s| {l: $l, s: $s} }
     } | flatten
-    for gro in [on off] {
-        ^ethtool -K $iface gro $gro
+    for g in ($gro | split row " ") {
+        ^ethtool -K $iface gro $g
         sleep 2sec
         for r in 1..$rounds {
             for c in ($cells | shuffle) {
                 let obj = if $c.l == "none" { "none" } else { $"($dir)/($c.l).o" }
                 let line = (
-                    ^$"($dir)/progbench" -obj $obj -label $"($c.l) gro=($gro)" -attach $iface -n $n -warmup $warmup -window $window $"-stats=($c.s == 'on')"
+                    ^$"($dir)/progbench" -obj $obj -label $"($c.l) gro=($g)" -attach $iface -n $n -warmup $warmup -window $window $"-stats=($c.s == 'on')"
                     | str trim
                 )
                 $"($line)\n" | save -a $out
-                print $"gro=($gro) round ($r) ($c.l) stats=($c.s) done"
+                print $"gro=($g) round ($r) ($c.l) stats=($c.s) done"
             }
         }
     }
