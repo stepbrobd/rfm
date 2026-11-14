@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # rfm campaign driver for two spirou nodes in a routed kavlan, run detached on the louvain
 # frontend. It only loops over the nu harness calls (measure.nu, gen.nu, progbench*.nu, realnic.nu,
-# rss.nu, dpdk.nu) and the iperf3 generator, which has no harness, logs every remote command, and
-# copies the json lines to <outdir> after each phase.
+# rss.nu, dpdk.nu, percpu.nu) and the iperf3 generator, which has no harness, logs every remote
+# command, and copies the json lines to <outdir> after each phase.
 #
 # usage: campaign.sh <job id> <outdir> [phase ...]
 #   the first host of the job is the dut, the second the generator. Control goes over the
@@ -658,15 +658,18 @@ for ph in $PHASES; do
         ;;
     pm3s)
         # the pm3 cells at default power and with C6 off, with rfm's stage on and off, since only
-        # the stage arms a timer on each CPU, and what woke the CPUs logged beside their idle time
+        # the stage arms a timer on each CPU, and what woke the CPUs beside their idle time, summed
+        # in the log and per CPU in pm3s-cpu.jsonl
         gen_start 1
         for r in $R3; do
             for st in $(shuf_words dflt noc6); do
                 power "$st" || break 2
                 for v in $(shuf_words none rfm rfm_nostage netobserv); do
+                    dut "nu $W/percpu.nu --label 'pm3s $st t1 N100 r$r $v before' --out /root/res/pm3s-cpu.jsonl"
                     log "cstate pm3s $st t1 N100 r$r $v before: $(cstates)$(wakes)"
                     m pm3s "pm3s $st t1 N100 r$r" "$v" 100 --warmup 10 --secs 30 --stat-secs 8
                     log "cstate pm3s $st t1 N100 r$r $v after: $(cstates)$(wakes)"
+                    dut "nu $W/percpu.nu --label 'pm3s $st t1 N100 r$r $v after' --out /root/res/pm3s-cpu.jsonl"
                 done
             done
         done
