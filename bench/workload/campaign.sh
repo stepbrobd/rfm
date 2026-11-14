@@ -10,7 +10,8 @@
 # phases, in this order by default:
 #   setup b5 b1 b3 b4 b7 b2 b12 b8 b9 b10 b11 more more2
 # and pm, the B3 cells with the dut at its default power settings and with turbo and C6 off, pm6,
-# the base cells of all six monitors with them off, and
+# the base cells of all six monitors with them off, pm6d, the same cells for rfm with its defaults
+# and without its stage, and
 # sparse, the B3 cells at N of 10000 and 100000 and the B1 ones at 10000, each named on its own
 # and the controls b1c, the B1 receive cells with systemd's accounting programs on and off the
 # socket path and with 8 to 64 connections, b9s, the B9 bulk windows with the run time statistics on
@@ -816,6 +817,22 @@ for ph in $PHASES; do
                 for v in $(shuf_words none rfm rfm_sampled netobserv hsflowd pmacctd softflowd); do
                     [ "$N" = 1 ] && [ "$v" = rfm ] && v=rfm_n1
                     m pm6 "pm fixed t1 N$N r$r" "$v" "$N" --warmup 10 --secs 30 --stat-secs 8
+                done
+            done
+        done
+        power dflt
+        quiet
+        ;;
+    pm6d)
+        # the pm6 cells for the two rfm configurations pm6 left out, the defaults and the tuned one
+        # without its stage, beside the tuned one, netobserv and an empty window of the same
+        # round, so the per packet times of every configuration exist with turbo and C6 off
+        power fixed || continue
+        for N in 100 10 1000; do
+            gen_start 1
+            for r in $R5; do
+                for v in $(shuf_words none rfm rfm_default rfm_nostage netobserv); do
+                    m pm6d "pm fixed t1 N$N r$r" "$v" "$N" --warmup 10 --secs 30 --stat-secs 8
                 done
             done
         done
