@@ -12,6 +12,9 @@
 # and pm, the B3 cells with the dut at its default power settings and with turbo and C6 off, pm6,
 # the base cells of all six monitors with them off, and
 # sparse, the B3 cells at N of 10000 and 100000 and the B1 ones at 10000, each named on its own
+# and the controls b1c, the B1 receive cells with systemd's accounting programs on and off the socket
+# path, b9s, the B9 bulk windows with the run time statistics on and off, b13s, the top cohort mix
+# with netobserv's table enlarged, and ramp, the adaptive against static half of b11 alone
 # SRC names a directory on the frontend that holds workload/ and progbench/. DRY=1 runs every
 # phase with one round and windows of a few seconds, to check the commands before a night.
 set -u
@@ -53,7 +56,7 @@ R2=${R2:-"1 2"}
 RB4=${RB4:-1}
 ACC=${ACC:-"rfm_acc netobserv hsflowd"}
 TRIALS=7
-ROUNDS=3
+ROUNDS=${ROUNDS:-3}
 WIN=20s
 SECS=20
 QS='1 2 4 8 16 32 63'
@@ -230,6 +233,57 @@ power() { # dflt or fixed
 # microseconds every idle state has been resident, summed over the dut's CPUs, and the time read
 cstates() {
     dutq "date +%s.%N; for s in /sys/devices/system/cpu/cpu0/cpuidle/state*; do echo \$(cat \$s/name)=\$(cat /sys/devices/system/cpu/cpu*/cpuidle/\${s##*/}/time | awk '{t+=\$1} END{print t}'); done" | tr '\n' ' '
+}
+
+# systemd's IP accounting programs (sd_fw_ingress and sd_fw_egress, DefaultIPAccounting on the
+# image) run once per cgroup level for every skb of a socket, four levels for a process started
+# over ssh
+# off detaches them from the cgroup of the dut's iperf3 and from its ancestors, on puts back what
+# off took, and both fail unless the chain then reads as asked
+# an iperf3 restart moves the server to a new cgroup, so on comes before it
+acct() { # off or on
+    local want got
+    case $1 in
+    off)
+        want=0
+        dut "p=\$(pgrep -x iperf3 | head -1); [ -n \"\$p\" ] || exit 1; cg=/sys/fs/cgroup\$(cut -d: -f3 /proc/\$p/cgroup); echo \$cg > /tmp/acct.cg; : > /tmp/acct.saved; while :; do bpftool -j cgroup show \$cg | jq -r '.[] | select(.name | startswith(\"sd_fw_\")) | \"\(.id) \(.attach_type)\"' | while read -r id ty; do bpftool cgroup detach \$cg \$ty id \$id && echo \$cg \$ty \$id >> /tmp/acct.saved; done; [ \$cg = /sys/fs/cgroup ] && break; cg=\$(dirname \$cg); done; cat /tmp/acct.saved"
+        ;;
+    on)
+        # nothing to put back unless an off came before
+        want=$(dutq "cat /tmp/acct.saved 2> /dev/null | wc -l")
+        [ "${want:-0}" = 0 ] && return 0
+        dut "while read -r cg ty id; do bpftool cgroup attach \$cg \$ty id \$id multi; done < /tmp/acct.saved; rm -f /tmp/acct.saved"
+        ;;
+    *) return 1 ;;
+    esac
+    got=$(dutq "cg=\$(cat /tmp/acct.cg); n=0; while :; do n=\$((n + \$(bpftool -j cgroup show \$cg | jq '[.[] | select(.name | startswith(\"sd_fw_\"))] | length'))); [ \$cg = /sys/fs/cgroup ] && break; cg=\$(dirname \$cg); done; echo \$n")
+    if [ "$got" != "$want" ] || [ -z "$want" ]; then
+        log "acct $1 leaves '$got' accounting programs on the iperf3 path, want '$want'"
+        return 1
+    fi
+    log "acct $1: $got accounting programs on the iperf3 path"
+}
+
+# adaptive against static sampling at N=1 while the generator ramps over 1, 2, 4 and 8 threads
+ramps() { # result file
+    local r mode flag t
+    for r in $R2; do
+        for mode in $(shuf_words adaptive static); do
+            gen_start 1
+            flag=""
+            [ "$mode" = adaptive ] && flag=--adaptive
+            dut "setsid nohup nu $W/control.nu --iface $IF --n 1 --bpf '$RFM_N1' --timeline $flag --secs $((STEP * 4)) --label 'ramp $mode r$r' --out /root/res/$1.jsonl > /root/res/$1-ramp.log 2>&1 < /dev/null &"
+            for t in 2 4 8; do
+                sleep $((STEP - 18))
+                gen_start $t
+            done
+            for _ in $(seq 1 120); do
+                [ -z "$(dutq "pgrep -f '^nu $W/control.nu'")" ] && break
+                sleep 5
+            done
+            dut "pkill -f '^nu $W/control.nu'; pkill -f '^[^ ]*rfm agent'; true"
+        done
+    done
 }
 
 # one measure.nu call; the variant names an rfm configuration or a monitor
@@ -499,22 +553,57 @@ for ph in $PHASES; do
         for r in $R3; do
             dut "nu $W/control.nu --iface $IF --n 100 --bpf '$RFM_EXACT' --changes $CHANGES --label 'control r$r' --out /root/res/b11.jsonl > /root/res/b11-control.log 2>&1"
         done
-        # adaptive against static sampling at N=1 while the generator ramps over 1, 2, 4 and 8 threads
-        for r in $R2; do
-            for mode in $(shuf_words adaptive static); do
-                gen_start 1
-                flag=""
-                [ "$mode" = adaptive ] && flag=--adaptive
-                dut "setsid nohup nu $W/control.nu --iface $IF --n 1 --bpf '$RFM_N1' --timeline $flag --secs $((STEP * 4)) --label 'ramp $mode r$r' --out /root/res/b11.jsonl > /root/res/b11-ramp.log 2>&1 < /dev/null &"
-                for t in 2 4 8; do
-                    sleep $((STEP - 18))
-                    gen_start $t
+        ramps b11
+        quiet
+        ;;
+    ramp)
+        quiet
+        ramps ramp
+        quiet
+        ;;
+    b1c)
+        # the b1 receive cells with and without the accounting programs, which run four times per
+        # skb and so per packet with GRO off, and with no monitor as well as rfm
+        for sc in rx_gro rx_nogro; do
+            quiet
+            [ "$sc" = rx_nogro ] && dut "ethtool -K $IF gro off"
+            iperf_rx 8
+            for r in $R3; do
+                for st in $(shuf_words on off); do
+                    if [ "$st" = off ]; then
+                        acct off || break 3
+                    fi
+                    m b1c "$sc acct_$st r$r" none 100 --warmup 12 --secs 45 --stat-secs 0
+                    m b1c "$sc acct_$st r$r" rfm_acc 100 --counts --warmup 12 --secs 45 --stat-secs 5
+                    if [ "$st" = off ]; then
+                        acct on || break 3
+                    fi
                 done
-                for _ in $(seq 1 120); do
-                    [ -z "$(dutq "pgrep -f '^nu $W/control.nu'")" ] && break
-                    sleep 5
-                done
-                dut "pkill -f '^nu $W/control.nu'; pkill -f '^[^ ]*rfm agent'; true"
+            done
+        done
+        acct on
+        quiet
+        ;;
+    b9s)
+        # the b9 bulk windows with the run time statistics on and off and with nothing attached, since
+        # the statistics add two clock reads to every program run and XDP runs once per packet
+        quiet
+        iperf_rx 8
+        dut "timeout 2400 nu $W/progbench_offload.nu --dir $PB --iface $IF --n 1000 --rounds $ROUNDS --window $WIN --labels 'none skip_array_lazy_nowake xdp_skip_array' --stats 'on off' > /root/res/b9s.log 2>&1; cp /tmp/progbench_offload.jsonl /root/res/b9s.jsonl"
+        quiet
+        ;;
+    b13s)
+        # the top cohort mix with netobserv's flow table enlarged past the 20000 flows of the flood,
+        # which separates the samples its default table of 5000 drops from the skb unit
+        quiet
+        iperf_rx 8
+        gen_start 1 "--flows 20000 --rate 1000"
+        for r in $R3; do
+            for v in $(shuf_words netobserv netobserv_sized hsflowd); do
+                case $v in
+                netobserv_sized) m b13s "cohort u1000 r$r" "$v" 100 --neto-cache 65536 --counts --warmup 12 --secs 45 --stat-secs 5 ;;
+                *) m b13s "cohort u1000 r$r" "$v" 100 --counts --warmup 12 --secs 45 --stat-secs 5 ;;
+                esac
             done
         done
         quiet

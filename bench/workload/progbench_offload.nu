@@ -9,6 +9,13 @@
 # monitor reports. GRO is toggled with ethtool -K, safe only when the NIC
 # carries test traffic alone (KaVLAN). Output is one JSON line per GRO setting,
 # label and round in /tmp/progbench_offload.jsonl.
+#
+# --stats runs each label with the kernel's run time statistics on, off or
+# both, since they add two clock reads to every run of every loaded program
+# and an XDP program runs once per packet where a TCX one runs once per skb
+#
+# the label none attaches nothing, as the baseline for busy cores, and the
+# order within a round is shuffled so drift in the stream favours no cell
 
 def main [
     --dir: string = "progbench" # directory holding progbench and the objects
@@ -18,20 +25,27 @@ def main [
     --warmup: string = "3s" # settle time after attach
     --window: string = "15s" # measurement window
     --labels: string = "agent_v3 skip_array_lazy_nowake xdp_skip_array" # space separated
+    --stats: string = "on" # space separated, on and off
 ] {
     let out = "/tmp/progbench_offload.jsonl"
     "" | save -f $out
+    # none loads no program to time, so it runs once whatever --stats asks for
+    let cells = $labels | split row " " | each {|l|
+        let ss = if $l == "none" { ["off"] } else { $stats | split row " " }
+        $ss | each {|s| {l: $l, s: $s} }
+    } | flatten
     for gro in [on off] {
         ^ethtool -K $iface gro $gro
         sleep 2sec
         for r in 1..$rounds {
-            for l in ($labels | split row " ") {
+            for c in ($cells | shuffle) {
+                let obj = if $c.l == "none" { "none" } else { $"($dir)/($c.l).o" }
                 let line = (
-                    ^$"($dir)/progbench" -obj $"($dir)/($l).o" -label $"($l) gro=($gro)" -attach $iface -n $n -warmup $warmup -window $window
+                    ^$"($dir)/progbench" -obj $obj -label $"($c.l) gro=($gro)" -attach $iface -n $n -warmup $warmup -window $window $"-stats=($c.s == 'on')"
                     | str trim
                 )
                 $"($line)\n" | save -a $out
-                print $"gro=($gro) round ($r) ($l) done"
+                print $"gro=($gro) round ($r) ($c.l) stats=($c.s) done"
             }
         }
     }
