@@ -11,6 +11,10 @@
 # attached, as the baseline for busy cores. The order is shuffled
 # per round so drift in the offered load does not favour one variant.
 # Output is one JSON line per label and round in --out.
+#
+# --stats runs each label with the kernel's run time statistics on, off or
+# both. Off reports no time per run and no program runs, and its busy cores
+# are free of the two clock reads the statistics add to every program run
 
 def main [
     --dir: string = "progbench" # directory holding progbench and the objects
@@ -21,21 +25,26 @@ def main [
     --window: string = "20s" # measurement window
     --labels: string = "none empty agent_v1 agent_v3 thresh_array skip_array thresh_array_lazy_nowake skip_array_lazy_nowake nocounter_thresh sampled_thresh sampled_skip xdp_empty xdp_skip_array" # space separated
     --out: string = "/tmp/progbench_insitu.jsonl" # JSON lines output
+    --stats: string = "on" # space separated, on and off
 ] {
     "" | save -f $out
-    let ls = $labels | split row " "
+    # none loads no program to time, so it runs once whatever --stats asks for
+    let cells = $labels | split row " " | each {|l|
+        let ss = if $l == "none" { ["off"] } else { $stats | split row " " }
+        $ss | each {|s| {l: $l, s: $s} }
+    } | flatten
     for r in 1..$rounds {
-        for l in ($ls | shuffle) {
+        for c in ($cells | shuffle) {
             # a label object@suffix attaches rfm_tc_ingress_suffix and rfm_tc_egress_suffix of object
-            let parts = $l | split row "@"
-            let obj = if $l == "none" { "none" } else { $"($dir)/($parts.0).o" }
+            let parts = $c.l | split row "@"
+            let obj = if $c.l == "none" { "none" } else { $"($dir)/($parts.0).o" }
             let progs = if ($parts | length) > 1 { $"rfm_tc_ingress_($parts.1),rfm_tc_egress_($parts.1)" } else { "auto" }
             let line = (
-                ^$"($dir)/progbench" -obj $obj -label $l -attach $iface -progs $progs -n $n -warmup $warmup -window $window
+                ^$"($dir)/progbench" -obj $obj -label $c.l -attach $iface -progs $progs -n $n -warmup $warmup -window $window $"-stats=($c.s == 'on')"
                 | str trim
             )
             $"($line)\n" | save -a $out
-            print $"round ($r) ($l) done"
+            print $"round ($r) ($c.l) stats=($c.s) done"
         }
     }
     print $"wrote ($out)"

@@ -15,8 +15,9 @@
 # and the controls b1c, the B1 receive cells with systemd's accounting programs on and off the socket
 # path and with 8 to 64 connections, b9s, the B9 bulk windows with the run time statistics on and
 # off, b13s, the top cohort mix with netobserv's table enlarged, b13p, the cohort mixes past it with
-# more flood threads, pm3s, the pm3 cells with rfm's stage on and off, and ramp, the adaptive against
-# static half of b11 alone
+# more flood threads, pm3s, the pm3 cells with rfm's stage on and off, b8s, the flood windows of the
+# XDP comparison with the statistics on and off, ramp, the adaptive against static half of b11 alone,
+# and env, a record of the nodes for the archive
 # SRC names a directory on the frontend that holds workload/ and progbench/. DRY=1 runs every
 # phase with one round and windows of a few seconds, to check the commands before a night.
 set -u
@@ -614,9 +615,12 @@ for ph in $PHASES; do
     b9s)
         # the b9 bulk windows with the run time statistics on and off and with nothing attached, since
         # the statistics add two clock reads to every program run and XDP runs once per packet
+        # PWR names the power settings of the dut for the phase and its result files
+        power "${PWR:-dflt}" || continue
         quiet
         iperf_rx 8
-        dut "timeout 2400 nu $W/progbench_offload.nu --dir $PB --iface $IF --n 1000 --rounds $ROUNDS --window $WIN --labels 'none skip_array_lazy_nowake xdp_skip_array' --stats 'on off' > /root/res/b9s.log 2>&1; cp /tmp/progbench_offload.jsonl /root/res/b9s.jsonl"
+        dut "timeout 2400 nu $W/progbench_offload.nu --dir $PB --iface $IF --n 1000 --rounds $ROUNDS --window $WIN --labels 'none skip_array_lazy_nowake xdp_skip_array' --stats 'on off' > /root/res/b9s${PWR:+-$PWR}.log 2>&1; cp /tmp/progbench_offload.jsonl /root/res/b9s${PWR:+-$PWR}.jsonl"
+        power dflt
         quiet
         ;;
     b13s)
@@ -634,6 +638,29 @@ for ph in $PHASES; do
             done
         done
         quiet
+        ;;
+    b8s)
+        # the flood windows of the XDP comparison with the run time statistics off and on, since
+        # busy cores need none and the statistics add two clock reads to every program run
+        # n=1000 at 8 threads, where the in situ reader stalls at 1 in 100
+        # PWR names the power settings of the dut for the phase and its result files
+        power "${PWR:-dflt}" || continue
+        for T in 1 4 8; do
+            quiet
+            gen_start "$T"
+            n=100
+            [ "$T" = 8 ] && n=1000
+            dut "timeout 2400 nu $W/progbench_insitu.nu --dir $PB --iface $IF --n $n --rounds $ROUNDS --window $WIN --stats 'off on' --labels 'none empty skip_array_lazy_nowake xdp_empty xdp_skip_array' --out /root/res/b8s${PWR:+-$PWR}-t$T.jsonl > /root/res/b8s${PWR:+-$PWR}-t$T.log 2>&1"
+        done
+        power dflt
+        quiet
+        ;;
+    env)
+        # what the inventory of setup leaves out, for the archive: the idle states with their
+        # latencies, the link and its receive hash, the builds of the tools and every loaded program
+        for c in "$DUTC" "$GENC"; do
+            $SSH root@"$c" "hostname; date -u +%FT%TZ; cat /etc/os-release | head -5; systemctl --version | head -1; systemctl show -p DefaultIPAccounting; cat /sys/devices/system/cpu/cpuidle/current_driver /sys/devices/system/cpu/cpuidle/current_governor /sys/devices/system/cpu/intel_pstate/status; for s in /sys/devices/system/cpu/cpu0/cpuidle/state*; do echo \$(cat \$s/name) latency \$(cat \$s/latency) residency \$(cat \$s/residency) disable \$(cat \$s/disable); done; cat /sys/devices/system/cpu/cpu0/cpufreq/energy_performance_preference /sys/kernel/mm/transparent_hugepage/enabled /proc/sys/kernel/numa_balancing; cat /sys/kernel/debug/sched/preempt; ethtool $IF; ethtool --show-fec $IF; ethtool -x $IF | head -24; ethtool -n $IF rx-flow-hash udp4; ethtool -n $IF rx-flow-hash tcp4; ethtool --show-priv-flags $IF; cat /sys/class/net/$IF/device/numa_node; ip -d link show $IF; tc qdisc show dev $IF | head -3; sysctl net.ipv4.tcp_congestion_control net.ipv4.tcp_rmem net.ipv4.tcp_wmem net.core.default_qdisc net.core.bpf_jit_enable net.core.bpf_jit_harden kernel.bpf_stats_enabled; bpftool version; bpftool prog show; for b in rfm netobserv-ebpf-agent hsflowd pmacctd softflowd iperf3 nu bpftool ethtool; do echo \$b \$(command -v \$b | xargs -r readlink -f); done; dmidecode -t bios -t system | grep -E 'Vendor|Version|Release Date|Manufacturer|Product Name'" < /dev/null > "$OUT/env-$c.txt" 2>&1
+        done
         ;;
     b13p)
         # the cohort mixes past the share one pktgen thread reaches beside bulk TCP, with 2, 4 and
