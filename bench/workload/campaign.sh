@@ -13,8 +13,10 @@
 # the base cells of all six monitors with them off, and
 # sparse, the B3 cells at N of 10000 and 100000 and the B1 ones at 10000, each named on its own
 # and the controls b1c, the B1 receive cells with systemd's accounting programs on and off the socket
-# path, b9s, the B9 bulk windows with the run time statistics on and off, b13s, the top cohort mix
-# with netobserv's table enlarged, and ramp, the adaptive against static half of b11 alone
+# path and with 8 to 64 connections, b9s, the B9 bulk windows with the run time statistics on and
+# off, b13s, the top cohort mix with netobserv's table enlarged, b13p, the cohort mixes past it with
+# more flood threads, pm3s, the pm3 cells with rfm's stage on and off, and ramp, the adaptive against
+# static half of b11 alone
 # SRC names a directory on the frontend that holds workload/ and progbench/. DRY=1 runs every
 # phase with one round and windows of a few seconds, to check the commands before a night.
 set -u
@@ -45,6 +47,8 @@ RFM_SAMPLED=${RFM_SAMPLED:-'sampled_only=true\nstage_events=32\nring_buf_size=16
 RFM_N1=${RFM_N1:-'stage_events=32\niface_slots=1'}
 RFM_ACC=${RFM_ACC:-$RFM_EXACT}
 RFM_MEM=${RFM_MEM:-'stage_events=32\niface_slots=1\nring_buf_size=4096'}
+# the favorable configuration less its stage, so one ring record per event and no flush timer
+RFM_NOSTAGE=${RFM_NOSTAGE:-'iface_slots=1\nring_buf_size=16384'}
 RFM_ENV=${RFM_ENV:-''}
 BIG='[agent.collector]\nmax_flows=2097152'
 
@@ -235,33 +239,49 @@ cstates() {
     dutq "date +%s.%N; for s in /sys/devices/system/cpu/cpu0/cpuidle/state*; do echo \$(cat \$s/name)=\$(cat /sys/devices/system/cpu/cpu*/cpuidle/\${s##*/}/time | awk '{t+=\$1} END{print t}'); done" | tr '\n' ' '
 }
 
+# what woke the dut's CPUs since boot, summed over them, as the softirqs of the hrtimer and timer
+# vectors, where a bpf timer runs, and the local timer, rescheduling and function call interrupts
+wakes() {
+    dutq "awk '\$1 ~ /^(HRTIMER|TIMER):\$/ {s = 0; for (i = 2; i <= NF; i++) s += \$i; sub(\":\", \"\", \$1); printf \"%s=%.0f \", \$1, s}' /proc/softirqs; awk '\$1 ~ /^(LOC|RES|CAL):\$/ {s = 0; for (i = 2; i <= NF; i++) if (\$i ~ /^[0-9]+\$/) s += \$i; sub(\":\", \"\", \$1); printf \"%s=%.0f \", \$1, s}' /proc/interrupts"
+}
+
 # systemd's IP accounting programs (sd_fw_ingress and sd_fw_egress, DefaultIPAccounting on the
 # image) run once per cgroup level for every skb of a socket, four levels for a process started
 # over ssh
-# off detaches them from the cgroup of the dut's iperf3 and from its ancestors, on puts back what
-# off took, and both fail unless the chain then reads as asked
+# off detaches them from the cgroup of the dut's iperf3 and from its ancestors and fails unless
+# none is left on that path, on puts back what off took and fails unless each one is attached
+# again, less those of a cgroup that is gone
 # an iperf3 restart moves the server to a new cgroup, so on comes before it
 acct() { # off or on
-    local want got
+    local got path
     case $1 in
     off)
-        want=0
-        dut "p=\$(pgrep -x iperf3 | head -1); [ -n \"\$p\" ] || exit 1; cg=/sys/fs/cgroup\$(cut -d: -f3 /proc/\$p/cgroup); echo \$cg > /tmp/acct.cg; : > /tmp/acct.saved; while :; do bpftool -j cgroup show \$cg | jq -r '.[] | select(.name | startswith(\"sd_fw_\")) | \"\(.id) \(.attach_type)\"' | while read -r id ty; do bpftool cgroup detach \$cg \$ty id \$id && echo \$cg \$ty \$id >> /tmp/acct.saved; done; [ \$cg = /sys/fs/cgroup ] && break; cg=\$(dirname \$cg); done; cat /tmp/acct.saved"
+        # the list of what was taken only grows until an on has put all of it back
+        dut "p=\$(pgrep -x iperf3 | head -1); [ -n \"\$p\" ] || exit 1; cg=/sys/fs/cgroup\$(cut -d: -f3 /proc/\$p/cgroup); echo \$cg > /tmp/acct.cg; while :; do bpftool -j cgroup show \$cg | jq -r '.[] | select((.name // \"\") | startswith(\"sd_fw_\")) | \"\(.id) \(.attach_type)\"' | while read -r id ty; do bpftool cgroup detach \$cg \$ty id \$id && echo \$cg \$ty \$id >> /tmp/acct.saved; done; [ \$cg = /sys/fs/cgroup ] && break; cg=\$(dirname \$cg); done; cat /tmp/acct.saved 2> /dev/null; true" || {
+            log "acct off leaves the path unknown, no iperf3 on the dut"
+            return 1
+        }
         ;;
     on)
         # nothing to put back unless an off came before
-        want=$(dutq "cat /tmp/acct.saved 2> /dev/null | wc -l")
-        [ "${want:-0}" = 0 ] && return 0
-        dut "while read -r cg ty id; do bpftool cgroup attach \$cg \$ty id \$id multi; done < /tmp/acct.saved; rm -f /tmp/acct.saved"
+        [ "$(dutq "cat /tmp/acct.saved 2> /dev/null | wc -l")" = 0 ] && return 0
+        dut "while read -r cg ty id; do [ -d \$cg ] && bpftool cgroup attach \$cg \$ty id \$id multi; done < /tmp/acct.saved"
         ;;
     *) return 1 ;;
     esac
-    got=$(dutq "cg=\$(cat /tmp/acct.cg); n=0; while :; do n=\$((n + \$(bpftool -j cgroup show \$cg | jq '[.[] | select(.name | startswith(\"sd_fw_\"))] | length'))); [ \$cg = /sys/fs/cgroup ] && break; cg=\$(dirname \$cg); done; echo \$n")
-    if [ "$got" != "$want" ] || [ -z "$want" ]; then
-        log "acct $1 leaves '$got' accounting programs on the iperf3 path, want '$want'"
+    # the programs on the path, where bpftool prints nothing for a cgroup without any
+    path=$(dutq "cg=\$(cat /tmp/acct.cg); n=0; while :; do n=\$((n + \$(bpftool -j cgroup show \$cg | jq -s '[.[][] | select((.name // \"\") | startswith(\"sd_fw_\"))] | length'))); [ \$cg = /sys/fs/cgroup ] && break; cg=\$(dirname \$cg); done; echo \$n")
+    got=$path
+    if [ "$1" = on ]; then
+        # and the ones that off took and that are still off their cgroup
+        got=$(dutq "n=0; while read -r cg ty id; do [ -d \$cg ] || continue; bpftool -j cgroup show \$cg | jq -s -e --argjson id \$id 'any(.[][]; .id == \$id)' > /dev/null || n=\$((n + 1)); done < /tmp/acct.saved; echo \$n")
+    fi
+    if [ "$got" != 0 ]; then
+        log "acct $1 leaves '$got' accounting programs in the wrong place, '$path' on the iperf3 path"
         return 1
     fi
-    log "acct $1: $got accounting programs on the iperf3 path"
+    [ "$1" = on ] && dutq "rm -f /tmp/acct.saved"
+    log "acct $1: $path accounting programs on the iperf3 path"
 }
 
 # adaptive against static sampling at N=1 while the generator ramps over 1, 2, 4 and 8 threads
@@ -298,6 +318,7 @@ m() { # phase label variant n [extra measure.nu flags]
     rfm_n1) a=rfm; bpf=$RFM_N1; env=$RFM_ENV ;;
     rfm_acc) a=rfm; bpf=$RFM_ACC ;;
     rfm_mem) a=rfm; bpf=$RFM_MEM ;;
+    rfm_nostage) a=rfm; bpf=$RFM_NOSTAGE; env=$RFM_ENV ;;
     netobserv_sized) a=netobserv ;;
     esac
     # rfm refuses a rate above max_sample_rate, 1000 unless set
@@ -563,21 +584,27 @@ for ph in $PHASES; do
         ;;
     b1c)
         # the b1 receive cells with and without the accounting programs, which run four times per
-        # skb and so per packet with GRO off, and with no monitor as well as rfm
-        for sc in rx_gro rx_nogro; do
-            quiet
-            [ "$sc" = rx_nogro ] && dut "ethtool -K $IF gro off"
-            iperf_rx 8
-            for r in $R3; do
-                for st in $(shuf_words on off); do
-                    if [ "$st" = off ]; then
-                        acct off || break 3
-                    fi
-                    m b1c "$sc acct_$st r$r" none 100 --warmup 12 --secs 45 --stat-secs 0
-                    m b1c "$sc acct_$st r$r" rfm_acc 100 --counts --warmup 12 --secs 45 --stat-secs 5
-                    if [ "$st" = off ]; then
-                        acct on || break 3
-                    fi
+        # skb and so per packet with GRO off, with no monitor and at the 8 connections of b1 with
+        # rfm as well
+        # more connections tell a receiver that GRO off slows from one that the link bounds
+        for P in ${B1C_P:-8 16 32 64}; do
+            for sc in rx_gro rx_nogro; do
+                quiet
+                [ "$sc" = rx_nogro ] && dut "ethtool -K $IF gro off"
+                iperf_rx "$P"
+                for r in $R3; do
+                    for st in $(shuf_words on off); do
+                        if [ "$st" = off ]; then
+                            acct off || break 4
+                        fi
+                        m b1c "$sc P$P acct_$st r$r" none 100 --warmup 12 --secs 45 --stat-secs 0
+                        if [ "$P" = 8 ]; then
+                            m b1c "$sc P$P acct_$st r$r" rfm_acc 100 --counts --warmup 12 --secs 45 --stat-secs 5
+                        fi
+                        if [ "$st" = off ]; then
+                            acct on || break 4
+                        fi
+                    done
                 done
             done
         done
@@ -606,6 +633,44 @@ for ph in $PHASES; do
                 esac
             done
         done
+        quiet
+        ;;
+    b13p)
+        # the cohort mixes past the share one pktgen thread reaches beside bulk TCP, with 2, 4 and
+        # 8 flood threads at full rate, then 8 with the TCP side paced to a fifth of the link, and
+        # netobserv at its default table as well as at one sized past the flood's flows
+        for mix in "2|" "4|" "8|" "8|--fq-rate 2.5G"; do
+            T=${mix%%|*}
+            X=${mix#*|}
+            quiet
+            iperf_rx 8 "$X"
+            gen_start "$T" "--flows 20000"
+            for r in $R3; do
+                for v in $(shuf_words rfm_acc netobserv netobserv_sized hsflowd); do
+                    case $v in
+                    netobserv_sized) m b13p "cohort t$T${X:+p} r$r" "$v" 100 --neto-cache 65536 --counts --warmup 12 --secs 45 --stat-secs 5 ;;
+                    *) m b13p "cohort t$T${X:+p} r$r" "$v" 100 --counts --warmup 12 --secs 45 --stat-secs 5 ;;
+                    esac
+                done
+            done
+        done
+        quiet
+        ;;
+    pm3s)
+        # the pm3 cells at default power and with C6 off, with rfm's stage on and off, since only
+        # the stage arms a timer on each CPU, and what woke the CPUs logged beside their idle time
+        gen_start 1
+        for r in $R3; do
+            for st in $(shuf_words dflt noc6); do
+                power "$st" || break 2
+                for v in $(shuf_words none rfm rfm_nostage netobserv); do
+                    log "cstate pm3s $st t1 N100 r$r $v before: $(cstates)$(wakes)"
+                    m pm3s "pm3s $st t1 N100 r$r" "$v" 100 --warmup 10 --secs 30 --stat-secs 8
+                    log "cstate pm3s $st t1 N100 r$r $v after: $(cstates)$(wakes)"
+                done
+            done
+        done
+        power dflt
         quiet
         ;;
     more)
