@@ -13,9 +13,13 @@
 # - restart: the agent stopped and started again with pinned counters. The
 #   counters must continue from their values, not from zero, and the packets
 #   they miss are those of the time without programs attached.
-# - timeline: with --timeline, one sample a second for --secs of the applied
-#   rate, sampled and exact rates and ring drops, for adaptive sampling while
-#   the driver ramps the generator. --adaptive turns it on, up to 1000.
+# - timeline: with --timeline, --secs samples of the applied rate, sampled and
+#   exact rates and ring drops, for adaptive sampling while the driver ramps
+#   the generator. --adaptive turns it on, up to 1000.
+#   a sample spans a one second sleep and the reads around it, which take
+#   0.1 s and more under load, so every read is timed and each rate divides
+#   by its own interval, with dt that of the port counter and ts the end of
+#   the sample
 
 const LIB = path self | path dirname | path join "lib.nu"
 use $LIB *
@@ -42,6 +46,11 @@ def counts [] {
         samples: $smp
         rate: $rate
     }
+}
+
+# wall clock in seconds
+def now [] {
+    (date now | into int) / 1e9
 }
 
 def drops [] {
@@ -94,13 +103,20 @@ def main [
     if $timeline {
         let rows = (1..$secs | each {|i|
             let a = counts
+            let ta = now
             let p = rx-phy $iface
+            let tp = now
             let d = drops
+            let td = now
             sleep 1sec
             let b = counts
+            let tb = now
             let q = rx-phy $iface
+            let tq = now
             let e = drops
-            {t: $i, ts: ((date now | into int) / 1e9), rate: $b.rate, wire_pps: ($q - $p), exact_pps: ($b.exact - $a.exact), sampled_pps: ($b.samples - $a.samples), est_pps: ($b.est - $a.est), drops: ($e - $d)}
+            let te = now
+            let dc = $tb - $ta
+            {t: $i, ts: $te, dt: ($tq - $tp), rate: $b.rate, wire_pps: (($q - $p) / ($tq - $tp)), exact_pps: (($b.exact - $a.exact) / $dc), sampled_pps: (($b.samples - $a.samples) / $dc), est_pps: (($b.est - $a.est) / $dc), drops: (($e - $d) / ($te - $td))}
         })
         {
             label: $label
