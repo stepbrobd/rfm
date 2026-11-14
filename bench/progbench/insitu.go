@@ -47,18 +47,24 @@ type insituResult struct {
 	RfmPkts   uint64 `json:"rfm_rx_packets"`
 	RfmBytes  uint64 `json:"rfm_rx_bytes"`
 	XDP       bool   `json:"xdp"`
-	Kernel    string `json:"kernel"`
+	// whether the kernel's run time statistics ran over the window
+	Stats  bool   `json:"stats"`
+	Kernel string `json:"kernel"`
 }
 
 // insitu attaches ingress and egress of obj, or rfm_xdp (else rfm_tc_ingress)
 // and rfm_tc_egress when they are empty, their stage programs from a stage of
 // 2 events on
-func insitu(obj, label, iface, ingress, egress string, n, ringOrder, stage uint32, warmup, window time.Duration, kernel string) error {
+//
+// the run time statistics are system wide and add two clock reads to every
+// run of every loaded program, stats false leaves them off and the window
+// reports no runs and no time per run
+func insitu(obj, label, iface, ingress, egress string, n, ringOrder, stage uint32, stats bool, warmup, window time.Duration, kernel string) error {
 	ifc, err := net.InterfaceByName(iface)
 	if err != nil {
 		return err
 	}
-	res := insituResult{Label: label, Iface: iface, N: n, Kernel: kernel}
+	res := insituResult{Label: label, Iface: iface, N: n, Stats: stats && obj != "none", Kernel: kernel}
 
 	var coll *ebpf.Collection
 	var events atomic.Uint64
@@ -106,11 +112,13 @@ func insitu(obj, label, iface, ingress, egress string, n, ringOrder, stage uint3
 			}
 		}
 
-		stats, err := ebpf.EnableStats(unix.BPF_STATS_RUN_TIME)
-		if err != nil {
-			return fmt.Errorf("enable stats: %w", err)
+		if stats {
+			on, err := ebpf.EnableStats(unix.BPF_STATS_RUN_TIME)
+			if err != nil {
+				return fmt.Errorf("enable stats: %w", err)
+			}
+			defer on.Close()
 		}
-		defer stats.Close()
 
 		inProg, outProg := coll.Programs[ingress], coll.Programs[egress]
 		if inProg == nil || outProg == nil {

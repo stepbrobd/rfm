@@ -105,6 +105,7 @@ func main() {
 	window := flag.Duration("window", 20*time.Second, "measurement window, with -attach")
 	acc := flag.String("accuracy", "", "K:M runs K flows of exactly M packets each through rfm_tc_ingress or the one ingress program -progs names, cycling the flows, and reports the sampled estimates against that ground truth")
 	stage := flag.Uint("stage", 1, "events per ring record of the stage programs, rfm_stage_events, from 2 on auto and the defaults of -attach and -accuracy take the stage programs")
+	stats := flag.Bool("stats", true, "with -attach, run the window with the kernel's run time statistics on, false reports no program runs and no time per run")
 	flag.Parse()
 
 	if *obj == "" || *label == "" {
@@ -145,7 +146,7 @@ func main() {
 				fail(errors.New("-progs with -attach wants ingress,egress"))
 			}
 		}
-		if err := insitu(*obj, *label, *attach, ingress, egress, uint32(*n), uint32(*ringOrder), uint32(*stage), *warmup, *window, kernel); err != nil {
+		if err := insitu(*obj, *label, *attach, ingress, egress, uint32(*n), uint32(*ringOrder), uint32(*stage), *stats, *warmup, *window, kernel); err != nil {
 			fail(err)
 		}
 		return
