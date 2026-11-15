@@ -1,0 +1,10 @@
+round 1 empty stats=on done
+round 1 xdp_empty stats=off done
+round 1 xdp_skip_array stats=on done
+round 1 empty stats=off done
+round 1 xdp_empty stats=on done
+round 1 xdp_skip_array stats=off done
+round 1 skip_array_lazy_nowake stats=on done
+round 1 none stats=off done
+round 1 skip_array_lazy_nowake stats=off done
+wrote /root/res/b8s-fixed-t4.jsonl

@@ -1,0 +1,447 @@
+# campaign logs
+cov/campaign.log: 15 calls exit 0, 0 nonzero, phases setup b4cov, 2026-11-13 15:32:11 to 2026-11-13 15:47:38
+ctl/campaign.log: 15 calls exit 0, 0 nonzero, phases setup b9s b13s ramp, 2026-11-14 21:43:59 to 2026-11-14 23:27:03
+ctl-dry/campaign.log: 3 calls exit 0, 0 nonzero, phases setup b1c b9s b13s ramp, 2026-11-14 21:36:08 to 2026-11-14 21:43:56
+  note: 2026-11-14 21:36:31 acct off leaves '' accounting programs on the iperf3 path, want '0'
+dahu/campaign.log: 96 calls exit 0, 0 nonzero, phases setup b1 b2, 2026-11-13 14:19:18 to 2026-11-13 16:00:23
+gros/campaign.log: 96 calls exit 0, 0 nonzero, phases setup b1 b2, 2026-11-13 14:17:06 to 2026-11-13 15:59:19
+lpc/campaign.log: 16 calls exit 0, 0 nonzero, phases setup b1, 2026-11-13 15:03:58 to 2026-11-13 15:21:54
+m/campaign.log: 0 calls exit 0, 0 nonzero, phases setup b9m, 2026-11-15 08:02:02 to 2026-11-15 08:13:51
+m-dry/campaign.log: 0 calls exit 0, 0 nonzero, phases setup b9m, 2026-11-15 08:00:18 to 2026-11-15 08:01:58
+pm6/campaign.log: 140 calls exit 0, 0 nonzero, phases setup pm6, 2026-11-13 13:07:59 to 2026-11-13 15:03:13
+weekend/campaign.log: 1442 calls exit 0, 0 nonzero, phases setup b1 b12 b2 b4 b11 b3 b7 b5 b8 b9 pm sparse pm6 b4cov, 2026-11-13 19:04:21 to 2026-11-14 17:39:19
+weekend2/campaign.log: 220 calls exit 0, 0 nonzero, phases setup b13 pm3, 2026-11-14 17:39:35 to 2026-11-14 21:24:54
+weekend3/campaign.log: 0 calls exit 0, 0 nonzero, phases setup b5, 2026-11-14 21:25:38 to 2026-11-14 21:35:43
+x/campaign.log: 220 calls exit 0, 0 nonzero, phases setup pm3s b1c b13p, 2026-11-14 23:45:27 to 2026-11-15 05:03:46
+x-dry/campaign.log: 44 calls exit 0, 0 nonzero, phases setup pm3s b1c b13p, 2026-11-14 23:27:29 to 2026-11-14 23:45:24
+y/campaign.log: 4 calls exit 0, 0 nonzero, phases setup b8s b9s b9p env, 2026-11-15 05:15:02 to 2026-11-15 06:48:57
+y-dry/campaign.log: 4 calls exit 0, 0 nonzero, phases setup b8s b9s b9p, 2026-11-15 05:04:06 to 2026-11-15 05:14:58
+z/campaign.log: 75 calls exit 0, 0 nonzero, phases setup pm6d, 2026-11-15 06:54:20 to 2026-11-15 07:59:49
+z-dry/campaign.log: 15 calls exit 0, 0 nonzero, phases setup pm6d, 2026-11-15 06:49:32 to 2026-11-15 06:54:16
+
+# measure.nu windows
+pm6/res/pm6.jsonl: 140 windows in 28 cells, rounds per cell [5], window 30.0 to 30.0 s
+lpc/res/b1.jsonl: 16 windows in 8 cells, rounds per cell [2], window 45.0 to 45.0 s
+lpc/res/pm6.jsonl: the same bytes as pm6/res/pm6.jsonl
+cov/res/b1.jsonl: the same bytes as lpc/res/b1.jsonl
+cov/res/b4cov.jsonl: 15 windows in 15 cells, rounds per cell [1], window 30.0 to 30.0 s
+cov/res/pm6.jsonl: the same bytes as pm6/res/pm6.jsonl
+gros/b1.jsonl: 36 windows in 12 cells, rounds per cell [3], window 45.0 to 45.0 s
+gros/b2.jsonl: 60 windows in 30 cells, rounds per cell [2], window 30.0 to 30.0 s
+dahu/b1.jsonl: 36 windows in 12 cells, rounds per cell [3], window 45.0 to 45.0 s
+dahu/b2.jsonl: 60 windows in 30 cells, rounds per cell [2], window 30.0 to 30.0 s
+weekend/res/b1.jsonl: 130 windows in 26 cells, rounds per cell [5], window 45.0 to 45.0 s
+weekend/res/b12.jsonl: 25 windows in 5 cells, rounds per cell [5], window 45.0 to 45.0 s
+weekend/res/b2.jsonl: 250 windows in 50 cells, rounds per cell [5], window 30.0 to 30.0 s
+weekend/res/b3.jsonl: 310 windows in 62 cells, rounds per cell [5], window 30.0 to 30.0 s
+weekend/res/b4.jsonl: 152 windows in 32 cells, rounds per cell [1, 5], window 20.0 to 30.0 s
+weekend/res/b4cov.jsonl: 75 windows in 15 cells, rounds per cell [5], window 30.0 to 30.0 s
+weekend/res/b4ring.jsonl: 40 windows in 8 cells, rounds per cell [5], window 30.0 to 30.0 s
+weekend/res/b7.jsonl: 70 windows in 14 cells, rounds per cell [5], window 30.0 to 30.0 s
+weekend/res/pm.jsonl: 250 windows in 50 cells, rounds per cell [5], window 30.0 to 30.0 s
+weekend/res/pm6.jsonl: 140 windows in 28 cells, rounds per cell [5], window 30.0 to 30.0 s
+weekend2/res/b1.jsonl: the same bytes as weekend/res/b1.jsonl
+weekend2/res/b11.jsonl: the same bytes as weekend/res/b11.jsonl
+weekend2/res/b12.jsonl: the same bytes as weekend/res/b12.jsonl
+weekend2/res/b13.jsonl: 60 windows in 12 cells, rounds per cell [5], window 45.0 to 45.0 s
+weekend2/res/b2.jsonl: the same bytes as weekend/res/b2.jsonl
+weekend2/res/b3.jsonl: the same bytes as weekend/res/b3.jsonl
+weekend2/res/b4.jsonl: the same bytes as weekend/res/b4.jsonl
+weekend2/res/b4cov.jsonl: the same bytes as weekend/res/b4cov.jsonl
+weekend2/res/b4ring.jsonl: the same bytes as weekend/res/b4ring.jsonl
+weekend2/res/b5-accuracy-burst.jsonl: the same bytes as weekend/res/b5-accuracy-burst.jsonl
+weekend2/res/b5-accuracy-round_robin.jsonl: the same bytes as weekend/res/b5-accuracy-round_robin.jsonl
+weekend2/res/b5-progbench.jsonl: the same bytes as weekend/res/b5-progbench.jsonl
+weekend2/res/b7.jsonl: the same bytes as weekend/res/b7.jsonl
+weekend2/res/b8-hi.jsonl: the same bytes as weekend/res/b8-hi.jsonl
+weekend2/res/b8-n100.jsonl: the same bytes as weekend/res/b8-n100.jsonl
+weekend2/res/b9-flood.jsonl: the same bytes as weekend/res/b9-flood.jsonl
+weekend2/res/b9.jsonl: the same bytes as weekend/res/b9.jsonl
+weekend2/res/pm.jsonl: the same bytes as weekend/res/pm.jsonl
+weekend2/res/pm3.jsonl: 160 windows in 32 cells, rounds per cell [5], window 30.0 to 30.0 s
+weekend2/res/pm6.jsonl: the same bytes as weekend/res/pm6.jsonl
+weekend3/res/b1.jsonl: the same bytes as weekend/res/b1.jsonl
+weekend3/res/b11.jsonl: the same bytes as weekend/res/b11.jsonl
+weekend3/res/b12.jsonl: the same bytes as weekend/res/b12.jsonl
+weekend3/res/b13.jsonl: the same bytes as weekend2/res/b13.jsonl
+weekend3/res/b2.jsonl: the same bytes as weekend/res/b2.jsonl
+weekend3/res/b3.jsonl: the same bytes as weekend/res/b3.jsonl
+weekend3/res/b4.jsonl: the same bytes as weekend/res/b4.jsonl
+weekend3/res/b4cov.jsonl: the same bytes as weekend/res/b4cov.jsonl
+weekend3/res/b4ring.jsonl: the same bytes as weekend/res/b4ring.jsonl
+weekend3/res/b7.jsonl: the same bytes as weekend/res/b7.jsonl
+weekend3/res/b8-hi.jsonl: the same bytes as weekend/res/b8-hi.jsonl
+weekend3/res/b8-n100.jsonl: the same bytes as weekend/res/b8-n100.jsonl
+weekend3/res/b9-flood.jsonl: the same bytes as weekend/res/b9-flood.jsonl
+weekend3/res/b9.jsonl: the same bytes as weekend/res/b9.jsonl
+weekend3/res/pm.jsonl: the same bytes as weekend/res/pm.jsonl
+weekend3/res/pm3.jsonl: the same bytes as weekend2/res/pm3.jsonl
+weekend3/res/pm6.jsonl: the same bytes as weekend/res/pm6.jsonl
+ctl-dry/res/b1.jsonl: the same bytes as weekend/res/b1.jsonl
+ctl-dry/res/b11.jsonl: the same bytes as weekend/res/b11.jsonl
+ctl-dry/res/b12.jsonl: the same bytes as weekend/res/b12.jsonl
+ctl-dry/res/b13.jsonl: the same bytes as weekend2/res/b13.jsonl
+ctl-dry/res/b13s.jsonl: 3 windows in 3 cells, rounds per cell [1], window 4.0 to 4.0 s
+ctl-dry/res/b2.jsonl: the same bytes as weekend/res/b2.jsonl
+ctl-dry/res/b3.jsonl: the same bytes as weekend/res/b3.jsonl
+ctl-dry/res/b4.jsonl: the same bytes as weekend/res/b4.jsonl
+ctl-dry/res/b4cov.jsonl: the same bytes as weekend/res/b4cov.jsonl
+ctl-dry/res/b4ring.jsonl: the same bytes as weekend/res/b4ring.jsonl
+ctl-dry/res/b5-accuracy-burst.jsonl: the same bytes as weekend3/res/b5-accuracy-burst.jsonl
+ctl-dry/res/b5-accuracy-round_robin.jsonl: the same bytes as weekend3/res/b5-accuracy-round_robin.jsonl
+ctl-dry/res/b5-progbench.jsonl: the same bytes as weekend3/res/b5-progbench.jsonl
+ctl-dry/res/b7.jsonl: the same bytes as weekend/res/b7.jsonl
+ctl-dry/res/b8-hi.jsonl: the same bytes as weekend/res/b8-hi.jsonl
+ctl-dry/res/b8-n100.jsonl: the same bytes as weekend/res/b8-n100.jsonl
+ctl-dry/res/b9-flood.jsonl: the same bytes as weekend/res/b9-flood.jsonl
+ctl-dry/res/b9.jsonl: the same bytes as weekend/res/b9.jsonl
+ctl-dry/res/pm.jsonl: the same bytes as weekend/res/pm.jsonl
+ctl-dry/res/pm3.jsonl: the same bytes as weekend2/res/pm3.jsonl
+ctl-dry/res/pm6.jsonl: the same bytes as weekend/res/pm6.jsonl
+ctl/res/b1.jsonl: the same bytes as weekend/res/b1.jsonl
+ctl/res/b11.jsonl: the same bytes as weekend/res/b11.jsonl
+ctl/res/b12.jsonl: the same bytes as weekend/res/b12.jsonl
+ctl/res/b13.jsonl: the same bytes as weekend2/res/b13.jsonl
+ctl/res/b13s.jsonl: 15 windows in 3 cells, rounds per cell [5], window 45.0 to 45.0 s
+ctl/res/b2.jsonl: the same bytes as weekend/res/b2.jsonl
+ctl/res/b3.jsonl: the same bytes as weekend/res/b3.jsonl
+ctl/res/b4.jsonl: the same bytes as weekend/res/b4.jsonl
+ctl/res/b4cov.jsonl: the same bytes as weekend/res/b4cov.jsonl
+ctl/res/b4ring.jsonl: the same bytes as weekend/res/b4ring.jsonl
+ctl/res/b5-accuracy-burst.jsonl: the same bytes as weekend3/res/b5-accuracy-burst.jsonl
+ctl/res/b5-accuracy-round_robin.jsonl: the same bytes as weekend3/res/b5-accuracy-round_robin.jsonl
+ctl/res/b5-progbench.jsonl: the same bytes as weekend3/res/b5-progbench.jsonl
+ctl/res/b7.jsonl: the same bytes as weekend/res/b7.jsonl
+ctl/res/b8-hi.jsonl: the same bytes as weekend/res/b8-hi.jsonl
+ctl/res/b8-n100.jsonl: the same bytes as weekend/res/b8-n100.jsonl
+ctl/res/b9-flood.jsonl: the same bytes as weekend/res/b9-flood.jsonl
+ctl/res/b9.jsonl: the same bytes as weekend/res/b9.jsonl
+ctl/res/pm.jsonl: the same bytes as weekend/res/pm.jsonl
+ctl/res/pm3.jsonl: the same bytes as weekend2/res/pm3.jsonl
+ctl/res/pm6.jsonl: the same bytes as weekend/res/pm6.jsonl
+x-dry/res/b1.jsonl: the same bytes as weekend/res/b1.jsonl
+x-dry/res/b11.jsonl: the same bytes as weekend/res/b11.jsonl
+x-dry/res/b12.jsonl: the same bytes as weekend/res/b12.jsonl
+x-dry/res/b13.jsonl: the same bytes as weekend2/res/b13.jsonl
+x-dry/res/b13p.jsonl: 16 windows in 16 cells, rounds per cell [1], window 4.0 to 4.0 s
+x-dry/res/b13s.jsonl: the same bytes as ctl/res/b13s.jsonl
+x-dry/res/b1c.jsonl: 20 windows in 20 cells, rounds per cell [1], window 4.0 to 4.0 s
+x-dry/res/b2.jsonl: the same bytes as weekend/res/b2.jsonl
+x-dry/res/b3.jsonl: the same bytes as weekend/res/b3.jsonl
+x-dry/res/b4.jsonl: the same bytes as weekend/res/b4.jsonl
+x-dry/res/b4cov.jsonl: the same bytes as weekend/res/b4cov.jsonl
+x-dry/res/b4ring.jsonl: the same bytes as weekend/res/b4ring.jsonl
+x-dry/res/b5-accuracy-burst.jsonl: the same bytes as weekend3/res/b5-accuracy-burst.jsonl
+x-dry/res/b5-accuracy-round_robin.jsonl: the same bytes as weekend3/res/b5-accuracy-round_robin.jsonl
+x-dry/res/b5-progbench.jsonl: the same bytes as weekend3/res/b5-progbench.jsonl
+x-dry/res/b7.jsonl: the same bytes as weekend/res/b7.jsonl
+x-dry/res/b8-hi.jsonl: the same bytes as weekend/res/b8-hi.jsonl
+x-dry/res/b8-n100.jsonl: the same bytes as weekend/res/b8-n100.jsonl
+x-dry/res/b9-flood.jsonl: the same bytes as weekend/res/b9-flood.jsonl
+x-dry/res/b9.jsonl: the same bytes as weekend/res/b9.jsonl
+x-dry/res/b9s.jsonl: the same bytes as ctl/res/b9s.jsonl
+x-dry/res/pm.jsonl: the same bytes as weekend/res/pm.jsonl
+x-dry/res/pm3.jsonl: the same bytes as weekend2/res/pm3.jsonl
+x-dry/res/pm3s.jsonl: 8 windows in 8 cells, rounds per cell [1], window 4.0 to 4.0 s
+x-dry/res/pm6.jsonl: the same bytes as weekend/res/pm6.jsonl
+x-dry/res/ramp.jsonl: the same bytes as ctl/res/ramp.jsonl
+x/res/b1.jsonl: the same bytes as weekend/res/b1.jsonl
+x/res/b11.jsonl: the same bytes as weekend/res/b11.jsonl
+x/res/b12.jsonl: the same bytes as weekend/res/b12.jsonl
+x/res/b13.jsonl: the same bytes as weekend2/res/b13.jsonl
+x/res/b13p.jsonl: 80 windows in 16 cells, rounds per cell [5], window 45.0 to 45.0 s
+x/res/b13s.jsonl: the same bytes as ctl/res/b13s.jsonl
+x/res/b1c.jsonl: 100 windows in 20 cells, rounds per cell [5], window 45.0 to 45.0 s
+x/res/b2.jsonl: the same bytes as weekend/res/b2.jsonl
+x/res/b3.jsonl: the same bytes as weekend/res/b3.jsonl
+x/res/b4.jsonl: the same bytes as weekend/res/b4.jsonl
+x/res/b4cov.jsonl: the same bytes as weekend/res/b4cov.jsonl
+x/res/b4ring.jsonl: the same bytes as weekend/res/b4ring.jsonl
+x/res/b5-accuracy-burst.jsonl: the same bytes as weekend3/res/b5-accuracy-burst.jsonl
+x/res/b5-accuracy-round_robin.jsonl: the same bytes as weekend3/res/b5-accuracy-round_robin.jsonl
+x/res/b5-progbench.jsonl: the same bytes as weekend3/res/b5-progbench.jsonl
+x/res/b7.jsonl: the same bytes as weekend/res/b7.jsonl
+x/res/b8-hi.jsonl: the same bytes as weekend/res/b8-hi.jsonl
+x/res/b8-n100.jsonl: the same bytes as weekend/res/b8-n100.jsonl
+x/res/b9-flood.jsonl: the same bytes as weekend/res/b9-flood.jsonl
+x/res/b9.jsonl: the same bytes as weekend/res/b9.jsonl
+x/res/b9s.jsonl: the same bytes as ctl/res/b9s.jsonl
+x/res/pm.jsonl: the same bytes as weekend/res/pm.jsonl
+x/res/pm3.jsonl: the same bytes as weekend2/res/pm3.jsonl
+x/res/pm3s.jsonl: 40 windows in 8 cells, rounds per cell [5], window 30.0 to 30.0 s
+x/res/pm6.jsonl: the same bytes as weekend/res/pm6.jsonl
+x/res/ramp.jsonl: the same bytes as ctl/res/ramp.jsonl
+y-dry/res/b1.jsonl: the same bytes as weekend/res/b1.jsonl
+y-dry/res/b11.jsonl: the same bytes as weekend/res/b11.jsonl
+y-dry/res/b12.jsonl: the same bytes as weekend/res/b12.jsonl
+y-dry/res/b13.jsonl: the same bytes as weekend2/res/b13.jsonl
+y-dry/res/b13p.jsonl: the same bytes as x/res/b13p.jsonl
+y-dry/res/b13s.jsonl: the same bytes as ctl/res/b13s.jsonl
+y-dry/res/b1c.jsonl: the same bytes as x/res/b1c.jsonl
+y-dry/res/b2.jsonl: the same bytes as weekend/res/b2.jsonl
+y-dry/res/b3.jsonl: the same bytes as weekend/res/b3.jsonl
+y-dry/res/b4.jsonl: the same bytes as weekend/res/b4.jsonl
+y-dry/res/b4cov.jsonl: the same bytes as weekend/res/b4cov.jsonl
+y-dry/res/b4ring.jsonl: the same bytes as weekend/res/b4ring.jsonl
+y-dry/res/b5-accuracy-burst.jsonl: the same bytes as weekend3/res/b5-accuracy-burst.jsonl
+y-dry/res/b5-accuracy-round_robin.jsonl: the same bytes as weekend3/res/b5-accuracy-round_robin.jsonl
+y-dry/res/b5-progbench.jsonl: the same bytes as weekend3/res/b5-progbench.jsonl
+y-dry/res/b7.jsonl: the same bytes as weekend/res/b7.jsonl
+y-dry/res/b8-hi.jsonl: the same bytes as weekend/res/b8-hi.jsonl
+y-dry/res/b8-n100.jsonl: the same bytes as weekend/res/b8-n100.jsonl
+y-dry/res/b9-flood.jsonl: the same bytes as weekend/res/b9-flood.jsonl
+y-dry/res/b9.jsonl: the same bytes as weekend/res/b9.jsonl
+y-dry/res/b9s.jsonl: the same bytes as ctl/res/b9s.jsonl
+y-dry/res/pm.jsonl: the same bytes as weekend/res/pm.jsonl
+y-dry/res/pm3.jsonl: the same bytes as weekend2/res/pm3.jsonl
+y-dry/res/pm3s-cpu.jsonl: the same bytes as x/res/pm3s-cpu.jsonl
+y-dry/res/pm3s.jsonl: the same bytes as x/res/pm3s.jsonl
+y-dry/res/pm6.jsonl: the same bytes as weekend/res/pm6.jsonl
+y-dry/res/ramp.jsonl: the same bytes as ctl/res/ramp.jsonl
+y/res/b1.jsonl: the same bytes as weekend/res/b1.jsonl
+y/res/b11.jsonl: the same bytes as weekend/res/b11.jsonl
+y/res/b12.jsonl: the same bytes as weekend/res/b12.jsonl
+y/res/b13.jsonl: the same bytes as weekend2/res/b13.jsonl
+y/res/b13p.jsonl: the same bytes as x/res/b13p.jsonl
+y/res/b13s.jsonl: the same bytes as ctl/res/b13s.jsonl
+y/res/b1c.jsonl: the same bytes as x/res/b1c.jsonl
+y/res/b2.jsonl: the same bytes as weekend/res/b2.jsonl
+y/res/b3.jsonl: the same bytes as weekend/res/b3.jsonl
+y/res/b4.jsonl: the same bytes as weekend/res/b4.jsonl
+y/res/b4cov.jsonl: the same bytes as weekend/res/b4cov.jsonl
+y/res/b4ring.jsonl: the same bytes as weekend/res/b4ring.jsonl
+y/res/b5-accuracy-burst.jsonl: the same bytes as weekend3/res/b5-accuracy-burst.jsonl
+y/res/b5-accuracy-round_robin.jsonl: the same bytes as weekend3/res/b5-accuracy-round_robin.jsonl
+y/res/b5-progbench.jsonl: the same bytes as weekend3/res/b5-progbench.jsonl
+y/res/b7.jsonl: the same bytes as weekend/res/b7.jsonl
+y/res/b8-hi.jsonl: the same bytes as weekend/res/b8-hi.jsonl
+y/res/b8-n100.jsonl: the same bytes as weekend/res/b8-n100.jsonl
+y/res/b9-flood.jsonl: the same bytes as weekend/res/b9-flood.jsonl
+y/res/b9.jsonl: the same bytes as weekend/res/b9.jsonl
+y/res/b9s.jsonl: the same bytes as ctl/res/b9s.jsonl
+y/res/pm.jsonl: the same bytes as weekend/res/pm.jsonl
+y/res/pm3.jsonl: the same bytes as weekend2/res/pm3.jsonl
+y/res/pm3s-cpu.jsonl: the same bytes as x/res/pm3s-cpu.jsonl
+y/res/pm3s.jsonl: the same bytes as x/res/pm3s.jsonl
+y/res/pm6.jsonl: the same bytes as weekend/res/pm6.jsonl
+y/res/ramp.jsonl: the same bytes as ctl/res/ramp.jsonl
+z-dry/res/b1.jsonl: the same bytes as weekend/res/b1.jsonl
+z-dry/res/b11.jsonl: the same bytes as weekend/res/b11.jsonl
+z-dry/res/b12.jsonl: the same bytes as weekend/res/b12.jsonl
+z-dry/res/b13.jsonl: the same bytes as weekend2/res/b13.jsonl
+z-dry/res/b13p.jsonl: the same bytes as x/res/b13p.jsonl
+z-dry/res/b13s.jsonl: the same bytes as ctl/res/b13s.jsonl
+z-dry/res/b1c.jsonl: the same bytes as x/res/b1c.jsonl
+z-dry/res/b2.jsonl: the same bytes as weekend/res/b2.jsonl
+z-dry/res/b3.jsonl: the same bytes as weekend/res/b3.jsonl
+z-dry/res/b4.jsonl: the same bytes as weekend/res/b4.jsonl
+z-dry/res/b4cov.jsonl: the same bytes as weekend/res/b4cov.jsonl
+z-dry/res/b4ring.jsonl: the same bytes as weekend/res/b4ring.jsonl
+z-dry/res/b5-accuracy-burst.jsonl: the same bytes as weekend3/res/b5-accuracy-burst.jsonl
+z-dry/res/b5-accuracy-round_robin.jsonl: the same bytes as weekend3/res/b5-accuracy-round_robin.jsonl
+z-dry/res/b5-progbench.jsonl: the same bytes as weekend3/res/b5-progbench.jsonl
+z-dry/res/b7.jsonl: the same bytes as weekend/res/b7.jsonl
+z-dry/res/b8-hi.jsonl: the same bytes as weekend/res/b8-hi.jsonl
+z-dry/res/b8-n100.jsonl: the same bytes as weekend/res/b8-n100.jsonl
+z-dry/res/b8s-fixed-t1.jsonl: the same bytes as y/res/b8s-fixed-t1.jsonl
+z-dry/res/b8s-fixed-t4.jsonl: the same bytes as y/res/b8s-fixed-t4.jsonl
+z-dry/res/b8s-fixed-t8.jsonl: the same bytes as y/res/b8s-fixed-t8.jsonl
+z-dry/res/b9-flood.jsonl: the same bytes as weekend/res/b9-flood.jsonl
+z-dry/res/b9.jsonl: the same bytes as weekend/res/b9.jsonl
+z-dry/res/b9s-fixed.jsonl: the same bytes as y/res/b9s-fixed.jsonl
+z-dry/res/b9s.jsonl: the same bytes as ctl/res/b9s.jsonl
+z-dry/res/pm.jsonl: the same bytes as weekend/res/pm.jsonl
+z-dry/res/pm3.jsonl: the same bytes as weekend2/res/pm3.jsonl
+z-dry/res/pm3s-cpu.jsonl: the same bytes as x/res/pm3s-cpu.jsonl
+z-dry/res/pm3s.jsonl: the same bytes as x/res/pm3s.jsonl
+z-dry/res/pm6.jsonl: the same bytes as weekend/res/pm6.jsonl
+z-dry/res/pm6d.jsonl: 15 windows in 15 cells, rounds per cell [1], window 4.0 to 4.0 s
+z-dry/res/ramp.jsonl: the same bytes as ctl/res/ramp.jsonl
+z/res/b1.jsonl: the same bytes as weekend/res/b1.jsonl
+z/res/b11.jsonl: the same bytes as weekend/res/b11.jsonl
+z/res/b12.jsonl: the same bytes as weekend/res/b12.jsonl
+z/res/b13.jsonl: the same bytes as weekend2/res/b13.jsonl
+z/res/b13p.jsonl: the same bytes as x/res/b13p.jsonl
+z/res/b13s.jsonl: the same bytes as ctl/res/b13s.jsonl
+z/res/b1c.jsonl: the same bytes as x/res/b1c.jsonl
+z/res/b2.jsonl: the same bytes as weekend/res/b2.jsonl
+z/res/b3.jsonl: the same bytes as weekend/res/b3.jsonl
+z/res/b4.jsonl: the same bytes as weekend/res/b4.jsonl
+z/res/b4cov.jsonl: the same bytes as weekend/res/b4cov.jsonl
+z/res/b4ring.jsonl: the same bytes as weekend/res/b4ring.jsonl
+z/res/b5-accuracy-burst.jsonl: the same bytes as weekend3/res/b5-accuracy-burst.jsonl
+z/res/b5-accuracy-round_robin.jsonl: the same bytes as weekend3/res/b5-accuracy-round_robin.jsonl
+z/res/b5-progbench.jsonl: the same bytes as weekend3/res/b5-progbench.jsonl
+z/res/b7.jsonl: the same bytes as weekend/res/b7.jsonl
+z/res/b8-hi.jsonl: the same bytes as weekend/res/b8-hi.jsonl
+z/res/b8-n100.jsonl: the same bytes as weekend/res/b8-n100.jsonl
+z/res/b8s-fixed-t1.jsonl: the same bytes as y/res/b8s-fixed-t1.jsonl
+z/res/b8s-fixed-t4.jsonl: the same bytes as y/res/b8s-fixed-t4.jsonl
+z/res/b8s-fixed-t8.jsonl: the same bytes as y/res/b8s-fixed-t8.jsonl
+z/res/b9-flood.jsonl: the same bytes as weekend/res/b9-flood.jsonl
+z/res/b9.jsonl: the same bytes as weekend/res/b9.jsonl
+z/res/b9s-fixed.jsonl: the same bytes as y/res/b9s-fixed.jsonl
+z/res/b9s.jsonl: the same bytes as ctl/res/b9s.jsonl
+z/res/pm.jsonl: the same bytes as weekend/res/pm.jsonl
+z/res/pm3.jsonl: the same bytes as weekend2/res/pm3.jsonl
+z/res/pm3s-cpu.jsonl: the same bytes as x/res/pm3s-cpu.jsonl
+z/res/pm3s.jsonl: the same bytes as x/res/pm3s.jsonl
+z/res/pm6.jsonl: the same bytes as weekend/res/pm6.jsonl
+z/res/pm6d.jsonl: 75 windows in 15 cells, rounds per cell [5], window 30.0 to 30.0 s
+z/res/ramp.jsonl: the same bytes as ctl/res/ramp.jsonl
+m-dry/res/b1.jsonl: the same bytes as weekend/res/b1.jsonl
+m-dry/res/b11.jsonl: the same bytes as weekend/res/b11.jsonl
+m-dry/res/b12.jsonl: the same bytes as weekend/res/b12.jsonl
+m-dry/res/b13.jsonl: the same bytes as weekend2/res/b13.jsonl
+m-dry/res/b13p.jsonl: the same bytes as x/res/b13p.jsonl
+m-dry/res/b13s.jsonl: the same bytes as ctl/res/b13s.jsonl
+m-dry/res/b1c.jsonl: the same bytes as x/res/b1c.jsonl
+m-dry/res/b2.jsonl: the same bytes as weekend/res/b2.jsonl
+m-dry/res/b3.jsonl: the same bytes as weekend/res/b3.jsonl
+m-dry/res/b4.jsonl: the same bytes as weekend/res/b4.jsonl
+m-dry/res/b4cov.jsonl: the same bytes as weekend/res/b4cov.jsonl
+m-dry/res/b4ring.jsonl: the same bytes as weekend/res/b4ring.jsonl
+m-dry/res/b5-accuracy-burst.jsonl: the same bytes as weekend3/res/b5-accuracy-burst.jsonl
+m-dry/res/b5-accuracy-round_robin.jsonl: the same bytes as weekend3/res/b5-accuracy-round_robin.jsonl
+m-dry/res/b5-progbench.jsonl: the same bytes as weekend3/res/b5-progbench.jsonl
+m-dry/res/b7.jsonl: the same bytes as weekend/res/b7.jsonl
+m-dry/res/b8-hi.jsonl: the same bytes as weekend/res/b8-hi.jsonl
+m-dry/res/b8-n100.jsonl: the same bytes as weekend/res/b8-n100.jsonl
+m-dry/res/b8s-fixed-t1.jsonl: the same bytes as y/res/b8s-fixed-t1.jsonl
+m-dry/res/b8s-fixed-t4.jsonl: the same bytes as y/res/b8s-fixed-t4.jsonl
+m-dry/res/b8s-fixed-t8.jsonl: the same bytes as y/res/b8s-fixed-t8.jsonl
+m-dry/res/b9-flood.jsonl: the same bytes as weekend/res/b9-flood.jsonl
+m-dry/res/b9.jsonl: the same bytes as weekend/res/b9.jsonl
+m-dry/res/b9s-fixed.jsonl: the same bytes as y/res/b9s-fixed.jsonl
+m-dry/res/b9s.jsonl: the same bytes as ctl/res/b9s.jsonl
+m-dry/res/pm.jsonl: the same bytes as weekend/res/pm.jsonl
+m-dry/res/pm3.jsonl: the same bytes as weekend2/res/pm3.jsonl
+m-dry/res/pm3s-cpu.jsonl: the same bytes as x/res/pm3s-cpu.jsonl
+m-dry/res/pm3s.jsonl: the same bytes as x/res/pm3s.jsonl
+m-dry/res/pm6.jsonl: the same bytes as weekend/res/pm6.jsonl
+m-dry/res/pm6d.jsonl: the same bytes as z/res/pm6d.jsonl
+m-dry/res/ramp.jsonl: the same bytes as ctl/res/ramp.jsonl
+m/res/b1.jsonl: the same bytes as weekend/res/b1.jsonl
+m/res/b11.jsonl: the same bytes as weekend/res/b11.jsonl
+m/res/b12.jsonl: the same bytes as weekend/res/b12.jsonl
+m/res/b13.jsonl: the same bytes as weekend2/res/b13.jsonl
+m/res/b13p.jsonl: the same bytes as x/res/b13p.jsonl
+m/res/b13s.jsonl: the same bytes as ctl/res/b13s.jsonl
+m/res/b1c.jsonl: the same bytes as x/res/b1c.jsonl
+m/res/b2.jsonl: the same bytes as weekend/res/b2.jsonl
+m/res/b3.jsonl: the same bytes as weekend/res/b3.jsonl
+m/res/b4.jsonl: the same bytes as weekend/res/b4.jsonl
+m/res/b4cov.jsonl: the same bytes as weekend/res/b4cov.jsonl
+m/res/b4ring.jsonl: the same bytes as weekend/res/b4ring.jsonl
+m/res/b5-accuracy-burst.jsonl: the same bytes as weekend3/res/b5-accuracy-burst.jsonl
+m/res/b5-accuracy-round_robin.jsonl: the same bytes as weekend3/res/b5-accuracy-round_robin.jsonl
+m/res/b5-progbench.jsonl: the same bytes as weekend3/res/b5-progbench.jsonl
+m/res/b7.jsonl: the same bytes as weekend/res/b7.jsonl
+m/res/b8-hi.jsonl: the same bytes as weekend/res/b8-hi.jsonl
+m/res/b8-n100.jsonl: the same bytes as weekend/res/b8-n100.jsonl
+m/res/b8s-fixed-t1.jsonl: the same bytes as y/res/b8s-fixed-t1.jsonl
+m/res/b8s-fixed-t4.jsonl: the same bytes as y/res/b8s-fixed-t4.jsonl
+m/res/b8s-fixed-t8.jsonl: the same bytes as y/res/b8s-fixed-t8.jsonl
+m/res/b9-flood.jsonl: the same bytes as weekend/res/b9-flood.jsonl
+m/res/b9.jsonl: the same bytes as weekend/res/b9.jsonl
+m/res/b9s-fixed.jsonl: the same bytes as y/res/b9s-fixed.jsonl
+m/res/b9s.jsonl: the same bytes as ctl/res/b9s.jsonl
+m/res/pm.jsonl: the same bytes as weekend/res/pm.jsonl
+m/res/pm3.jsonl: the same bytes as weekend2/res/pm3.jsonl
+m/res/pm3s-cpu.jsonl: the same bytes as x/res/pm3s-cpu.jsonl
+m/res/pm3s.jsonl: the same bytes as x/res/pm3s.jsonl
+m/res/pm6.jsonl: the same bytes as weekend/res/pm6.jsonl
+m/res/pm6d.jsonl: the same bytes as z/res/pm6d.jsonl
+m/res/ramp.jsonl: the same bytes as ctl/res/ramp.jsonl
+
+# flagged windows: 90
+pm6/res/pm6.jsonl: pm fixed t1 N1 r5 hsflowd: no traffic (0 pps), port rate 0.00 Gbit/s against the cell's median 1.35
+pm6/res/pm6.jsonl: pm fixed t1 N1 r5 netobserv: no traffic (0 pps), port rate 0.00 Gbit/s against the cell's median 1.35
+pm6/res/pm6.jsonl: pm fixed t1 N1 r5 none: no traffic (0 pps), port rate 0.00 Gbit/s against the cell's median 1.34
+pm6/res/pm6.jsonl: pm fixed t1 N1 r1 pmacctd: port drops 37.04% of the packets
+pm6/res/pm6.jsonl: pm fixed t1 N1 r5 pmacctd: no traffic (0 pps), port rate 0.00 Gbit/s against the cell's median 1.34
+pm6/res/pm6.jsonl: pm fixed t1 N1 r1 softflowd: port drops 29.06% of the packets
+pm6/res/pm6.jsonl: pm fixed t1 N1 r4 softflowd: port drops 0.68% of the packets
+pm6/res/pm6.jsonl: pm fixed t1 N10 r5 netobserv: no traffic (0 pps), port rate 0.00 Gbit/s against the cell's median 1.34
+pm6/res/pm6.jsonl: pm fixed t1 N10 r5 pmacctd: no traffic (0 pps), port rate 0.00 Gbit/s against the cell's median 1.35
+pm6/res/pm6.jsonl: pm fixed t1 N10 r5 rfm_sampled: no traffic (0 pps), port rate 0.00 Gbit/s against the cell's median 1.35
+pm6/res/pm6.jsonl: pm fixed t1 N10 r5 softflowd: no traffic (0 pps), port rate 0.00 Gbit/s against the cell's median 1.34
+pm6/res/pm6.jsonl: pm fixed t1 N100 r5 hsflowd: no traffic (0 pps), port rate 0.00 Gbit/s against the cell's median 1.35
+pm6/res/pm6.jsonl: pm fixed t1 N100 r5 none: no traffic (0 pps), port rate 0.00 Gbit/s against the cell's median 1.35
+pm6/res/pm6.jsonl: pm fixed t1 N100 r4 pmacctd: port drops 39.36% of the packets
+pm6/res/pm6.jsonl: pm fixed t1 N100 r5 pmacctd: port drops 39.07% of the packets
+pm6/res/pm6.jsonl: pm fixed t1 N100 r5 rfm_sampled: no traffic (0 pps), port rate 0.00 Gbit/s against the cell's median 1.35
+pm6/res/pm6.jsonl: pm fixed t1 N100 r1 softflowd: port drops 1.14% of the packets
+pm6/res/pm6.jsonl: pm fixed t1 N100 r2 softflowd: port drops 1.39% of the packets
+pm6/res/pm6.jsonl: pm fixed t1 N100 r3 softflowd: port drops 0.76% of the packets
+pm6/res/pm6.jsonl: pm fixed t1 N100 r4 softflowd: port drops 1.21% of the packets
+pm6/res/pm6.jsonl: pm fixed t1 N100 r5 softflowd: no traffic (0 pps), port rate 0.00 Gbit/s against the cell's median 1.34
+pm6/res/pm6.jsonl: pm fixed t1 N1000 r5 hsflowd: no traffic (0 pps), port rate 0.00 Gbit/s against the cell's median 1.35
+pm6/res/pm6.jsonl: pm fixed t1 N1000 r5 netobserv: no traffic (0 pps), port rate 0.00 Gbit/s against the cell's median 1.35
+pm6/res/pm6.jsonl: pm fixed t1 N1000 r5 none: no traffic (0 pps), port rate 0.00 Gbit/s against the cell's median 1.35
+pm6/res/pm6.jsonl: pm fixed t1 N1000 r2 pmacctd: port drops 8.00% of the packets
+pm6/res/pm6.jsonl: pm fixed t1 N1000 r3 pmacctd: port drops 37.27% of the packets
+pm6/res/pm6.jsonl: pm fixed t1 N1000 r4 pmacctd: port drops 36.42% of the packets
+pm6/res/pm6.jsonl: pm fixed t1 N1000 r5 pmacctd: port rate 1.08 Gbit/s against the cell's median 1.36
+pm6/res/pm6.jsonl: pm fixed t1 N1000 r1 softflowd: port drops 2.47% of the packets
+pm6/res/pm6.jsonl: pm fixed t1 N1000 r2 softflowd: port drops 2.86% of the packets
+pm6/res/pm6.jsonl: pm fixed t1 N1000 r3 softflowd: port drops 0.94% of the packets
+pm6/res/pm6.jsonl: pm fixed t1 N1000 r4 softflowd: port drops 0.93% of the packets
+pm6/res/pm6.jsonl: pm fixed t1 N1000 r5 softflowd: no traffic (0 pps), port rate 0.00 Gbit/s against the cell's median 1.36
+weekend/res/b1.jsonl: tx_tso r3 softflowd: listed as invalid, port rate 43.11 Gbit/s against the cell's median 98.86
+weekend/res/b12.jsonl: mixed r1 pmacctd: port rate 21.85 Gbit/s against the cell's median 26.29, port drops 11.59% of the packets
+weekend/res/b12.jsonl: mixed r2 pmacctd: port rate 44.90 Gbit/s against the cell's median 26.29, port drops 1.20% of the packets
+weekend/res/b12.jsonl: mixed r4 pmacctd: port rate 61.35 Gbit/s against the cell's median 26.29
+weekend/res/b12.jsonl: mixed r5 pmacctd: port rate 1.29 Gbit/s against the cell's median 26.29, port drops 16.82% of the packets
+weekend/res/b3.jsonl: base N1 r2 pmacctd: port drops 0.66% of the packets
+weekend/res/b3.jsonl: base N1 r5 pmacctd: port drops 0.63% of the packets
+weekend/res/b3.jsonl: base N10 r1 softflowd: port drops 0.10% of the packets
+weekend/res/b3.jsonl: base N10 r2 softflowd: port drops 0.13% of the packets
+weekend/res/b3.jsonl: base N10 r3 softflowd: port drops 0.13% of the packets
+weekend/res/b3.jsonl: base N100 r1 pmacctd: port drops 2.43% of the packets
+weekend/res/b3.jsonl: base N100 r2 pmacctd: port drops 0.54% of the packets
+weekend/res/b3.jsonl: base N100 r3 pmacctd: port drops 2.31% of the packets
+weekend/res/b3.jsonl: base N100 r4 pmacctd: port drops 0.26% of the packets
+weekend/res/b3.jsonl: base N100 r5 pmacctd: port drops 0.33% of the packets
+weekend/res/b3.jsonl: base N100 r1 softflowd: port drops 1.22% of the packets
+weekend/res/b3.jsonl: base N100 r2 softflowd: port drops 1.06% of the packets
+weekend/res/b3.jsonl: base N100 r3 softflowd: port drops 1.17% of the packets
+weekend/res/b3.jsonl: base N100 r4 softflowd: port drops 0.99% of the packets
+weekend/res/b3.jsonl: base N100 r5 softflowd: port drops 1.07% of the packets
+weekend/res/b3.jsonl: base N1000 r1 pmacctd: port drops 35.52% of the packets
+weekend/res/b3.jsonl: base N1000 r2 pmacctd: port drops 31.12% of the packets
+weekend/res/b3.jsonl: base N1000 r3 pmacctd: port drops 35.00% of the packets
+weekend/res/b3.jsonl: base N1000 r4 pmacctd: port drops 35.39% of the packets
+weekend/res/b3.jsonl: base N1000 r5 pmacctd: port drops 35.44% of the packets
+weekend/res/b3.jsonl: base N1000 r1 softflowd: port drops 1.09% of the packets
+weekend/res/b3.jsonl: base N1000 r2 softflowd: port drops 1.33% of the packets
+weekend/res/b3.jsonl: base N1000 r3 softflowd: port drops 1.28% of the packets
+weekend/res/b3.jsonl: base N1000 r4 softflowd: port drops 1.28% of the packets
+weekend/res/b3.jsonl: base N1000 r5 softflowd: port drops 1.01% of the packets
+weekend/res/b7.jsonl: udp tx N10 r1 rfm: ring drops 32
+weekend/res/b7.jsonl: udp tx N10 r3 rfm: ring drops 64
+weekend/res/b7.jsonl: udp tx N10 r4 rfm: ring drops 166
+weekend/res/b7.jsonl: udp tx N10 r2 rfm_sampled: ring drops 32
+weekend/res/b7.jsonl: udp tx N10 r4 rfm_sampled: ring drops 32
+weekend/res/b7.jsonl: udp tx N10 r5 rfm_sampled: ring drops 32
+weekend/res/pm6.jsonl: pm fixed t1 N1 r1 pmacctd: port drops 9.61% of the packets
+weekend/res/pm6.jsonl: pm fixed t1 N1 r2 pmacctd: port drops 37.34% of the packets
+weekend/res/pm6.jsonl: pm fixed t1 N1 r3 pmacctd: port drops 37.86% of the packets
+weekend/res/pm6.jsonl: pm fixed t1 N1 r4 pmacctd: port drops 7.85% of the packets
+weekend/res/pm6.jsonl: pm fixed t1 N1 r5 pmacctd: port drops 37.44% of the packets
+weekend/res/pm6.jsonl: pm fixed t1 N1 r2 softflowd: port drops 28.38% of the packets
+weekend/res/pm6.jsonl: pm fixed t1 N1 r5 softflowd: port drops 29.30% of the packets
+weekend/res/pm6.jsonl: pm fixed t1 N100 r3 pmacctd: port drops 39.28% of the packets
+weekend/res/pm6.jsonl: pm fixed t1 N100 r1 softflowd: port drops 1.60% of the packets
+weekend/res/pm6.jsonl: pm fixed t1 N100 r2 softflowd: port drops 2.71% of the packets
+weekend/res/pm6.jsonl: pm fixed t1 N100 r3 softflowd: port drops 0.92% of the packets
+weekend/res/pm6.jsonl: pm fixed t1 N100 r4 softflowd: port drops 1.75% of the packets
+weekend/res/pm6.jsonl: pm fixed t1 N100 r5 softflowd: port drops 1.18% of the packets
+weekend/res/pm6.jsonl: pm fixed t1 N1000 r1 pmacctd: port drops 37.09% of the packets
+weekend/res/pm6.jsonl: pm fixed t1 N1000 r3 pmacctd: port drops 38.85% of the packets
+weekend/res/pm6.jsonl: pm fixed t1 N1000 r4 pmacctd: port drops 37.00% of the packets
+weekend/res/pm6.jsonl: pm fixed t1 N1000 r1 softflowd: port drops 1.28% of the packets
+weekend/res/pm6.jsonl: pm fixed t1 N1000 r2 softflowd: port drops 6.61% of the packets
+weekend/res/pm6.jsonl: pm fixed t1 N1000 r3 softflowd: port drops 1.21% of the packets
+weekend/res/pm6.jsonl: pm fixed t1 N1000 r4 softflowd: port drops 6.51% of the packets
+weekend/res/pm6.jsonl: pm fixed t1 N1000 r5 softflowd: port drops 2.98% of the packets

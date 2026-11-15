@@ -1,0 +1,27 @@
+2026-11-14 21:25:36 job 20530 vlan 4 dut spirou-7 gen spirou-8 phases: setup b5
+2026-11-14 21:25:36 rounds R5 '1 2 3 4 5' R3 '1 2 3' R2 '1 2' RB4 '1' accuracy monitors 'rfm_acc netobserv hsflowd'
+2026-11-14 21:25:37 dut ctl 172.16.208.15 test 10.48.0.7 e8:eb:d3:fd:ce:ac, gen ctl 172.16.208.16 test 10.48.0.8 e8:eb:d3:fd:cf:0c pci 0000:4b:00.0
+2026-11-14 21:25:38 === phase setup
+2026-11-14 21:25:41 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+2026-11-14 21:25:41 dut: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+2026-11-14 21:25:42 dut: pkill -x iperf3; true
+2026-11-14 21:25:42 gen: pkill -x iperf3; true
+2026-11-14 21:25:44 dut: pkill -KILL -f '^/root/progbench/progbench '; sysctl -qw kernel.bpf_stats_enabled=0; ethtool -K ens1f0np0 gro on tso on gso on; ethtool -L ens1f0np0 combined 63; true
+Actual changes:
+tx-tcp-ecn-segmentation: off [requested on]
+tx-tcp-accecn-segmentation: off [requested on]
+2026-11-14 21:25:45 === phase setup done
+2026-11-14 21:25:45 === phase b5
+2026-11-14 21:25:45 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+2026-11-14 21:25:45 dut: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+2026-11-14 21:25:45 dut: pkill -x iperf3; true
+2026-11-14 21:25:45 gen: pkill -x iperf3; true
+2026-11-14 21:25:48 dut: pkill -KILL -f '^/root/progbench/progbench '; sysctl -qw kernel.bpf_stats_enabled=0; ethtool -K ens1f0np0 gro on tso on gso on; ethtool -L ens1f0np0 combined 63; true
+Actual changes:
+tx-tcp-ecn-segmentation: off [requested on]
+tx-tcp-accecn-segmentation: off [requested on]
+2026-11-14 21:25:48 dut: timeout 2400 nu /root/workload/progbench.nu --dir /root/progbench --ns '100 1000 1' --trials 7 --cpu 2 > /root/res/b5-progbench.log 2>&1; cp /tmp/progbench.jsonl /root/res/b5-progbench.jsonl
+2026-11-14 21:33:42 dut: timeout 2400 nu /root/workload/progbench_accuracy.nu --dir /root/progbench --flows 1000 --order round_robin --cpu 2 > /root/res/b5-accuracy-round_robin.log 2>&1; cp /tmp/progbench_accuracy_round_robin.jsonl /root/res/b5-accuracy-round_robin.jsonl
+2026-11-14 21:34:42 dut: timeout 2400 nu /root/workload/progbench_accuracy.nu --dir /root/progbench --flows 1000 --order burst --cpu 2 > /root/res/b5-accuracy-burst.log 2>&1; cp /tmp/progbench_accuracy_burst.jsonl /root/res/b5-accuracy-burst.jsonl
+2026-11-14 21:35:43 === phase b5 done
+2026-11-14 21:35:43 campaign done

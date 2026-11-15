@@ -1,0 +1,32 @@
+== gros b1
+rx_gro                        24.7 Gb/s  rfm_acc.exact  100.01 [100.00,100.01] n=3  rfm_acc.est  100.07 [99.86,100.27] n=3  netobserv.est    4.25 [4.12,4.37] n=3  hsflowd.est    4.26 [4.16,4.38] n=3
+rx_nogro                      24.7 Gb/s  rfm_acc.exact  100.01 [100.00,100.01] n=3  rfm_acc.est   99.97 [99.89,100.02] n=3  netobserv.est   99.92 [99.92,99.92] n=3  hsflowd.est   99.90 [99.85,99.94] n=3
+tx_notso                      24.7 Gb/s  rfm_acc.exact  100.01 [100.01,100.01] n=3  rfm_acc.est  100.23 [99.90,100.44] n=3  netobserv.est    2.22 [2.21,2.23] n=3  hsflowd.est    2.22 [2.18,2.25] n=3
+tx_tso                        24.7 Gb/s  rfm_acc.exact  100.00 [100.00,100.01] n=3  rfm_acc.est  100.22 [99.77,100.46] n=3  netobserv.est    2.24 [2.21,2.27] n=3  hsflowd.est    2.22 [2.20,2.22] n=3
+== gros b2
+rx P1 max                     24.2 Gb/s  rfm_acc.exact  100.01 [100.01,100.01] n=2  rfm_acc.est  100.15 [99.68,100.62] n=2  netobserv.est    2.76 [2.76,2.76] n=2  hsflowd.est    2.70 [2.69,2.70] n=2
+rx P128 -b 100M               13.4 Gb/s  rfm_acc.exact  100.01 [100.00,100.01] n=2  rfm_acc.est  100.10 [99.85,100.35] n=2  netobserv.est   13.53 [13.48,13.58] n=2  hsflowd.est   13.60 [13.57,13.62] n=2
+rx P128 -b 10M -N -l 1448      1.3 Gb/s  rfm_acc.exact  100.01 [100.00,100.01] n=2  rfm_acc.est  100.17 [100.03,100.30] n=2  netobserv.est  100.43 [100.24,100.61] n=2  hsflowd.est  100.44 [100.15,100.73] n=2
+rx P128 -b 2M -N -l 1448       0.3 Gb/s  rfm_acc.exact  100.00 [100.00,100.00] n=2  rfm_acc.est   99.55 [99.43,99.67] n=2  netobserv.est  100.18 [100.13,100.22] n=2  hsflowd.est  100.43 [100.24,100.63] n=2
+rx P16 max                    24.7 Gb/s  rfm_acc.exact  100.01 [100.01,100.01] n=2  rfm_acc.est   98.88 [98.50,99.26] n=2  netobserv.est    5.11 [5.06,5.17] n=2  hsflowd.est    4.87 [4.77,4.97] n=2
+rx P64 -b 1G                  24.7 Gb/s  rfm_acc.exact  100.01 [100.01,100.01] n=2  rfm_acc.est  100.04 [99.75,100.32] n=2  netobserv.est   11.97 [11.68,12.26] n=2  hsflowd.est   11.57 [11.19,11.94] n=2
+tx P8 -N -l 1448 -b 100M       0.8 Gb/s  rfm_acc.exact  100.01 [100.00,100.01] n=2  rfm_acc.est   99.67 [99.54,99.79] n=2  netobserv.est   99.72 [99.29,100.16] n=2  hsflowd.est  100.29 [99.98,100.60] n=2
+tx P8 -N -l 32K -b 300M        2.5 Gb/s  rfm_acc.exact  100.01 [100.01,100.01] n=2  rfm_acc.est  100.68 [99.90,101.46] n=2  netobserv.est    4.32 [4.29,4.36] n=2  hsflowd.est    4.38 [4.33,4.42] n=2
+tx P8 -N -l 64K -b 1G          8.4 Gb/s  rfm_acc.exact  100.01 [100.01,100.01] n=2  rfm_acc.est  100.15 [99.14,101.15] n=2  netobserv.est    4.38 [4.35,4.41] n=2  hsflowd.est    4.33 [4.31,4.35] n=2
+tx P8 -N -l 8K -b 100M         0.8 Gb/s  rfm_acc.exact  100.01 [100.00,100.01] n=2  rfm_acc.est  100.49 [100.10,100.88] n=2  netobserv.est   16.31 [16.16,16.47] n=2  hsflowd.est   16.84 [16.66,17.02] n=2
+== dahu b1
+rx_gro                         9.9 Gb/s  rfm_acc.exact  100.01 [99.99,100.02] n=3  rfm_acc.est  100.02 [99.79,100.38] n=3  netobserv.est   10.45 [10.06,10.80] n=3  hsflowd.est   11.20 [10.90,11.54] n=3
+rx_nogro                       9.9 Gb/s  rfm_acc.exact  100.00 [99.99,100.01] n=3  rfm_acc.est  100.09 [100.05,100.14] n=3  netobserv.est   99.96 [99.90,100.00] n=3  hsflowd.est   99.86 [99.79,99.94] n=3
+tx_notso                       9.9 Gb/s  rfm_acc.exact  100.01 [100.00,100.01] n=3  rfm_acc.est  100.50 [99.28,101.56] n=3  netobserv.est    2.24 [2.23,2.25] n=3  hsflowd.est    2.23 [2.20,2.26] n=3
+tx_tso                         9.9 Gb/s  rfm_acc.exact  100.00 [100.00,100.01] n=3  rfm_acc.est   99.73 [99.65,99.83] n=3  netobserv.est    2.25 [2.23,2.26] n=3  hsflowd.est    2.24 [2.21,2.28] n=3
+== dahu b2
+rx P1 max                      9.9 Gb/s  rfm_acc.exact  100.01 [100.00,100.01] n=2  rfm_acc.est  100.49 [99.36,101.62] n=2  netobserv.est    4.61 [4.55,4.66] n=2  hsflowd.est    4.65 [4.58,4.73] n=2
+rx P128 -b 100M                9.9 Gb/s  rfm_acc.exact  100.00 [100.00,100.01] n=2  rfm_acc.est   99.64 [99.28,100.00] n=2  netobserv.est   27.14 [26.39,27.88] n=2  hsflowd.est   25.09 [22.28,27.89] n=2
+rx P128 -b 10M -N -l 1448      1.3 Gb/s  rfm_acc.exact  100.02 [100.01,100.02] n=2  rfm_acc.est   99.95 [99.92,99.97] n=2  netobserv.est  100.46 [100.03,100.90] n=2  hsflowd.est   99.68 [99.22,100.14] n=2
+rx P128 -b 2M -N -l 1448       0.3 Gb/s  rfm_acc.exact   99.99 [99.98,100.00] n=2  rfm_acc.est  100.39 [100.16,100.63] n=2  netobserv.est   99.54 [99.34,99.75] n=2  hsflowd.est  100.07 [99.49,100.65] n=2
+rx P16 max                     9.9 Gb/s  rfm_acc.exact  100.00 [99.98,100.02] n=2  rfm_acc.est   99.67 [99.58,99.76] n=2  netobserv.est   17.47 [16.86,18.09] n=2  hsflowd.est   17.65 [16.49,18.82] n=2
+rx P64 -b 1G                   9.9 Gb/s  rfm_acc.exact  100.01 [100.01,100.02] n=2  rfm_acc.est   99.56 [99.48,99.65] n=2  netobserv.est   23.37 [21.48,25.27] n=2  hsflowd.est   24.66 [23.09,26.22] n=2
+tx P8 -N -l 1448 -b 100M       0.8 Gb/s  rfm_acc.exact  100.02 [100.02,100.02] n=2  rfm_acc.est  100.29 [99.94,100.64] n=2  netobserv.est  100.59 [100.51,100.68] n=2  hsflowd.est  100.24 [99.38,101.10] n=2
+tx P8 -N -l 32K -b 300M        2.5 Gb/s  rfm_acc.exact  100.01 [100.01,100.01] n=2  rfm_acc.est   99.95 [99.91,99.98] n=2  netobserv.est    5.36 [5.34,5.38] n=2  hsflowd.est    5.38 [5.27,5.49] n=2
+tx P8 -N -l 64K -b 1G          8.4 Gb/s  rfm_acc.exact  100.01 [100.01,100.01] n=2  rfm_acc.est   99.83 [99.69,99.98] n=2  netobserv.est    4.31 [4.30,4.32] n=2  hsflowd.est    4.37 [4.35,4.38] n=2
+tx P8 -N -l 8K -b 100M         0.8 Gb/s  rfm_acc.exact  100.00 [100.00,100.01] n=2  rfm_acc.est   98.22 [97.46,98.98] n=2  netobserv.est   16.57 [16.49,16.65] n=2  hsflowd.est   16.76 [16.76,16.76] n=2

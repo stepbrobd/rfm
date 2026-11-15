@@ -1,0 +1,4 @@
+Sat Nov 14 09:36:04 PM CET 2026 starting the dry pass
+Sat Nov 14 09:43:56 PM CET 2026 the accounting helper failed in the dry pass, the real pass runs without b1c
+mv: cannot stat '/root/res/b1c*': No such file or directory
+Sat Nov 14 09:43:56 PM CET 2026 dry pass clean, starting the real pass

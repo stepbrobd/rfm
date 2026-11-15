@@ -1,0 +1,64 @@
+2026-11-15 06:49:30 job 20530 vlan 4 dut spirou-7 gen spirou-8 phases: setup pm6d
+2026-11-15 06:49:30 rounds R5 '1' R3 '1' R2 '1' RB4 '1' accuracy monitors 'rfm_acc netobserv hsflowd'
+2026-11-15 06:49:31 dut ctl 172.16.208.15 test 10.48.0.7 e8:eb:d3:fd:ce:ac, gen ctl 172.16.208.16 test 10.48.0.8 e8:eb:d3:fd:cf:0c pci 0000:4b:00.0
+2026-11-15 06:49:32 === phase setup
+2026-11-15 06:49:35 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+2026-11-15 06:49:35 dut: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+2026-11-15 06:49:35 dut: pkill -x iperf3; true
+2026-11-15 06:49:35 gen: pkill -x iperf3; true
+2026-11-15 06:49:38 dut: pkill -KILL -f '^/root/progbench/progbench '; sysctl -qw kernel.bpf_stats_enabled=0; ethtool -K ens1f0np0 gro on tso on gso on; ethtool -L ens1f0np0 combined 63; true
+Actual changes:
+tx-tcp-ecn-segmentation: off [requested on]
+tx-tcp-accecn-segmentation: off [requested on]
+2026-11-15 06:49:39 === phase setup done
+2026-11-15 06:49:39 === phase pm6d
+2026-11-15 06:49:39 dut: echo 1 > /sys/devices/system/cpu/intel_pstate/no_turbo; for s in /sys/devices/system/cpu/cpu*/cpuidle/state*; do case $(cat $s/name) in C6* | C7* | C8* | C9* | C10*) echo 1 > $s/disable ;; *) echo 0 > $s/disable ;; esac; done; echo no_turbo $(cat /sys/devices/system/cpu/intel_pstate/no_turbo) disabled $(cat /sys/devices/system/cpu/cpu*/cpuidle/state*/disable | sort | uniq -c | tr -s ' \n' ' ')
+no_turbo 1 disabled 288 0 96 1
+2026-11-15 06:49:46 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; setsid nohup nu /root/workload/gen.nu --iface ens1f0np0 --dst 10.48.0.7 --dstmac e8:eb:d3:fd:ce:ac --count 0 --threads 1  > /tmp/gen.log 2>&1 < /dev/null &
+2026-11-15 06:50:05 dut rx pps 2715389
+2026-11-15 06:50:05 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent none --n 100 --label pm\ fixed\ t1\ N100\ r1\ none --out /root/res/pm6d.jsonl --warmup 3 --secs 4 --stat-secs 2 > /dev/null 2>> /root/res/pm6d.err; echo exit=$?
+exit=0
+2026-11-15 06:50:15 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label pm\ fixed\ t1\ N100\ r1\ rfm_default --out /root/res/pm6d.jsonl --warmup 3 --secs 4 --stat-secs 2 > /dev/null 2>> /root/res/pm6d.err; echo exit=$?
+exit=0
+2026-11-15 06:50:30 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 100 --label pm\ fixed\ t1\ N100\ r1\ netobserv --out /root/res/pm6d.jsonl --warmup 3 --secs 4 --stat-secs 2 > /dev/null 2>> /root/res/pm6d.err; echo exit=$?
+exit=0
+2026-11-15 06:50:43 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label pm\ fixed\ t1\ N100\ r1\ rfm --out /root/res/pm6d.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --warmup 3 --secs 4 --stat-secs 2 > /dev/null 2>> /root/res/pm6d.err; echo exit=$?
+exit=0
+2026-11-15 06:50:58 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label pm\ fixed\ t1\ N100\ r1\ rfm_nostage --out /root/res/pm6d.jsonl --rfm-bpf iface_slots=1\\nring_buf_size=16384 --warmup 3 --secs 4 --stat-secs 2 > /dev/null 2>> /root/res/pm6d.err; echo exit=$?
+exit=0
+2026-11-15 06:51:12 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; setsid nohup nu /root/workload/gen.nu --iface ens1f0np0 --dst 10.48.0.7 --dstmac e8:eb:d3:fd:ce:ac --count 0 --threads 1  > /tmp/gen.log 2>&1 < /dev/null &
+2026-11-15 06:51:31 dut rx pps 2675886
+2026-11-15 06:51:31 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent none --n 10 --label pm\ fixed\ t1\ N10\ r1\ none --out /root/res/pm6d.jsonl --warmup 3 --secs 4 --stat-secs 2 > /dev/null 2>> /root/res/pm6d.err; echo exit=$?
+exit=0
+2026-11-15 06:51:41 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 10 --label pm\ fixed\ t1\ N10\ r1\ rfm --out /root/res/pm6d.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --warmup 3 --secs 4 --stat-secs 2 > /dev/null 2>> /root/res/pm6d.err; echo exit=$?
+exit=0
+2026-11-15 06:51:56 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 10 --label pm\ fixed\ t1\ N10\ r1\ rfm_default --out /root/res/pm6d.jsonl --warmup 3 --secs 4 --stat-secs 2 > /dev/null 2>> /root/res/pm6d.err; echo exit=$?
+exit=0
+2026-11-15 06:52:11 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 10 --label pm\ fixed\ t1\ N10\ r1\ rfm_nostage --out /root/res/pm6d.jsonl --rfm-bpf iface_slots=1\\nring_buf_size=16384 --warmup 3 --secs 4 --stat-secs 2 > /dev/null 2>> /root/res/pm6d.err; echo exit=$?
+exit=0
+2026-11-15 06:52:25 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 10 --label pm\ fixed\ t1\ N10\ r1\ netobserv --out /root/res/pm6d.jsonl --warmup 3 --secs 4 --stat-secs 2 > /dev/null 2>> /root/res/pm6d.err; echo exit=$?
+exit=0
+2026-11-15 06:52:39 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; setsid nohup nu /root/workload/gen.nu --iface ens1f0np0 --dst 10.48.0.7 --dstmac e8:eb:d3:fd:ce:ac --count 0 --threads 1  > /tmp/gen.log 2>&1 < /dev/null &
+2026-11-15 06:52:57 dut rx pps 2727274
+2026-11-15 06:52:57 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 1000 --label pm\ fixed\ t1\ N1000\ r1\ netobserv --out /root/res/pm6d.jsonl --warmup 3 --secs 4 --stat-secs 2 > /dev/null 2>> /root/res/pm6d.err; echo exit=$?
+exit=0
+2026-11-15 06:53:10 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 1000 --label pm\ fixed\ t1\ N1000\ r1\ rfm_nostage --out /root/res/pm6d.jsonl --rfm-bpf iface_slots=1\\nring_buf_size=16384 --warmup 3 --secs 4 --stat-secs 2 > /dev/null 2>> /root/res/pm6d.err; echo exit=$?
+exit=0
+2026-11-15 06:53:25 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 1000 --label pm\ fixed\ t1\ N1000\ r1\ rfm_default --out /root/res/pm6d.jsonl --warmup 3 --secs 4 --stat-secs 2 > /dev/null 2>> /root/res/pm6d.err; echo exit=$?
+exit=0
+2026-11-15 06:53:40 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 1000 --label pm\ fixed\ t1\ N1000\ r1\ rfm --out /root/res/pm6d.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --warmup 3 --secs 4 --stat-secs 2 > /dev/null 2>> /root/res/pm6d.err; echo exit=$?
+exit=0
+2026-11-15 06:53:55 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent none --n 1000 --label pm\ fixed\ t1\ N1000\ r1\ none --out /root/res/pm6d.jsonl --warmup 3 --secs 4 --stat-secs 2 > /dev/null 2>> /root/res/pm6d.err; echo exit=$?
+exit=0
+2026-11-15 06:54:05 dut: echo 0 > /sys/devices/system/cpu/intel_pstate/no_turbo; for s in /sys/devices/system/cpu/cpu*/cpuidle/state*; do case $(cat $s/name) in C6* | C7* | C8* | C9* | C10*) echo 0 > $s/disable ;; *) echo 0 > $s/disable ;; esac; done; echo no_turbo $(cat /sys/devices/system/cpu/intel_pstate/no_turbo) disabled $(cat /sys/devices/system/cpu/cpu*/cpuidle/state*/disable | sort | uniq -c | tr -s ' \n' ' ')
+no_turbo 0 disabled 384 0
+2026-11-15 06:54:12 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+2026-11-15 06:54:12 dut: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+2026-11-15 06:54:12 dut: pkill -x iperf3; true
+2026-11-15 06:54:12 gen: pkill -x iperf3; true
+2026-11-15 06:54:15 dut: pkill -KILL -f '^/root/progbench/progbench '; sysctl -qw kernel.bpf_stats_enabled=0; ethtool -K ens1f0np0 gro on tso on gso on; ethtool -L ens1f0np0 combined 63; true
+Actual changes:
+tx-tcp-ecn-segmentation: off [requested on]
+tx-tcp-accecn-segmentation: off [requested on]
+2026-11-15 06:54:16 === phase pm6d done
+2026-11-15 06:54:16 campaign done

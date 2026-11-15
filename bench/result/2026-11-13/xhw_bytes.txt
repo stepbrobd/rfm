@@ -1,0 +1,13 @@
+== gros (percent of port bytes less FCS, in brackets against raw port bytes)
+rx_gro     rfm_acc.exact 100.005 ( 99.742) n=3  rfm_acc.est 100.068 ( 99.804) n=3  netobserv.est  96.005 ( 95.752) n=3  hsflowd.est  95.585 ( 95.333) n=3
+rx_nogro   rfm_acc.exact 100.005 ( 99.742) n=3  rfm_acc.est  99.969 ( 99.706) n=3  netobserv.est  99.922 ( 99.659) n=3  hsflowd.est 101.084 (100.818) n=3
+tx_notso   rfm_acc.exact 100.009 ( 99.745) n=3  rfm_acc.est 100.233 ( 99.969) n=3  netobserv.est  95.548 ( 95.296) n=3  hsflowd.est  95.654 ( 95.402) n=3
+tx_tso     rfm_acc.exact 100.004 ( 99.741) n=3  rfm_acc.est 100.219 ( 99.955) n=3  netobserv.est  96.463 ( 96.209) n=3  hsflowd.est  95.360 ( 95.108) n=3
+== dahu (percent of port bytes less FCS, in brackets against raw port bytes)
+rx_gro     rfm_acc.exact 100.007 ( 99.743) n=3  rfm_acc.est 100.024 ( 99.761) n=3  netobserv.est  96.349 ( 96.095) n=3  hsflowd.est  96.574 ( 96.319) n=3
+rx_nogro   rfm_acc.exact 100.004 ( 99.740) n=3  rfm_acc.est 100.090 ( 99.826) n=3  netobserv.est  99.963 ( 99.700) n=3  hsflowd.est 101.051 (100.784) n=3
+tx_notso   rfm_acc.exact 100.006 ( 99.742) n=3  rfm_acc.est 100.502 (100.237) n=3  netobserv.est  95.681 ( 95.429) n=3  hsflowd.est  95.198 ( 94.947) n=3
+tx_tso     rfm_acc.exact 100.004 ( 99.740) n=3  rfm_acc.est  99.726 ( 99.463) n=3  netobserv.est  96.102 ( 95.849) n=3  hsflowd.est  95.865 ( 95.612) n=3
+== ../2026-11-10/job20520/res (percent of port bytes less FCS, in brackets against raw port bytes)
+rx_gro N10000  rfm_acc.exact 100.007 ( 99.743) n=3  rfm_acc.est  99.444 ( 99.182) n=3  netobserv.est  97.041 ( 96.785) n=3  hsflowd.est  96.818 ( 96.563) n=3
+tx_tso N10000  rfm_acc.exact 100.012 ( 99.748) n=3  rfm_acc.est  99.690 ( 99.427) n=3  netobserv.est  99.414 ( 99.152) n=3  hsflowd.est  91.041 ( 90.801) n=3

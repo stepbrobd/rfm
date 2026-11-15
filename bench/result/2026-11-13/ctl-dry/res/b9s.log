@@ -1,0 +1,11 @@
+gro=on round 1 skip_array_lazy_nowake stats=off done
+gro=on round 1 xdp_skip_array stats=on done
+gro=on round 1 none stats=off done
+gro=on round 1 xdp_skip_array stats=off done
+gro=on round 1 skip_array_lazy_nowake stats=on done
+gro=off round 1 none stats=off done
+gro=off round 1 xdp_skip_array stats=off done
+gro=off round 1 skip_array_lazy_nowake stats=off done
+gro=off round 1 xdp_skip_array stats=on done
+gro=off round 1 skip_array_lazy_nowake stats=on done
+wrote /tmp/progbench_offload.jsonl

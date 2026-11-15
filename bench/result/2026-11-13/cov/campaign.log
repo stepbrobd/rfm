@@ -1,0 +1,66 @@
+2026-11-13 15:32:09 job 20529 vlan 4 dut spirou-7 gen spirou-8 phases: setup b4cov
+2026-11-13 15:32:09 rounds R5 '1 2 3 4 5' R3 '1' R2 '1 2' RB4 '1' accuracy monitors 'rfm_acc netobserv hsflowd'
+2026-11-13 15:32:11 dut ctl 172.16.208.15 test 10.48.0.7 e8:eb:d3:fd:ce:ac, gen ctl 172.16.208.16 test 10.48.0.8 e8:eb:d3:fd:cf:0c pci 0000:4b:00.0
+2026-11-13 15:32:11 === phase setup
+2026-11-13 15:32:14 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+2026-11-13 15:32:14 dut: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+bash: line 1: /proc/net/pktgen/pgctrl: No such file or directory
+2026-11-13 15:32:15 dut: pkill -x iperf3; true
+2026-11-13 15:32:15 gen: pkill -x iperf3; true
+2026-11-13 15:32:17 dut: pkill -KILL -f '^/root/progbench/progbench '; sysctl -qw kernel.bpf_stats_enabled=0; ethtool -K ens1f0np0 gro on tso on gso on; ethtool -L ens1f0np0 combined 63; true
+Actual changes:
+tx-tcp-ecn-segmentation: off [requested on]
+tx-tcp-accecn-segmentation: off [requested on]
+2026-11-13 15:32:17 === phase setup done
+2026-11-13 15:32:17 === phase b4cov
+2026-11-13 15:32:17 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; setsid nohup nu /root/workload/gen.nu --iface ens1f0np0 --dst 10.48.0.7 --dstmac e8:eb:d3:fd:ce:ac --count 0 --threads 1 --flows 1000 > /tmp/gen.log 2>&1 < /dev/null &
+2026-11-13 15:32:36 dut rx pps 2640644
+2026-11-13 15:32:36 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label flows1000\ r1\ rfm --out /root/res/b4cov.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --tables --warmup 15 --secs 30 --stat-secs 0 > /dev/null 2>> /root/res/b4cov.err; echo exit=$?
+exit=0
+2026-11-13 15:33:25 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 100 --label flows1000\ r1\ netobserv --out /root/res/b4cov.jsonl --flows-seen --tables --warmup 15 --secs 30 --stat-secs 0 > /dev/null 2>> /root/res/b4cov.err; echo exit=$?
+exit=0
+2026-11-13 15:34:20 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 100 --label flows1000\ r1\ netobserv_sized --out /root/res/b4cov.jsonl --neto-cache 1000 --flows-seen --tables --warmup 15 --secs 30 --stat-secs 0 > /dev/null 2>> /root/res/b4cov.err; echo exit=$?
+exit=0
+2026-11-13 15:35:15 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; setsid nohup nu /root/workload/gen.nu --iface ens1f0np0 --dst 10.48.0.7 --dstmac e8:eb:d3:fd:ce:ac --count 0 --threads 1 --flows 5000 > /tmp/gen.log 2>&1 < /dev/null &
+2026-11-13 15:35:34 dut rx pps 2635184
+2026-11-13 15:35:34 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label flows5000\ r1\ rfm --out /root/res/b4cov.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --tables --warmup 15 --secs 30 --stat-secs 0 > /dev/null 2>> /root/res/b4cov.err; echo exit=$?
+exit=0
+2026-11-13 15:36:23 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 100 --label flows5000\ r1\ netobserv_sized --out /root/res/b4cov.jsonl --neto-cache 5000 --flows-seen --tables --warmup 15 --secs 30 --stat-secs 0 > /dev/null 2>> /root/res/b4cov.err; echo exit=$?
+exit=0
+2026-11-13 15:37:19 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 100 --label flows5000\ r1\ netobserv --out /root/res/b4cov.jsonl --flows-seen --tables --warmup 15 --secs 30 --stat-secs 0 > /dev/null 2>> /root/res/b4cov.err; echo exit=$?
+exit=0
+2026-11-13 15:38:14 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; setsid nohup nu /root/workload/gen.nu --iface ens1f0np0 --dst 10.48.0.7 --dstmac e8:eb:d3:fd:ce:ac --count 0 --threads 1 --flows 20000 > /tmp/gen.log 2>&1 < /dev/null &
+2026-11-13 15:38:32 dut rx pps 2641850
+2026-11-13 15:38:32 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label flows20000\ r1\ rfm --out /root/res/b4cov.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --tables --warmup 15 --secs 30 --stat-secs 0 > /dev/null 2>> /root/res/b4cov.err; echo exit=$?
+exit=0
+2026-11-13 15:39:22 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 100 --label flows20000\ r1\ netobserv_sized --out /root/res/b4cov.jsonl --neto-cache 20000 --flows-seen --tables --warmup 15 --secs 30 --stat-secs 0 > /dev/null 2>> /root/res/b4cov.err; echo exit=$?
+exit=0
+2026-11-13 15:40:20 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 100 --label flows20000\ r1\ netobserv --out /root/res/b4cov.jsonl --flows-seen --tables --warmup 15 --secs 30 --stat-secs 0 > /dev/null 2>> /root/res/b4cov.err; echo exit=$?
+exit=0
+2026-11-13 15:41:15 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; setsid nohup nu /root/workload/gen.nu --iface ens1f0np0 --dst 10.48.0.7 --dstmac e8:eb:d3:fd:ce:ac --count 0 --threads 1 --flows 1000 --srcips 100 > /tmp/gen.log 2>&1 < /dev/null &
+2026-11-13 15:41:34 dut rx pps 2507241
+2026-11-13 15:41:34 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 100 --label flows100000\ r1\ netobserv --out /root/res/b4cov.jsonl --flows-seen --tables --warmup 15 --secs 30 --stat-secs 0 > /dev/null 2>> /root/res/b4cov.err; echo exit=$?
+exit=0
+2026-11-13 15:42:29 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label flows100000\ r1\ rfm --out /root/res/b4cov.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --tables --warmup 15 --secs 30 --stat-secs 0 --rfm-extra \[agent.collector\]\\nmax_flows=2097152 > /dev/null 2>> /root/res/b4cov.err; echo exit=$?
+exit=0
+2026-11-13 15:43:19 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 100 --label flows100000\ r1\ netobserv_sized --out /root/res/b4cov.jsonl --neto-cache 100000 --flows-seen --tables --warmup 15 --secs 30 --stat-secs 0 > /dev/null 2>> /root/res/b4cov.err; echo exit=$?
+exit=0
+2026-11-13 15:44:23 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; setsid nohup nu /root/workload/gen.nu --iface ens1f0np0 --dst 10.48.0.7 --dstmac e8:eb:d3:fd:ce:ac --count 0 --threads 1 --flows 1000 --srcips 1000 > /tmp/gen.log 2>&1 < /dev/null &
+2026-11-13 15:44:42 dut rx pps 2520073
+2026-11-13 15:44:42 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 100 --label flows1000000\ r1\ netobserv_sized --out /root/res/b4cov.jsonl --neto-cache 1000000 --flows-seen --tables --warmup 15 --secs 30 --stat-secs 0 > /dev/null 2>> /root/res/b4cov.err; echo exit=$?
+exit=0
+2026-11-13 15:45:50 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label flows1000000\ r1\ rfm --out /root/res/b4cov.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --tables --warmup 15 --secs 30 --stat-secs 0 --rfm-extra \[agent.collector\]\\nmax_flows=2097152 > /dev/null 2>> /root/res/b4cov.err; echo exit=$?
+exit=0
+2026-11-13 15:46:40 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 100 --label flows1000000\ r1\ netobserv --out /root/res/b4cov.jsonl --flows-seen --tables --warmup 15 --secs 30 --stat-secs 0 > /dev/null 2>> /root/res/b4cov.err; echo exit=$?
+exit=0
+2026-11-13 15:47:35 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+2026-11-13 15:47:35 dut: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+bash: line 1: /proc/net/pktgen/pgctrl: No such file or directory
+2026-11-13 15:47:35 dut: pkill -x iperf3; true
+2026-11-13 15:47:36 gen: pkill -x iperf3; true
+2026-11-13 15:47:38 dut: pkill -KILL -f '^/root/progbench/progbench '; sysctl -qw kernel.bpf_stats_enabled=0; ethtool -K ens1f0np0 gro on tso on gso on; ethtool -L ens1f0np0 combined 63; true
+Actual changes:
+tx-tcp-ecn-segmentation: off [requested on]
+tx-tcp-accecn-segmentation: off [requested on]
+2026-11-13 15:47:38 === phase b4cov done
+2026-11-13 15:47:38 campaign done

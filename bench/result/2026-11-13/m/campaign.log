@@ -1,0 +1,108 @@
+2026-11-15 08:02:00 job 20530 vlan 4 dut spirou-7 gen spirou-8 phases: setup b9m
+2026-11-15 08:02:00 rounds R5 '1 2 3 4 5' R3 '1 2 3' R2 '1 2' RB4 '1' accuracy monitors 'rfm_acc netobserv hsflowd'
+2026-11-15 08:02:02 dut ctl 172.16.208.15 test 10.48.0.7 e8:eb:d3:fd:ce:ac, gen ctl 172.16.208.16 test 10.48.0.8 e8:eb:d3:fd:cf:0c pci 0000:4b:00.0
+2026-11-15 08:02:02 === phase setup
+2026-11-15 08:02:05 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+2026-11-15 08:02:05 dut: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+2026-11-15 08:02:06 dut: pkill -x iperf3; true
+2026-11-15 08:02:06 gen: pkill -x iperf3; true
+2026-11-15 08:02:08 dut: pkill -KILL -f '^/root/progbench/progbench '; sysctl -qw kernel.bpf_stats_enabled=0; ethtool -K ens1f0np0 gro on tso on gso on; ethtool -L ens1f0np0 combined 63; true
+Actual changes:
+tx-tcp-ecn-segmentation: off [requested on]
+tx-tcp-accecn-segmentation: off [requested on]
+2026-11-15 08:02:09 === phase setup done
+2026-11-15 08:02:09 === phase b9m
+2026-11-15 08:02:09 dut: echo 1 > /sys/devices/system/cpu/intel_pstate/no_turbo; for s in /sys/devices/system/cpu/cpu*/cpuidle/state*; do case $(cat $s/name) in C6* | C7* | C8* | C9* | C10*) echo 1 > $s/disable ;; *) echo 0 > $s/disable ;; esac; done; echo no_turbo $(cat /sys/devices/system/cpu/intel_pstate/no_turbo) disabled $(cat /sys/devices/system/cpu/cpu*/cpuidle/state*/disable | sort | uniq -c | tr -s ' \n' ' ')
+no_turbo 1 disabled 288 0 96 1
+2026-11-15 08:02:16 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+2026-11-15 08:02:17 dut: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+2026-11-15 08:02:17 dut: pkill -x iperf3; true
+2026-11-15 08:02:17 gen: pkill -x iperf3; true
+2026-11-15 08:02:19 dut: pkill -KILL -f '^/root/progbench/progbench '; sysctl -qw kernel.bpf_stats_enabled=0; ethtool -K ens1f0np0 gro on tso on gso on; ethtool -L ens1f0np0 combined 63; true
+Actual changes:
+tx-tcp-ecn-segmentation: off [requested on]
+tx-tcp-accecn-segmentation: off [requested on]
+2026-11-15 08:02:20 dut: ip link set dev ens1f0np0 mtu 1500; sleep 3; echo round 1 mtu $(cat /sys/class/net/ens1f0np0/mtu)
+round 1 mtu 1500
+2026-11-15 08:02:23 dut: pkill -x iperf3; true
+2026-11-15 08:02:23 gen: pkill -x iperf3; true
+2026-11-15 08:02:25 dut: iperf3 -s -D
+2026-11-15 08:02:25 gen: setsid nohup iperf3 -c 10.48.0.7 -P 8  -t 86400 > /tmp/iperf.log 2>&1 < /dev/null &
+2026-11-15 08:02:36 dut: rm -f /tmp/progbench_offload.jsonl; timeout 600 nu /root/workload/progbench_offload.nu --dir /root/progbench --iface ens1f0np0 --n 1000 --rounds 1 --window 20s --gro on --labels 'none xdp_empty' --stats off >> /root/res/b9m-fixed.log 2>&1; cat /tmp/progbench_offload.jsonl >> /root/res/b9m-fixed-mtu1500.jsonl
+2026-11-15 08:03:27 dut: ip link set dev ens1f0np0 mtu 1700; sleep 3; echo round 1 mtu $(cat /sys/class/net/ens1f0np0/mtu)
+round 1 mtu 1700
+2026-11-15 08:03:31 dut: pkill -x iperf3; true
+2026-11-15 08:03:31 gen: pkill -x iperf3; true
+2026-11-15 08:03:33 dut: iperf3 -s -D
+2026-11-15 08:03:33 gen: setsid nohup iperf3 -c 10.48.0.7 -P 8  -t 86400 > /tmp/iperf.log 2>&1 < /dev/null &
+2026-11-15 08:03:44 dut: rm -f /tmp/progbench_offload.jsonl; timeout 600 nu /root/workload/progbench_offload.nu --dir /root/progbench --iface ens1f0np0 --n 1000 --rounds 1 --window 20s --gro on --labels 'none xdp_empty' --stats off >> /root/res/b9m-fixed.log 2>&1; cat /tmp/progbench_offload.jsonl >> /root/res/b9m-fixed-mtu1700.jsonl
+2026-11-15 08:04:35 dut: ip link set dev ens1f0np0 mtu 1500; sleep 3; echo round 2 mtu $(cat /sys/class/net/ens1f0np0/mtu)
+round 2 mtu 1500
+2026-11-15 08:04:39 dut: pkill -x iperf3; true
+2026-11-15 08:04:39 gen: pkill -x iperf3; true
+2026-11-15 08:04:41 dut: iperf3 -s -D
+2026-11-15 08:04:42 gen: setsid nohup iperf3 -c 10.48.0.7 -P 8  -t 86400 > /tmp/iperf.log 2>&1 < /dev/null &
+2026-11-15 08:04:52 dut: rm -f /tmp/progbench_offload.jsonl; timeout 600 nu /root/workload/progbench_offload.nu --dir /root/progbench --iface ens1f0np0 --n 1000 --rounds 1 --window 20s --gro on --labels 'none xdp_empty' --stats off >> /root/res/b9m-fixed.log 2>&1; cat /tmp/progbench_offload.jsonl >> /root/res/b9m-fixed-mtu1500.jsonl
+2026-11-15 08:05:43 dut: ip link set dev ens1f0np0 mtu 1700; sleep 3; echo round 2 mtu $(cat /sys/class/net/ens1f0np0/mtu)
+round 2 mtu 1700
+2026-11-15 08:05:47 dut: pkill -x iperf3; true
+2026-11-15 08:05:47 gen: pkill -x iperf3; true
+2026-11-15 08:05:49 dut: iperf3 -s -D
+2026-11-15 08:05:49 gen: setsid nohup iperf3 -c 10.48.0.7 -P 8  -t 86400 > /tmp/iperf.log 2>&1 < /dev/null &
+2026-11-15 08:06:00 dut: rm -f /tmp/progbench_offload.jsonl; timeout 600 nu /root/workload/progbench_offload.nu --dir /root/progbench --iface ens1f0np0 --n 1000 --rounds 1 --window 20s --gro on --labels 'none xdp_empty' --stats off >> /root/res/b9m-fixed.log 2>&1; cat /tmp/progbench_offload.jsonl >> /root/res/b9m-fixed-mtu1700.jsonl
+2026-11-15 08:06:51 dut: ip link set dev ens1f0np0 mtu 1700; sleep 3; echo round 3 mtu $(cat /sys/class/net/ens1f0np0/mtu)
+round 3 mtu 1700
+2026-11-15 08:06:54 dut: pkill -x iperf3; true
+2026-11-15 08:06:55 gen: pkill -x iperf3; true
+2026-11-15 08:06:57 dut: iperf3 -s -D
+2026-11-15 08:06:57 gen: setsid nohup iperf3 -c 10.48.0.7 -P 8  -t 86400 > /tmp/iperf.log 2>&1 < /dev/null &
+2026-11-15 08:07:07 dut: rm -f /tmp/progbench_offload.jsonl; timeout 600 nu /root/workload/progbench_offload.nu --dir /root/progbench --iface ens1f0np0 --n 1000 --rounds 1 --window 20s --gro on --labels 'none xdp_empty' --stats off >> /root/res/b9m-fixed.log 2>&1; cat /tmp/progbench_offload.jsonl >> /root/res/b9m-fixed-mtu1700.jsonl
+2026-11-15 08:07:58 dut: ip link set dev ens1f0np0 mtu 1500; sleep 3; echo round 3 mtu $(cat /sys/class/net/ens1f0np0/mtu)
+round 3 mtu 1500
+2026-11-15 08:08:03 dut: pkill -x iperf3; true
+2026-11-15 08:08:03 gen: pkill -x iperf3; true
+2026-11-15 08:08:05 dut: iperf3 -s -D
+2026-11-15 08:08:05 gen: setsid nohup iperf3 -c 10.48.0.7 -P 8  -t 86400 > /tmp/iperf.log 2>&1 < /dev/null &
+2026-11-15 08:08:15 dut: rm -f /tmp/progbench_offload.jsonl; timeout 600 nu /root/workload/progbench_offload.nu --dir /root/progbench --iface ens1f0np0 --n 1000 --rounds 1 --window 20s --gro on --labels 'none xdp_empty' --stats off >> /root/res/b9m-fixed.log 2>&1; cat /tmp/progbench_offload.jsonl >> /root/res/b9m-fixed-mtu1500.jsonl
+2026-11-15 08:09:07 dut: ip link set dev ens1f0np0 mtu 1500; sleep 3; echo round 4 mtu $(cat /sys/class/net/ens1f0np0/mtu)
+round 4 mtu 1500
+2026-11-15 08:09:10 dut: pkill -x iperf3; true
+2026-11-15 08:09:10 gen: pkill -x iperf3; true
+2026-11-15 08:09:12 dut: iperf3 -s -D
+2026-11-15 08:09:12 gen: setsid nohup iperf3 -c 10.48.0.7 -P 8  -t 86400 > /tmp/iperf.log 2>&1 < /dev/null &
+2026-11-15 08:09:23 dut: rm -f /tmp/progbench_offload.jsonl; timeout 600 nu /root/workload/progbench_offload.nu --dir /root/progbench --iface ens1f0np0 --n 1000 --rounds 1 --window 20s --gro on --labels 'none xdp_empty' --stats off >> /root/res/b9m-fixed.log 2>&1; cat /tmp/progbench_offload.jsonl >> /root/res/b9m-fixed-mtu1500.jsonl
+2026-11-15 08:10:13 dut: ip link set dev ens1f0np0 mtu 1700; sleep 3; echo round 4 mtu $(cat /sys/class/net/ens1f0np0/mtu)
+round 4 mtu 1700
+2026-11-15 08:10:18 dut: pkill -x iperf3; true
+2026-11-15 08:10:18 gen: pkill -x iperf3; true
+2026-11-15 08:10:20 dut: iperf3 -s -D
+2026-11-15 08:10:20 gen: setsid nohup iperf3 -c 10.48.0.7 -P 8  -t 86400 > /tmp/iperf.log 2>&1 < /dev/null &
+2026-11-15 08:10:30 dut: rm -f /tmp/progbench_offload.jsonl; timeout 600 nu /root/workload/progbench_offload.nu --dir /root/progbench --iface ens1f0np0 --n 1000 --rounds 1 --window 20s --gro on --labels 'none xdp_empty' --stats off >> /root/res/b9m-fixed.log 2>&1; cat /tmp/progbench_offload.jsonl >> /root/res/b9m-fixed-mtu1700.jsonl
+2026-11-15 08:11:22 dut: ip link set dev ens1f0np0 mtu 1700; sleep 3; echo round 5 mtu $(cat /sys/class/net/ens1f0np0/mtu)
+round 5 mtu 1700
+2026-11-15 08:11:25 dut: pkill -x iperf3; true
+2026-11-15 08:11:25 gen: pkill -x iperf3; true
+2026-11-15 08:11:27 dut: iperf3 -s -D
+2026-11-15 08:11:28 gen: setsid nohup iperf3 -c 10.48.0.7 -P 8  -t 86400 > /tmp/iperf.log 2>&1 < /dev/null &
+2026-11-15 08:11:38 dut: rm -f /tmp/progbench_offload.jsonl; timeout 600 nu /root/workload/progbench_offload.nu --dir /root/progbench --iface ens1f0np0 --n 1000 --rounds 1 --window 20s --gro on --labels 'none xdp_empty' --stats off >> /root/res/b9m-fixed.log 2>&1; cat /tmp/progbench_offload.jsonl >> /root/res/b9m-fixed-mtu1700.jsonl
+2026-11-15 08:12:29 dut: ip link set dev ens1f0np0 mtu 1500; sleep 3; echo round 5 mtu $(cat /sys/class/net/ens1f0np0/mtu)
+round 5 mtu 1500
+2026-11-15 08:12:33 dut: pkill -x iperf3; true
+2026-11-15 08:12:33 gen: pkill -x iperf3; true
+2026-11-15 08:12:36 dut: iperf3 -s -D
+2026-11-15 08:12:36 gen: setsid nohup iperf3 -c 10.48.0.7 -P 8  -t 86400 > /tmp/iperf.log 2>&1 < /dev/null &
+2026-11-15 08:12:46 dut: rm -f /tmp/progbench_offload.jsonl; timeout 600 nu /root/workload/progbench_offload.nu --dir /root/progbench --iface ens1f0np0 --n 1000 --rounds 1 --window 20s --gro on --labels 'none xdp_empty' --stats off >> /root/res/b9m-fixed.log 2>&1; cat /tmp/progbench_offload.jsonl >> /root/res/b9m-fixed-mtu1500.jsonl
+2026-11-15 08:13:37 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+2026-11-15 08:13:37 dut: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+2026-11-15 08:13:37 dut: pkill -x iperf3; true
+2026-11-15 08:13:37 gen: pkill -x iperf3; true
+2026-11-15 08:13:40 dut: pkill -KILL -f '^/root/progbench/progbench '; sysctl -qw kernel.bpf_stats_enabled=0; ethtool -K ens1f0np0 gro on tso on gso on; ethtool -L ens1f0np0 combined 63; true
+Actual changes:
+tx-tcp-ecn-segmentation: off [requested on]
+tx-tcp-accecn-segmentation: off [requested on]
+2026-11-15 08:13:40 dut: ip link set dev ens1f0np0 mtu 1500; sleep 3; echo mtu $(cat /sys/class/net/ens1f0np0/mtu)
+mtu 1500
+2026-11-15 08:13:43 dut: echo 0 > /sys/devices/system/cpu/intel_pstate/no_turbo; for s in /sys/devices/system/cpu/cpu*/cpuidle/state*; do case $(cat $s/name) in C6* | C7* | C8* | C9* | C10*) echo 0 > $s/disable ;; *) echo 0 > $s/disable ;; esac; done; echo no_turbo $(cat /sys/devices/system/cpu/intel_pstate/no_turbo) disabled $(cat /sys/devices/system/cpu/cpu*/cpuidle/state*/disable | sort | uniq -c | tr -s ' \n' ' ')
+no_turbo 0 disabled 384 0
+2026-11-15 08:13:51 === phase b9m done
+2026-11-15 08:13:51 campaign done

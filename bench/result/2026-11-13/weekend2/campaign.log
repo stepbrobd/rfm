@@ -1,0 +1,900 @@
+2026-11-14 17:39:33 job 20530 vlan 4 dut spirou-7 gen spirou-8 phases: setup b13 pm3
+2026-11-14 17:39:33 rounds R5 '1 2 3 4 5' R3 '1 2 3 4 5' R2 '1 2 3 4 5' RB4 '1 2 3 4 5' accuracy monitors 'rfm_acc netobserv hsflowd'
+2026-11-14 17:39:35 dut ctl 172.16.208.15 test 10.48.0.7 e8:eb:d3:fd:ce:ac, gen ctl 172.16.208.16 test 10.48.0.8 e8:eb:d3:fd:cf:0c pci 0000:4b:00.0
+2026-11-14 17:39:35 === phase setup
+2026-11-14 17:39:38 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+2026-11-14 17:39:39 dut: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+2026-11-14 17:39:39 dut: pkill -x iperf3; true
+2026-11-14 17:39:39 gen: pkill -x iperf3; true
+2026-11-14 17:39:41 dut: pkill -KILL -f '^/root/progbench/progbench '; sysctl -qw kernel.bpf_stats_enabled=0; ethtool -K ens1f0np0 gro on tso on gso on; ethtool -L ens1f0np0 combined 63; true
+Actual changes:
+tx-tcp-ecn-segmentation: off [requested on]
+tx-tcp-accecn-segmentation: off [requested on]
+2026-11-14 17:39:42 === phase setup done
+2026-11-14 17:39:42 === phase b13
+2026-11-14 17:39:42 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+2026-11-14 17:39:42 dut: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+2026-11-14 17:39:42 dut: pkill -x iperf3; true
+2026-11-14 17:39:42 gen: pkill -x iperf3; true
+2026-11-14 17:39:45 dut: pkill -KILL -f '^/root/progbench/progbench '; sysctl -qw kernel.bpf_stats_enabled=0; ethtool -K ens1f0np0 gro on tso on gso on; ethtool -L ens1f0np0 combined 63; true
+Actual changes:
+tx-tcp-ecn-segmentation: off [requested on]
+tx-tcp-accecn-segmentation: off [requested on]
+2026-11-14 17:39:45 dut: pkill -x iperf3; true
+2026-11-14 17:39:45 gen: pkill -x iperf3; true
+2026-11-14 17:39:47 dut: iperf3 -s -D
+2026-11-14 17:39:47 gen: setsid nohup iperf3 -c 10.48.0.7 -P 8  -t 86400 > /tmp/iperf.log 2>&1 < /dev/null &
+2026-11-14 17:39:58 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; setsid nohup nu /root/workload/gen.nu --iface ens1f0np0 --dst 10.48.0.7 --dstmac e8:eb:d3:fd:ce:ac --count 0 --threads 1 --flows 20000 --rate 100 > /tmp/gen.log 2>&1 < /dev/null &
+2026-11-14 17:40:16 dut rx pps 8339327
+2026-11-14 17:40:16 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent hsflowd --n 100 --label cohort\ u100\ r1\ hsflowd --out /root/res/b13.jsonl --counts --warmup 12 --secs 45 --stat-secs 5 > /dev/null 2>> /root/res/b13.err; echo exit=$?
+exit=0
+2026-11-14 17:41:32 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 100 --label cohort\ u100\ r1\ netobserv --out /root/res/b13.jsonl --counts --warmup 12 --secs 45 --stat-secs 5 > /dev/null 2>> /root/res/b13.err; echo exit=$?
+exit=0
+2026-11-14 17:42:53 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label cohort\ u100\ r1\ rfm_acc --out /root/res/b13.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --counts --warmup 12 --secs 45 --stat-secs 5 > /dev/null 2>> /root/res/b13.err; echo exit=$?
+exit=0
+2026-11-14 17:44:04 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label cohort\ u100\ r2\ rfm_acc --out /root/res/b13.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --counts --warmup 12 --secs 45 --stat-secs 5 > /dev/null 2>> /root/res/b13.err; echo exit=$?
+exit=0
+2026-11-14 17:45:14 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent hsflowd --n 100 --label cohort\ u100\ r2\ hsflowd --out /root/res/b13.jsonl --counts --warmup 12 --secs 45 --stat-secs 5 > /dev/null 2>> /root/res/b13.err; echo exit=$?
+exit=0
+2026-11-14 17:46:31 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 100 --label cohort\ u100\ r2\ netobserv --out /root/res/b13.jsonl --counts --warmup 12 --secs 45 --stat-secs 5 > /dev/null 2>> /root/res/b13.err; echo exit=$?
+exit=0
+2026-11-14 17:47:52 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent hsflowd --n 100 --label cohort\ u100\ r3\ hsflowd --out /root/res/b13.jsonl --counts --warmup 12 --secs 45 --stat-secs 5 > /dev/null 2>> /root/res/b13.err; echo exit=$?
+exit=0
+2026-11-14 17:49:09 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 100 --label cohort\ u100\ r3\ netobserv --out /root/res/b13.jsonl --counts --warmup 12 --secs 45 --stat-secs 5 > /dev/null 2>> /root/res/b13.err; echo exit=$?
+exit=0
+2026-11-14 17:50:30 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label cohort\ u100\ r3\ rfm_acc --out /root/res/b13.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --counts --warmup 12 --secs 45 --stat-secs 5 > /dev/null 2>> /root/res/b13.err; echo exit=$?
+exit=0
+2026-11-14 17:51:41 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label cohort\ u100\ r4\ rfm_acc --out /root/res/b13.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --counts --warmup 12 --secs 45 --stat-secs 5 > /dev/null 2>> /root/res/b13.err; echo exit=$?
+exit=0
+2026-11-14 17:52:51 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 100 --label cohort\ u100\ r4\ netobserv --out /root/res/b13.jsonl --counts --warmup 12 --secs 45 --stat-secs 5 > /dev/null 2>> /root/res/b13.err; echo exit=$?
+exit=0
+2026-11-14 17:54:12 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent hsflowd --n 100 --label cohort\ u100\ r4\ hsflowd --out /root/res/b13.jsonl --counts --warmup 12 --secs 45 --stat-secs 5 > /dev/null 2>> /root/res/b13.err; echo exit=$?
+exit=0
+2026-11-14 17:55:29 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 100 --label cohort\ u100\ r5\ netobserv --out /root/res/b13.jsonl --counts --warmup 12 --secs 45 --stat-secs 5 > /dev/null 2>> /root/res/b13.err; echo exit=$?
+exit=0
+2026-11-14 17:56:50 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent hsflowd --n 100 --label cohort\ u100\ r5\ hsflowd --out /root/res/b13.jsonl --counts --warmup 12 --secs 45 --stat-secs 5 > /dev/null 2>> /root/res/b13.err; echo exit=$?
+exit=0
+2026-11-14 17:58:06 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label cohort\ u100\ r5\ rfm_acc --out /root/res/b13.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --counts --warmup 12 --secs 45 --stat-secs 5 > /dev/null 2>> /root/res/b13.err; echo exit=$?
+exit=0
+2026-11-14 17:59:16 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; setsid nohup nu /root/workload/gen.nu --iface ens1f0np0 --dst 10.48.0.7 --dstmac e8:eb:d3:fd:ce:ac --count 0 --threads 1 --flows 20000 --rate 300 > /tmp/gen.log 2>&1 < /dev/null &
+2026-11-14 17:59:35 dut rx pps 8734439
+2026-11-14 17:59:35 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent hsflowd --n 100 --label cohort\ u300\ r1\ hsflowd --out /root/res/b13.jsonl --counts --warmup 12 --secs 45 --stat-secs 5 > /dev/null 2>> /root/res/b13.err; echo exit=$?
+exit=0
+2026-11-14 18:00:57 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label cohort\ u300\ r1\ rfm_acc --out /root/res/b13.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --counts --warmup 12 --secs 45 --stat-secs 5 > /dev/null 2>> /root/res/b13.err; echo exit=$?
+exit=0
+2026-11-14 18:02:08 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 100 --label cohort\ u300\ r1\ netobserv --out /root/res/b13.jsonl --counts --warmup 12 --secs 45 --stat-secs 5 > /dev/null 2>> /root/res/b13.err; echo exit=$?
+exit=0
+2026-11-14 18:03:47 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label cohort\ u300\ r2\ rfm_acc --out /root/res/b13.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --counts --warmup 12 --secs 45 --stat-secs 5 > /dev/null 2>> /root/res/b13.err; echo exit=$?
+exit=0
+2026-11-14 18:04:58 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent hsflowd --n 100 --label cohort\ u300\ r2\ hsflowd --out /root/res/b13.jsonl --counts --warmup 12 --secs 45 --stat-secs 5 > /dev/null 2>> /root/res/b13.err; echo exit=$?
+exit=0
+2026-11-14 18:06:21 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 100 --label cohort\ u300\ r2\ netobserv --out /root/res/b13.jsonl --counts --warmup 12 --secs 45 --stat-secs 5 > /dev/null 2>> /root/res/b13.err; echo exit=$?
+exit=0
+2026-11-14 18:08:02 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label cohort\ u300\ r3\ rfm_acc --out /root/res/b13.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --counts --warmup 12 --secs 45 --stat-secs 5 > /dev/null 2>> /root/res/b13.err; echo exit=$?
+exit=0
+2026-11-14 18:09:13 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent hsflowd --n 100 --label cohort\ u300\ r3\ hsflowd --out /root/res/b13.jsonl --counts --warmup 12 --secs 45 --stat-secs 5 > /dev/null 2>> /root/res/b13.err; echo exit=$?
+exit=0
+2026-11-14 18:10:35 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 100 --label cohort\ u300\ r3\ netobserv --out /root/res/b13.jsonl --counts --warmup 12 --secs 45 --stat-secs 5 > /dev/null 2>> /root/res/b13.err; echo exit=$?
+exit=0
+2026-11-14 18:12:16 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 100 --label cohort\ u300\ r4\ netobserv --out /root/res/b13.jsonl --counts --warmup 12 --secs 45 --stat-secs 5 > /dev/null 2>> /root/res/b13.err; echo exit=$?
+exit=0
+2026-11-14 18:13:55 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label cohort\ u300\ r4\ rfm_acc --out /root/res/b13.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --counts --warmup 12 --secs 45 --stat-secs 5 > /dev/null 2>> /root/res/b13.err; echo exit=$?
+exit=0
+2026-11-14 18:15:06 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent hsflowd --n 100 --label cohort\ u300\ r4\ hsflowd --out /root/res/b13.jsonl --counts --warmup 12 --secs 45 --stat-secs 5 > /dev/null 2>> /root/res/b13.err; echo exit=$?
+exit=0
+2026-11-14 18:16:28 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent hsflowd --n 100 --label cohort\ u300\ r5\ hsflowd --out /root/res/b13.jsonl --counts --warmup 12 --secs 45 --stat-secs 5 > /dev/null 2>> /root/res/b13.err; echo exit=$?
+exit=0
+2026-11-14 18:17:51 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label cohort\ u300\ r5\ rfm_acc --out /root/res/b13.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --counts --warmup 12 --secs 45 --stat-secs 5 > /dev/null 2>> /root/res/b13.err; echo exit=$?
+exit=0
+2026-11-14 18:19:02 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 100 --label cohort\ u300\ r5\ netobserv --out /root/res/b13.jsonl --counts --warmup 12 --secs 45 --stat-secs 5 > /dev/null 2>> /root/res/b13.err; echo exit=$?
+exit=0
+2026-11-14 18:20:40 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; setsid nohup nu /root/workload/gen.nu --iface ens1f0np0 --dst 10.48.0.7 --dstmac e8:eb:d3:fd:ce:ac --count 0 --threads 1 --flows 20000 --rate 1000 > /tmp/gen.log 2>&1 < /dev/null &
+2026-11-14 18:20:59 dut rx pps 9101731
+2026-11-14 18:20:59 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label cohort\ u1000\ r1\ rfm_acc --out /root/res/b13.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --counts --warmup 12 --secs 45 --stat-secs 5 > /dev/null 2>> /root/res/b13.err; echo exit=$?
+exit=0
+2026-11-14 18:22:09 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 100 --label cohort\ u1000\ r1\ netobserv --out /root/res/b13.jsonl --counts --warmup 12 --secs 45 --stat-secs 5 > /dev/null 2>> /root/res/b13.err; echo exit=$?
+exit=0
+2026-11-14 18:23:50 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent hsflowd --n 100 --label cohort\ u1000\ r1\ hsflowd --out /root/res/b13.jsonl --counts --warmup 12 --secs 45 --stat-secs 5 > /dev/null 2>> /root/res/b13.err; echo exit=$?
+exit=0
+2026-11-14 18:25:18 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent hsflowd --n 100 --label cohort\ u1000\ r2\ hsflowd --out /root/res/b13.jsonl --counts --warmup 12 --secs 45 --stat-secs 5 > /dev/null 2>> /root/res/b13.err; echo exit=$?
+exit=0
+2026-11-14 18:26:47 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label cohort\ u1000\ r2\ rfm_acc --out /root/res/b13.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --counts --warmup 12 --secs 45 --stat-secs 5 > /dev/null 2>> /root/res/b13.err; echo exit=$?
+exit=0
+2026-11-14 18:27:58 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 100 --label cohort\ u1000\ r2\ netobserv --out /root/res/b13.jsonl --counts --warmup 12 --secs 45 --stat-secs 5 > /dev/null 2>> /root/res/b13.err; echo exit=$?
+exit=0
+2026-11-14 18:29:37 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 100 --label cohort\ u1000\ r3\ netobserv --out /root/res/b13.jsonl --counts --warmup 12 --secs 45 --stat-secs 5 > /dev/null 2>> /root/res/b13.err; echo exit=$?
+exit=0
+2026-11-14 18:31:16 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label cohort\ u1000\ r3\ rfm_acc --out /root/res/b13.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --counts --warmup 12 --secs 45 --stat-secs 5 > /dev/null 2>> /root/res/b13.err; echo exit=$?
+exit=0
+2026-11-14 18:32:27 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent hsflowd --n 100 --label cohort\ u1000\ r3\ hsflowd --out /root/res/b13.jsonl --counts --warmup 12 --secs 45 --stat-secs 5 > /dev/null 2>> /root/res/b13.err; echo exit=$?
+exit=0
+2026-11-14 18:33:56 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label cohort\ u1000\ r4\ rfm_acc --out /root/res/b13.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --counts --warmup 12 --secs 45 --stat-secs 5 > /dev/null 2>> /root/res/b13.err; echo exit=$?
+exit=0
+2026-11-14 18:35:06 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent hsflowd --n 100 --label cohort\ u1000\ r4\ hsflowd --out /root/res/b13.jsonl --counts --warmup 12 --secs 45 --stat-secs 5 > /dev/null 2>> /root/res/b13.err; echo exit=$?
+exit=0
+2026-11-14 18:36:36 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 100 --label cohort\ u1000\ r4\ netobserv --out /root/res/b13.jsonl --counts --warmup 12 --secs 45 --stat-secs 5 > /dev/null 2>> /root/res/b13.err; echo exit=$?
+exit=0
+2026-11-14 18:38:18 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label cohort\ u1000\ r5\ rfm_acc --out /root/res/b13.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --counts --warmup 12 --secs 45 --stat-secs 5 > /dev/null 2>> /root/res/b13.err; echo exit=$?
+exit=0
+2026-11-14 18:39:28 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 100 --label cohort\ u1000\ r5\ netobserv --out /root/res/b13.jsonl --counts --warmup 12 --secs 45 --stat-secs 5 > /dev/null 2>> /root/res/b13.err; echo exit=$?
+exit=0
+2026-11-14 18:41:10 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent hsflowd --n 100 --label cohort\ u1000\ r5\ hsflowd --out /root/res/b13.jsonl --counts --warmup 12 --secs 45 --stat-secs 5 > /dev/null 2>> /root/res/b13.err; echo exit=$?
+exit=0
+2026-11-14 18:42:38 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; setsid nohup nu /root/workload/gen.nu --iface ens1f0np0 --dst 10.48.0.7 --dstmac e8:eb:d3:fd:ce:ac --count 0 --threads 1 --flows 20000 --rate 3000 > /tmp/gen.log 2>&1 < /dev/null &
+2026-11-14 18:42:57 dut rx pps 9100805
+2026-11-14 18:42:57 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label cohort\ u3000\ r1\ rfm_acc --out /root/res/b13.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --counts --warmup 12 --secs 45 --stat-secs 5 > /dev/null 2>> /root/res/b13.err; echo exit=$?
+exit=0
+2026-11-14 18:44:07 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 100 --label cohort\ u3000\ r1\ netobserv --out /root/res/b13.jsonl --counts --warmup 12 --secs 45 --stat-secs 5 > /dev/null 2>> /root/res/b13.err; echo exit=$?
+exit=0
+2026-11-14 18:45:49 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent hsflowd --n 100 --label cohort\ u3000\ r1\ hsflowd --out /root/res/b13.jsonl --counts --warmup 12 --secs 45 --stat-secs 5 > /dev/null 2>> /root/res/b13.err; echo exit=$?
+exit=0
+2026-11-14 18:47:17 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label cohort\ u3000\ r2\ rfm_acc --out /root/res/b13.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --counts --warmup 12 --secs 45 --stat-secs 5 > /dev/null 2>> /root/res/b13.err; echo exit=$?
+exit=0
+2026-11-14 18:48:27 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 100 --label cohort\ u3000\ r2\ netobserv --out /root/res/b13.jsonl --counts --warmup 12 --secs 45 --stat-secs 5 > /dev/null 2>> /root/res/b13.err; echo exit=$?
+exit=0
+2026-11-14 18:50:10 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent hsflowd --n 100 --label cohort\ u3000\ r2\ hsflowd --out /root/res/b13.jsonl --counts --warmup 12 --secs 45 --stat-secs 5 > /dev/null 2>> /root/res/b13.err; echo exit=$?
+exit=0
+2026-11-14 18:51:38 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 100 --label cohort\ u3000\ r3\ netobserv --out /root/res/b13.jsonl --counts --warmup 12 --secs 45 --stat-secs 5 > /dev/null 2>> /root/res/b13.err; echo exit=$?
+exit=0
+2026-11-14 18:53:20 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent hsflowd --n 100 --label cohort\ u3000\ r3\ hsflowd --out /root/res/b13.jsonl --counts --warmup 12 --secs 45 --stat-secs 5 > /dev/null 2>> /root/res/b13.err; echo exit=$?
+exit=0
+2026-11-14 18:54:48 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label cohort\ u3000\ r3\ rfm_acc --out /root/res/b13.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --counts --warmup 12 --secs 45 --stat-secs 5 > /dev/null 2>> /root/res/b13.err; echo exit=$?
+exit=0
+2026-11-14 18:55:59 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label cohort\ u3000\ r4\ rfm_acc --out /root/res/b13.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --counts --warmup 12 --secs 45 --stat-secs 5 > /dev/null 2>> /root/res/b13.err; echo exit=$?
+exit=0
+2026-11-14 18:57:09 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent hsflowd --n 100 --label cohort\ u3000\ r4\ hsflowd --out /root/res/b13.jsonl --counts --warmup 12 --secs 45 --stat-secs 5 > /dev/null 2>> /root/res/b13.err; echo exit=$?
+exit=0
+2026-11-14 18:58:37 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 100 --label cohort\ u3000\ r4\ netobserv --out /root/res/b13.jsonl --counts --warmup 12 --secs 45 --stat-secs 5 > /dev/null 2>> /root/res/b13.err; echo exit=$?
+exit=0
+2026-11-14 19:00:17 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 100 --label cohort\ u3000\ r5\ netobserv --out /root/res/b13.jsonl --counts --warmup 12 --secs 45 --stat-secs 5 > /dev/null 2>> /root/res/b13.err; echo exit=$?
+exit=0
+2026-11-14 19:01:57 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label cohort\ u3000\ r5\ rfm_acc --out /root/res/b13.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --counts --warmup 12 --secs 45 --stat-secs 5 > /dev/null 2>> /root/res/b13.err; echo exit=$?
+exit=0
+2026-11-14 19:03:07 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent hsflowd --n 100 --label cohort\ u3000\ r5\ hsflowd --out /root/res/b13.jsonl --counts --warmup 12 --secs 45 --stat-secs 5 > /dev/null 2>> /root/res/b13.err; echo exit=$?
+exit=0
+2026-11-14 19:04:35 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+2026-11-14 19:04:35 dut: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+2026-11-14 19:04:36 dut: pkill -x iperf3; true
+2026-11-14 19:04:36 gen: pkill -x iperf3; true
+2026-11-14 19:04:38 dut: pkill -KILL -f '^/root/progbench/progbench '; sysctl -qw kernel.bpf_stats_enabled=0; ethtool -K ens1f0np0 gro on tso on gso on; ethtool -L ens1f0np0 combined 63; true
+Actual changes:
+tx-tcp-ecn-segmentation: off [requested on]
+tx-tcp-accecn-segmentation: off [requested on]
+2026-11-14 19:04:39 === phase b13 done
+2026-11-14 19:04:39 === phase pm3
+2026-11-14 19:04:39 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; setsid nohup nu /root/workload/gen.nu --iface ens1f0np0 --dst 10.48.0.7 --dstmac e8:eb:d3:fd:ce:ac --count 0 --threads 1  > /tmp/gen.log 2>&1 < /dev/null &
+2026-11-14 19:04:57 dut rx pps 2663919
+2026-11-14 19:04:57 dut: echo 1 > /sys/devices/system/cpu/intel_pstate/no_turbo; for s in /sys/devices/system/cpu/cpu*/cpuidle/state*; do case $(cat $s/name) in C6* | C7* | C8* | C9* | C10*) echo 1 > $s/disable ;; *) echo 0 > $s/disable ;; esac; done; echo no_turbo $(cat /sys/devices/system/cpu/intel_pstate/no_turbo) disabled $(cat /sys/devices/system/cpu/cpu*/cpuidle/state*/disable | sort | uniq -c | tr -s ' \n' ' ')
+no_turbo 1 disabled 288 0 96 1
+2026-11-14 19:05:05 cstate pm3 fixed t1 N100 r1 netobserv before: 1794679505.240331845 POLL=466594789 C1=7521240395 C1E=1458925430110 C6=5981477554382 
+2026-11-14 19:05:05 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 100 --label pm3\ fixed\ t1\ N100\ r1\ netobserv --out /root/res/pm3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm3.err; echo exit=$?
+exit=0
+2026-11-14 19:05:57 cstate pm3 fixed t1 N100 r1 netobserv after: 1794679557.579659957 POLL=466787469 C1=7521416774 C1E=1463708872822 C6=5981477554382 
+2026-11-14 19:05:57 cstate pm3 fixed t1 N100 r1 hsflowd before: 1794679557.774555861 POLL=466787988 C1=7521435624 C1E=1463726427807 C6=5981477554382 
+2026-11-14 19:05:57 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent hsflowd --n 100 --label pm3\ fixed\ t1\ N100\ r1\ hsflowd --out /root/res/pm3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm3.err; echo exit=$?
+exit=0
+2026-11-14 19:06:50 cstate pm3 fixed t1 N100 r1 hsflowd after: 1794679610.152514083 POLL=466996185 C1=7521709025 C1E=1468502510496 C6=5981477554382 
+2026-11-14 19:06:50 cstate pm3 fixed t1 N100 r1 none before: 1794679610.349161771 POLL=466997043 C1=7521726645 C1E=1468520307377 C6=5981477554382 
+2026-11-14 19:06:50 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent none --n 100 --label pm3\ fixed\ t1\ N100\ r1\ none --out /root/res/pm3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm3.err; echo exit=$?
+exit=0
+2026-11-14 19:07:33 cstate pm3 fixed t1 N100 r1 none after: 1794679653.560365848 POLL=467160350 C1=7521872228 C1E=1472478897762 C6=5981477554382 
+2026-11-14 19:07:33 cstate pm3 fixed t1 N100 r1 rfm before: 1794679653.760720256 POLL=467161618 C1=7521890428 C1E=1472497320433 C6=5981477554382 
+2026-11-14 19:07:33 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label pm3\ fixed\ t1\ N100\ r1\ rfm --out /root/res/pm3.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm3.err; echo exit=$?
+exit=0
+2026-11-14 19:08:27 cstate pm3 fixed t1 N100 r1 rfm after: 1794679707.675643425 POLL=467518402 C1=7522179514 C1E=1477424518836 C6=5981477554382 
+2026-11-14 19:08:27 dut: echo 1 > /sys/devices/system/cpu/intel_pstate/no_turbo; for s in /sys/devices/system/cpu/cpu*/cpuidle/state*; do case $(cat $s/name) in C6* | C7* | C8* | C9* | C10*) echo 0 > $s/disable ;; *) echo 0 > $s/disable ;; esac; done; echo no_turbo $(cat /sys/devices/system/cpu/intel_pstate/no_turbo) disabled $(cat /sys/devices/system/cpu/cpu*/cpuidle/state*/disable | sort | uniq -c | tr -s ' \n' ' ')
+no_turbo 1 disabled 384 0
+2026-11-14 19:08:35 cstate pm3 noturbo t1 N100 r1 none before: 1794679715.068772242 POLL=467537040 C1=7522211861 C1E=1477503060833 C6=5982054342887 
+2026-11-14 19:08:35 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent none --n 100 --label pm3\ noturbo\ t1\ N100\ r1\ none --out /root/res/pm3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm3.err; echo exit=$?
+exit=0
+2026-11-14 19:09:18 cstate pm3 noturbo t1 N100 r1 none after: 1794679758.271900702 POLL=467645634 C1=7522274106 C1E=1477603493123 C6=5985780314127 
+2026-11-14 19:09:18 cstate pm3 noturbo t1 N100 r1 netobserv before: 1794679758.489940521 POLL=467646513 C1=7522291851 C1E=1477604430464 C6=5985798898937 
+2026-11-14 19:09:18 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 100 --label pm3\ noturbo\ t1\ N100\ r1\ netobserv --out /root/res/pm3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm3.err; echo exit=$?
+exit=0
+2026-11-14 19:10:10 cstate pm3 noturbo t1 N100 r1 netobserv after: 1794679810.852114797 POLL=467766899 C1=7522361148 C1E=1477726199935 C6=5990299968921 
+2026-11-14 19:10:11 cstate pm3 noturbo t1 N100 r1 rfm before: 1794679811.074303090 POLL=467767662 C1=7522368794 C1E=1477727747839 C6=5990317359822 
+2026-11-14 19:10:11 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label pm3\ noturbo\ t1\ N100\ r1\ rfm --out /root/res/pm3.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm3.err; echo exit=$?
+exit=0
+2026-11-14 19:11:05 cstate pm3 noturbo t1 N100 r1 rfm after: 1794679865.061690617 POLL=468016211 C1=7522555607 C1E=1478354685000 C6=5994490651997 
+2026-11-14 19:11:05 cstate pm3 noturbo t1 N100 r1 hsflowd before: 1794679865.275962282 POLL=468017017 C1=7522559753 C1E=1478356054649 C6=5994508380090 
+2026-11-14 19:11:05 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent hsflowd --n 100 --label pm3\ noturbo\ t1\ N100\ r1\ hsflowd --out /root/res/pm3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm3.err; echo exit=$?
+exit=0
+2026-11-14 19:11:57 cstate pm3 noturbo t1 N100 r1 hsflowd after: 1794679917.623947193 POLL=468145467 C1=7522650007 C1E=1478482154314 C6=5998988043277 
+2026-11-14 19:11:57 dut: echo 0 > /sys/devices/system/cpu/intel_pstate/no_turbo; for s in /sys/devices/system/cpu/cpu*/cpuidle/state*; do case $(cat $s/name) in C6* | C7* | C8* | C9* | C10*) echo 1 > $s/disable ;; *) echo 0 > $s/disable ;; esac; done; echo no_turbo $(cat /sys/devices/system/cpu/intel_pstate/no_turbo) disabled $(cat /sys/devices/system/cpu/cpu*/cpuidle/state*/disable | sort | uniq -c | tr -s ' \n' ' ')
+no_turbo 0 disabled 288 0 96 1
+2026-11-14 19:12:04 cstate pm3 noc6 t1 N100 r1 rfm before: 1794679924.685469622 POLL=468177327 C1=7522699317 C1E=1479081747743 C6=5999036557196 
+2026-11-14 19:12:04 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label pm3\ noc6\ t1\ N100\ r1\ rfm --out /root/res/pm3.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm3.err; echo exit=$?
+exit=0
+2026-11-14 19:12:58 cstate pm3 noc6 t1 N100 r1 rfm after: 1794679978.502429386 POLL=468568817 C1=7522987822 C1E=1484041279275 C6=5999036557196 
+2026-11-14 19:12:58 cstate pm3 noc6 t1 N100 r1 none before: 1794679978.688850646 POLL=468569624 C1=7523006581 C1E=1484058187612 C6=5999036557196 
+2026-11-14 19:12:58 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent none --n 100 --label pm3\ noc6\ t1\ N100\ r1\ none --out /root/res/pm3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm3.err; echo exit=$?
+exit=0
+2026-11-14 19:13:41 cstate pm3 noc6 t1 N100 r1 none after: 1794680021.692137462 POLL=468736126 C1=7523154668 C1E=1488029674428 C6=5999036557196 
+2026-11-14 19:13:41 cstate pm3 noc6 t1 N100 r1 netobserv before: 1794680021.879816382 POLL=468736875 C1=7523176068 C1E=1488047015294 C6=5999036557196 
+2026-11-14 19:13:41 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 100 --label pm3\ noc6\ t1\ N100\ r1\ netobserv --out /root/res/pm3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm3.err; echo exit=$?
+exit=0
+2026-11-14 19:14:34 cstate pm3 noc6 t1 N100 r1 netobserv after: 1794680073.985376515 POLL=468936480 C1=7523364375 C1E=1492849098472 C6=5999036557196 
+2026-11-14 19:14:34 cstate pm3 noc6 t1 N100 r1 hsflowd before: 1794680074.175265175 POLL=468937407 C1=7523379300 C1E=1492866650625 C6=5999036557196 
+2026-11-14 19:14:34 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent hsflowd --n 100 --label pm3\ noc6\ t1\ N100\ r1\ hsflowd --out /root/res/pm3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm3.err; echo exit=$?
+exit=0
+2026-11-14 19:15:26 cstate pm3 noc6 t1 N100 r1 hsflowd after: 1794680126.313085848 POLL=469154718 C1=7523646008 C1E=1497662864527 C6=5999036557196 
+2026-11-14 19:15:26 dut: echo 0 > /sys/devices/system/cpu/intel_pstate/no_turbo; for s in /sys/devices/system/cpu/cpu*/cpuidle/state*; do case $(cat $s/name) in C6* | C7* | C8* | C9* | C10*) echo 0 > $s/disable ;; *) echo 0 > $s/disable ;; esac; done; echo no_turbo $(cat /sys/devices/system/cpu/intel_pstate/no_turbo) disabled $(cat /sys/devices/system/cpu/cpu*/cpuidle/state*/disable | sort | uniq -c | tr -s ' \n' ' ')
+no_turbo 0 disabled 384 0
+2026-11-14 19:15:33 cstate pm3 dflt t1 N100 r1 netobserv before: 1794680133.339186059 POLL=469174006 C1=7523678298 C1E=1497740864127 C6=5999588457216 
+2026-11-14 19:15:33 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 100 --label pm3\ dflt\ t1\ N100\ r1\ netobserv --out /root/res/pm3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm3.err; echo exit=$?
+exit=0
+2026-11-14 19:16:25 cstate pm3 dflt t1 N100 r1 netobserv after: 1794680185.422864110 POLL=469289315 C1=7523748697 C1E=1497867237054 C6=6004117233544 
+2026-11-14 19:16:25 cstate pm3 dflt t1 N100 r1 rfm before: 1794680185.615350200 POLL=469289835 C1=7523762794 C1E=1497867995886 C6=6004133814970 
+2026-11-14 19:16:25 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label pm3\ dflt\ t1\ N100\ r1\ rfm --out /root/res/pm3.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm3.err; echo exit=$?
+exit=0
+2026-11-14 19:17:19 cstate pm3 dflt t1 N100 r1 rfm after: 1794680239.250598917 POLL=469533149 C1=7523932164 C1E=1498503854765 C6=6008325072111 
+2026-11-14 19:17:19 cstate pm3 dflt t1 N100 r1 none before: 1794680239.452376810 POLL=469533580 C1=7523942769 C1E=1498504712280 C6=6008342496493 
+2026-11-14 19:17:19 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent none --n 100 --label pm3\ dflt\ t1\ N100\ r1\ none --out /root/res/pm3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm3.err; echo exit=$?
+exit=0
+2026-11-14 19:18:02 cstate pm3 dflt t1 N100 r1 none after: 1794680282.386530725 POLL=469620926 C1=7523988009 C1E=1498606596527 C6=6012089888001 
+2026-11-14 19:18:02 cstate pm3 dflt t1 N100 r1 hsflowd before: 1794680282.579002232 POLL=469621757 C1=7524000536 C1E=1498607633437 C6=6012105500728 
+2026-11-14 19:18:02 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent hsflowd --n 100 --label pm3\ dflt\ t1\ N100\ r1\ hsflowd --out /root/res/pm3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm3.err; echo exit=$?
+exit=0
+2026-11-14 19:18:54 cstate pm3 dflt t1 N100 r1 hsflowd after: 1794680334.634651429 POLL=469737911 C1=7524117931 C1E=1498730974117 C6=6016619207694 
+2026-11-14 19:18:54 dut: echo 0 > /sys/devices/system/cpu/intel_pstate/no_turbo; for s in /sys/devices/system/cpu/cpu*/cpuidle/state*; do case $(cat $s/name) in C6* | C7* | C8* | C9* | C10*) echo 0 > $s/disable ;; *) echo 0 > $s/disable ;; esac; done; echo no_turbo $(cat /sys/devices/system/cpu/intel_pstate/no_turbo) disabled $(cat /sys/devices/system/cpu/cpu*/cpuidle/state*/disable | sort | uniq -c | tr -s ' \n' ' ')
+no_turbo 0 disabled 384 0
+2026-11-14 19:19:01 cstate pm3 dflt t1 N100 r2 none before: 1794680341.538201685 POLL=469755096 C1=7524149208 C1E=1498757079945 C6=6017210866240 
+2026-11-14 19:19:01 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent none --n 100 --label pm3\ dflt\ t1\ N100\ r2\ none --out /root/res/pm3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm3.err; echo exit=$?
+exit=0
+2026-11-14 19:19:44 cstate pm3 dflt t1 N100 r2 none after: 1794680384.451881295 POLL=469845803 C1=7524196873 C1E=1498859852184 C6=6020955984796 
+2026-11-14 19:19:44 cstate pm3 dflt t1 N100 r2 netobserv before: 1794680384.647553308 POLL=469846336 C1=7524209796 C1E=1498860896726 C6=6020972288804 
+2026-11-14 19:19:44 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 100 --label pm3\ dflt\ t1\ N100\ r2\ netobserv --out /root/res/pm3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm3.err; echo exit=$?
+exit=0
+2026-11-14 19:20:36 cstate pm3 dflt t1 N100 r2 netobserv after: 1794680436.758359189 POLL=469958542 C1=7524281608 C1E=1498988321885 C6=6025501439373 
+2026-11-14 19:20:36 cstate pm3 dflt t1 N100 r2 rfm before: 1794680436.954323877 POLL=469959157 C1=7524286394 C1E=1498989723926 C6=6025517493136 
+2026-11-14 19:20:36 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label pm3\ dflt\ t1\ N100\ r2\ rfm --out /root/res/pm3.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm3.err; echo exit=$?
+exit=0
+2026-11-14 19:21:30 cstate pm3 dflt t1 N100 r2 rfm after: 1794680490.530310867 POLL=470205824 C1=7524441965 C1E=1499621794222 C6=6029706270971 
+2026-11-14 19:21:30 cstate pm3 dflt t1 N100 r2 hsflowd before: 1794680490.758929156 POLL=470206707 C1=7524459463 C1E=1499622911188 C6=6029725941214 
+2026-11-14 19:21:30 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent hsflowd --n 100 --label pm3\ dflt\ t1\ N100\ r2\ hsflowd --out /root/res/pm3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm3.err; echo exit=$?
+exit=0
+2026-11-14 19:22:22 cstate pm3 dflt t1 N100 r2 hsflowd after: 1794680542.841420017 POLL=470322902 C1=7524553383 C1E=1499749264367 C6=6034243393809 
+2026-11-14 19:22:22 dut: echo 1 > /sys/devices/system/cpu/intel_pstate/no_turbo; for s in /sys/devices/system/cpu/cpu*/cpuidle/state*; do case $(cat $s/name) in C6* | C7* | C8* | C9* | C10*) echo 0 > $s/disable ;; *) echo 0 > $s/disable ;; esac; done; echo no_turbo $(cat /sys/devices/system/cpu/intel_pstate/no_turbo) disabled $(cat /sys/devices/system/cpu/cpu*/cpuidle/state*/disable | sort | uniq -c | tr -s ' \n' ' ')
+no_turbo 1 disabled 384 0
+2026-11-14 19:22:30 cstate pm3 noturbo t1 N100 r2 hsflowd before: 1794680550.287591889 POLL=470342373 C1=7524572907 C1E=1499775680349 C6=6034875304588 
+2026-11-14 19:22:30 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent hsflowd --n 100 --label pm3\ noturbo\ t1\ N100\ r2\ hsflowd --out /root/res/pm3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm3.err; echo exit=$?
+exit=0
+2026-11-14 19:23:22 cstate pm3 noturbo t1 N100 r2 hsflowd after: 1794680602.663914902 POLL=470473588 C1=7524673676 C1E=1499900932952 C6=6039356595623 
+2026-11-14 19:23:22 cstate pm3 noturbo t1 N100 r2 netobserv before: 1794680602.877020866 POLL=470474178 C1=7524690110 C1E=1499901903829 C6=6039374184452 
+2026-11-14 19:23:22 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 100 --label pm3\ noturbo\ t1\ N100\ r2\ netobserv --out /root/res/pm3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm3.err; echo exit=$?
+exit=0
+2026-11-14 19:24:15 cstate pm3 noturbo t1 N100 r2 netobserv after: 1794680655.220108656 POLL=470602047 C1=7524772754 C1E=1500024516039 C6=6043870878276 
+2026-11-14 19:24:15 cstate pm3 noturbo t1 N100 r2 rfm before: 1794680655.438565092 POLL=470602841 C1=7524783762 C1E=1500025670731 C6=6043888875277 
+2026-11-14 19:24:15 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label pm3\ noturbo\ t1\ N100\ r2\ rfm --out /root/res/pm3.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm3.err; echo exit=$?
+exit=0
+2026-11-14 19:25:09 cstate pm3 noturbo t1 N100 r2 rfm after: 1794680709.520036133 POLL=470854807 C1=7524975987 C1E=1500658212473 C6=6048067915244 
+2026-11-14 19:25:09 cstate pm3 noturbo t1 N100 r2 none before: 1794680709.737634347 POLL=470855666 C1=7524989318 C1E=1500658987138 C6=6048086124027 
+2026-11-14 19:25:09 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent none --n 100 --label pm3\ noturbo\ t1\ N100\ r2\ none --out /root/res/pm3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm3.err; echo exit=$?
+exit=0
+2026-11-14 19:25:53 cstate pm3 noturbo t1 N100 r2 none after: 1794680753.094516520 POLL=470958718 C1=7525048952 C1E=1500763153202 C6=6051822198319 
+2026-11-14 19:25:53 dut: echo 1 > /sys/devices/system/cpu/intel_pstate/no_turbo; for s in /sys/devices/system/cpu/cpu*/cpuidle/state*; do case $(cat $s/name) in C6* | C7* | C8* | C9* | C10*) echo 1 > $s/disable ;; *) echo 0 > $s/disable ;; esac; done; echo no_turbo $(cat /sys/devices/system/cpu/intel_pstate/no_turbo) disabled $(cat /sys/devices/system/cpu/cpu*/cpuidle/state*/disable | sort | uniq -c | tr -s ' \n' ' ')
+no_turbo 1 disabled 288 0 96 1
+2026-11-14 19:26:00 cstate pm3 fixed t1 N100 r2 none before: 1794680760.418205283 POLL=470987185 C1=7525097034 C1E=1501376147406 C6=6051876032887 
+2026-11-14 19:26:00 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent none --n 100 --label pm3\ fixed\ t1\ N100\ r2\ none --out /root/res/pm3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm3.err; echo exit=$?
+exit=0
+2026-11-14 19:26:43 cstate pm3 fixed t1 N100 r2 none after: 1794680803.638972910 POLL=471141338 C1=7525248226 C1E=1505336033112 C6=6051876032887 
+2026-11-14 19:26:43 cstate pm3 fixed t1 N100 r2 rfm before: 1794680803.833500506 POLL=471142367 C1=7525266689 C1E=1505353745977 C6=6051876032887 
+2026-11-14 19:26:43 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label pm3\ fixed\ t1\ N100\ r2\ rfm --out /root/res/pm3.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm3.err; echo exit=$?
+exit=0
+2026-11-14 19:27:37 cstate pm3 fixed t1 N100 r2 rfm after: 1794680857.863844008 POLL=471492629 C1=7525555487 C1E=1510291172976 C6=6051876032887 
+2026-11-14 19:27:38 cstate pm3 fixed t1 N100 r2 hsflowd before: 1794680858.059793966 POLL=471493244 C1=7525569953 C1E=1510309126865 C6=6051876032887 
+2026-11-14 19:27:38 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent hsflowd --n 100 --label pm3\ fixed\ t1\ N100\ r2\ hsflowd --out /root/res/pm3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm3.err; echo exit=$?
+exit=0
+2026-11-14 19:28:30 cstate pm3 fixed t1 N100 r2 hsflowd after: 1794680910.448079090 POLL=471701070 C1=7525842256 C1E=1515085599773 C6=6051876032887 
+2026-11-14 19:28:30 cstate pm3 fixed t1 N100 r2 netobserv before: 1794680910.642439232 POLL=471701978 C1=7525855153 C1E=1515103257190 C6=6051876032887 
+2026-11-14 19:28:30 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 100 --label pm3\ fixed\ t1\ N100\ r2\ netobserv --out /root/res/pm3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm3.err; echo exit=$?
+exit=0
+2026-11-14 19:29:23 cstate pm3 fixed t1 N100 r2 netobserv after: 1794680963.055101808 POLL=471907878 C1=7526035114 C1E=1519893475720 C6=6051876032887 
+2026-11-14 19:29:23 dut: echo 0 > /sys/devices/system/cpu/intel_pstate/no_turbo; for s in /sys/devices/system/cpu/cpu*/cpuidle/state*; do case $(cat $s/name) in C6* | C7* | C8* | C9* | C10*) echo 1 > $s/disable ;; *) echo 0 > $s/disable ;; esac; done; echo no_turbo $(cat /sys/devices/system/cpu/intel_pstate/no_turbo) disabled $(cat /sys/devices/system/cpu/cpu*/cpuidle/state*/disable | sort | uniq -c | tr -s ' \n' ' ')
+no_turbo 0 disabled 288 0 96 1
+2026-11-14 19:29:30 cstate pm3 noc6 t1 N100 r2 rfm before: 1794680970.019381592 POLL=471936033 C1=7526083896 C1E=1520534531023 C6=6051876032887 
+2026-11-14 19:29:30 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label pm3\ noc6\ t1\ N100\ r2\ rfm --out /root/res/pm3.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm3.err; echo exit=$?
+exit=0
+2026-11-14 19:30:23 cstate pm3 noc6 t1 N100 r2 rfm after: 1794681023.798202825 POLL=472333154 C1=7526384382 C1E=1525491029997 C6=6051876032887 
+2026-11-14 19:30:24 cstate pm3 noc6 t1 N100 r2 hsflowd before: 1794681023.992802581 POLL=472334346 C1=7526394617 C1E=1525508584827 C6=6051876032887 
+2026-11-14 19:30:24 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent hsflowd --n 100 --label pm3\ noc6\ t1\ N100\ r2\ hsflowd --out /root/res/pm3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm3.err; echo exit=$?
+exit=0
+2026-11-14 19:31:16 cstate pm3 noc6 t1 N100 r2 hsflowd after: 1794681076.112983895 POLL=472547555 C1=7526670177 C1E=1530303605685 C6=6051876032887 
+2026-11-14 19:31:16 cstate pm3 noc6 t1 N100 r2 none before: 1794681076.299146859 POLL=472548132 C1=7526684130 C1E=1530320234266 C6=6051876032887 
+2026-11-14 19:31:16 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent none --n 100 --label pm3\ noc6\ t1\ N100\ r2\ none --out /root/res/pm3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm3.err; echo exit=$?
+exit=0
+2026-11-14 19:31:59 cstate pm3 noc6 t1 N100 r2 none after: 1794681119.375031382 POLL=472714647 C1=7526826859 C1E=1534299412721 C6=6051876032887 
+2026-11-14 19:31:59 cstate pm3 noc6 t1 N100 r2 netobserv before: 1794681119.571275388 POLL=472715767 C1=7526839109 C1E=1534316611443 C6=6051876032887 
+2026-11-14 19:31:59 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 100 --label pm3\ noc6\ t1\ N100\ r2\ netobserv --out /root/res/pm3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm3.err; echo exit=$?
+exit=0
+2026-11-14 19:32:51 cstate pm3 noc6 t1 N100 r2 netobserv after: 1794681171.668187066 POLL=472911904 C1=7527017167 C1E=1539118964732 C6=6051876032887 
+2026-11-14 19:32:51 dut: echo 0 > /sys/devices/system/cpu/intel_pstate/no_turbo; for s in /sys/devices/system/cpu/cpu*/cpuidle/state*; do case $(cat $s/name) in C6* | C7* | C8* | C9* | C10*) echo 0 > $s/disable ;; *) echo 0 > $s/disable ;; esac; done; echo no_turbo $(cat /sys/devices/system/cpu/intel_pstate/no_turbo) disabled $(cat /sys/devices/system/cpu/cpu*/cpuidle/state*/disable | sort | uniq -c | tr -s ' \n' ' ')
+no_turbo 0 disabled 384 0
+2026-11-14 19:32:58 cstate pm3 dflt t1 N100 r3 none before: 1794681178.618127851 POLL=472930482 C1=7527042735 C1E=1539191746434 C6=6052427070989 
+2026-11-14 19:32:58 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent none --n 100 --label pm3\ dflt\ t1\ N100\ r3\ none --out /root/res/pm3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm3.err; echo exit=$?
+exit=0
+2026-11-14 19:33:41 cstate pm3 dflt t1 N100 r3 none after: 1794681221.583881360 POLL=473017286 C1=7527094983 C1E=1539294498363 C6=6056175208291 
+2026-11-14 19:33:41 cstate pm3 dflt t1 N100 r3 hsflowd before: 1794681221.777353576 POLL=473017554 C1=7527107298 C1E=1539295312292 C6=6056191580795 
+2026-11-14 19:33:41 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent hsflowd --n 100 --label pm3\ dflt\ t1\ N100\ r3\ hsflowd --out /root/res/pm3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm3.err; echo exit=$?
+exit=0
+2026-11-14 19:34:33 cstate pm3 dflt t1 N100 r3 hsflowd after: 1794681273.806177866 POLL=473128866 C1=7527218523 C1E=1539420819565 C6=6060705149854 
+2026-11-14 19:34:34 cstate pm3 dflt t1 N100 r3 rfm before: 1794681273.998231888 POLL=473129438 C1=7527228840 C1E=1539421822573 C6=6060721548090 
+2026-11-14 19:34:34 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label pm3\ dflt\ t1\ N100\ r3\ rfm --out /root/res/pm3.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm3.err; echo exit=$?
+exit=0
+2026-11-14 19:35:27 cstate pm3 dflt t1 N100 r3 rfm after: 1794681327.599977074 POLL=473386376 C1=7527393307 C1E=1540055119870 C6=6064909662573 
+2026-11-14 19:35:27 cstate pm3 dflt t1 N100 r3 netobserv before: 1794681327.794183572 POLL=473386530 C1=7527405146 C1E=1540056090233 C6=6064925941179 
+2026-11-14 19:35:27 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 100 --label pm3\ dflt\ t1\ N100\ r3\ netobserv --out /root/res/pm3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm3.err; echo exit=$?
+exit=0
+2026-11-14 19:36:19 cstate pm3 dflt t1 N100 r3 netobserv after: 1794681379.834620049 POLL=473497131 C1=7527474975 C1E=1540180475966 C6=6069455143814 
+2026-11-14 19:36:19 dut: echo 0 > /sys/devices/system/cpu/intel_pstate/no_turbo; for s in /sys/devices/system/cpu/cpu*/cpuidle/state*; do case $(cat $s/name) in C6* | C7* | C8* | C9* | C10*) echo 1 > $s/disable ;; *) echo 0 > $s/disable ;; esac; done; echo no_turbo $(cat /sys/devices/system/cpu/intel_pstate/no_turbo) disabled $(cat /sys/devices/system/cpu/cpu*/cpuidle/state*/disable | sort | uniq -c | tr -s ' \n' ' ')
+no_turbo 0 disabled 288 0 96 1
+2026-11-14 19:36:26 cstate pm3 noc6 t1 N100 r3 none before: 1794681386.743083962 POLL=473525963 C1=7527511204 C1E=1540771082184 C6=6069499710888 
+2026-11-14 19:36:26 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent none --n 100 --label pm3\ noc6\ t1\ N100\ r3\ none --out /root/res/pm3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm3.err; echo exit=$?
+exit=0
+2026-11-14 19:37:09 cstate pm3 noc6 t1 N100 r3 none after: 1794681429.737060314 POLL=473694906 C1=7527657199 C1E=1544742022568 C6=6069499710888 
+2026-11-14 19:37:09 cstate pm3 noc6 t1 N100 r3 netobserv before: 1794681429.927991825 POLL=473695720 C1=7527669861 C1E=1544759258227 C6=6069499710888 
+2026-11-14 19:37:09 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 100 --label pm3\ noc6\ t1\ N100\ r3\ netobserv --out /root/res/pm3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm3.err; echo exit=$?
+exit=0
+2026-11-14 19:38:02 cstate pm3 noc6 t1 N100 r3 netobserv after: 1794681482.032241357 POLL=473899669 C1=7527856857 C1E=1549562290104 C6=6069499710888 
+2026-11-14 19:38:02 cstate pm3 noc6 t1 N100 r3 rfm before: 1794681482.217250639 POLL=473901043 C1=7527877678 C1E=1549579027661 C6=6069499710888 
+2026-11-14 19:38:02 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label pm3\ noc6\ t1\ N100\ r3\ rfm --out /root/res/pm3.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm3.err; echo exit=$?
+exit=0
+2026-11-14 19:38:56 cstate pm3 noc6 t1 N100 r3 rfm after: 1794681536.004269251 POLL=474276543 C1=7528163899 C1E=1554536570473 C6=6069499710888 
+2026-11-14 19:38:56 cstate pm3 noc6 t1 N100 r3 hsflowd before: 1794681536.180328637 POLL=474277454 C1=7528183594 C1E=1554552169041 C6=6069499710888 
+2026-11-14 19:38:56 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent hsflowd --n 100 --label pm3\ noc6\ t1\ N100\ r3\ hsflowd --out /root/res/pm3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm3.err; echo exit=$?
+exit=0
+2026-11-14 19:39:48 cstate pm3 noc6 t1 N100 r3 hsflowd after: 1794681588.324078668 POLL=474496777 C1=7528451046 C1E=1559349546076 C6=6069499710888 
+2026-11-14 19:39:48 dut: echo 1 > /sys/devices/system/cpu/intel_pstate/no_turbo; for s in /sys/devices/system/cpu/cpu*/cpuidle/state*; do case $(cat $s/name) in C6* | C7* | C8* | C9* | C10*) echo 1 > $s/disable ;; *) echo 0 > $s/disable ;; esac; done; echo no_turbo $(cat /sys/devices/system/cpu/intel_pstate/no_turbo) disabled $(cat /sys/devices/system/cpu/cpu*/cpuidle/state*/disable | sort | uniq -c | tr -s ' \n' ' ')
+no_turbo 1 disabled 288 0 96 1
+2026-11-14 19:39:55 cstate pm3 fixed t1 N100 r3 rfm before: 1794681595.586102411 POLL=474527292 C1=7528496370 C1E=1560013365902 C6=6069499710888 
+2026-11-14 19:39:55 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label pm3\ fixed\ t1\ N100\ r3\ rfm --out /root/res/pm3.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm3.err; echo exit=$?
+exit=0
+2026-11-14 19:40:49 cstate pm3 fixed t1 N100 r3 rfm after: 1794681649.519584644 POLL=474891177 C1=7528777583 C1E=1564941672456 C6=6069499710888 
+2026-11-14 19:40:49 cstate pm3 fixed t1 N100 r3 none before: 1794681649.713024943 POLL=474892111 C1=7528792610 C1E=1564959308373 C6=6069499710888 
+2026-11-14 19:40:49 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent none --n 100 --label pm3\ fixed\ t1\ N100\ r3\ none --out /root/res/pm3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm3.err; echo exit=$?
+exit=0
+2026-11-14 19:41:32 cstate pm3 fixed t1 N100 r3 none after: 1794681692.878206958 POLL=475054838 C1=7528935207 C1E=1568913936839 C6=6069499710888 
+2026-11-14 19:41:33 cstate pm3 fixed t1 N100 r3 hsflowd before: 1794681693.059673579 POLL=475056115 C1=7528942182 C1E=1568930822461 C6=6069499710888 
+2026-11-14 19:41:33 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent hsflowd --n 100 --label pm3\ fixed\ t1\ N100\ r3\ hsflowd --out /root/res/pm3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm3.err; echo exit=$?
+exit=0
+2026-11-14 19:42:25 cstate pm3 fixed t1 N100 r3 hsflowd after: 1794681745.334368450 POLL=475259786 C1=7529195594 C1E=1573697130380 C6=6069499710888 
+2026-11-14 19:42:25 cstate pm3 fixed t1 N100 r3 netobserv before: 1794681745.526135607 POLL=475260444 C1=7529204840 C1E=1573714731505 C6=6069499710888 
+2026-11-14 19:42:25 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 100 --label pm3\ fixed\ t1\ N100\ r3\ netobserv --out /root/res/pm3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm3.err; echo exit=$?
+exit=0
+2026-11-14 19:43:17 cstate pm3 fixed t1 N100 r3 netobserv after: 1794681797.831836078 POLL=475455940 C1=7529375361 C1E=1578495247024 C6=6069499710888 
+2026-11-14 19:43:17 dut: echo 1 > /sys/devices/system/cpu/intel_pstate/no_turbo; for s in /sys/devices/system/cpu/cpu*/cpuidle/state*; do case $(cat $s/name) in C6* | C7* | C8* | C9* | C10*) echo 0 > $s/disable ;; *) echo 0 > $s/disable ;; esac; done; echo no_turbo $(cat /sys/devices/system/cpu/intel_pstate/no_turbo) disabled $(cat /sys/devices/system/cpu/cpu*/cpuidle/state*/disable | sort | uniq -c | tr -s ' \n' ' ')
+no_turbo 1 disabled 384 0
+2026-11-14 19:43:25 cstate pm3 noturbo t1 N100 r3 netobserv before: 1794681805.177891473 POLL=475476921 C1=7529411384 C1E=1578573346763 C6=6070073452624 
+2026-11-14 19:43:25 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 100 --label pm3\ noturbo\ t1\ N100\ r3\ netobserv --out /root/res/pm3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm3.err; echo exit=$?
+exit=0
+2026-11-14 19:44:17 cstate pm3 noturbo t1 N100 r3 netobserv after: 1794681857.597080237 POLL=475610297 C1=7529487411 C1E=1578699305104 C6=6074574406765 
+2026-11-14 19:44:17 cstate pm3 noturbo t1 N100 r3 none before: 1794681857.805239425 POLL=475610834 C1=7529496727 C1E=1578700122361 C6=6074591707541 
+2026-11-14 19:44:17 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent none --n 100 --label pm3\ noturbo\ t1\ N100\ r3\ none --out /root/res/pm3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm3.err; echo exit=$?
+exit=0
+2026-11-14 19:45:01 cstate pm3 noturbo t1 N100 r3 none after: 1794681900.984578202 POLL=475709252 C1=7529555624 C1E=1578801096554 C6=6078315912484 
+2026-11-14 19:45:01 cstate pm3 noturbo t1 N100 r3 hsflowd before: 1794681901.187006118 POLL=475709860 C1=7529574476 C1E=1578802095955 C6=6078332699268 
+2026-11-14 19:45:01 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent hsflowd --n 100 --label pm3\ noturbo\ t1\ N100\ r3\ hsflowd --out /root/res/pm3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm3.err; echo exit=$?
+exit=0
+2026-11-14 19:45:53 cstate pm3 noturbo t1 N100 r3 hsflowd after: 1794681953.606794512 POLL=475834288 C1=7529685625 C1E=1578928887708 C6=6082817086177 
+2026-11-14 19:45:53 cstate pm3 noturbo t1 N100 r3 rfm before: 1794681953.812797572 POLL=475835353 C1=7529706248 C1E=1578929783910 C6=6082834435383 
+2026-11-14 19:45:53 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label pm3\ noturbo\ t1\ N100\ r3\ rfm --out /root/res/pm3.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm3.err; echo exit=$?
+exit=0
+2026-11-14 19:46:47 cstate pm3 noturbo t1 N100 r3 rfm after: 1794682007.892856139 POLL=476076328 C1=7529887058 C1E=1579547001617 C6=6087027294468 
+2026-11-14 19:46:47 dut: echo 0 > /sys/devices/system/cpu/intel_pstate/no_turbo; for s in /sys/devices/system/cpu/cpu*/cpuidle/state*; do case $(cat $s/name) in C6* | C7* | C8* | C9* | C10*) echo 0 > $s/disable ;; *) echo 0 > $s/disable ;; esac; done; echo no_turbo $(cat /sys/devices/system/cpu/intel_pstate/no_turbo) disabled $(cat /sys/devices/system/cpu/cpu*/cpuidle/state*/disable | sort | uniq -c | tr -s ' \n' ' ')
+no_turbo 0 disabled 384 0
+2026-11-14 19:46:54 cstate pm3 dflt t1 N100 r4 hsflowd before: 1794682014.809294451 POLL=476091689 C1=7529914867 C1E=1579570523243 C6=6087620958805 
+2026-11-14 19:46:54 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent hsflowd --n 100 --label pm3\ dflt\ t1\ N100\ r4\ hsflowd --out /root/res/pm3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm3.err; echo exit=$?
+exit=0
+2026-11-14 19:47:46 cstate pm3 dflt t1 N100 r4 hsflowd after: 1794682066.821105694 POLL=476204311 C1=7530024685 C1E=1579695343747 C6=6092135071517 
+2026-11-14 19:47:47 cstate pm3 dflt t1 N100 r4 rfm before: 1794682067.006690002 POLL=476204804 C1=7530032490 C1E=1579696151546 C6=6092150417500 
+2026-11-14 19:47:47 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label pm3\ dflt\ t1\ N100\ r4\ rfm --out /root/res/pm3.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm3.err; echo exit=$?
+exit=0
+2026-11-14 19:48:40 cstate pm3 dflt t1 N100 r4 rfm after: 1794682120.639832991 POLL=476453072 C1=7530199251 C1E=1580334065589 C6=6096338444409 
+2026-11-14 19:48:40 cstate pm3 dflt t1 N100 r4 netobserv before: 1794682120.833391814 POLL=476453576 C1=7530207777 C1E=1580335153506 C6=6096354425179 
+2026-11-14 19:48:40 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 100 --label pm3\ dflt\ t1\ N100\ r4\ netobserv --out /root/res/pm3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm3.err; echo exit=$?
+exit=0
+2026-11-14 19:49:32 cstate pm3 dflt t1 N100 r4 netobserv after: 1794682172.897553417 POLL=476565028 C1=7530264543 C1E=1580461633771 C6=6100884050653 
+2026-11-14 19:49:33 cstate pm3 dflt t1 N100 r4 none before: 1794682173.098333982 POLL=476565778 C1=7530268215 C1E=1580462729738 C6=6100900165003 
+2026-11-14 19:49:33 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent none --n 100 --label pm3\ dflt\ t1\ N100\ r4\ none --out /root/res/pm3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm3.err; echo exit=$?
+exit=0
+2026-11-14 19:50:16 cstate pm3 dflt t1 N100 r4 none after: 1794682216.033594265 POLL=476655832 C1=7530318132 C1E=1580566389270 C6=6104645324705 
+2026-11-14 19:50:16 dut: echo 0 > /sys/devices/system/cpu/intel_pstate/no_turbo; for s in /sys/devices/system/cpu/cpu*/cpuidle/state*; do case $(cat $s/name) in C6* | C7* | C8* | C9* | C10*) echo 1 > $s/disable ;; *) echo 0 > $s/disable ;; esac; done; echo no_turbo $(cat /sys/devices/system/cpu/intel_pstate/no_turbo) disabled $(cat /sys/devices/system/cpu/cpu*/cpuidle/state*/disable | sort | uniq -c | tr -s ' \n' ' ')
+no_turbo 0 disabled 288 0 96 1
+2026-11-14 19:50:23 cstate pm3 noc6 t1 N100 r4 hsflowd before: 1794682223.025112550 POLL=476684081 C1=7530358694 C1E=1581161953713 C6=6104692652250 
+2026-11-14 19:50:23 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent hsflowd --n 100 --label pm3\ noc6\ t1\ N100\ r4\ hsflowd --out /root/res/pm3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm3.err; echo exit=$?
+exit=0
+2026-11-14 19:51:15 cstate pm3 noc6 t1 N100 r4 hsflowd after: 1794682275.140504753 POLL=476902561 C1=7530626889 C1E=1585955819165 C6=6104692652250 
+2026-11-14 19:51:15 cstate pm3 noc6 t1 N100 r4 none before: 1794682275.325387561 POLL=476903611 C1=7530643442 C1E=1585972897548 C6=6104692652250 
+2026-11-14 19:51:15 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent none --n 100 --label pm3\ noc6\ t1\ N100\ r4\ none --out /root/res/pm3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm3.err; echo exit=$?
+exit=0
+2026-11-14 19:51:58 cstate pm3 noc6 t1 N100 r4 none after: 1794682318.355376128 POLL=477069374 C1=7530792684 C1E=1589947151820 C6=6104692652250 
+2026-11-14 19:51:58 cstate pm3 noc6 t1 N100 r4 rfm before: 1794682318.546333184 POLL=477070237 C1=7530803157 C1E=1589964379076 C6=6104692652250 
+2026-11-14 19:51:58 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label pm3\ noc6\ t1\ N100\ r4\ rfm --out /root/res/pm3.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm3.err; echo exit=$?
+exit=0
+2026-11-14 19:52:52 cstate pm3 noc6 t1 N100 r4 rfm after: 1794682372.280578545 POLL=477452594 C1=7531082059 C1E=1594917276441 C6=6104692652250 
+2026-11-14 19:52:52 cstate pm3 noc6 t1 N100 r4 netobserv before: 1794682372.468364034 POLL=477453477 C1=7531095089 C1E=1594934465994 C6=6104692652250 
+2026-11-14 19:52:52 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 100 --label pm3\ noc6\ t1\ N100\ r4\ netobserv --out /root/res/pm3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm3.err; echo exit=$?
+exit=0
+2026-11-14 19:53:44 cstate pm3 noc6 t1 N100 r4 netobserv after: 1794682424.569055804 POLL=477657284 C1=7531276518 C1E=1599736936820 C6=6104692652250 
+2026-11-14 19:53:44 dut: echo 1 > /sys/devices/system/cpu/intel_pstate/no_turbo; for s in /sys/devices/system/cpu/cpu*/cpuidle/state*; do case $(cat $s/name) in C6* | C7* | C8* | C9* | C10*) echo 0 > $s/disable ;; *) echo 0 > $s/disable ;; esac; done; echo no_turbo $(cat /sys/devices/system/cpu/intel_pstate/no_turbo) disabled $(cat /sys/devices/system/cpu/cpu*/cpuidle/state*/disable | sort | uniq -c | tr -s ' \n' ' ')
+no_turbo 1 disabled 384 0
+2026-11-14 19:53:52 cstate pm3 noturbo t1 N100 r4 netobserv before: 1794682431.991537913 POLL=477677367 C1=7531305548 C1E=1599820344967 C6=6105268496666 
+2026-11-14 19:53:52 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 100 --label pm3\ noturbo\ t1\ N100\ r4\ netobserv --out /root/res/pm3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm3.err; echo exit=$?
+exit=0
+2026-11-14 19:54:44 cstate pm3 noturbo t1 N100 r4 netobserv after: 1794682484.411426761 POLL=477806257 C1=7531376592 C1E=1599944525852 C6=6109771299453 
+2026-11-14 19:54:44 cstate pm3 noturbo t1 N100 r4 hsflowd before: 1794682484.633525719 POLL=477806914 C1=7531381901 C1E=1599945573533 C6=6109790083323 
+2026-11-14 19:54:44 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent hsflowd --n 100 --label pm3\ noturbo\ t1\ N100\ r4\ hsflowd --out /root/res/pm3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm3.err; echo exit=$?
+exit=0
+2026-11-14 19:55:37 cstate pm3 noturbo t1 N100 r4 hsflowd after: 1794682537.067876542 POLL=477930701 C1=7531475432 C1E=1600069979381 C6=6114278840196 
+2026-11-14 19:55:37 cstate pm3 noturbo t1 N100 r4 none before: 1794682537.282576141 POLL=477931006 C1=7531486298 C1E=1600070620607 C6=6114297185714 
+2026-11-14 19:55:37 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent none --n 100 --label pm3\ noturbo\ t1\ N100\ r4\ none --out /root/res/pm3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm3.err; echo exit=$?
+exit=0
+2026-11-14 19:56:20 cstate pm3 noturbo t1 N100 r4 none after: 1794682580.554468343 POLL=478030538 C1=7531544644 C1E=1600172905980 C6=6118027389531 
+2026-11-14 19:56:20 cstate pm3 noturbo t1 N100 r4 rfm before: 1794682580.774994589 POLL=478031024 C1=7531549678 C1E=1600173965077 C6=6118045826247 
+2026-11-14 19:56:20 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label pm3\ noturbo\ t1\ N100\ r4\ rfm --out /root/res/pm3.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm3.err; echo exit=$?
+exit=0
+2026-11-14 19:57:14 cstate pm3 noturbo t1 N100 r4 rfm after: 1794682634.820354657 POLL=478269408 C1=7531730984 C1E=1600787821455 C6=6122239106542 
+2026-11-14 19:57:14 dut: echo 1 > /sys/devices/system/cpu/intel_pstate/no_turbo; for s in /sys/devices/system/cpu/cpu*/cpuidle/state*; do case $(cat $s/name) in C6* | C7* | C8* | C9* | C10*) echo 1 > $s/disable ;; *) echo 0 > $s/disable ;; esac; done; echo no_turbo $(cat /sys/devices/system/cpu/intel_pstate/no_turbo) disabled $(cat /sys/devices/system/cpu/cpu*/cpuidle/state*/disable | sort | uniq -c | tr -s ' \n' ' ')
+no_turbo 1 disabled 288 0 96 1
+2026-11-14 19:57:22 cstate pm3 fixed t1 N100 r4 rfm before: 1794682642.149106948 POLL=478300087 C1=7531792454 C1E=1601402400063 C6=6122291759493 
+2026-11-14 19:57:22 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label pm3\ fixed\ t1\ N100\ r4\ rfm --out /root/res/pm3.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm3.err; echo exit=$?
+exit=0
+2026-11-14 19:58:16 cstate pm3 fixed t1 N100 r4 rfm after: 1794682696.120820143 POLL=478655050 C1=7532060404 C1E=1606334905667 C6=6122291759493 
+2026-11-14 19:58:16 cstate pm3 fixed t1 N100 r4 hsflowd before: 1794682696.320802401 POLL=478656108 C1=7532068314 C1E=1606352884373 C6=6122291759493 
+2026-11-14 19:58:16 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent hsflowd --n 100 --label pm3\ fixed\ t1\ N100\ r4\ hsflowd --out /root/res/pm3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm3.err; echo exit=$?
+exit=0
+2026-11-14 19:59:08 cstate pm3 fixed t1 N100 r4 hsflowd after: 1794682748.591971133 POLL=478859165 C1=7532325900 C1E=1611119051026 C6=6122291759493 
+2026-11-14 19:59:08 cstate pm3 fixed t1 N100 r4 none before: 1794682748.788961194 POLL=478860003 C1=7532338882 C1E=1611136710191 C6=6122291759493 
+2026-11-14 19:59:08 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent none --n 100 --label pm3\ fixed\ t1\ N100\ r4\ none --out /root/res/pm3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm3.err; echo exit=$?
+exit=0
+2026-11-14 19:59:51 cstate pm3 fixed t1 N100 r4 none after: 1794682791.962237482 POLL=479028477 C1=7532487374 C1E=1615092491512 C6=6122291759493 
+2026-11-14 19:59:52 cstate pm3 fixed t1 N100 r4 netobserv before: 1794682792.160736263 POLL=479029348 C1=7532495231 C1E=1615110280055 C6=6122291759493 
+2026-11-14 19:59:52 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 100 --label pm3\ fixed\ t1\ N100\ r4\ netobserv --out /root/res/pm3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm3.err; echo exit=$?
+exit=0
+2026-11-14 20:00:44 cstate pm3 fixed t1 N100 r4 netobserv after: 1794682844.515638757 POLL=479221412 C1=7532678468 C1E=1619895374175 C6=6122291759493 
+2026-11-14 20:00:44 dut: echo 1 > /sys/devices/system/cpu/intel_pstate/no_turbo; for s in /sys/devices/system/cpu/cpu*/cpuidle/state*; do case $(cat $s/name) in C6* | C7* | C8* | C9* | C10*) echo 0 > $s/disable ;; *) echo 0 > $s/disable ;; esac; done; echo no_turbo $(cat /sys/devices/system/cpu/intel_pstate/no_turbo) disabled $(cat /sys/devices/system/cpu/cpu*/cpuidle/state*/disable | sort | uniq -c | tr -s ' \n' ' ')
+no_turbo 1 disabled 384 0
+2026-11-14 20:00:51 cstate pm3 noturbo t1 N100 r5 rfm before: 1794682851.931373973 POLL=479241529 C1=7532716460 C1E=1619976827965 C6=6122868486545 
+2026-11-14 20:00:51 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label pm3\ noturbo\ t1\ N100\ r5\ rfm --out /root/res/pm3.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm3.err; echo exit=$?
+exit=0
+2026-11-14 20:01:46 cstate pm3 noturbo t1 N100 r5 rfm after: 1794682906.029129376 POLL=479482525 C1=7532910539 C1E=1620605243918 C6=6127051551281 
+2026-11-14 20:01:46 cstate pm3 noturbo t1 N100 r5 netobserv before: 1794682906.244006521 POLL=479483136 C1=7532927240 C1E=1620606205546 C6=6127069496530 
+2026-11-14 20:01:46 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 100 --label pm3\ noturbo\ t1\ N100\ r5\ netobserv --out /root/res/pm3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm3.err; echo exit=$?
+exit=0
+2026-11-14 20:02:38 cstate pm3 noturbo t1 N100 r5 netobserv after: 1794682958.652547050 POLL=479612794 C1=7532988067 C1E=1620729516827 C6=6131572024471 
+2026-11-14 20:02:38 cstate pm3 noturbo t1 N100 r5 hsflowd before: 1794682958.861298640 POLL=479613613 C1=7533010455 C1E=1620730488617 C6=6131590129937 
+2026-11-14 20:02:38 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent hsflowd --n 100 --label pm3\ noturbo\ t1\ N100\ r5\ hsflowd --out /root/res/pm3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm3.err; echo exit=$?
+exit=0
+2026-11-14 20:03:31 cstate pm3 noturbo t1 N100 r5 hsflowd after: 1794683011.240606054 POLL=479745245 C1=7533110292 C1E=1620856133108 C6=6136072970764 
+2026-11-14 20:03:31 cstate pm3 noturbo t1 N100 r5 none before: 1794683011.451046824 POLL=479745869 C1=7533132338 C1E=1620857104419 C6=6136090550850 
+2026-11-14 20:03:31 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent none --n 100 --label pm3\ noturbo\ t1\ N100\ r5\ none --out /root/res/pm3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm3.err; echo exit=$?
+exit=0
+2026-11-14 20:04:14 cstate pm3 noturbo t1 N100 r5 none after: 1794683054.715533253 POLL=479853194 C1=7533188616 C1E=1620960205153 C6=6139819277842 
+2026-11-14 20:04:14 dut: echo 0 > /sys/devices/system/cpu/intel_pstate/no_turbo; for s in /sys/devices/system/cpu/cpu*/cpuidle/state*; do case $(cat $s/name) in C6* | C7* | C8* | C9* | C10*) echo 1 > $s/disable ;; *) echo 0 > $s/disable ;; esac; done; echo no_turbo $(cat /sys/devices/system/cpu/intel_pstate/no_turbo) disabled $(cat /sys/devices/system/cpu/cpu*/cpuidle/state*/disable | sort | uniq -c | tr -s ' \n' ' ')
+no_turbo 0 disabled 288 0 96 1
+2026-11-14 20:04:21 cstate pm3 noc6 t1 N100 r5 none before: 1794683061.732080973 POLL=479884844 C1=7533233555 C1E=1621555380389 C6=6139867948383 
+2026-11-14 20:04:21 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent none --n 100 --label pm3\ noc6\ t1\ N100\ r5\ none --out /root/res/pm3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm3.err; echo exit=$?
+exit=0
+2026-11-14 20:05:04 cstate pm3 noc6 t1 N100 r5 none after: 1794683104.762871198 POLL=480050681 C1=7533367592 C1E=1625529727275 C6=6139867948383 
+2026-11-14 20:05:04 cstate pm3 noc6 t1 N100 r5 hsflowd before: 1794683104.939444911 POLL=480051357 C1=7533383770 C1E=1625545737633 C6=6139867948383 
+2026-11-14 20:05:04 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent hsflowd --n 100 --label pm3\ noc6\ t1\ N100\ r5\ hsflowd --out /root/res/pm3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm3.err; echo exit=$?
+exit=0
+2026-11-14 20:05:57 cstate pm3 noc6 t1 N100 r5 hsflowd after: 1794683157.057057902 POLL=480269120 C1=7533664326 C1E=1630339603414 C6=6139867948383 
+2026-11-14 20:05:57 cstate pm3 noc6 t1 N100 r5 netobserv before: 1794683157.241869633 POLL=480270218 C1=7533680882 C1E=1630356340828 C6=6139867948383 
+2026-11-14 20:05:57 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 100 --label pm3\ noc6\ t1\ N100\ r5\ netobserv --out /root/res/pm3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm3.err; echo exit=$?
+exit=0
+2026-11-14 20:06:49 cstate pm3 noc6 t1 N100 r5 netobserv after: 1794683209.386763283 POLL=480470505 C1=7533858904 C1E=1635162970007 C6=6139867948383 
+2026-11-14 20:06:49 cstate pm3 noc6 t1 N100 r5 rfm before: 1794683209.583324405 POLL=480471352 C1=7533878157 C1E=1635181109519 C6=6139867948383 
+2026-11-14 20:06:49 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label pm3\ noc6\ t1\ N100\ r5\ rfm --out /root/res/pm3.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm3.err; echo exit=$?
+exit=0
+2026-11-14 20:07:43 cstate pm3 noc6 t1 N100 r5 rfm after: 1794683263.343618938 POLL=480847162 C1=7534151374 C1E=1640135921247 C6=6139867948383 
+2026-11-14 20:07:43 dut: echo 0 > /sys/devices/system/cpu/intel_pstate/no_turbo; for s in /sys/devices/system/cpu/cpu*/cpuidle/state*; do case $(cat $s/name) in C6* | C7* | C8* | C9* | C10*) echo 0 > $s/disable ;; *) echo 0 > $s/disable ;; esac; done; echo no_turbo $(cat /sys/devices/system/cpu/intel_pstate/no_turbo) disabled $(cat /sys/devices/system/cpu/cpu*/cpuidle/state*/disable | sort | uniq -c | tr -s ' \n' ' ')
+no_turbo 0 disabled 384 0
+2026-11-14 20:07:50 cstate pm3 dflt t1 N100 r5 none before: 1794683270.289297092 POLL=480864164 C1=7534186011 C1E=1640208636284 C6=6140417924676 
+2026-11-14 20:07:50 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent none --n 100 --label pm3\ dflt\ t1\ N100\ r5\ none --out /root/res/pm3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm3.err; echo exit=$?
+exit=0
+2026-11-14 20:08:33 cstate pm3 dflt t1 N100 r5 none after: 1794683313.216621994 POLL=480949477 C1=7534229856 C1E=1640310537696 C6=6144165095138 
+2026-11-14 20:08:33 cstate pm3 dflt t1 N100 r5 hsflowd before: 1794683313.406627814 POLL=480949765 C1=7534241732 C1E=1640311406644 C6=6144181253304 
+2026-11-14 20:08:33 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent hsflowd --n 100 --label pm3\ dflt\ t1\ N100\ r5\ hsflowd --out /root/res/pm3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm3.err; echo exit=$?
+exit=0
+2026-11-14 20:09:25 cstate pm3 dflt t1 N100 r5 hsflowd after: 1794683365.427649476 POLL=481060533 C1=7534341806 C1E=1640433766259 C6=6148699940019 
+2026-11-14 20:09:25 cstate pm3 dflt t1 N100 r5 netobserv before: 1794683365.605200576 POLL=481060955 C1=7534360071 C1E=1640434553247 C6=6148714857546 
+2026-11-14 20:09:25 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 100 --label pm3\ dflt\ t1\ N100\ r5\ netobserv --out /root/res/pm3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm3.err; echo exit=$?
+exit=0
+2026-11-14 20:10:17 cstate pm3 dflt t1 N100 r5 netobserv after: 1794683417.604927445 POLL=481166111 C1=7534425461 C1E=1640559146462 C6=6153237306975 
+2026-11-14 20:10:17 cstate pm3 dflt t1 N100 r5 rfm before: 1794683417.796496748 POLL=481166557 C1=7534442432 C1E=1640559858899 C6=6153253747021 
+2026-11-14 20:10:17 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label pm3\ dflt\ t1\ N100\ r5\ rfm --out /root/res/pm3.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm3.err; echo exit=$?
+exit=0
+2026-11-14 20:11:11 cstate pm3 dflt t1 N100 r5 rfm after: 1794683471.511688699 POLL=481410864 C1=7534601679 C1E=1641190864848 C6=6157456438726 
+2026-11-14 20:11:11 dut: echo 1 > /sys/devices/system/cpu/intel_pstate/no_turbo; for s in /sys/devices/system/cpu/cpu*/cpuidle/state*; do case $(cat $s/name) in C6* | C7* | C8* | C9* | C10*) echo 1 > $s/disable ;; *) echo 0 > $s/disable ;; esac; done; echo no_turbo $(cat /sys/devices/system/cpu/intel_pstate/no_turbo) disabled $(cat /sys/devices/system/cpu/cpu*/cpuidle/state*/disable | sort | uniq -c | tr -s ' \n' ' ')
+no_turbo 1 disabled 288 0 96 1
+2026-11-14 20:11:18 cstate pm3 fixed t1 N100 r5 hsflowd before: 1794683478.838783773 POLL=481440080 C1=7534644003 C1E=1641804157732 C6=6157511022022 
+2026-11-14 20:11:18 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent hsflowd --n 100 --label pm3\ fixed\ t1\ N100\ r5\ hsflowd --out /root/res/pm3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm3.err; echo exit=$?
+exit=0
+2026-11-14 20:12:11 cstate pm3 fixed t1 N100 r5 hsflowd after: 1794683531.204631501 POLL=481648229 C1=7534898782 C1E=1646578001372 C6=6157511022022 
+2026-11-14 20:12:11 cstate pm3 fixed t1 N100 r5 none before: 1794683531.398750635 POLL=481649404 C1=7534908554 C1E=1646595750474 C6=6157511022022 
+2026-11-14 20:12:11 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent none --n 100 --label pm3\ fixed\ t1\ N100\ r5\ none --out /root/res/pm3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm3.err; echo exit=$?
+exit=0
+2026-11-14 20:12:54 cstate pm3 fixed t1 N100 r5 none after: 1794683574.547837830 POLL=481813607 C1=7535057097 C1E=1650548853177 C6=6157511022022 
+2026-11-14 20:12:54 cstate pm3 fixed t1 N100 r5 netobserv before: 1794683574.742563060 POLL=481814141 C1=7535076621 C1E=1650566851587 C6=6157511022022 
+2026-11-14 20:12:54 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 100 --label pm3\ fixed\ t1\ N100\ r5\ netobserv --out /root/res/pm3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm3.err; echo exit=$?
+exit=0
+2026-11-14 20:13:47 cstate pm3 fixed t1 N100 r5 netobserv after: 1794683627.062869758 POLL=482012234 C1=7535255487 C1E=1655348666963 C6=6157511022022 
+2026-11-14 20:13:47 cstate pm3 fixed t1 N100 r5 rfm before: 1794683627.256847854 POLL=482012764 C1=7535275132 C1E=1655366548680 C6=6157511022022 
+2026-11-14 20:13:47 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label pm3\ fixed\ t1\ N100\ r5\ rfm --out /root/res/pm3.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm3.err; echo exit=$?
+exit=0
+2026-11-14 20:14:41 cstate pm3 fixed t1 N100 r5 rfm after: 1794683681.274642904 POLL=482363433 C1=7535565169 C1E=1660302550558 C6=6157511022022 
+2026-11-14 20:14:41 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; setsid nohup nu /root/workload/gen.nu --iface ens1f0np0 --dst 10.48.0.7 --dstmac e8:eb:d3:fd:ce:ac --count 0 --threads 1  > /tmp/gen.log 2>&1 < /dev/null &
+2026-11-14 20:14:59 dut rx pps 2674022
+2026-11-14 20:14:59 dut: echo 0 > /sys/devices/system/cpu/intel_pstate/no_turbo; for s in /sys/devices/system/cpu/cpu*/cpuidle/state*; do case $(cat $s/name) in C6* | C7* | C8* | C9* | C10*) echo 1 > $s/disable ;; *) echo 0 > $s/disable ;; esac; done; echo no_turbo $(cat /sys/devices/system/cpu/intel_pstate/no_turbo) disabled $(cat /sys/devices/system/cpu/cpu*/cpuidle/state*/disable | sort | uniq -c | tr -s ' \n' ' ')
+no_turbo 0 disabled 288 0 96 1
+2026-11-14 20:15:06 cstate pm3 noc6 t1 N10 r1 rfm before: 1794683706.893202964 POLL=482417766 C1=7535653833 C1E=1662706220429 C6=6157511022022 
+2026-11-14 20:15:06 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 10 --label pm3\ noc6\ t1\ N10\ r1\ rfm --out /root/res/pm3.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm3.err; echo exit=$?
+exit=0
+2026-11-14 20:16:00 cstate pm3 noc6 t1 N10 r1 rfm after: 1794683760.668471375 POLL=482815417 C1=7535939095 C1E=1667659473550 C6=6157511022022 
+2026-11-14 20:16:00 cstate pm3 noc6 t1 N10 r1 netobserv before: 1794683760.854329280 POLL=482815808 C1=7535957414 C1E=1667676804741 C6=6157511022022 
+2026-11-14 20:16:00 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 10 --label pm3\ noc6\ t1\ N10\ r1\ netobserv --out /root/res/pm3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm3.err; echo exit=$?
+exit=0
+2026-11-14 20:16:53 cstate pm3 noc6 t1 N10 r1 netobserv after: 1794683813.048424388 POLL=483015670 C1=7536136497 C1E=1672485591775 C6=6157511022022 
+2026-11-14 20:16:53 cstate pm3 noc6 t1 N10 r1 hsflowd before: 1794683813.222974949 POLL=483016753 C1=7536155942 C1E=1672501762657 C6=6157511022022 
+2026-11-14 20:16:53 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent hsflowd --n 10 --label pm3\ noc6\ t1\ N10\ r1\ hsflowd --out /root/res/pm3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm3.err; echo exit=$?
+exit=0
+2026-11-14 20:17:45 cstate pm3 noc6 t1 N10 r1 hsflowd after: 1794683865.373641196 POLL=483229001 C1=7546078479 C1E=1677253213492 C6=6157511022022 
+2026-11-14 20:17:45 cstate pm3 noc6 t1 N10 r1 none before: 1794683865.562247368 POLL=483230244 C1=7546091483 C1E=1677270701732 C6=6157511022022 
+2026-11-14 20:17:45 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent none --n 10 --label pm3\ noc6\ t1\ N10\ r1\ none --out /root/res/pm3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm3.err; echo exit=$?
+exit=0
+2026-11-14 20:18:28 cstate pm3 noc6 t1 N10 r1 none after: 1794683908.632369619 POLL=483389142 C1=7546246119 C1E=1681248318927 C6=6157511022022 
+2026-11-14 20:18:28 dut: echo 0 > /sys/devices/system/cpu/intel_pstate/no_turbo; for s in /sys/devices/system/cpu/cpu*/cpuidle/state*; do case $(cat $s/name) in C6* | C7* | C8* | C9* | C10*) echo 0 > $s/disable ;; *) echo 0 > $s/disable ;; esac; done; echo no_turbo $(cat /sys/devices/system/cpu/intel_pstate/no_turbo) disabled $(cat /sys/devices/system/cpu/cpu*/cpuidle/state*/disable | sort | uniq -c | tr -s ' \n' ' ')
+no_turbo 0 disabled 384 0
+2026-11-14 20:18:35 cstate pm3 dflt t1 N10 r1 rfm before: 1794683915.565939423 POLL=483405856 C1=7546277564 C1E=1681319156391 C6=6158061528364 
+2026-11-14 20:18:35 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 10 --label pm3\ dflt\ t1\ N10\ r1\ rfm --out /root/res/pm3.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm3.err; echo exit=$?
+exit=0
+2026-11-14 20:19:29 cstate pm3 dflt t1 N10 r1 rfm after: 1794683969.318305998 POLL=483703668 C1=7546472784 C1E=1682039242706 C6=6162179505332 
+2026-11-14 20:19:29 cstate pm3 dflt t1 N10 r1 netobserv before: 1794683969.514060250 POLL=483704138 C1=7546482825 C1E=1682040350731 C6=6162196230303 
+2026-11-14 20:19:29 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 10 --label pm3\ dflt\ t1\ N10\ r1\ netobserv --out /root/res/pm3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm3.err; echo exit=$?
+exit=0
+2026-11-14 20:20:21 cstate pm3 dflt t1 N10 r1 netobserv after: 1794684021.548603486 POLL=483818171 C1=7546534138 C1E=1682165964919 C6=6166719194016 
+2026-11-14 20:20:21 cstate pm3 dflt t1 N10 r1 none before: 1794684021.742122821 POLL=483818670 C1=7546543242 C1E=1682166749724 C6=6166735702368 
+2026-11-14 20:20:21 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent none --n 10 --label pm3\ dflt\ t1\ N10\ r1\ none --out /root/res/pm3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm3.err; echo exit=$?
+exit=0
+2026-11-14 20:21:04 cstate pm3 dflt t1 N10 r1 none after: 1794684064.785798139 POLL=483904863 C1=7546594257 C1E=1682272934204 C6=6170488036923 
+2026-11-14 20:21:04 cstate pm3 dflt t1 N10 r1 hsflowd before: 1794684064.972514590 POLL=483905466 C1=7546611956 C1E=1682273816608 C6=6170503943064 
+2026-11-14 20:21:05 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent hsflowd --n 10 --label pm3\ dflt\ t1\ N10\ r1\ hsflowd --out /root/res/pm3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm3.err; echo exit=$?
+exit=0
+2026-11-14 20:21:56 cstate pm3 dflt t1 N10 r1 hsflowd after: 1794684116.970094834 POLL=483993335 C1=7553099914 C1E=1682381229284 C6=6174998734073 
+2026-11-14 20:21:57 dut: echo 1 > /sys/devices/system/cpu/intel_pstate/no_turbo; for s in /sys/devices/system/cpu/cpu*/cpuidle/state*; do case $(cat $s/name) in C6* | C7* | C8* | C9* | C10*) echo 1 > $s/disable ;; *) echo 0 > $s/disable ;; esac; done; echo no_turbo $(cat /sys/devices/system/cpu/intel_pstate/no_turbo) disabled $(cat /sys/devices/system/cpu/cpu*/cpuidle/state*/disable | sort | uniq -c | tr -s ' \n' ' ')
+no_turbo 1 disabled 288 0 96 1
+2026-11-14 20:22:04 cstate pm3 fixed t1 N10 r1 rfm before: 1794684124.291069222 POLL=484024537 C1=7553144256 C1E=1682990936067 C6=6175056030903 
+2026-11-14 20:22:04 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 10 --label pm3\ fixed\ t1\ N10\ r1\ rfm --out /root/res/pm3.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm3.err; echo exit=$?
+exit=0
+2026-11-14 20:22:58 cstate pm3 fixed t1 N10 r1 rfm after: 1794684178.207255002 POLL=484417871 C1=7553457010 C1E=1687914185233 C6=6175056030903 
+2026-11-14 20:22:58 cstate pm3 fixed t1 N10 r1 netobserv before: 1794684178.403759114 POLL=484418688 C1=7553475879 C1E=1687932183225 C6=6175056030903 
+2026-11-14 20:22:58 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 10 --label pm3\ fixed\ t1\ N10\ r1\ netobserv --out /root/res/pm3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm3.err; echo exit=$?
+exit=0
+2026-11-14 20:23:50 cstate pm3 fixed t1 N10 r1 netobserv after: 1794684230.736354648 POLL=484605249 C1=7553665403 C1E=1692714288603 C6=6175056030903 
+2026-11-14 20:23:50 cstate pm3 fixed t1 N10 r1 hsflowd before: 1794684230.934897055 POLL=484606408 C1=7553683972 C1E=1692732232212 C6=6175056030903 
+2026-11-14 20:23:50 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent hsflowd --n 10 --label pm3\ fixed\ t1\ N10\ r1\ hsflowd --out /root/res/pm3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm3.err; echo exit=$?
+exit=0
+2026-11-14 20:24:43 cstate pm3 fixed t1 N10 r1 hsflowd after: 1794684283.269246245 POLL=484817456 C1=7561981162 C1E=1697457033287 C6=6175056030903 
+2026-11-14 20:24:43 cstate pm3 fixed t1 N10 r1 none before: 1794684283.468947964 POLL=484818613 C1=7561993386 C1E=1697475118034 C6=6175056030903 
+2026-11-14 20:24:43 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent none --n 10 --label pm3\ fixed\ t1\ N10\ r1\ none --out /root/res/pm3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm3.err; echo exit=$?
+exit=0
+2026-11-14 20:25:26 cstate pm3 fixed t1 N10 r1 none after: 1794684326.624825278 POLL=484984365 C1=7562144862 C1E=1701429233743 C6=6175056030903 
+2026-11-14 20:25:26 dut: echo 1 > /sys/devices/system/cpu/intel_pstate/no_turbo; for s in /sys/devices/system/cpu/cpu*/cpuidle/state*; do case $(cat $s/name) in C6* | C7* | C8* | C9* | C10*) echo 0 > $s/disable ;; *) echo 0 > $s/disable ;; esac; done; echo no_turbo $(cat /sys/devices/system/cpu/intel_pstate/no_turbo) disabled $(cat /sys/devices/system/cpu/cpu*/cpuidle/state*/disable | sort | uniq -c | tr -s ' \n' ' ')
+no_turbo 1 disabled 384 0
+2026-11-14 20:25:34 cstate pm3 noturbo t1 N10 r1 hsflowd before: 1794684333.963383106 POLL=485003701 C1=7562188033 C1E=1701504308837 C6=6175631620761 
+2026-11-14 20:25:34 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent hsflowd --n 10 --label pm3\ noturbo\ t1\ N10\ r1\ hsflowd --out /root/res/pm3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm3.err; echo exit=$?
+exit=0
+2026-11-14 20:26:26 cstate pm3 noturbo t1 N10 r1 hsflowd after: 1794684386.357131251 POLL=485103490 C1=7566677757 C1E=1701609416966 C6=6180095198427 
+2026-11-14 20:26:26 cstate pm3 noturbo t1 N10 r1 netobserv before: 1794684386.564741019 POLL=485103789 C1=7566696225 C1E=1701610254822 C6=6180112627246 
+2026-11-14 20:26:26 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 10 --label pm3\ noturbo\ t1\ N10\ r1\ netobserv --out /root/res/pm3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm3.err; echo exit=$?
+exit=0
+2026-11-14 20:27:18 cstate pm3 noturbo t1 N10 r1 netobserv after: 1794684438.897064770 POLL=485234821 C1=7566769910 C1E=1701734358558 C6=6184604664915 
+2026-11-14 20:27:19 cstate pm3 noturbo t1 N10 r1 none before: 1794684439.107890487 POLL=485235774 C1=7566788020 C1E=1701735899909 C6=6184621647782 
+2026-11-14 20:27:19 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent none --n 10 --label pm3\ noturbo\ t1\ N10\ r1\ none --out /root/res/pm3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm3.err; echo exit=$?
+exit=0
+2026-11-14 20:28:02 cstate pm3 noturbo t1 N10 r1 none after: 1794684482.344039664 POLL=485338392 C1=7566849578 C1E=1701837560800 C6=6188349780362 
+2026-11-14 20:28:02 cstate pm3 noturbo t1 N10 r1 rfm before: 1794684482.558075904 POLL=485339139 C1=7566865865 C1E=1701838571952 C6=6188367536456 
+2026-11-14 20:28:02 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 10 --label pm3\ noturbo\ t1\ N10\ r1\ rfm --out /root/res/pm3.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm3.err; echo exit=$?
+exit=0
+2026-11-14 20:28:56 cstate pm3 noturbo t1 N10 r1 rfm after: 1794684536.628603724 POLL=485613630 C1=7567077987 C1E=1702535178284 C6=6192480454328 
+2026-11-14 20:28:56 dut: echo 0 > /sys/devices/system/cpu/intel_pstate/no_turbo; for s in /sys/devices/system/cpu/cpu*/cpuidle/state*; do case $(cat $s/name) in C6* | C7* | C8* | C9* | C10*) echo 1 > $s/disable ;; *) echo 0 > $s/disable ;; esac; done; echo no_turbo $(cat /sys/devices/system/cpu/intel_pstate/no_turbo) disabled $(cat /sys/devices/system/cpu/cpu*/cpuidle/state*/disable | sort | uniq -c | tr -s ' \n' ' ')
+no_turbo 0 disabled 288 0 96 1
+2026-11-14 20:29:03 cstate pm3 noc6 t1 N10 r2 rfm before: 1794684543.651610113 POLL=485641832 C1=7567126131 C1E=1703131471158 C6=6192528712479 
+2026-11-14 20:29:03 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 10 --label pm3\ noc6\ t1\ N10\ r2\ rfm --out /root/res/pm3.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm3.err; echo exit=$?
+exit=0
+2026-11-14 20:29:57 cstate pm3 noc6 t1 N10 r2 rfm after: 1794684597.419317871 POLL=486048497 C1=7567423950 C1E=1708083847776 C6=6192528712479 
+2026-11-14 20:29:57 cstate pm3 noc6 t1 N10 r2 hsflowd before: 1794684597.610030866 POLL=486049469 C1=7567441916 C1E=1708101308602 C6=6192528712479 
+2026-11-14 20:29:57 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent hsflowd --n 10 --label pm3\ noc6\ t1\ N10\ r2\ hsflowd --out /root/res/pm3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm3.err; echo exit=$?
+exit=0
+2026-11-14 20:30:49 cstate pm3 noc6 t1 N10 r2 hsflowd after: 1794684649.774706797 POLL=486258042 C1=7578002751 C1E=1712859035021 C6=6192528712479 
+2026-11-14 20:30:50 cstate pm3 noc6 t1 N10 r2 netobserv before: 1794684649.960260457 POLL=486258975 C1=7578023527 C1E=1712875781608 C6=6192528712479 
+2026-11-14 20:30:50 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 10 --label pm3\ noc6\ t1\ N10\ r2\ netobserv --out /root/res/pm3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm3.err; echo exit=$?
+exit=0
+2026-11-14 20:31:42 cstate pm3 noc6 t1 N10 r2 netobserv after: 1794684702.081398706 POLL=486456518 C1=7578200815 C1E=1717679050106 C6=6192528712479 
+2026-11-14 20:31:42 cstate pm3 noc6 t1 N10 r2 none before: 1794684702.265360476 POLL=486457437 C1=7578223788 C1E=1717695810608 C6=6192528712479 
+2026-11-14 20:31:42 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent none --n 10 --label pm3\ noc6\ t1\ N10\ r2\ none --out /root/res/pm3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm3.err; echo exit=$?
+exit=0
+2026-11-14 20:32:25 cstate pm3 noc6 t1 N10 r2 none after: 1794684745.340574611 POLL=486629244 C1=7578377695 C1E=1721674567561 C6=6192528712479 
+2026-11-14 20:32:25 dut: echo 1 > /sys/devices/system/cpu/intel_pstate/no_turbo; for s in /sys/devices/system/cpu/cpu*/cpuidle/state*; do case $(cat $s/name) in C6* | C7* | C8* | C9* | C10*) echo 0 > $s/disable ;; *) echo 0 > $s/disable ;; esac; done; echo no_turbo $(cat /sys/devices/system/cpu/intel_pstate/no_turbo) disabled $(cat /sys/devices/system/cpu/cpu*/cpuidle/state*/disable | sort | uniq -c | tr -s ' \n' ' ')
+no_turbo 1 disabled 384 0
+2026-11-14 20:32:32 cstate pm3 noturbo t1 N10 r2 hsflowd before: 1794684752.763111313 POLL=486650102 C1=7578409920 C1E=1721755133513 C6=6193106282982 
+2026-11-14 20:32:32 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent hsflowd --n 10 --label pm3\ noturbo\ t1\ N10\ r2\ hsflowd --out /root/res/pm3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm3.err; echo exit=$?
+exit=0
+2026-11-14 20:33:25 cstate pm3 noturbo t1 N10 r2 hsflowd after: 1794684805.160646702 POLL=486751977 C1=7582780210 C1E=1721859280656 C6=6197570950734 
+2026-11-14 20:33:25 cstate pm3 noturbo t1 N10 r2 none before: 1794684805.374076783 POLL=486752829 C1=7582794656 C1E=1721860191577 C6=6197588809348 
+2026-11-14 20:33:25 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent none --n 10 --label pm3\ noturbo\ t1\ N10\ r2\ none --out /root/res/pm3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm3.err; echo exit=$?
+exit=0
+2026-11-14 20:34:08 cstate pm3 noturbo t1 N10 r2 none after: 1794684848.600742519 POLL=486861710 C1=7582860004 C1E=1721962378021 C6=6201316357829 
+2026-11-14 20:34:08 cstate pm3 noturbo t1 N10 r2 rfm before: 1794684848.815225548 POLL=486862153 C1=7582882416 C1E=1721963375195 C6=6201334082810 
+2026-11-14 20:34:08 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 10 --label pm3\ noturbo\ t1\ N10\ r2\ rfm --out /root/res/pm3.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm3.err; echo exit=$?
+exit=0
+2026-11-14 20:35:02 cstate pm3 noturbo t1 N10 r2 rfm after: 1794684902.838496049 POLL=487146608 C1=7583106275 C1E=1722670030884 C6=6205433926044 
+2026-11-14 20:35:03 cstate pm3 noturbo t1 N10 r2 netobserv before: 1794684903.049206656 POLL=487146926 C1=7583131614 C1E=1722671014998 C6=6205451846569 
+2026-11-14 20:35:03 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 10 --label pm3\ noturbo\ t1\ N10\ r2\ netobserv --out /root/res/pm3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm3.err; echo exit=$?
+exit=0
+2026-11-14 20:35:55 cstate pm3 noturbo t1 N10 r2 netobserv after: 1794684955.511271003 POLL=487280990 C1=7583202038 C1E=1722797335246 C6=6209951927029 
+2026-11-14 20:35:55 dut: echo 0 > /sys/devices/system/cpu/intel_pstate/no_turbo; for s in /sys/devices/system/cpu/cpu*/cpuidle/state*; do case $(cat $s/name) in C6* | C7* | C8* | C9* | C10*) echo 0 > $s/disable ;; *) echo 0 > $s/disable ;; esac; done; echo no_turbo $(cat /sys/devices/system/cpu/intel_pstate/no_turbo) disabled $(cat /sys/devices/system/cpu/cpu*/cpuidle/state*/disable | sort | uniq -c | tr -s ' \n' ' ')
+no_turbo 0 disabled 384 0
+2026-11-14 20:36:02 cstate pm3 dflt t1 N10 r2 hsflowd before: 1794684962.405484219 POLL=487297508 C1=7583237384 C1E=1722821005603 C6=6210543309215 
+2026-11-14 20:36:02 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent hsflowd --n 10 --label pm3\ dflt\ t1\ N10\ r2\ hsflowd --out /root/res/pm3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm3.err; echo exit=$?
+exit=0
+2026-11-14 20:36:54 cstate pm3 dflt t1 N10 r2 hsflowd after: 1794685014.445170080 POLL=487387325 C1=7589568050 C1E=1722930702494 C6=6215035954520 
+2026-11-14 20:36:54 cstate pm3 dflt t1 N10 r2 none before: 1794685014.639813797 POLL=487387923 C1=7589580997 C1E=1722931643051 C6=6215052256597 
+2026-11-14 20:36:54 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent none --n 10 --label pm3\ dflt\ t1\ N10\ r2\ none --out /root/res/pm3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm3.err; echo exit=$?
+exit=0
+2026-11-14 20:37:37 cstate pm3 dflt t1 N10 r2 none after: 1794685057.569038045 POLL=487477544 C1=7589628098 C1E=1723036657157 C6=6218795600445 
+2026-11-14 20:37:37 cstate pm3 dflt t1 N10 r2 netobserv before: 1794685057.769530277 POLL=487478009 C1=7589636750 C1E=1723037759670 C6=6218812248908 
+2026-11-14 20:37:37 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 10 --label pm3\ dflt\ t1\ N10\ r2\ netobserv --out /root/res/pm3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm3.err; echo exit=$?
+exit=0
+2026-11-14 20:38:29 cstate pm3 dflt t1 N10 r2 netobserv after: 1794685109.910906259 POLL=487596094 C1=7589699850 C1E=1723167486082 C6=6223338475018 
+2026-11-14 20:38:30 cstate pm3 dflt t1 N10 r2 rfm before: 1794685110.111790764 POLL=487596631 C1=7589710831 C1E=1723168375208 C6=6223355610782 
+2026-11-14 20:38:30 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 10 --label pm3\ dflt\ t1\ N10\ r2\ rfm --out /root/res/pm3.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm3.err; echo exit=$?
+exit=0
+2026-11-14 20:39:23 cstate pm3 dflt t1 N10 r2 rfm after: 1794685163.797025176 POLL=487890840 C1=7589915781 C1E=1723886938953 C6=6227470122666 
+2026-11-14 20:39:23 dut: echo 1 > /sys/devices/system/cpu/intel_pstate/no_turbo; for s in /sys/devices/system/cpu/cpu*/cpuidle/state*; do case $(cat $s/name) in C6* | C7* | C8* | C9* | C10*) echo 1 > $s/disable ;; *) echo 0 > $s/disable ;; esac; done; echo no_turbo $(cat /sys/devices/system/cpu/intel_pstate/no_turbo) disabled $(cat /sys/devices/system/cpu/cpu*/cpuidle/state*/disable | sort | uniq -c | tr -s ' \n' ' ')
+no_turbo 1 disabled 288 0 96 1
+2026-11-14 20:39:31 cstate pm3 fixed t1 N10 r2 netobserv before: 1794685171.175054622 POLL=487922421 C1=7589963880 C1E=1724504159423 C6=6227525359214 
+2026-11-14 20:39:31 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 10 --label pm3\ fixed\ t1\ N10\ r2\ netobserv --out /root/res/pm3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm3.err; echo exit=$?
+exit=0
+2026-11-14 20:40:23 cstate pm3 fixed t1 N10 r2 netobserv after: 1794685223.453542161 POLL=488108559 C1=7590137534 C1E=1729280190552 C6=6227525359214 
+2026-11-14 20:40:23 cstate pm3 fixed t1 N10 r2 rfm before: 1794685223.651355074 POLL=488109159 C1=7590156628 C1E=1729298189539 C6=6227525359214 
+2026-11-14 20:40:23 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 10 --label pm3\ fixed\ t1\ N10\ r2\ rfm --out /root/res/pm3.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm3.err; echo exit=$?
+exit=0
+2026-11-14 20:41:17 cstate pm3 fixed t1 N10 r2 rfm after: 1794685277.547852789 POLL=488498903 C1=7590467704 C1E=1734219617744 C6=6227525359214 
+2026-11-14 20:41:17 cstate pm3 fixed t1 N10 r2 none before: 1794685277.743654278 POLL=488499752 C1=7590485550 C1E=1734237567530 C6=6227525359214 
+2026-11-14 20:41:17 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent none --n 10 --label pm3\ fixed\ t1\ N10\ r2\ none --out /root/res/pm3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm3.err; echo exit=$?
+exit=0
+2026-11-14 20:42:01 cstate pm3 fixed t1 N10 r2 none after: 1794685321.009941883 POLL=488658744 C1=7590635132 C1E=1738201315075 C6=6227525359214 
+2026-11-14 20:42:01 cstate pm3 fixed t1 N10 r2 hsflowd before: 1794685321.204885240 POLL=488659354 C1=7590649283 C1E=1738219147631 C6=6227525359214 
+2026-11-14 20:42:01 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent hsflowd --n 10 --label pm3\ fixed\ t1\ N10\ r2\ hsflowd --out /root/res/pm3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm3.err; echo exit=$?
+exit=0
+2026-11-14 20:42:53 cstate pm3 fixed t1 N10 r2 hsflowd after: 1794685373.476002016 POLL=488866429 C1=7598905717 C1E=1742937050115 C6=6227525359214 
+2026-11-14 20:42:53 dut: echo 0 > /sys/devices/system/cpu/intel_pstate/no_turbo; for s in /sys/devices/system/cpu/cpu*/cpuidle/state*; do case $(cat $s/name) in C6* | C7* | C8* | C9* | C10*) echo 1 > $s/disable ;; *) echo 0 > $s/disable ;; esac; done; echo no_turbo $(cat /sys/devices/system/cpu/intel_pstate/no_turbo) disabled $(cat /sys/devices/system/cpu/cpu*/cpuidle/state*/disable | sort | uniq -c | tr -s ' \n' ' ')
+no_turbo 0 disabled 288 0 96 1
+2026-11-14 20:43:00 cstate pm3 noc6 t1 N10 r3 netobserv before: 1794685380.448691479 POLL=488896478 C1=7598962443 C1E=1743578939240 C6=6227525359214 
+2026-11-14 20:43:00 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 10 --label pm3\ noc6\ t1\ N10\ r3\ netobserv --out /root/res/pm3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm3.err; echo exit=$?
+exit=0
+2026-11-14 20:43:52 cstate pm3 noc6 t1 N10 r3 netobserv after: 1794685432.597475307 POLL=489104518 C1=7599142659 C1E=1748384240079 C6=6227525359214 
+2026-11-14 20:43:52 cstate pm3 noc6 t1 N10 r3 hsflowd before: 1794685432.783254714 POLL=489105364 C1=7599166640 C1E=1748400937277 C6=6227525359214 
+2026-11-14 20:43:52 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent hsflowd --n 10 --label pm3\ noc6\ t1\ N10\ r3\ hsflowd --out /root/res/pm3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm3.err; echo exit=$?
+exit=0
+2026-11-14 20:44:44 cstate pm3 noc6 t1 N10 r3 hsflowd after: 1794685484.913261227 POLL=489320971 C1=7609212828 C1E=1753150588951 C6=6227525359214 
+2026-11-14 20:44:45 cstate pm3 noc6 t1 N10 r3 none before: 1794685485.095090727 POLL=489321791 C1=7609237130 C1E=1753167139692 C6=6227525359214 
+2026-11-14 20:44:45 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent none --n 10 --label pm3\ noc6\ t1\ N10\ r3\ none --out /root/res/pm3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm3.err; echo exit=$?
+exit=0
+2026-11-14 20:45:28 cstate pm3 noc6 t1 N10 r3 none after: 1794685528.085556745 POLL=489487279 C1=7609385636 C1E=1757137405822 C6=6227525359214 
+2026-11-14 20:45:28 cstate pm3 noc6 t1 N10 r3 rfm before: 1794685528.253573561 POLL=489488108 C1=7609399594 C1E=1757153040518 C6=6227525359214 
+2026-11-14 20:45:28 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 10 --label pm3\ noc6\ t1\ N10\ r3\ rfm --out /root/res/pm3.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm3.err; echo exit=$?
+exit=0
+2026-11-14 20:46:22 cstate pm3 noc6 t1 N10 r3 rfm after: 1794685581.953293340 POLL=489889213 C1=7609704237 C1E=1762099234806 C6=6227525359214 
+2026-11-14 20:46:22 dut: echo 0 > /sys/devices/system/cpu/intel_pstate/no_turbo; for s in /sys/devices/system/cpu/cpu*/cpuidle/state*; do case $(cat $s/name) in C6* | C7* | C8* | C9* | C10*) echo 0 > $s/disable ;; *) echo 0 > $s/disable ;; esac; done; echo no_turbo $(cat /sys/devices/system/cpu/intel_pstate/no_turbo) disabled $(cat /sys/devices/system/cpu/cpu*/cpuidle/state*/disable | sort | uniq -c | tr -s ' \n' ' ')
+no_turbo 0 disabled 384 0
+2026-11-14 20:46:28 cstate pm3 dflt t1 N10 r3 none before: 1794685588.882659411 POLL=489907117 C1=7609739871 C1E=1762170415967 C6=6228076168037 
+2026-11-14 20:46:28 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent none --n 10 --label pm3\ dflt\ t1\ N10\ r3\ none --out /root/res/pm3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm3.err; echo exit=$?
+exit=0
+2026-11-14 20:47:11 cstate pm3 dflt t1 N10 r3 none after: 1794685631.821486166 POLL=490000054 C1=7609792691 C1E=1762274222567 C6=6231820902282 
+2026-11-14 20:47:12 cstate pm3 dflt t1 N10 r3 rfm before: 1794685632.019788837 POLL=490000461 C1=7609805405 C1E=1762275343572 C6=6231837016452 
+2026-11-14 20:47:12 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 10 --label pm3\ dflt\ t1\ N10\ r3\ rfm --out /root/res/pm3.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm3.err; echo exit=$?
+exit=0
+2026-11-14 20:48:05 cstate pm3 dflt t1 N10 r3 rfm after: 1794685685.649405304 POLL=490286857 C1=7609997292 C1E=1762986837174 C6=6235953914914 
+2026-11-14 20:48:05 cstate pm3 dflt t1 N10 r3 hsflowd before: 1794685685.845270693 POLL=490287231 C1=7610012887 C1E=1762987764120 C6=6235970544619 
+2026-11-14 20:48:05 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent hsflowd --n 10 --label pm3\ dflt\ t1\ N10\ r3\ hsflowd --out /root/res/pm3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm3.err; echo exit=$?
+exit=0
+2026-11-14 20:48:58 cstate pm3 dflt t1 N10 r3 hsflowd after: 1794685737.987868753 POLL=490372705 C1=7616682177 C1E=1763094064662 C6=6240469942479 
+2026-11-14 20:48:58 cstate pm3 dflt t1 N10 r3 netobserv before: 1794685738.184804127 POLL=490373079 C1=7616690093 C1E=1763095257946 C6=6240486494089 
+2026-11-14 20:48:58 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 10 --label pm3\ dflt\ t1\ N10\ r3\ netobserv --out /root/res/pm3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm3.err; echo exit=$?
+exit=0
+2026-11-14 20:49:50 cstate pm3 dflt t1 N10 r3 netobserv after: 1794685790.305710963 POLL=490492836 C1=7616747191 C1E=1763223790998 C6=6245015828262 
+2026-11-14 20:49:50 dut: echo 1 > /sys/devices/system/cpu/intel_pstate/no_turbo; for s in /sys/devices/system/cpu/cpu*/cpuidle/state*; do case $(cat $s/name) in C6* | C7* | C8* | C9* | C10*) echo 0 > $s/disable ;; *) echo 0 > $s/disable ;; esac; done; echo no_turbo $(cat /sys/devices/system/cpu/intel_pstate/no_turbo) disabled $(cat /sys/devices/system/cpu/cpu*/cpuidle/state*/disable | sort | uniq -c | tr -s ' \n' ' ')
+no_turbo 1 disabled 384 0
+2026-11-14 20:49:57 cstate pm3 noturbo t1 N10 r3 none before: 1794685797.764671642 POLL=490513316 C1=7616772583 C1E=1763250768164 C6=6245649132644 
+2026-11-14 20:49:57 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent none --n 10 --label pm3\ noturbo\ t1\ N10\ r3\ none --out /root/res/pm3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm3.err; echo exit=$?
+exit=0
+2026-11-14 20:50:41 cstate pm3 noturbo t1 N10 r3 none after: 1794685841.039628252 POLL=490617936 C1=7616837448 C1E=1763353707440 C6=6249378061686 
+2026-11-14 20:50:41 cstate pm3 noturbo t1 N10 r3 rfm before: 1794685841.258939068 POLL=490618294 C1=7616851931 C1E=1763354482760 C6=6249396455643 
+2026-11-14 20:50:41 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 10 --label pm3\ noturbo\ t1\ N10\ r3\ rfm --out /root/res/pm3.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm3.err; echo exit=$?
+exit=0
+2026-11-14 20:51:35 cstate pm3 noturbo t1 N10 r3 rfm after: 1794685895.359001399 POLL=490898509 C1=7617078833 C1E=1764060417740 C6=6253505576022 
+2026-11-14 20:51:35 cstate pm3 noturbo t1 N10 r3 hsflowd before: 1794685895.573993885 POLL=490898942 C1=7617096981 C1E=1764061213562 C6=6253523036384 
+2026-11-14 20:51:35 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent hsflowd --n 10 --label pm3\ noturbo\ t1\ N10\ r3\ hsflowd --out /root/res/pm3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm3.err; echo exit=$?
+exit=0
+2026-11-14 20:52:28 cstate pm3 noturbo t1 N10 r3 hsflowd after: 1794685947.953386292 POLL=490997692 C1=7621507708 C1E=1764164320769 C6=6257987697627 
+2026-11-14 20:52:28 cstate pm3 noturbo t1 N10 r3 netobserv before: 1794685948.161281436 POLL=490998243 C1=7621525558 C1E=1764165229451 C6=6258004944821 
+2026-11-14 20:52:28 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 10 --label pm3\ noturbo\ t1\ N10\ r3\ netobserv --out /root/res/pm3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm3.err; echo exit=$?
+exit=0
+2026-11-14 20:53:20 cstate pm3 noturbo t1 N10 r3 netobserv after: 1794686000.497056820 POLL=491130532 C1=7621600202 C1E=1764287848847 C6=6262499112747 
+2026-11-14 20:53:20 dut: echo 1 > /sys/devices/system/cpu/intel_pstate/no_turbo; for s in /sys/devices/system/cpu/cpu*/cpuidle/state*; do case $(cat $s/name) in C6* | C7* | C8* | C9* | C10*) echo 1 > $s/disable ;; *) echo 0 > $s/disable ;; esac; done; echo no_turbo $(cat /sys/devices/system/cpu/intel_pstate/no_turbo) disabled $(cat /sys/devices/system/cpu/cpu*/cpuidle/state*/disable | sort | uniq -c | tr -s ' \n' ' ')
+no_turbo 1 disabled 288 0 96 1
+2026-11-14 20:53:27 cstate pm3 fixed t1 N10 r3 hsflowd before: 1794686007.822232123 POLL=491161578 C1=7621640755 C1E=1764900460513 C6=6262553493835 
+2026-11-14 20:53:27 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent hsflowd --n 10 --label pm3\ fixed\ t1\ N10\ r3\ hsflowd --out /root/res/pm3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm3.err; echo exit=$?
+exit=0
+2026-11-14 20:54:20 cstate pm3 fixed t1 N10 r3 hsflowd after: 1794686060.196249059 POLL=491371291 C1=7630006649 C1E=1769627942597 C6=6262553493835 
+2026-11-14 20:54:20 cstate pm3 fixed t1 N10 r3 rfm before: 1794686060.391692068 POLL=491372128 C1=7630027945 C1E=1769645726483 C6=6262553493835 
+2026-11-14 20:54:20 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 10 --label pm3\ fixed\ t1\ N10\ r3\ rfm --out /root/res/pm3.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm3.err; echo exit=$?
+exit=0
+2026-11-14 20:55:14 cstate pm3 fixed t1 N10 r3 rfm after: 1794686114.358104932 POLL=491749385 C1=7630327275 C1E=1774573590224 C6=6262553493835 
+2026-11-14 20:55:14 cstate pm3 fixed t1 N10 r3 none before: 1794686114.547005149 POLL=491750124 C1=7630331598 C1E=1774590583692 C6=6262553493835 
+2026-11-14 20:55:14 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent none --n 10 --label pm3\ fixed\ t1\ N10\ r3\ none --out /root/res/pm3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm3.err; echo exit=$?
+exit=0
+2026-11-14 20:55:57 cstate pm3 fixed t1 N10 r3 none after: 1794686157.840339489 POLL=491909568 C1=7630478810 C1E=1778556557986 C6=6262553493835 
+2026-11-14 20:55:58 cstate pm3 fixed t1 N10 r3 netobserv before: 1794686158.045919443 POLL=491910018 C1=7630491371 C1E=1778575485721 C6=6262553493835 
+2026-11-14 20:55:58 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 10 --label pm3\ fixed\ t1\ N10\ r3\ netobserv --out /root/res/pm3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm3.err; echo exit=$?
+exit=0
+2026-11-14 20:56:50 cstate pm3 fixed t1 N10 r3 netobserv after: 1794686210.506820663 POLL=492105349 C1=7630677314 C1E=1783368759201 C6=6262553493835 
+2026-11-14 20:56:50 dut: echo 0 > /sys/devices/system/cpu/intel_pstate/no_turbo; for s in /sys/devices/system/cpu/cpu*/cpuidle/state*; do case $(cat $s/name) in C6* | C7* | C8* | C9* | C10*) echo 1 > $s/disable ;; *) echo 0 > $s/disable ;; esac; done; echo no_turbo $(cat /sys/devices/system/cpu/intel_pstate/no_turbo) disabled $(cat /sys/devices/system/cpu/cpu*/cpuidle/state*/disable | sort | uniq -c | tr -s ' \n' ' ')
+no_turbo 0 disabled 288 0 96 1
+2026-11-14 20:56:57 cstate pm3 noc6 t1 N10 r4 rfm before: 1794686217.474339282 POLL=492137632 C1=7630723535 C1E=1784010047444 C6=6262553493835 
+2026-11-14 20:56:57 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 10 --label pm3\ noc6\ t1\ N10\ r4\ rfm --out /root/res/pm3.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm3.err; echo exit=$?
+exit=0
+2026-11-14 20:57:51 cstate pm3 noc6 t1 N10 r4 rfm after: 1794686271.269461725 POLL=492543979 C1=7631016718 C1E=1788964628109 C6=6262553493835 
+2026-11-14 20:57:51 cstate pm3 noc6 t1 N10 r4 none before: 1794686271.456287910 POLL=492545053 C1=7631034239 C1E=1788981975162 C6=6262553493835 
+2026-11-14 20:57:51 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent none --n 10 --label pm3\ noc6\ t1\ N10\ r4\ none --out /root/res/pm3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm3.err; echo exit=$?
+exit=0
+2026-11-14 20:58:34 cstate pm3 noc6 t1 N10 r4 none after: 1794686314.512502890 POLL=492710988 C1=7631176168 C1E=1792958145574 C6=6262553493835 
+2026-11-14 20:58:34 cstate pm3 noc6 t1 N10 r4 netobserv before: 1794686314.698129924 POLL=492711719 C1=7631196944 C1E=1792974993048 C6=6262553493835 
+2026-11-14 20:58:34 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 10 --label pm3\ noc6\ t1\ N10\ r4\ netobserv --out /root/res/pm3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm3.err; echo exit=$?
+exit=0
+2026-11-14 20:59:26 cstate pm3 noc6 t1 N10 r4 netobserv after: 1794686366.814492536 POLL=492904208 C1=7631365158 C1E=1797777047150 C6=6262553493835 
+2026-11-14 20:59:27 cstate pm3 noc6 t1 N10 r4 hsflowd before: 1794686367.001435694 POLL=492904970 C1=7631381357 C1E=1797793886918 C6=6262553493835 
+2026-11-14 20:59:27 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent hsflowd --n 10 --label pm3\ noc6\ t1\ N10\ r4\ hsflowd --out /root/res/pm3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm3.err; echo exit=$?
+exit=0
+2026-11-14 21:00:19 cstate pm3 noc6 t1 N10 r4 hsflowd after: 1794686419.110403004 POLL=493115033 C1=7641355101 C1E=1802542101635 C6=6262553493835 
+2026-11-14 21:00:19 dut: echo 1 > /sys/devices/system/cpu/intel_pstate/no_turbo; for s in /sys/devices/system/cpu/cpu*/cpuidle/state*; do case $(cat $s/name) in C6* | C7* | C8* | C9* | C10*) echo 0 > $s/disable ;; *) echo 0 > $s/disable ;; esac; done; echo no_turbo $(cat /sys/devices/system/cpu/intel_pstate/no_turbo) disabled $(cat /sys/devices/system/cpu/cpu*/cpuidle/state*/disable | sort | uniq -c | tr -s ' \n' ' ')
+no_turbo 1 disabled 384 0
+2026-11-14 21:00:26 cstate pm3 noturbo t1 N10 r4 netobserv before: 1794686426.503397322 POLL=493136997 C1=7641388261 C1E=1802620847771 C6=6263130772451 
+2026-11-14 21:00:26 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 10 --label pm3\ noturbo\ t1\ N10\ r4\ netobserv --out /root/res/pm3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm3.err; echo exit=$?
+exit=0
+2026-11-14 21:01:18 cstate pm3 noturbo t1 N10 r4 netobserv after: 1794686478.921340912 POLL=493265359 C1=7641463153 C1E=1802746929497 C6=6267627321006 
+2026-11-14 21:01:19 cstate pm3 noturbo t1 N10 r4 rfm before: 1794686479.140310510 POLL=493265891 C1=7641477066 C1E=1802747966483 C6=6267645337426 
+2026-11-14 21:01:19 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 10 --label pm3\ noturbo\ t1\ N10\ r4\ rfm --out /root/res/pm3.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm3.err; echo exit=$?
+exit=0
+2026-11-14 21:02:13 cstate pm3 noturbo t1 N10 r4 rfm after: 1794686533.126948584 POLL=493535972 C1=7641675830 C1E=1803439730924 C6=6271754618834 
+2026-11-14 21:02:13 cstate pm3 noturbo t1 N10 r4 none before: 1794686533.335104807 POLL=493536129 C1=7641693625 C1E=1803440738173 C6=6271771920400 
+2026-11-14 21:02:13 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent none --n 10 --label pm3\ noturbo\ t1\ N10\ r4\ none --out /root/res/pm3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm3.err; echo exit=$?
+exit=0
+2026-11-14 21:02:56 cstate pm3 noturbo t1 N10 r4 none after: 1794686576.551207271 POLL=493642153 C1=7641754799 C1E=1803544328681 C6=6275496097500 
+2026-11-14 21:02:56 cstate pm3 noturbo t1 N10 r4 hsflowd before: 1794686576.763210073 POLL=493642621 C1=7641767768 C1E=1803545144490 C6=6275513954671 
+2026-11-14 21:02:56 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent hsflowd --n 10 --label pm3\ noturbo\ t1\ N10\ r4\ hsflowd --out /root/res/pm3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm3.err; echo exit=$?
+exit=0
+2026-11-14 21:03:49 cstate pm3 noturbo t1 N10 r4 hsflowd after: 1794686629.111935247 POLL=493733897 C1=7646737427 C1E=1803641988661 C6=6279983170982 
+2026-11-14 21:03:49 dut: echo 0 > /sys/devices/system/cpu/intel_pstate/no_turbo; for s in /sys/devices/system/cpu/cpu*/cpuidle/state*; do case $(cat $s/name) in C6* | C7* | C8* | C9* | C10*) echo 0 > $s/disable ;; *) echo 0 > $s/disable ;; esac; done; echo no_turbo $(cat /sys/devices/system/cpu/intel_pstate/no_turbo) disabled $(cat /sys/devices/system/cpu/cpu*/cpuidle/state*/disable | sort | uniq -c | tr -s ' \n' ' ')
+no_turbo 0 disabled 384 0
+2026-11-14 21:03:56 cstate pm3 dflt t1 N10 r4 rfm before: 1794686636.006008277 POLL=493749724 C1=7646771396 C1E=1803667169744 C6=6280573016460 
+2026-11-14 21:03:56 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 10 --label pm3\ dflt\ t1\ N10\ r4\ rfm --out /root/res/pm3.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm3.err; echo exit=$?
+exit=0
+2026-11-14 21:04:49 cstate pm3 dflt t1 N10 r4 rfm after: 1794686689.751790000 POLL=494036439 C1=7646965678 C1E=1804384983573 C6=6284692047239 
+2026-11-14 21:04:50 cstate pm3 dflt t1 N10 r4 netobserv before: 1794686689.943387775 POLL=494037154 C1=7646988070 C1E=1804385954151 C6=6284708569033 
+2026-11-14 21:04:50 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 10 --label pm3\ dflt\ t1\ N10\ r4\ netobserv --out /root/res/pm3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm3.err; echo exit=$?
+exit=0
+2026-11-14 21:05:42 cstate pm3 dflt t1 N10 r4 netobserv after: 1794686741.967889128 POLL=494152020 C1=7647047664 C1E=1804513795694 C6=6289227892333 
+2026-11-14 21:05:42 cstate pm3 dflt t1 N10 r4 hsflowd before: 1794686742.159381427 POLL=494152242 C1=7647062328 C1E=1804514707134 C6=6289244198071 
+2026-11-14 21:05:42 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent hsflowd --n 10 --label pm3\ dflt\ t1\ N10\ r4\ hsflowd --out /root/res/pm3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm3.err; echo exit=$?
+exit=0
+2026-11-14 21:06:34 cstate pm3 dflt t1 N10 r4 hsflowd after: 1794686794.203723053 POLL=494238422 C1=7653415146 C1E=1804623202714 C6=6293742199881 
+2026-11-14 21:06:34 cstate pm3 dflt t1 N10 r4 none before: 1794686794.405317506 POLL=494238653 C1=7653427779 C1E=1804624208505 C6=6293759246362 
+2026-11-14 21:06:34 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent none --n 10 --label pm3\ dflt\ t1\ N10\ r4\ none --out /root/res/pm3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm3.err; echo exit=$?
+exit=0
+2026-11-14 21:07:17 cstate pm3 dflt t1 N10 r4 none after: 1794686837.314829909 POLL=494326123 C1=7653483798 C1E=1804728185424 C6=6297501477452 
+2026-11-14 21:07:17 dut: echo 1 > /sys/devices/system/cpu/intel_pstate/no_turbo; for s in /sys/devices/system/cpu/cpu*/cpuidle/state*; do case $(cat $s/name) in C6* | C7* | C8* | C9* | C10*) echo 1 > $s/disable ;; *) echo 0 > $s/disable ;; esac; done; echo no_turbo $(cat /sys/devices/system/cpu/intel_pstate/no_turbo) disabled $(cat /sys/devices/system/cpu/cpu*/cpuidle/state*/disable | sort | uniq -c | tr -s ' \n' ' ')
+no_turbo 1 disabled 288 0 96 1
+2026-11-14 21:07:24 cstate pm3 fixed t1 N10 r4 rfm before: 1794686844.722344517 POLL=494359880 C1=7653527043 C1E=1805349025838 C6=6297555915825 
+2026-11-14 21:07:24 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 10 --label pm3\ fixed\ t1\ N10\ r4\ rfm --out /root/res/pm3.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm3.err; echo exit=$?
+exit=0
+2026-11-14 21:08:18 cstate pm3 fixed t1 N10 r4 rfm after: 1794686898.735210759 POLL=494744737 C1=7653842643 C1E=1810280975868 C6=6297555915825 
+2026-11-14 21:08:18 cstate pm3 fixed t1 N10 r4 hsflowd before: 1794686898.935628458 POLL=494745774 C1=7653859231 C1E=1810299171181 C6=6297555915825 
+2026-11-14 21:08:19 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent hsflowd --n 10 --label pm3\ fixed\ t1\ N10\ r4\ hsflowd --out /root/res/pm3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm3.err; echo exit=$?
+exit=0
+2026-11-14 21:09:11 cstate pm3 fixed t1 N10 r4 hsflowd after: 1794686951.388838162 POLL=494949526 C1=7662359522 C1E=1815039791839 C6=6297555915825 
+2026-11-14 21:09:11 cstate pm3 fixed t1 N10 r4 netobserv before: 1794686951.582763022 POLL=494950494 C1=7662380212 C1E=1815056866137 C6=6297555915825 
+2026-11-14 21:09:11 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 10 --label pm3\ fixed\ t1\ N10\ r4\ netobserv --out /root/res/pm3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm3.err; echo exit=$?
+exit=0
+2026-11-14 21:10:03 cstate pm3 fixed t1 N10 r4 netobserv after: 1794687003.885646864 POLL=495147599 C1=7662570030 C1E=1819835446754 C6=6297555915825 
+2026-11-14 21:10:04 cstate pm3 fixed t1 N10 r4 none before: 1794687004.086507862 POLL=495148871 C1=7662585338 C1E=1819853501682 C6=6297555915825 
+2026-11-14 21:10:04 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent none --n 10 --label pm3\ fixed\ t1\ N10\ r4\ none --out /root/res/pm3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm3.err; echo exit=$?
+exit=0
+2026-11-14 21:10:47 cstate pm3 fixed t1 N10 r4 none after: 1794687047.279112700 POLL=495315096 C1=7662731439 C1E=1823810437128 C6=6297555915825 
+2026-11-14 21:10:47 dut: echo 1 > /sys/devices/system/cpu/intel_pstate/no_turbo; for s in /sys/devices/system/cpu/cpu*/cpuidle/state*; do case $(cat $s/name) in C6* | C7* | C8* | C9* | C10*) echo 1 > $s/disable ;; *) echo 0 > $s/disable ;; esac; done; echo no_turbo $(cat /sys/devices/system/cpu/intel_pstate/no_turbo) disabled $(cat /sys/devices/system/cpu/cpu*/cpuidle/state*/disable | sort | uniq -c | tr -s ' \n' ' ')
+no_turbo 1 disabled 288 0 96 1
+2026-11-14 21:10:54 cstate pm3 fixed t1 N10 r5 rfm before: 1794687054.552101523 POLL=495346500 C1=7662778385 C1E=1824474792965 C6=6297555915825 
+2026-11-14 21:10:54 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 10 --label pm3\ fixed\ t1\ N10\ r5\ rfm --out /root/res/pm3.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm3.err; echo exit=$?
+exit=0
+2026-11-14 21:11:48 cstate pm3 fixed t1 N10 r5 rfm after: 1794687108.578869937 POLL=495726151 C1=7663076424 C1E=1829408197962 C6=6297555915825 
+2026-11-14 21:11:48 cstate pm3 fixed t1 N10 r5 hsflowd before: 1794687108.780945733 POLL=495727350 C1=7663095990 C1E=1829426475526 C6=6297555915825 
+2026-11-14 21:11:48 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent hsflowd --n 10 --label pm3\ fixed\ t1\ N10\ r5\ hsflowd --out /root/res/pm3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm3.err; echo exit=$?
+exit=0
+2026-11-14 21:12:41 cstate pm3 fixed t1 N10 r5 hsflowd after: 1794687161.062135047 POLL=495932354 C1=7671643006 C1E=1834151347654 C6=6297555915825 
+2026-11-14 21:12:41 cstate pm3 fixed t1 N10 r5 none before: 1794687161.253966518 POLL=495933136 C1=7671663866 C1E=1834168717851 C6=6297555915825 
+2026-11-14 21:12:41 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent none --n 10 --label pm3\ fixed\ t1\ N10\ r5\ none --out /root/res/pm3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm3.err; echo exit=$?
+exit=0
+2026-11-14 21:13:24 cstate pm3 fixed t1 N10 r5 none after: 1794687204.403713871 POLL=496093188 C1=7671809393 C1E=1838121910457 C6=6297555915825 
+2026-11-14 21:13:24 cstate pm3 fixed t1 N10 r5 netobserv before: 1794687204.599807129 POLL=496094313 C1=7671826338 C1E=1838139789192 C6=6297555915825 
+2026-11-14 21:13:24 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 10 --label pm3\ fixed\ t1\ N10\ r5\ netobserv --out /root/res/pm3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm3.err; echo exit=$?
+exit=0
+2026-11-14 21:14:16 cstate pm3 fixed t1 N10 r5 netobserv after: 1794687256.903644734 POLL=496287793 C1=7672008074 C1E=1842918840895 C6=6297555915825 
+2026-11-14 21:14:16 dut: echo 0 > /sys/devices/system/cpu/intel_pstate/no_turbo; for s in /sys/devices/system/cpu/cpu*/cpuidle/state*; do case $(cat $s/name) in C6* | C7* | C8* | C9* | C10*) echo 1 > $s/disable ;; *) echo 0 > $s/disable ;; esac; done; echo no_turbo $(cat /sys/devices/system/cpu/intel_pstate/no_turbo) disabled $(cat /sys/devices/system/cpu/cpu*/cpuidle/state*/disable | sort | uniq -c | tr -s ' \n' ' ')
+no_turbo 0 disabled 288 0 96 1
+2026-11-14 21:14:23 cstate pm3 noc6 t1 N10 r5 netobserv before: 1794687263.855802025 POLL=496316320 C1=7672051224 C1E=1843558561866 C6=6297555915825 
+2026-11-14 21:14:23 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 10 --label pm3\ noc6\ t1\ N10\ r5\ netobserv --out /root/res/pm3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm3.err; echo exit=$?
+exit=0
+2026-11-14 21:15:15 cstate pm3 noc6 t1 N10 r5 netobserv after: 1794687315.930304116 POLL=496522692 C1=7672236136 C1E=1848356459208 C6=6297555915825 
+2026-11-14 21:15:16 cstate pm3 noc6 t1 N10 r5 rfm before: 1794687316.101427736 POLL=496523624 C1=7672251813 C1E=1848371862120 C6=6297555915825 
+2026-11-14 21:15:16 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 10 --label pm3\ noc6\ t1\ N10\ r5\ rfm --out /root/res/pm3.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm3.err; echo exit=$?
+exit=0
+2026-11-14 21:16:09 cstate pm3 noc6 t1 N10 r5 rfm after: 1794687369.859247246 POLL=496934640 C1=7672550401 C1E=1853323793934 C6=6297555915825 
+2026-11-14 21:16:10 cstate pm3 noc6 t1 N10 r5 none before: 1794687370.047619665 POLL=496935447 C1=7672570433 C1E=1853341260140 C6=6297555915825 
+2026-11-14 21:16:10 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent none --n 10 --label pm3\ noc6\ t1\ N10\ r5\ none --out /root/res/pm3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm3.err; echo exit=$?
+exit=0
+2026-11-14 21:16:53 cstate pm3 noc6 t1 N10 r5 none after: 1794687413.081519580 POLL=497099991 C1=7672717657 C1E=1857315558884 C6=6297555915825 
+2026-11-14 21:16:53 cstate pm3 noc6 t1 N10 r5 hsflowd before: 1794687413.263219912 POLL=497100795 C1=7672737700 C1E=1857332012622 C6=6297555915825 
+2026-11-14 21:16:53 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent hsflowd --n 10 --label pm3\ noc6\ t1\ N10\ r5\ hsflowd --out /root/res/pm3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm3.err; echo exit=$?
+exit=0
+2026-11-14 21:17:45 cstate pm3 noc6 t1 N10 r5 hsflowd after: 1794687465.370161078 POLL=497313727 C1=7682636074 C1E=1862080168547 C6=6297555915825 
+2026-11-14 21:17:45 dut: echo 0 > /sys/devices/system/cpu/intel_pstate/no_turbo; for s in /sys/devices/system/cpu/cpu*/cpuidle/state*; do case $(cat $s/name) in C6* | C7* | C8* | C9* | C10*) echo 0 > $s/disable ;; *) echo 0 > $s/disable ;; esac; done; echo no_turbo $(cat /sys/devices/system/cpu/intel_pstate/no_turbo) disabled $(cat /sys/devices/system/cpu/cpu*/cpuidle/state*/disable | sort | uniq -c | tr -s ' \n' ' ')
+no_turbo 0 disabled 384 0
+2026-11-14 21:17:52 cstate pm3 dflt t1 N10 r5 hsflowd before: 1794687472.280638709 POLL=497330835 C1=7682670943 C1E=1862151424097 C6=6298104756447 
+2026-11-14 21:17:52 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent hsflowd --n 10 --label pm3\ dflt\ t1\ N10\ r5\ hsflowd --out /root/res/pm3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm3.err; echo exit=$?
+exit=0
+2026-11-14 21:18:44 cstate pm3 dflt t1 N10 r5 hsflowd after: 1794687524.297608113 POLL=497416280 C1=7689031464 C1E=1862258498862 C6=6302600001525 
+2026-11-14 21:18:44 cstate pm3 dflt t1 N10 r5 netobserv before: 1794687524.492661889 POLL=497416708 C1=7689045319 C1E=1862259292125 C6=6302616754807 
+2026-11-14 21:18:44 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 10 --label pm3\ dflt\ t1\ N10\ r5\ netobserv --out /root/res/pm3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm3.err; echo exit=$?
+exit=0
+2026-11-14 21:19:36 cstate pm3 dflt t1 N10 r5 netobserv after: 1794687576.609132517 POLL=497527231 C1=7689104006 C1E=1862386108483 C6=6307146970828 
+2026-11-14 21:19:36 cstate pm3 dflt t1 N10 r5 rfm before: 1794687576.800464493 POLL=497527519 C1=7689118312 C1E=1862386966644 C6=6307163444851 
+2026-11-14 21:19:36 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 10 --label pm3\ dflt\ t1\ N10\ r5\ rfm --out /root/res/pm3.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm3.err; echo exit=$?
+exit=0
+2026-11-14 21:20:30 cstate pm3 dflt t1 N10 r5 rfm after: 1794687630.508013147 POLL=497823492 C1=7689314594 C1E=1863112267110 C6=6311273119558 
+2026-11-14 21:20:30 cstate pm3 dflt t1 N10 r5 none before: 1794687630.702495535 POLL=497823781 C1=7689334571 C1E=1863113197086 C6=6311289369563 
+2026-11-14 21:20:30 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent none --n 10 --label pm3\ dflt\ t1\ N10\ r5\ none --out /root/res/pm3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm3.err; echo exit=$?
+exit=0
+2026-11-14 21:21:13 cstate pm3 dflt t1 N10 r5 none after: 1794687673.597566590 POLL=497914422 C1=7689382435 C1E=1863216429023 C6=6315031273921 
+2026-11-14 21:21:13 dut: echo 1 > /sys/devices/system/cpu/intel_pstate/no_turbo; for s in /sys/devices/system/cpu/cpu*/cpuidle/state*; do case $(cat $s/name) in C6* | C7* | C8* | C9* | C10*) echo 0 > $s/disable ;; *) echo 0 > $s/disable ;; esac; done; echo no_turbo $(cat /sys/devices/system/cpu/intel_pstate/no_turbo) disabled $(cat /sys/devices/system/cpu/cpu*/cpuidle/state*/disable | sort | uniq -c | tr -s ' \n' ' ')
+no_turbo 1 disabled 384 0
+2026-11-14 21:21:21 cstate pm3 noturbo t1 N10 r5 none before: 1794687681.085461961 POLL=497936311 C1=7689409884 C1E=1863246875678 C6=6315663310376 
+2026-11-14 21:21:21 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent none --n 10 --label pm3\ noturbo\ t1\ N10\ r5\ none --out /root/res/pm3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm3.err; echo exit=$?
+exit=0
+2026-11-14 21:22:04 cstate pm3 noturbo t1 N10 r5 none after: 1794687724.336357598 POLL=498043369 C1=7689471308 C1E=1863349077490 C6=6319391877082 
+2026-11-14 21:22:04 cstate pm3 noturbo t1 N10 r5 rfm before: 1794687724.541795658 POLL=498043935 C1=7689485636 C1E=1863349895558 C6=6319409203534 
+2026-11-14 21:22:04 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 10 --label pm3\ noturbo\ t1\ N10\ r5\ rfm --out /root/res/pm3.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm3.err; echo exit=$?
+exit=0
+2026-11-14 21:22:58 cstate pm3 noturbo t1 N10 r5 rfm after: 1794687778.514475948 POLL=498302194 C1=7689675718 C1E=1864035942372 C6=6323523330143 
+2026-11-14 21:22:58 cstate pm3 noturbo t1 N10 r5 hsflowd before: 1794687778.731120877 POLL=498303146 C1=7689685381 C1E=1864037203210 C6=6323540816460 
+2026-11-14 21:22:58 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent hsflowd --n 10 --label pm3\ noturbo\ t1\ N10\ r5\ hsflowd --out /root/res/pm3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm3.err; echo exit=$?
+exit=0
+2026-11-14 21:23:51 cstate pm3 noturbo t1 N10 r5 hsflowd after: 1794687831.185817304 POLL=498401005 C1=7694069150 C1E=1864141292238 C6=6328010774087 
+2026-11-14 21:23:51 cstate pm3 noturbo t1 N10 r5 netobserv before: 1794687831.397762560 POLL=498401755 C1=7694083374 C1E=1864142436884 C6=6328028277431 
+2026-11-14 21:23:51 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 10 --label pm3\ noturbo\ t1\ N10\ r5\ netobserv --out /root/res/pm3.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm3.err; echo exit=$?
+exit=0
+2026-11-14 21:24:43 cstate pm3 noturbo t1 N10 r5 netobserv after: 1794687883.770739582 POLL=498528483 C1=7694157619 C1E=1864265975350 C6=6332523483961 
+2026-11-14 21:24:43 dut: echo 0 > /sys/devices/system/cpu/intel_pstate/no_turbo; for s in /sys/devices/system/cpu/cpu*/cpuidle/state*; do case $(cat $s/name) in C6* | C7* | C8* | C9* | C10*) echo 0 > $s/disable ;; *) echo 0 > $s/disable ;; esac; done; echo no_turbo $(cat /sys/devices/system/cpu/intel_pstate/no_turbo) disabled $(cat /sys/devices/system/cpu/cpu*/cpuidle/state*/disable | sort | uniq -c | tr -s ' \n' ' ')
+no_turbo 0 disabled 384 0
+2026-11-14 21:24:50 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+2026-11-14 21:24:50 dut: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+2026-11-14 21:24:51 dut: pkill -x iperf3; true
+2026-11-14 21:24:51 gen: pkill -x iperf3; true
+2026-11-14 21:24:53 dut: pkill -KILL -f '^/root/progbench/progbench '; sysctl -qw kernel.bpf_stats_enabled=0; ethtool -K ens1f0np0 gro on tso on gso on; ethtool -L ens1f0np0 combined 63; true
+Actual changes:
+tx-tcp-ecn-segmentation: off [requested on]
+tx-tcp-accecn-segmentation: off [requested on]
+2026-11-14 21:24:54 === phase pm3 done
+2026-11-14 21:24:54 campaign done

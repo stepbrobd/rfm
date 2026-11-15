@@ -1,0 +1,634 @@
+spirou-7-kavlan-4
+2026-11-15T05:48:55Z
+ANSI_COLOR="0;38;2;126;186;228"
+BUG_REPORT_URL="https://github.com/NixOS/nixpkgs/issues"
+BUILD_ID="26.11.20261106.0dea955"
+CPE_NAME="cpe:/o:nixos:nixos:26.11"
+DEFAULT_HOSTNAME=nixos
+systemd 262 (262)
+DefaultIPAccounting=yes
+intel_idle
+menu
+active
+POLL latency 0 residency 0 disable 0
+C1 latency 1 residency 1 disable 0
+C1E latency 4 residency 4 disable 0
+C6 latency 170 residency 600 disable 0
+performance
+always [madvise] never
+1
+full (lazy) 
+Settings for ens1f0np0:
+	Supported ports: [ Backplane ]
+	Supported link modes:   1000baseT/Full
+	                        10000baseT/Full
+	                        1000baseKX/Full
+	                        10000baseKR/Full
+	                        10000baseR_FEC
+	                        40000baseKR4/Full
+	                        40000baseCR4/Full
+	                        40000baseSR4/Full
+	                        40000baseLR4/Full
+	                        25000baseCR/Full
+	                        25000baseKR/Full
+	                        25000baseSR/Full
+	                        50000baseCR2/Full
+	                        50000baseKR2/Full
+	                        100000baseKR4/Full
+	                        100000baseSR4/Full
+	                        100000baseCR4/Full
+	                        100000baseLR4_ER4/Full
+	                        50000baseSR2/Full
+	                        1000baseX/Full
+	                        10000baseCR/Full
+	                        10000baseSR/Full
+	                        10000baseLR/Full
+	                        10000baseER/Full
+	                        50000baseKR/Full
+	                        50000baseSR/Full
+	                        50000baseCR/Full
+	                        50000baseLR_ER_FR/Full
+	                        50000baseDR/Full
+	                        100000baseKR2/Full
+	                        100000baseSR2/Full
+	                        100000baseCR2/Full
+	                        100000baseLR2_ER2_FR2/Full
+	                        100000baseDR2/Full
+	Supported pause frame use: Symmetric
+	Supports auto-negotiation: Yes
+	Supported FEC modes: None	 RS	 BASER
+	Advertised link modes:  1000baseT/Full
+	                        10000baseT/Full
+	                        1000baseKX/Full
+	                        10000baseKR/Full
+	                        10000baseR_FEC
+	                        40000baseKR4/Full
+	                        40000baseCR4/Full
+	                        40000baseSR4/Full
+	                        40000baseLR4/Full
+	                        25000baseCR/Full
+	                        25000baseKR/Full
+	                        25000baseSR/Full
+	                        50000baseCR2/Full
+	                        50000baseKR2/Full
+	                        100000baseKR4/Full
+	                        100000baseSR4/Full
+	                        100000baseCR4/Full
+	                        100000baseLR4_ER4/Full
+	                        50000baseSR2/Full
+	                        1000baseX/Full
+	                        10000baseCR/Full
+	                        10000baseSR/Full
+	                        10000baseLR/Full
+	                        10000baseER/Full
+	                        50000baseKR/Full
+	                        50000baseSR/Full
+	                        50000baseCR/Full
+	                        50000baseLR_ER_FR/Full
+	                        50000baseDR/Full
+	                        100000baseKR2/Full
+	                        100000baseSR2/Full
+	                        100000baseCR2/Full
+	                        100000baseLR2_ER2_FR2/Full
+	                        100000baseDR2/Full
+	Advertised pause frame use: Symmetric
+	Advertised auto-negotiation: Yes
+	Advertised FEC modes: RS
+	Link partner advertised link modes:  Not reported
+	Link partner advertised pause frame use: No
+	Link partner advertised auto-negotiation: Yes
+	Link partner advertised FEC modes: Not reported
+	Speed: 100000Mb/s
+	Lanes: 4
+	Duplex: Full
+	Auto-negotiation: on
+	Port: Direct Attach Copper
+	PHYAD: 0
+	Transceiver: internal
+	Supports Wake-on: d
+	Wake-on: d
+	Link detected: yes
+FEC parameters for ens1f0np0:
+Supported/Configured FEC encodings: Auto
+Active FEC encoding: RS
+
+RX flow hash indirection table for ens1f0np0 with 63 RX ring(s):
+    0:      0     1     2     3     4     5     6     7
+    8:      8     9    10    11    12    13    14    15
+   16:     16    17    18    19    20    21    22    23
+   24:     24    25    26    27    28    29    30    31
+   32:     32    33    34    35    36    37    38    39
+   40:     40    41    42    43    44    45    46    47
+   48:     48    49    50    51    52    53    54    55
+   56:     56    57    58    59    60    61    62     0
+   64:      1     2     3     4     5     6     7     8
+   72:      9    10    11    12    13    14    15    16
+   80:     17    18    19    20    21    22    23    24
+   88:     25    26    27    28    29    30    31    32
+   96:     33    34    35    36    37    38    39    40
+  104:     41    42    43    44    45    46    47    48
+  112:     49    50    51    52    53    54    55    56
+  120:     57    58    59    60    61    62     0     1
+  128:      2     3     4     5     6     7     8     9
+  136:     10    11    12    13    14    15    16    17
+  144:     18    19    20    21    22    23    24    25
+  152:     26    27    28    29    30    31    32    33
+  160:     34    35    36    37    38    39    40    41
+  168:     42    43    44    45    46    47    48    49
+UDP over IPV4 flows use these fields for computing Hash flow key:
+IP SA
+IP DA
+L4 bytes 0 & 1 [TCP/UDP src port]
+L4 bytes 2 & 3 [TCP/UDP dst port]
+
+TCP over IPV4 flows use these fields for computing Hash flow key:
+IP SA
+IP DA
+L4 bytes 0 & 1 [TCP/UDP src port]
+L4 bytes 2 & 3 [TCP/UDP dst port]
+
+Private flags for ens1f0np0:
+rx_cqe_moder       : off
+tx_cqe_moder       : off
+rx_cqe_compress    : off
+rx_striding_rq     : on
+rx_no_csum_complete: off
+xdp_tx_mpwqe       : on
+skb_tx_mpwqe       : on
+tx_port_ts         : off
+0
+6: ens1f0np0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc mq state UP mode DEFAULT group default qlen 1000
+    link/ether e8:eb:d3:fd:ce:ac brd ff:ff:ff:ff:ff:ff promiscuity 0 allmulti 0 minmtu 68 maxmtu 9978 addrgenmode none numtxqueues 768 numrxqueues 63 gso_max_size 65536 gso_max_segs 65535 tso_max_size 524280 tso_max_segs 65535 gro_max_size 65536 gso_ipv4_max_size 65536 gro_ipv4_max_size 65536 portname p0 switchid accefd0003d3ebe8 parentbus pci parentdev 0000:4b:00.0 
+    altname enp75s0f0np0
+    altname enxe8ebd3fdceac
+qdisc mq 0: root 
+qdisc fq_codel 0: parent :3f limit 10240p flows 1024 quantum 1514 target 5ms interval 100ms memory_limit 32Mb ecn drop_batch 64 
+qdisc fq_codel 0: parent :3e limit 10240p flows 1024 quantum 1514 target 5ms interval 100ms memory_limit 32Mb ecn drop_batch 64 
+net.ipv4.tcp_congestion_control = cubic
+net.ipv4.tcp_rmem = 4096	131072	33554432
+net.ipv4.tcp_wmem = 4096	16384	4194304
+net.core.default_qdisc = fq_codel
+net.core.bpf_jit_enable = 1
+net.core.bpf_jit_harden = 0
+kernel.bpf_stats_enabled = 0
+bpftool v7.8.0
+using libbpf v1.8
+features: libbfd, crypto
+24: cgroup_skb  name sd_fw_egress  tag 772db7720b2728e9  gpl
+	loaded_at 2026-11-13T18:03:41+0000  uid 0
+	xlated 64B  jited 67B  memlock 4096B
+25: cgroup_skb  name sd_fw_ingress  tag 772db7720b2728e9  gpl
+	loaded_at 2026-11-13T18:03:41+0000  uid 0
+	xlated 64B  jited 67B  memlock 4096B
+46: lsm  name restrict_filesystems  tag 1b080e5cc215cba6  gpl run_time_ns 51558254 run_cnt 437364
+	loaded_at 2026-11-13T18:03:44+0000  uid 0
+	xlated 520B  jited 297B  memlock 4096B  map_ids 20
+	btf_id 47
+56: cgroup_skb  name sd_fw_egress  tag 6144bc3db46d80b4  gpl
+	loaded_at 2026-11-13T18:03:44+0000  uid 0
+	xlated 312B  jited 205B  memlock 4096B  map_ids 30
+57: cgroup_skb  name sd_fw_ingress  tag 6144bc3db46d80b4  gpl
+	loaded_at 2026-11-13T18:03:44+0000  uid 0
+	xlated 312B  jited 205B  memlock 4096B  map_ids 29
+62: cgroup_skb  name sd_fw_egress  tag 6144bc3db46d80b4  gpl
+	loaded_at 2026-11-13T18:03:44+0000  uid 0
+	xlated 312B  jited 205B  memlock 4096B  map_ids 32
+63: cgroup_skb  name sd_fw_ingress  tag 6144bc3db46d80b4  gpl
+	loaded_at 2026-11-13T18:03:44+0000  uid 0
+	xlated 312B  jited 205B  memlock 4096B  map_ids 31
+64: cgroup_skb  name sd_fw_egress  tag 6144bc3db46d80b4  gpl
+	loaded_at 2026-11-13T18:03:44+0000  uid 0
+	xlated 312B  jited 205B  memlock 4096B  map_ids 34
+65: cgroup_skb  name sd_fw_ingress  tag 6144bc3db46d80b4  gpl
+	loaded_at 2026-11-13T18:03:44+0000  uid 0
+	xlated 312B  jited 205B  memlock 4096B  map_ids 33
+68: cgroup_skb  name sd_fw_egress  tag 6144bc3db46d80b4  gpl
+	loaded_at 2026-11-13T18:03:44+0000  uid 0
+	xlated 312B  jited 205B  memlock 4096B  map_ids 38
+69: cgroup_skb  name sd_fw_ingress  tag 6144bc3db46d80b4  gpl
+	loaded_at 2026-11-13T18:03:44+0000  uid 0
+	xlated 312B  jited 205B  memlock 4096B  map_ids 37
+78: cgroup_skb  name sd_fw_egress  tag 6144bc3db46d80b4  gpl
+	loaded_at 2026-11-13T18:03:45+0000  uid 0
+	xlated 312B  jited 205B  memlock 4096B  map_ids 48
+79: cgroup_skb  name sd_fw_ingress  tag 6144bc3db46d80b4  gpl
+	loaded_at 2026-11-13T18:03:45+0000  uid 0
+	xlated 312B  jited 205B  memlock 4096B  map_ids 47
+80: cgroup_skb  name sd_fw_egress  tag 6144bc3db46d80b4  gpl
+	loaded_at 2026-11-13T18:03:45+0000  uid 0
+	xlated 312B  jited 205B  memlock 4096B  map_ids 50
+81: cgroup_skb  name sd_fw_ingress  tag 6144bc3db46d80b4  gpl
+	loaded_at 2026-11-13T18:03:45+0000  uid 0
+	xlated 312B  jited 205B  memlock 4096B  map_ids 49
+82: cgroup_skb  name sd_fw_egress  tag 6144bc3db46d80b4  gpl
+	loaded_at 2026-11-13T18:03:45+0000  uid 0
+	xlated 312B  jited 205B  memlock 4096B  map_ids 52
+83: cgroup_skb  name sd_fw_ingress  tag 6144bc3db46d80b4  gpl
+	loaded_at 2026-11-13T18:03:45+0000  uid 0
+	xlated 312B  jited 205B  memlock 4096B  map_ids 51
+84: cgroup_device  name sd_devices  tag 1fd65e04c6f752cb  gpl
+	loaded_at 2026-11-13T18:03:45+0000  uid 0
+	xlated 504B  jited 322B  memlock 4096B
+85: cgroup_skb  name sd_fw_egress  tag 4082c8a83378dc42  gpl
+	loaded_at 2026-11-13T18:03:45+0000  uid 0
+	xlated 64B  jited 67B  memlock 4096B  map_ids 54
+86: cgroup_skb  name sd_fw_ingress  tag 4082c8a83378dc42  gpl
+	loaded_at 2026-11-13T18:03:45+0000  uid 0
+	xlated 64B  jited 67B  memlock 4096B  map_ids 53
+87: cgroup_skb  name sd_fw_egress  tag 6144bc3db46d80b4  gpl
+	loaded_at 2026-11-13T18:03:45+0000  uid 0
+	xlated 312B  jited 205B  memlock 4096B  map_ids 56
+88: cgroup_skb  name sd_fw_ingress  tag 6144bc3db46d80b4  gpl
+	loaded_at 2026-11-13T18:03:45+0000  uid 0
+	xlated 312B  jited 205B  memlock 4096B  map_ids 55
+89: cgroup_skb  name sd_fw_egress  tag 6144bc3db46d80b4  gpl
+	loaded_at 2026-11-13T18:03:45+0000  uid 0
+	xlated 312B  jited 205B  memlock 4096B  map_ids 58
+90: cgroup_skb  name sd_fw_ingress  tag 6144bc3db46d80b4  gpl
+	loaded_at 2026-11-13T18:03:45+0000  uid 0
+	xlated 312B  jited 205B  memlock 4096B  map_ids 57
+91: cgroup_skb  name sd_fw_egress  tag 6144bc3db46d80b4  gpl
+	loaded_at 2026-11-13T18:03:45+0000  uid 0
+	xlated 312B  jited 205B  memlock 4096B  map_ids 60
+92: cgroup_skb  name sd_fw_ingress  tag 6144bc3db46d80b4  gpl
+	loaded_at 2026-11-13T18:03:45+0000  uid 0
+	xlated 312B  jited 205B  memlock 4096B  map_ids 59
+97: cgroup_skb  name sd_fw_egress  tag 6144bc3db46d80b4  gpl
+	loaded_at 2026-11-13T18:03:45+0000  uid 0
+	xlated 312B  jited 205B  memlock 4096B  map_ids 66
+98: cgroup_skb  name sd_fw_ingress  tag 6144bc3db46d80b4  gpl
+	loaded_at 2026-11-13T18:03:45+0000  uid 0
+	xlated 312B  jited 205B  memlock 4096B  map_ids 65
+99: cgroup_skb  name sd_fw_egress  tag 6144bc3db46d80b4  gpl
+	loaded_at 2026-11-13T18:03:45+0000  uid 0
+	xlated 312B  jited 205B  memlock 4096B  map_ids 68
+100: cgroup_skb  name sd_fw_ingress  tag 6144bc3db46d80b4  gpl
+	loaded_at 2026-11-13T18:03:45+0000  uid 0
+	xlated 312B  jited 205B  memlock 4096B  map_ids 67
+101: cgroup_device  name sd_devices  tag a97c143260cd9940  gpl
+	loaded_at 2026-11-13T18:03:45+0000  uid 0
+	xlated 416B  jited 271B  memlock 4096B
+102: cgroup_skb  name sd_fw_egress  tag 6144bc3db46d80b4  gpl run_time_ns 7518 run_cnt 8
+	loaded_at 2026-11-13T18:03:45+0000  uid 0
+	xlated 312B  jited 205B  memlock 4096B  map_ids 70
+103: cgroup_skb  name sd_fw_ingress  tag 6144bc3db46d80b4  gpl run_time_ns 9180 run_cnt 8
+	loaded_at 2026-11-13T18:03:45+0000  uid 0
+	xlated 312B  jited 205B  memlock 4096B  map_ids 69
+104: cgroup_skb  name sd_fw_egress  tag 6144bc3db46d80b4  gpl
+	loaded_at 2026-11-13T18:03:45+0000  uid 0
+	xlated 312B  jited 205B  memlock 4096B  map_ids 72
+105: cgroup_skb  name sd_fw_ingress  tag 6144bc3db46d80b4  gpl
+	loaded_at 2026-11-13T18:03:45+0000  uid 0
+	xlated 312B  jited 205B  memlock 4096B  map_ids 71
+106: cgroup_skb  name sd_fw_egress  tag 6144bc3db46d80b4  gpl
+	loaded_at 2026-11-13T18:03:45+0000  uid 0
+	xlated 312B  jited 205B  memlock 4096B  map_ids 74
+107: cgroup_skb  name sd_fw_ingress  tag 6144bc3db46d80b4  gpl
+	loaded_at 2026-11-13T18:03:45+0000  uid 0
+	xlated 312B  jited 205B  memlock 4096B  map_ids 73
+108: cgroup_skb  name sd_fw_egress  tag 4082c8a83378dc42  gpl
+	loaded_at 2026-11-13T18:03:45+0000  uid 0
+	xlated 64B  jited 67B  memlock 4096B  map_ids 76
+109: cgroup_skb  name sd_fw_ingress  tag 4082c8a83378dc42  gpl
+	loaded_at 2026-11-13T18:03:45+0000  uid 0
+	xlated 64B  jited 67B  memlock 4096B  map_ids 75
+110: cgroup_skb  name sd_fw_egress  tag 6144bc3db46d80b4  gpl
+	loaded_at 2026-11-13T18:03:46+0000  uid 0
+	xlated 312B  jited 205B  memlock 4096B  map_ids 78
+111: cgroup_skb  name sd_fw_ingress  tag 6144bc3db46d80b4  gpl
+	loaded_at 2026-11-13T18:03:46+0000  uid 0
+	xlated 312B  jited 205B  memlock 4096B  map_ids 77
+114: cgroup_device  name sd_devices  tag 5e74ecbe3c463f4a  gpl
+	loaded_at 2026-11-13T18:03:46+0000  uid 0
+	xlated 464B  jited 301B  memlock 4096B
+115: cgroup_skb  name sd_fw_egress  tag 4082c8a83378dc42  gpl
+	loaded_at 2026-11-13T18:03:46+0000  uid 0
+	xlated 64B  jited 67B  memlock 4096B  map_ids 82
+116: cgroup_skb  name sd_fw_ingress  tag 4082c8a83378dc42  gpl
+	loaded_at 2026-11-13T18:03:46+0000  uid 0
+	xlated 64B  jited 67B  memlock 4096B  map_ids 81
+117: cgroup_skb  name sd_fw_egress  tag 6144bc3db46d80b4  gpl
+	loaded_at 2026-11-13T18:03:46+0000  uid 0
+	xlated 312B  jited 205B  memlock 4096B  map_ids 84
+118: cgroup_skb  name sd_fw_ingress  tag 6144bc3db46d80b4  gpl
+	loaded_at 2026-11-13T18:03:46+0000  uid 0
+	xlated 312B  jited 205B  memlock 4096B  map_ids 83
+119: cgroup_skb  name sd_fw_egress  tag 6144bc3db46d80b4  gpl
+	loaded_at 2026-11-13T18:03:46+0000  uid 0
+	xlated 312B  jited 205B  memlock 4096B  map_ids 86
+120: cgroup_skb  name sd_fw_ingress  tag 6144bc3db46d80b4  gpl
+	loaded_at 2026-11-13T18:03:46+0000  uid 0
+	xlated 312B  jited 205B  memlock 4096B  map_ids 85
+121: cgroup_skb  name sd_fw_egress  tag 6144bc3db46d80b4  gpl
+	loaded_at 2026-11-13T18:03:46+0000  uid 0
+	xlated 312B  jited 205B  memlock 4096B  map_ids 88
+122: cgroup_skb  name sd_fw_ingress  tag 6144bc3db46d80b4  gpl
+	loaded_at 2026-11-13T18:03:46+0000  uid 0
+	xlated 312B  jited 205B  memlock 4096B  map_ids 87
+123: cgroup_skb  name sd_fw_egress  tag 6144bc3db46d80b4  gpl
+	loaded_at 2026-11-13T18:03:46+0000  uid 0
+	xlated 312B  jited 205B  memlock 4096B  map_ids 90
+124: cgroup_skb  name sd_fw_ingress  tag 6144bc3db46d80b4  gpl
+	loaded_at 2026-11-13T18:03:46+0000  uid 0
+	xlated 312B  jited 205B  memlock 4096B  map_ids 89
+125: cgroup_skb  name sd_fw_egress  tag 6144bc3db46d80b4  gpl
+	loaded_at 2026-11-13T18:03:46+0000  uid 0
+	xlated 312B  jited 205B  memlock 4096B  map_ids 92
+126: cgroup_skb  name sd_fw_ingress  tag 6144bc3db46d80b4  gpl
+	loaded_at 2026-11-13T18:03:46+0000  uid 0
+	xlated 312B  jited 205B  memlock 4096B  map_ids 91
+127: cgroup_skb  name sd_fw_egress  tag 6144bc3db46d80b4  gpl
+	loaded_at 2026-11-13T18:03:46+0000  uid 0
+	xlated 312B  jited 205B  memlock 4096B  map_ids 94
+128: cgroup_skb  name sd_fw_ingress  tag 6144bc3db46d80b4  gpl
+	loaded_at 2026-11-13T18:03:46+0000  uid 0
+	xlated 312B  jited 205B  memlock 4096B  map_ids 93
+129: cgroup_skb  name sd_fw_egress  tag 6144bc3db46d80b4  gpl
+	loaded_at 2026-11-13T18:03:47+0000  uid 0
+	xlated 312B  jited 205B  memlock 4096B  map_ids 96
+130: cgroup_skb  name sd_fw_ingress  tag 6144bc3db46d80b4  gpl
+	loaded_at 2026-11-13T18:03:47+0000  uid 0
+	xlated 312B  jited 205B  memlock 4096B  map_ids 95
+131: cgroup_skb  name sd_fw_egress  tag 6144bc3db46d80b4  gpl
+	loaded_at 2026-11-13T18:03:47+0000  uid 0
+	xlated 312B  jited 205B  memlock 4096B  map_ids 98
+132: cgroup_skb  name sd_fw_ingress  tag 6144bc3db46d80b4  gpl
+	loaded_at 2026-11-13T18:03:47+0000  uid 0
+	xlated 312B  jited 205B  memlock 4096B  map_ids 97
+133: cgroup_skb  name sd_fw_egress  tag 6144bc3db46d80b4  gpl
+	loaded_at 2026-11-13T18:03:47+0000  uid 0
+	xlated 312B  jited 205B  memlock 4096B  map_ids 100
+134: cgroup_skb  name sd_fw_ingress  tag 6144bc3db46d80b4  gpl
+	loaded_at 2026-11-13T18:03:47+0000  uid 0
+	xlated 312B  jited 205B  memlock 4096B  map_ids 99
+135: cgroup_skb  name sd_fw_egress  tag 6144bc3db46d80b4  gpl
+	loaded_at 2026-11-13T18:03:47+0000  uid 0
+	xlated 312B  jited 205B  memlock 4096B  map_ids 102
+136: cgroup_skb  name sd_fw_ingress  tag 6144bc3db46d80b4  gpl
+	loaded_at 2026-11-13T18:03:47+0000  uid 0
+	xlated 312B  jited 205B  memlock 4096B  map_ids 101
+137: cgroup_device  name sd_devices  tag a97c143260cd9940  gpl
+	loaded_at 2026-11-13T18:03:47+0000  uid 0
+	xlated 416B  jited 271B  memlock 4096B
+138: cgroup_skb  name sd_fw_egress  tag 6144bc3db46d80b4  gpl
+	loaded_at 2026-11-13T18:03:47+0000  uid 0
+	xlated 312B  jited 205B  memlock 4096B  map_ids 104
+139: cgroup_skb  name sd_fw_ingress  tag 6144bc3db46d80b4  gpl
+	loaded_at 2026-11-13T18:03:47+0000  uid 0
+	xlated 312B  jited 205B  memlock 4096B  map_ids 103
+142: cgroup_skb  name sd_fw_egress  tag 6144bc3db46d80b4  gpl
+	loaded_at 2026-11-13T18:03:47+0000  uid 0
+	xlated 312B  jited 205B  memlock 4096B  map_ids 108
+143: cgroup_skb  name sd_fw_ingress  tag 6144bc3db46d80b4  gpl
+	loaded_at 2026-11-13T18:03:47+0000  uid 0
+	xlated 312B  jited 205B  memlock 4096B  map_ids 107
+144: cgroup_skb  name sd_fw_egress  tag 6144bc3db46d80b4  gpl
+	loaded_at 2026-11-13T18:03:47+0000  uid 0
+	xlated 312B  jited 205B  memlock 4096B  map_ids 110
+145: cgroup_skb  name sd_fw_ingress  tag 6144bc3db46d80b4  gpl
+	loaded_at 2026-11-13T18:03:47+0000  uid 0
+	xlated 312B  jited 205B  memlock 4096B  map_ids 109
+148: cgroup_skb  name sd_fw_egress  tag 6144bc3db46d80b4  gpl
+	loaded_at 2026-11-13T18:03:47+0000  uid 0
+	xlated 312B  jited 205B  memlock 4096B  map_ids 114
+149: cgroup_skb  name sd_fw_ingress  tag 6144bc3db46d80b4  gpl
+	loaded_at 2026-11-13T18:03:47+0000  uid 0
+	xlated 312B  jited 205B  memlock 4096B  map_ids 113
+150: cgroup_skb  name sd_fw_egress  tag 6144bc3db46d80b4  gpl
+	loaded_at 2026-11-13T18:03:47+0000  uid 0
+	xlated 312B  jited 205B  memlock 4096B  map_ids 116
+151: cgroup_skb  name sd_fw_ingress  tag 6144bc3db46d80b4  gpl
+	loaded_at 2026-11-13T18:03:47+0000  uid 0
+	xlated 312B  jited 205B  memlock 4096B  map_ids 115
+152: cgroup_skb  name sd_fw_egress  tag 6144bc3db46d80b4  gpl
+	loaded_at 2026-11-13T18:03:47+0000  uid 0
+	xlated 312B  jited 205B  memlock 4096B  map_ids 118
+153: cgroup_skb  name sd_fw_ingress  tag 6144bc3db46d80b4  gpl
+	loaded_at 2026-11-13T18:03:47+0000  uid 0
+	xlated 312B  jited 205B  memlock 4096B  map_ids 117
+154: cgroup_skb  name sd_fw_egress  tag 6144bc3db46d80b4  gpl
+	loaded_at 2026-11-13T18:03:47+0000  uid 0
+	xlated 312B  jited 205B  memlock 4096B  map_ids 120
+155: cgroup_skb  name sd_fw_ingress  tag 6144bc3db46d80b4  gpl
+	loaded_at 2026-11-13T18:03:47+0000  uid 0
+	xlated 312B  jited 205B  memlock 4096B  map_ids 119
+156: cgroup_device  name sd_devices  tag e112e5d192672dfc  gpl
+	loaded_at 2026-11-13T18:03:47+0000  uid 0
+	xlated 520B  jited 340B  memlock 4096B
+157: cgroup_skb  name sd_fw_egress  tag 4082c8a83378dc42  gpl
+	loaded_at 2026-11-13T18:03:47+0000  uid 0
+	xlated 64B  jited 67B  memlock 4096B  map_ids 122
+158: cgroup_skb  name sd_fw_ingress  tag 4082c8a83378dc42  gpl
+	loaded_at 2026-11-13T18:03:47+0000  uid 0
+	xlated 64B  jited 67B  memlock 4096B  map_ids 121
+159: cgroup_device  name sd_devices  tag 605e6bee6149b527  gpl
+	loaded_at 2026-11-13T18:03:48+0000  uid 0
+	xlated 744B  jited 460B  memlock 4096B
+160: cgroup_skb  name sd_fw_egress  tag 4082c8a83378dc42  gpl
+	loaded_at 2026-11-13T18:03:48+0000  uid 0
+	xlated 64B  jited 67B  memlock 4096B  map_ids 124
+161: cgroup_skb  name sd_fw_ingress  tag 4082c8a83378dc42  gpl
+	loaded_at 2026-11-13T18:03:48+0000  uid 0
+	xlated 64B  jited 67B  memlock 4096B  map_ids 123
+162: cgroup_skb  name sd_fw_egress  tag 6144bc3db46d80b4  gpl
+	loaded_at 2026-11-13T18:03:48+0000  uid 0
+	xlated 312B  jited 205B  memlock 4096B  map_ids 126
+163: cgroup_skb  name sd_fw_ingress  tag 6144bc3db46d80b4  gpl
+	loaded_at 2026-11-13T18:03:48+0000  uid 0
+	xlated 312B  jited 205B  memlock 4096B  map_ids 125
+166: cgroup_skb  name sd_fw_egress  tag 6144bc3db46d80b4  gpl run_time_ns 198158 run_cnt 271
+	loaded_at 2026-11-13T18:03:48+0000  uid 0
+	xlated 312B  jited 205B  memlock 4096B  map_ids 130
+167: cgroup_skb  name sd_fw_ingress  tag 6144bc3db46d80b4  gpl run_time_ns 778106 run_cnt 1455
+	loaded_at 2026-11-13T18:03:48+0000  uid 0
+	xlated 312B  jited 205B  memlock 4096B  map_ids 129
+168: cgroup_skb  name sd_fw_egress  tag 6144bc3db46d80b4  gpl
+	loaded_at 2026-11-13T18:03:48+0000  uid 0
+	xlated 312B  jited 205B  memlock 4096B  map_ids 132
+169: cgroup_skb  name sd_fw_ingress  tag 6144bc3db46d80b4  gpl
+	loaded_at 2026-11-13T18:03:48+0000  uid 0
+	xlated 312B  jited 205B  memlock 4096B  map_ids 131
+171: cgroup_skb  name sd_fw_egress  tag 4082c8a83378dc42  gpl
+	loaded_at 2026-11-13T18:03:48+0000  uid 0
+	xlated 64B  jited 67B  memlock 4096B  map_ids 134
+172: cgroup_skb  name sd_fw_ingress  tag 4082c8a83378dc42  gpl
+	loaded_at 2026-11-13T18:03:48+0000  uid 0
+	xlated 64B  jited 67B  memlock 4096B  map_ids 133
+173: cgroup_skb  name sd_fw_egress  tag 6144bc3db46d80b4  gpl run_time_ns 1818415 run_cnt 5963
+	loaded_at 2026-11-13T18:03:48+0000  uid 0
+	xlated 312B  jited 205B  memlock 4096B  map_ids 136
+174: cgroup_skb  name sd_fw_ingress  tag 6144bc3db46d80b4  gpl run_time_ns 2875848 run_cnt 7288
+	loaded_at 2026-11-13T18:03:48+0000  uid 0
+	xlated 312B  jited 205B  memlock 4096B  map_ids 135
+175: cgroup_skb  name sd_fw_egress  tag 6144bc3db46d80b4  gpl
+	loaded_at 2026-11-13T18:03:48+0000  uid 0
+	xlated 312B  jited 205B  memlock 4096B  map_ids 138
+176: cgroup_skb  name sd_fw_ingress  tag 6144bc3db46d80b4  gpl
+	loaded_at 2026-11-13T18:03:48+0000  uid 0
+	xlated 312B  jited 205B  memlock 4096B  map_ids 137
+177: cgroup_skb  name sd_fw_egress  tag 6144bc3db46d80b4  gpl
+	loaded_at 2026-11-13T18:03:48+0000  uid 0
+	xlated 312B  jited 205B  memlock 4096B  map_ids 140
+178: cgroup_skb  name sd_fw_ingress  tag 6144bc3db46d80b4  gpl
+	loaded_at 2026-11-13T18:03:48+0000  uid 0
+	xlated 312B  jited 205B  memlock 4096B  map_ids 139
+179: cgroup_skb  name sd_fw_egress  tag 6144bc3db46d80b4  gpl
+	loaded_at 2026-11-13T18:03:48+0000  uid 0
+	xlated 312B  jited 205B  memlock 4096B  map_ids 142
+180: cgroup_skb  name sd_fw_ingress  tag 6144bc3db46d80b4  gpl
+	loaded_at 2026-11-13T18:03:48+0000  uid 0
+	xlated 312B  jited 205B  memlock 4096B  map_ids 141
+182: cgroup_skb  name sd_fw_egress  tag 6144bc3db46d80b4  gpl run_time_ns 231452161696 run_cnt 1737976983
+	loaded_at 2026-11-13T18:03:50+0000  uid 0
+	xlated 312B  jited 205B  memlock 4096B  map_ids 22
+183: cgroup_skb  name sd_fw_ingress  tag 6144bc3db46d80b4  gpl run_time_ns 617974209033 run_cnt 4010737323
+	loaded_at 2026-11-13T18:03:50+0000  uid 0
+	xlated 312B  jited 205B  memlock 4096B  map_ids 21
+184: cgroup_skb  name sd_fw_egress  tag 6144bc3db46d80b4  gpl run_time_ns 239344426566 run_cnt 1692351207
+	loaded_at 2026-11-13T18:03:50+0000  uid 0
+	xlated 312B  jited 205B  memlock 4096B  map_ids 36
+185: cgroup_skb  name sd_fw_ingress  tag 6144bc3db46d80b4  gpl run_time_ns 556474038874 run_cnt 4010728592
+	loaded_at 2026-11-13T18:03:50+0000  uid 0
+	xlated 312B  jited 205B  memlock 4096B  map_ids 35
+186: cgroup_skb  name sd_fw_egress  tag 6144bc3db46d80b4  gpl
+	loaded_at 2026-11-13T18:03:50+0000  uid 0
+	xlated 312B  jited 205B  memlock 4096B  map_ids 145
+187: cgroup_skb  name sd_fw_ingress  tag 6144bc3db46d80b4  gpl
+	loaded_at 2026-11-13T18:03:50+0000  uid 0
+	xlated 312B  jited 205B  memlock 4096B  map_ids 144
+188: cgroup_skb  name sd_fw_egress  tag 6144bc3db46d80b4  gpl
+	loaded_at 2026-11-13T18:03:50+0000  uid 0
+	xlated 312B  jited 205B  memlock 4096B  map_ids 147
+189: cgroup_skb  name sd_fw_ingress  tag 6144bc3db46d80b4  gpl
+	loaded_at 2026-11-13T18:03:50+0000  uid 0
+	xlated 312B  jited 205B  memlock 4096B  map_ids 146
+191: cgroup_skb  name sd_fw_egress  tag 6144bc3db46d80b4  gpl
+	loaded_at 2026-11-13T18:03:50+0000  uid 0
+	xlated 312B  jited 205B  memlock 4096B  map_ids 24
+192: cgroup_skb  name sd_fw_ingress  tag 6144bc3db46d80b4  gpl
+	loaded_at 2026-11-13T18:03:50+0000  uid 0
+	xlated 312B  jited 205B  memlock 4096B  map_ids 23
+193: cgroup_skb  name sd_fw_egress  tag 6144bc3db46d80b4  gpl
+	loaded_at 2026-11-13T18:03:50+0000  uid 0
+	xlated 312B  jited 205B  memlock 4096B  map_ids 64
+194: cgroup_skb  name sd_fw_ingress  tag 6144bc3db46d80b4  gpl
+	loaded_at 2026-11-13T18:03:50+0000  uid 0
+	xlated 312B  jited 205B  memlock 4096B  map_ids 63
+195: cgroup_skb  name sd_fw_egress  tag 6144bc3db46d80b4  gpl
+	loaded_at 2026-11-13T18:03:50+0000  uid 0
+	xlated 312B  jited 205B  memlock 4096B  map_ids 42
+196: cgroup_skb  name sd_fw_ingress  tag 6144bc3db46d80b4  gpl
+	loaded_at 2026-11-13T18:03:50+0000  uid 0
+	xlated 312B  jited 205B  memlock 4096B  map_ids 41
+197: cgroup_skb  name sd_fw_egress  tag 6144bc3db46d80b4  gpl
+	loaded_at 2026-11-13T18:03:50+0000  uid 0
+	xlated 312B  jited 205B  memlock 4096B  map_ids 46
+198: cgroup_skb  name sd_fw_ingress  tag 6144bc3db46d80b4  gpl
+	loaded_at 2026-11-13T18:03:50+0000  uid 0
+	xlated 312B  jited 205B  memlock 4096B  map_ids 45
+199: cgroup_skb  name sd_fw_egress  tag 6144bc3db46d80b4  gpl
+	loaded_at 2026-11-13T18:03:50+0000  uid 0
+	xlated 312B  jited 205B  memlock 4096B  map_ids 62
+200: cgroup_skb  name sd_fw_ingress  tag 6144bc3db46d80b4  gpl
+	loaded_at 2026-11-13T18:03:50+0000  uid 0
+	xlated 312B  jited 205B  memlock 4096B  map_ids 61
+201: cgroup_skb  name sd_fw_egress  tag 6144bc3db46d80b4  gpl run_time_ns 1899210 run_cnt 6242
+	loaded_at 2026-11-13T18:03:50+0000  uid 0
+	xlated 312B  jited 205B  memlock 4096B  map_ids 26
+202: cgroup_skb  name sd_fw_ingress  tag 6144bc3db46d80b4  gpl run_time_ns 2009113 run_cnt 8751
+	loaded_at 2026-11-13T18:03:50+0000  uid 0
+	xlated 312B  jited 205B  memlock 4096B  map_ids 25
+203: cgroup_skb  name sd_fw_egress  tag 6144bc3db46d80b4  gpl
+	loaded_at 2026-11-13T18:03:50+0000  uid 0
+	xlated 312B  jited 205B  memlock 4096B  map_ids 40
+204: cgroup_skb  name sd_fw_ingress  tag 6144bc3db46d80b4  gpl
+	loaded_at 2026-11-13T18:03:50+0000  uid 0
+	xlated 312B  jited 205B  memlock 4096B  map_ids 39
+205: cgroup_skb  name sd_fw_egress  tag 6144bc3db46d80b4  gpl
+	loaded_at 2026-11-13T18:03:50+0000  uid 0
+	xlated 312B  jited 205B  memlock 4096B  map_ids 44
+206: cgroup_skb  name sd_fw_ingress  tag 6144bc3db46d80b4  gpl
+	loaded_at 2026-11-13T18:03:50+0000  uid 0
+	xlated 312B  jited 205B  memlock 4096B  map_ids 43
+207: cgroup_skb  name sd_fw_egress  tag 6144bc3db46d80b4  gpl
+	loaded_at 2026-11-13T18:03:50+0000  uid 0
+	xlated 312B  jited 205B  memlock 4096B  map_ids 150
+208: cgroup_skb  name sd_fw_ingress  tag 6144bc3db46d80b4  gpl
+	loaded_at 2026-11-13T18:03:50+0000  uid 0
+	xlated 312B  jited 205B  memlock 4096B  map_ids 149
+209: socket_filter  tag 52cf03146427952a run_time_ns 7214931 run_cnt 4301
+	loaded_at 2026-11-13T18:03:50+0000  uid 0
+	xlated 848B  jited 467B  memlock 4096B  map_ids 151
+210: cgroup_skb  name sd_fw_egress  tag 6144bc3db46d80b4  gpl
+	loaded_at 2026-11-13T18:03:50+0000  uid 0
+	xlated 312B  jited 205B  memlock 4096B  map_ids 153
+211: cgroup_skb  name sd_fw_ingress  tag 6144bc3db46d80b4  gpl
+	loaded_at 2026-11-13T18:03:50+0000  uid 0
+	xlated 312B  jited 205B  memlock 4096B  map_ids 152
+212: socket_filter  tag 1372983d6112668b run_time_ns 1004360 run_cnt 613
+	loaded_at 2026-11-13T18:03:50+0000  uid 0
+	xlated 848B  jited 467B  memlock 4096B  map_ids 154
+213: cgroup_skb  name sd_fw_egress  tag 6144bc3db46d80b4  gpl
+	loaded_at 2026-11-13T18:03:50+0000  uid 0
+	xlated 312B  jited 205B  memlock 4096B  map_ids 156
+214: cgroup_skb  name sd_fw_ingress  tag 6144bc3db46d80b4  gpl
+	loaded_at 2026-11-13T18:03:50+0000  uid 0
+	xlated 312B  jited 205B  memlock 4096B  map_ids 155
+215: cgroup_skb  name sd_fw_egress  tag 6144bc3db46d80b4  gpl
+	loaded_at 2026-11-13T18:03:50+0000  uid 0
+	xlated 312B  jited 205B  memlock 4096B  map_ids 158
+216: cgroup_skb  name sd_fw_ingress  tag 6144bc3db46d80b4  gpl
+	loaded_at 2026-11-13T18:03:50+0000  uid 0
+	xlated 312B  jited 205B  memlock 4096B  map_ids 157
+20707: cgroup_skb  name sd_fw_egress  tag 6144bc3db46d80b4  gpl
+	loaded_at 2026-11-14T18:03:50+0000  uid 0
+	xlated 312B  jited 205B  memlock 4096B  map_ids 243954
+20708: cgroup_skb  name sd_fw_ingress  tag 6144bc3db46d80b4  gpl
+	loaded_at 2026-11-14T18:03:50+0000  uid 0
+	xlated 312B  jited 205B  memlock 4096B  map_ids 243953
+20966: cgroup_skb  name sd_fw_egress  tag 6144bc3db46d80b4  gpl
+	loaded_at 2026-11-14T18:18:52+0000  uid 0
+	xlated 312B  jited 205B  memlock 4096B  map_ids 244640
+20967: cgroup_skb  name sd_fw_ingress  tag 6144bc3db46d80b4  gpl
+	loaded_at 2026-11-14T18:18:52+0000  uid 0
+	xlated 312B  jited 205B  memlock 4096B  map_ids 244639
+34349: cgroup_skb  name sd_fw_egress  tag 6144bc3db46d80b4  gpl run_time_ns 50347791176 run_cnt 313833093
+	loaded_at 2026-11-15T04:55:45+0000  uid 0
+	xlated 312B  jited 205B  memlock 4096B  map_ids 160
+34350: cgroup_skb  name sd_fw_ingress  tag 6144bc3db46d80b4  gpl run_time_ns 141176831876 run_cnt 843208210
+	loaded_at 2026-11-15T04:55:45+0000  uid 0
+	xlated 312B  jited 205B  memlock 4096B  map_ids 159
+34351: cgroup_skb  name sd_fw_egress  tag 6144bc3db46d80b4  gpl
+	loaded_at 2026-11-15T04:55:45+0000  uid 0
+	xlated 312B  jited 205B  memlock 4096B  map_ids 436098
+34352: cgroup_skb  name sd_fw_ingress  tag 6144bc3db46d80b4  gpl
+	loaded_at 2026-11-15T04:55:45+0000  uid 0
+	xlated 312B  jited 205B  memlock 4096B  map_ids 436097
+34353: cgroup_skb  name sd_fw_egress  tag 6144bc3db46d80b4  gpl
+	loaded_at 2026-11-15T04:55:45+0000  uid 0
+	xlated 312B  jited 205B  memlock 4096B  map_ids 436100
+34354: cgroup_skb  name sd_fw_ingress  tag 6144bc3db46d80b4  gpl
+	loaded_at 2026-11-15T04:55:45+0000  uid 0
+	xlated 312B  jited 205B  memlock 4096B  map_ids 436099
+34398: cgroup_skb  name sd_fw_egress  tag 6144bc3db46d80b4  gpl
+	loaded_at 2026-11-15T05:00:03+0000  uid 0
+	xlated 312B  jited 205B  memlock 4096B  map_ids 436209
+34399: cgroup_skb  name sd_fw_ingress  tag 6144bc3db46d80b4  gpl
+	loaded_at 2026-11-15T05:00:03+0000  uid 0
+	xlated 312B  jited 205B  memlock 4096B  map_ids 436208
+34765: cgroup_skb  name sd_fw_egress  tag 6144bc3db46d80b4  gpl
+	loaded_at 2026-11-15T05:48:55+0000  uid 0
+	xlated 312B  jited 205B  memlock 4096B  map_ids 437329
+34766: cgroup_skb  name sd_fw_ingress  tag 6144bc3db46d80b4  gpl
+	loaded_at 2026-11-15T05:48:55+0000  uid 0
+	xlated 312B  jited 205B  memlock 4096B  map_ids 437328
+rfm /nix/store/h5scmrghrwag6sbv54c2xr6r9h3ljjy9-rfm-2026.1109.0/bin/rfm
+netobserv-ebpf-agent /nix/store/0acjdnjcjaz7v5vd1qbvgw8qj09g2mai-netobserv-ebpf-agent-2.0.2/bin/netobserv-ebpf-agent
+hsflowd /nix/store/x9xiy7048pilswfcq8av6m4yy0cdg44w-hsflowd-2.1.26-1/bin/hsflowd
+pmacctd /nix/store/gcq5bjgz3syh01l5mxn2rg0sqdzasbl4-pmacct-1.7.9/bin/pmacctd
+softflowd /nix/store/jy8iwhc1b2ld89i8m436gqcsm8i4jnrb-softflowd-1.1.1/bin/softflowd
+iperf3 /nix/store/i6jh66v9gq8jz1d06z7463c9l8s9mjf1-iperf-3.21/bin/iperf3
+nu /nix/store/6b4d726srsg3qf769lvs5dls80ll4fa7-nushell-0.116.1/bin/nu
+bpftool /nix/store/i2j77zw291sadjsrjm07sgmh8x36zbmv-bpftools-7.2/bin/bpftool
+ethtool /nix/store/4cd9sy9ck7r0pcbdnny7w9scif472c35-ethtool-7.1/bin/ethtool
+bash: line 1: dmidecode: command not found

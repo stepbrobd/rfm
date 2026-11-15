@@ -1,0 +1,428 @@
+2026-11-14 23:27:27 job 20530 vlan 4 dut spirou-7 gen spirou-8 phases: setup pm3s b1c b13p
+2026-11-14 23:27:27 rounds R5 '1' R3 '1' R2 '1' RB4 '1' accuracy monitors 'rfm_acc netobserv hsflowd'
+2026-11-14 23:27:29 dut ctl 172.16.208.15 test 10.48.0.7 e8:eb:d3:fd:ce:ac, gen ctl 172.16.208.16 test 10.48.0.8 e8:eb:d3:fd:cf:0c pci 0000:4b:00.0
+2026-11-14 23:27:29 === phase setup
+2026-11-14 23:27:32 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+2026-11-14 23:27:33 dut: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+2026-11-14 23:27:33 dut: pkill -x iperf3; true
+2026-11-14 23:27:33 gen: pkill -x iperf3; true
+2026-11-14 23:27:35 dut: pkill -KILL -f '^/root/progbench/progbench '; sysctl -qw kernel.bpf_stats_enabled=0; ethtool -K ens1f0np0 gro on tso on gso on; ethtool -L ens1f0np0 combined 63; true
+Actual changes:
+tx-tcp-ecn-segmentation: off [requested on]
+tx-tcp-accecn-segmentation: off [requested on]
+2026-11-14 23:27:36 === phase setup done
+2026-11-14 23:27:36 === phase pm3s
+2026-11-14 23:27:36 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; setsid nohup nu /root/workload/gen.nu --iface ens1f0np0 --dst 10.48.0.7 --dstmac e8:eb:d3:fd:ce:ac --count 0 --threads 1  > /tmp/gen.log 2>&1 < /dev/null &
+2026-11-14 23:27:55 dut rx pps 2664426
+2026-11-14 23:27:55 dut: echo 0 > /sys/devices/system/cpu/intel_pstate/no_turbo; for s in /sys/devices/system/cpu/cpu*/cpuidle/state*; do case $(cat $s/name) in C6* | C7* | C8* | C9* | C10*) echo 0 > $s/disable ;; *) echo 0 > $s/disable ;; esac; done; echo no_turbo $(cat /sys/devices/system/cpu/intel_pstate/no_turbo) disabled $(cat /sys/devices/system/cpu/cpu*/cpuidle/state*/disable | sort | uniq -c | tr -s ' \n' ' ')
+no_turbo 0 disabled 384 0
+2026-11-14 23:28:01 dut: nu /root/workload/percpu.nu --label 'pm3s dflt t1 N100 r1 none before' --out /root/res/pm3s-cpu.jsonl
+2026-11-14 23:28:02 cstate pm3s dflt t1 N100 r1 none before: 1794695282.291525480 POLL=544599447 C1=11255899742 C1E=1894713640008 C6=6918947954456 TIMER=85070628 HRTIMER=130347337 LOC=1150104381 RES=16063128 CAL=897667253 
+2026-11-14 23:28:02 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent none --n 100 --label pm3s\ dflt\ t1\ N100\ r1\ none --out /root/res/pm3s.jsonl --warmup 3 --secs 4 --stat-secs 2 > /dev/null 2>> /root/res/pm3s.err; echo exit=$?
+exit=0
+2026-11-14 23:28:12 cstate pm3s dflt t1 N100 r1 none after: 1794695292.419393004 POLL=544623301 C1=11255927368 C1E=1894740632586 C6=6919828385259 TIMER=85085686 HRTIMER=130347337 LOC=1150140323 RES=16063134 CAL=897672013 
+2026-11-14 23:28:12 dut: nu /root/workload/percpu.nu --label 'pm3s dflt t1 N100 r1 none after' --out /root/res/pm3s-cpu.jsonl
+2026-11-14 23:28:12 dut: nu /root/workload/percpu.nu --label 'pm3s dflt t1 N100 r1 rfm_nostage before' --out /root/res/pm3s-cpu.jsonl
+2026-11-14 23:28:13 cstate pm3s dflt t1 N100 r1 rfm_nostage before: 1794695293.210552737 POLL=544625503 C1=11255939975 C1E=1894743717555 C6=6919895499374 TIMER=85087051 HRTIMER=130347337 LOC=1150147375 RES=16063137 CAL=897672861 
+2026-11-14 23:28:13 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label pm3s\ dflt\ t1\ N100\ r1\ rfm_nostage --out /root/res/pm3s.jsonl --rfm-bpf iface_slots=1\\nring_buf_size=16384 --warmup 3 --secs 4 --stat-secs 2 > /dev/null 2>> /root/res/pm3s.err; echo exit=$?
+exit=0
+2026-11-14 23:28:28 cstate pm3s dflt t1 N100 r1 rfm_nostage after: 1794695308.018111497 POLL=544658629 C1=11255974239 C1E=1894784400631 C6=6921177805014 TIMER=85107962 HRTIMER=130347337 LOC=1150221125 RES=16063502 CAL=897685444 
+2026-11-14 23:28:28 dut: nu /root/workload/percpu.nu --label 'pm3s dflt t1 N100 r1 rfm_nostage after' --out /root/res/pm3s-cpu.jsonl
+2026-11-14 23:28:28 dut: nu /root/workload/percpu.nu --label 'pm3s dflt t1 N100 r1 netobserv before' --out /root/res/pm3s-cpu.jsonl
+2026-11-14 23:28:29 cstate pm3s dflt t1 N100 r1 netobserv before: 1794695308.810386899 POLL=544660898 C1=11255986600 C1E=1894786978082 C6=6921245723765 TIMER=85109344 HRTIMER=130347337 LOC=1150227858 RES=16063505 CAL=897686242 
+2026-11-14 23:28:29 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 100 --label pm3s\ dflt\ t1\ N100\ r1\ netobserv --out /root/res/pm3s.jsonl --warmup 3 --secs 4 --stat-secs 2 > /dev/null 2>> /root/res/pm3s.err; echo exit=$?
+exit=0
+2026-11-14 23:28:42 cstate pm3s dflt t1 N100 r1 netobserv after: 1794695322.078645419 POLL=544689108 C1=11256017340 C1E=1894821607930 C6=6922396314961 TIMER=85129143 HRTIMER=130347337 LOC=1150276300 RES=16063679 CAL=897698401 
+2026-11-14 23:28:42 dut: nu /root/workload/percpu.nu --label 'pm3s dflt t1 N100 r1 netobserv after' --out /root/res/pm3s-cpu.jsonl
+2026-11-14 23:28:42 dut: nu /root/workload/percpu.nu --label 'pm3s dflt t1 N100 r1 rfm before' --out /root/res/pm3s-cpu.jsonl
+2026-11-14 23:28:43 cstate pm3s dflt t1 N100 r1 rfm before: 1794695322.886489401 POLL=544691121 C1=11256033250 C1E=1894824208686 C6=6922465792057 TIMER=85130542 HRTIMER=130347337 LOC=1150283244 RES=16063684 CAL=897699239 
+2026-11-14 23:28:43 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label pm3s\ dflt\ t1\ N100\ r1\ rfm --out /root/res/pm3s.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --warmup 3 --secs 4 --stat-secs 2 > /dev/null 2>> /root/res/pm3s.err; echo exit=$?
+exit=0
+2026-11-14 23:28:57 cstate pm3s dflt t1 N100 r1 rfm after: 1794695337.704504371 POLL=544757542 C1=11256080495 C1E=1894981726580 C6=6923639369273 TIMER=85149635 HRTIMER=130410992 LOC=1150467517 RES=16064107 CAL=897714746 
+2026-11-14 23:28:57 dut: nu /root/workload/percpu.nu --label 'pm3s dflt t1 N100 r1 rfm after' --out /root/res/pm3s-cpu.jsonl
+2026-11-14 23:28:58 dut: echo 0 > /sys/devices/system/cpu/intel_pstate/no_turbo; for s in /sys/devices/system/cpu/cpu*/cpuidle/state*; do case $(cat $s/name) in C6* | C7* | C8* | C9* | C10*) echo 1 > $s/disable ;; *) echo 0 > $s/disable ;; esac; done; echo no_turbo $(cat /sys/devices/system/cpu/intel_pstate/no_turbo) disabled $(cat /sys/devices/system/cpu/cpu*/cpuidle/state*/disable | sort | uniq -c | tr -s ' \n' ' ')
+no_turbo 0 disabled 288 0 96 1
+2026-11-14 23:29:04 dut: nu /root/workload/percpu.nu --label 'pm3s noc6 t1 N100 r1 none before' --out /root/res/pm3s-cpu.jsonl
+2026-11-14 23:29:05 cstate pm3s noc6 t1 N100 r1 none before: 1794695345.322897929 POLL=544788505 C1=11256119384 C1E=1895602019406 C6=6923718126121 TIMER=85161495 HRTIMER=130410992 LOC=1150534399 RES=16064139 CAL=897720997 
+2026-11-14 23:29:05 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent none --n 100 --label pm3s\ noc6\ t1\ N100\ r1\ none --out /root/res/pm3s.jsonl --warmup 3 --secs 4 --stat-secs 2 > /dev/null 2>> /root/res/pm3s.err; echo exit=$?
+exit=0
+2026-11-14 23:29:15 cstate pm3s noc6 t1 N100 r1 none after: 1794695355.542597778 POLL=544829837 C1=11256174071 C1E=1896545213807 C6=6923718126121 TIMER=85176711 HRTIMER=130410992 LOC=1150603772 RES=16064152 CAL=897728654 
+2026-11-14 23:29:15 dut: nu /root/workload/percpu.nu --label 'pm3s noc6 t1 N100 r1 none after' --out /root/res/pm3s-cpu.jsonl
+2026-11-14 23:29:15 dut: nu /root/workload/percpu.nu --label 'pm3s noc6 t1 N100 r1 rfm_nostage before' --out /root/res/pm3s-cpu.jsonl
+2026-11-14 23:29:16 cstate pm3s noc6 t1 N100 r1 rfm_nostage before: 1794695356.316984248 POLL=544833942 C1=11256197714 C1E=1896616434382 C6=6923718126121 TIMER=85178152 HRTIMER=130410992 LOC=1150612842 RES=16064160 CAL=897729714 
+2026-11-14 23:29:16 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label pm3s\ noc6\ t1\ N100\ r1\ rfm_nostage --out /root/res/pm3s.jsonl --rfm-bpf iface_slots=1\\nring_buf_size=16384 --warmup 3 --secs 4 --stat-secs 2 > /dev/null 2>> /root/res/pm3s.err; echo exit=$?
+exit=0
+2026-11-14 23:29:31 cstate pm3s noc6 t1 N100 r1 rfm_nostage after: 1794695371.232358817 POLL=544962625 C1=11256305631 C1E=1897988257079 C6=6923718126121 TIMER=85199885 HRTIMER=130410992 LOC=1151059185 RES=16064693 CAL=897749459 
+2026-11-14 23:29:31 dut: nu /root/workload/percpu.nu --label 'pm3s noc6 t1 N100 r1 rfm_nostage after' --out /root/res/pm3s-cpu.jsonl
+2026-11-14 23:29:31 dut: nu /root/workload/percpu.nu --label 'pm3s noc6 t1 N100 r1 rfm before' --out /root/res/pm3s-cpu.jsonl
+2026-11-14 23:29:32 cstate pm3s noc6 t1 N100 r1 rfm before: 1794695372.009802155 POLL=544967150 C1=11256338324 C1E=1898059151548 C6=6923718126121 TIMER=85201335 HRTIMER=130410992 LOC=1151068983 RES=16064702 CAL=897750631 
+2026-11-14 23:29:32 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label pm3s\ noc6\ t1\ N100\ r1\ rfm --out /root/res/pm3s.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --warmup 3 --secs 4 --stat-secs 2 > /dev/null 2>> /root/res/pm3s.err; echo exit=$?
+exit=0
+2026-11-14 23:29:47 cstate pm3s noc6 t1 N100 r1 rfm after: 1794695386.976881753 POLL=545068499 C1=11256430383 C1E=1899437931253 C6=6923718126121 TIMER=85223101 HRTIMER=130475565 LOC=1151315649 RES=16065234 CAL=897764777 
+2026-11-14 23:29:47 dut: nu /root/workload/percpu.nu --label 'pm3s noc6 t1 N100 r1 rfm after' --out /root/res/pm3s-cpu.jsonl
+2026-11-14 23:29:47 dut: nu /root/workload/percpu.nu --label 'pm3s noc6 t1 N100 r1 netobserv before' --out /root/res/pm3s-cpu.jsonl
+2026-11-14 23:29:47 cstate pm3s noc6 t1 N100 r1 netobserv before: 1794695387.750648246 POLL=545071994 C1=11256460929 C1E=1899509111119 C6=6923718126121 TIMER=85224623 HRTIMER=130475565 LOC=1151325096 RES=16065242 CAL=897765942 
+2026-11-14 23:29:47 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 100 --label pm3s\ noc6\ t1\ N100\ r1\ netobserv --out /root/res/pm3s.jsonl --warmup 3 --secs 4 --stat-secs 2 > /dev/null 2>> /root/res/pm3s.err; echo exit=$?
+exit=0
+2026-11-14 23:30:01 cstate pm3s noc6 t1 N100 r1 netobserv after: 1794695401.025207354 POLL=545122929 C1=11256529928 C1E=1900732255596 C6=6923718126121 TIMER=85244211 HRTIMER=130475565 LOC=1151411608 RES=16065523 CAL=897781884 
+2026-11-14 23:30:01 dut: nu /root/workload/percpu.nu --label 'pm3s noc6 t1 N100 r1 netobserv after' --out /root/res/pm3s-cpu.jsonl
+2026-11-14 23:30:01 dut: echo 0 > /sys/devices/system/cpu/intel_pstate/no_turbo; for s in /sys/devices/system/cpu/cpu*/cpuidle/state*; do case $(cat $s/name) in C6* | C7* | C8* | C9* | C10*) echo 0 > $s/disable ;; *) echo 0 > $s/disable ;; esac; done; echo no_turbo $(cat /sys/devices/system/cpu/intel_pstate/no_turbo) disabled $(cat /sys/devices/system/cpu/cpu*/cpuidle/state*/disable | sort | uniq -c | tr -s ' \n' ' ')
+no_turbo 0 disabled 384 0
+2026-11-14 23:30:08 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+2026-11-14 23:30:08 dut: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+2026-11-14 23:30:08 dut: pkill -x iperf3; true
+2026-11-14 23:30:08 gen: pkill -x iperf3; true
+2026-11-14 23:30:11 dut: pkill -KILL -f '^/root/progbench/progbench '; sysctl -qw kernel.bpf_stats_enabled=0; ethtool -K ens1f0np0 gro on tso on gso on; ethtool -L ens1f0np0 combined 63; true
+Actual changes:
+tx-tcp-ecn-segmentation: off [requested on]
+tx-tcp-accecn-segmentation: off [requested on]
+2026-11-14 23:30:11 === phase pm3s done
+2026-11-14 23:30:11 === phase b1c
+2026-11-14 23:30:11 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+2026-11-14 23:30:12 dut: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+2026-11-14 23:30:12 dut: pkill -x iperf3; true
+2026-11-14 23:30:12 gen: pkill -x iperf3; true
+2026-11-14 23:30:14 dut: pkill -KILL -f '^/root/progbench/progbench '; sysctl -qw kernel.bpf_stats_enabled=0; ethtool -K ens1f0np0 gro on tso on gso on; ethtool -L ens1f0np0 combined 63; true
+Actual changes:
+tx-tcp-ecn-segmentation: off [requested on]
+tx-tcp-accecn-segmentation: off [requested on]
+2026-11-14 23:30:14 dut: pkill -x iperf3; true
+2026-11-14 23:30:15 gen: pkill -x iperf3; true
+2026-11-14 23:30:17 dut: iperf3 -s -D
+2026-11-14 23:30:17 gen: setsid nohup iperf3 -c 10.48.0.7 -P 8  -t 86400 > /tmp/iperf.log 2>&1 < /dev/null &
+2026-11-14 23:30:27 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent none --n 100 --label rx_gro\ P8\ acct_on\ r1\ none --out /root/res/b1c.jsonl --warmup 3 --secs 4 --stat-secs 0 > /dev/null 2>> /root/res/b1c.err; echo exit=$?
+exit=0
+2026-11-14 23:30:37 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label rx_gro\ P8\ acct_on\ r1\ rfm_acc --out /root/res/b1c.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --counts --warmup 3 --secs 4 --stat-secs 2 > /dev/null 2>> /root/res/b1c.err; echo exit=$?
+exit=0
+2026-11-14 23:30:54 dut: p=$(pgrep -x iperf3 | head -1); [ -n "$p" ] || exit 1; cg=/sys/fs/cgroup$(cut -d: -f3 /proc/$p/cgroup); echo $cg > /tmp/acct.cg; while :; do bpftool -j cgroup show $cg | jq -r '.[] | select((.name // "") | startswith("sd_fw_")) | "\(.id) \(.attach_type)"' | while read -r id ty; do bpftool cgroup detach $cg $ty id $id && echo $cg $ty $id >> /tmp/acct.saved; done; [ $cg = /sys/fs/cgroup ] && break; cg=$(dirname $cg); done; cat /tmp/acct.saved 2> /dev/null; true
+/sys/fs/cgroup/user.slice/user-0.slice/session-3348.scope cgroup_inet_ingress 30091
+/sys/fs/cgroup/user.slice/user-0.slice/session-3348.scope cgroup_inet_egress 30090
+/sys/fs/cgroup/user.slice/user-0.slice cgroup_inet_ingress 29844
+/sys/fs/cgroup/user.slice/user-0.slice cgroup_inet_egress 29843
+/sys/fs/cgroup/user.slice cgroup_inet_ingress 185
+/sys/fs/cgroup/user.slice cgroup_inet_egress 184
+/sys/fs/cgroup cgroup_inet_ingress 183
+/sys/fs/cgroup cgroup_inet_egress 182
+2026-11-14 23:30:55 acct off: 0 accounting programs on the iperf3 path
+2026-11-14 23:30:55 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent none --n 100 --label rx_gro\ P8\ acct_off\ r1\ none --out /root/res/b1c.jsonl --warmup 3 --secs 4 --stat-secs 0 > /dev/null 2>> /root/res/b1c.err; echo exit=$?
+exit=0
+2026-11-14 23:31:05 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label rx_gro\ P8\ acct_off\ r1\ rfm_acc --out /root/res/b1c.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --counts --warmup 3 --secs 4 --stat-secs 2 > /dev/null 2>> /root/res/b1c.err; echo exit=$?
+exit=0
+2026-11-14 23:31:22 dut: while read -r cg ty id; do [ -d $cg ] && bpftool cgroup attach $cg $ty id $id multi; done < /tmp/acct.saved
+2026-11-14 23:31:23 acct on: 8 accounting programs on the iperf3 path
+2026-11-14 23:31:23 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+2026-11-14 23:31:24 dut: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+2026-11-14 23:31:24 dut: pkill -x iperf3; true
+2026-11-14 23:31:24 gen: pkill -x iperf3; true
+2026-11-14 23:31:26 dut: pkill -KILL -f '^/root/progbench/progbench '; sysctl -qw kernel.bpf_stats_enabled=0; ethtool -K ens1f0np0 gro on tso on gso on; ethtool -L ens1f0np0 combined 63; true
+Actual changes:
+tx-tcp-ecn-segmentation: off [requested on]
+tx-tcp-accecn-segmentation: off [requested on]
+2026-11-14 23:31:26 dut: ethtool -K ens1f0np0 gro off
+2026-11-14 23:31:27 dut: pkill -x iperf3; true
+2026-11-14 23:31:27 gen: pkill -x iperf3; true
+2026-11-14 23:31:29 dut: iperf3 -s -D
+2026-11-14 23:31:29 gen: setsid nohup iperf3 -c 10.48.0.7 -P 8  -t 86400 > /tmp/iperf.log 2>&1 < /dev/null &
+2026-11-14 23:31:39 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent none --n 100 --label rx_nogro\ P8\ acct_on\ r1\ none --out /root/res/b1c.jsonl --warmup 3 --secs 4 --stat-secs 0 > /dev/null 2>> /root/res/b1c.err; echo exit=$?
+exit=0
+2026-11-14 23:31:49 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label rx_nogro\ P8\ acct_on\ r1\ rfm_acc --out /root/res/b1c.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --counts --warmup 3 --secs 4 --stat-secs 2 > /dev/null 2>> /root/res/b1c.err; echo exit=$?
+exit=0
+2026-11-14 23:32:06 dut: p=$(pgrep -x iperf3 | head -1); [ -n "$p" ] || exit 1; cg=/sys/fs/cgroup$(cut -d: -f3 /proc/$p/cgroup); echo $cg > /tmp/acct.cg; while :; do bpftool -j cgroup show $cg | jq -r '.[] | select((.name // "") | startswith("sd_fw_")) | "\(.id) \(.attach_type)"' | while read -r id ty; do bpftool cgroup detach $cg $ty id $id && echo $cg $ty $id >> /tmp/acct.saved; done; [ $cg = /sys/fs/cgroup ] && break; cg=$(dirname $cg); done; cat /tmp/acct.saved 2> /dev/null; true
+/sys/fs/cgroup/user.slice/user-0.slice/session-3365.scope cgroup_inet_ingress 30145
+/sys/fs/cgroup/user.slice/user-0.slice/session-3365.scope cgroup_inet_egress 30144
+/sys/fs/cgroup/user.slice/user-0.slice cgroup_inet_ingress 29844
+/sys/fs/cgroup/user.slice/user-0.slice cgroup_inet_egress 29843
+/sys/fs/cgroup/user.slice cgroup_inet_ingress 185
+/sys/fs/cgroup/user.slice cgroup_inet_egress 184
+/sys/fs/cgroup cgroup_inet_ingress 183
+/sys/fs/cgroup cgroup_inet_egress 182
+2026-11-14 23:32:07 acct off: 0 accounting programs on the iperf3 path
+2026-11-14 23:32:07 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent none --n 100 --label rx_nogro\ P8\ acct_off\ r1\ none --out /root/res/b1c.jsonl --warmup 3 --secs 4 --stat-secs 0 > /dev/null 2>> /root/res/b1c.err; echo exit=$?
+exit=0
+2026-11-14 23:32:17 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label rx_nogro\ P8\ acct_off\ r1\ rfm_acc --out /root/res/b1c.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --counts --warmup 3 --secs 4 --stat-secs 2 > /dev/null 2>> /root/res/b1c.err; echo exit=$?
+exit=0
+2026-11-14 23:32:34 dut: while read -r cg ty id; do [ -d $cg ] && bpftool cgroup attach $cg $ty id $id multi; done < /tmp/acct.saved
+2026-11-14 23:32:35 acct on: 8 accounting programs on the iperf3 path
+2026-11-14 23:32:35 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+2026-11-14 23:32:35 dut: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+2026-11-14 23:32:35 dut: pkill -x iperf3; true
+2026-11-14 23:32:36 gen: pkill -x iperf3; true
+2026-11-14 23:32:38 dut: pkill -KILL -f '^/root/progbench/progbench '; sysctl -qw kernel.bpf_stats_enabled=0; ethtool -K ens1f0np0 gro on tso on gso on; ethtool -L ens1f0np0 combined 63; true
+Actual changes:
+rx-gro: on
+tx-tcp-ecn-segmentation: off [requested on]
+tx-tcp-accecn-segmentation: off [requested on]
+2026-11-14 23:32:38 dut: pkill -x iperf3; true
+2026-11-14 23:32:38 gen: pkill -x iperf3; true
+2026-11-14 23:32:40 dut: iperf3 -s -D
+2026-11-14 23:32:41 gen: setsid nohup iperf3 -c 10.48.0.7 -P 16  -t 86400 > /tmp/iperf.log 2>&1 < /dev/null &
+2026-11-14 23:32:51 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent none --n 100 --label rx_gro\ P16\ acct_on\ r1\ none --out /root/res/b1c.jsonl --warmup 3 --secs 4 --stat-secs 0 > /dev/null 2>> /root/res/b1c.err; echo exit=$?
+exit=0
+2026-11-14 23:33:01 dut: p=$(pgrep -x iperf3 | head -1); [ -n "$p" ] || exit 1; cg=/sys/fs/cgroup$(cut -d: -f3 /proc/$p/cgroup); echo $cg > /tmp/acct.cg; while :; do bpftool -j cgroup show $cg | jq -r '.[] | select((.name // "") | startswith("sd_fw_")) | "\(.id) \(.attach_type)"' | while read -r id ty; do bpftool cgroup detach $cg $ty id $id && echo $cg $ty $id >> /tmp/acct.saved; done; [ $cg = /sys/fs/cgroup ] && break; cg=$(dirname $cg); done; cat /tmp/acct.saved 2> /dev/null; true
+/sys/fs/cgroup/user.slice/user-0.slice/session-3381.scope cgroup_inet_ingress 30187
+/sys/fs/cgroup/user.slice/user-0.slice/session-3381.scope cgroup_inet_egress 30186
+/sys/fs/cgroup/user.slice/user-0.slice cgroup_inet_ingress 29844
+/sys/fs/cgroup/user.slice/user-0.slice cgroup_inet_egress 29843
+/sys/fs/cgroup/user.slice cgroup_inet_ingress 185
+/sys/fs/cgroup/user.slice cgroup_inet_egress 184
+/sys/fs/cgroup cgroup_inet_ingress 183
+/sys/fs/cgroup cgroup_inet_egress 182
+2026-11-14 23:33:01 acct off: 0 accounting programs on the iperf3 path
+2026-11-14 23:33:01 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent none --n 100 --label rx_gro\ P16\ acct_off\ r1\ none --out /root/res/b1c.jsonl --warmup 3 --secs 4 --stat-secs 0 > /dev/null 2>> /root/res/b1c.err; echo exit=$?
+exit=0
+2026-11-14 23:33:11 dut: while read -r cg ty id; do [ -d $cg ] && bpftool cgroup attach $cg $ty id $id multi; done < /tmp/acct.saved
+2026-11-14 23:33:12 acct on: 8 accounting programs on the iperf3 path
+2026-11-14 23:33:12 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+2026-11-14 23:33:12 dut: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+2026-11-14 23:33:13 dut: pkill -x iperf3; true
+2026-11-14 23:33:13 gen: pkill -x iperf3; true
+2026-11-14 23:33:15 dut: pkill -KILL -f '^/root/progbench/progbench '; sysctl -qw kernel.bpf_stats_enabled=0; ethtool -K ens1f0np0 gro on tso on gso on; ethtool -L ens1f0np0 combined 63; true
+Actual changes:
+tx-tcp-ecn-segmentation: off [requested on]
+tx-tcp-accecn-segmentation: off [requested on]
+2026-11-14 23:33:15 dut: ethtool -K ens1f0np0 gro off
+2026-11-14 23:33:15 dut: pkill -x iperf3; true
+2026-11-14 23:33:16 gen: pkill -x iperf3; true
+2026-11-14 23:33:18 dut: iperf3 -s -D
+2026-11-14 23:33:18 gen: setsid nohup iperf3 -c 10.48.0.7 -P 16  -t 86400 > /tmp/iperf.log 2>&1 < /dev/null &
+2026-11-14 23:33:28 dut: p=$(pgrep -x iperf3 | head -1); [ -n "$p" ] || exit 1; cg=/sys/fs/cgroup$(cut -d: -f3 /proc/$p/cgroup); echo $cg > /tmp/acct.cg; while :; do bpftool -j cgroup show $cg | jq -r '.[] | select((.name // "") | startswith("sd_fw_")) | "\(.id) \(.attach_type)"' | while read -r id ty; do bpftool cgroup detach $cg $ty id $id && echo $cg $ty $id >> /tmp/acct.saved; done; [ $cg = /sys/fs/cgroup ] && break; cg=$(dirname $cg); done; cat /tmp/acct.saved 2> /dev/null; true
+/sys/fs/cgroup/user.slice/user-0.slice/session-3397.scope cgroup_inet_ingress 30219
+/sys/fs/cgroup/user.slice/user-0.slice/session-3397.scope cgroup_inet_egress 30218
+/sys/fs/cgroup/user.slice/user-0.slice cgroup_inet_ingress 29844
+/sys/fs/cgroup/user.slice/user-0.slice cgroup_inet_egress 29843
+/sys/fs/cgroup/user.slice cgroup_inet_ingress 185
+/sys/fs/cgroup/user.slice cgroup_inet_egress 184
+/sys/fs/cgroup cgroup_inet_ingress 183
+/sys/fs/cgroup cgroup_inet_egress 182
+2026-11-14 23:33:29 acct off: 0 accounting programs on the iperf3 path
+2026-11-14 23:33:29 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent none --n 100 --label rx_nogro\ P16\ acct_off\ r1\ none --out /root/res/b1c.jsonl --warmup 3 --secs 4 --stat-secs 0 > /dev/null 2>> /root/res/b1c.err; echo exit=$?
+exit=0
+2026-11-14 23:33:39 dut: while read -r cg ty id; do [ -d $cg ] && bpftool cgroup attach $cg $ty id $id multi; done < /tmp/acct.saved
+2026-11-14 23:33:39 acct on: 8 accounting programs on the iperf3 path
+2026-11-14 23:33:39 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent none --n 100 --label rx_nogro\ P16\ acct_on\ r1\ none --out /root/res/b1c.jsonl --warmup 3 --secs 4 --stat-secs 0 > /dev/null 2>> /root/res/b1c.err; echo exit=$?
+exit=0
+2026-11-14 23:33:49 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+2026-11-14 23:33:49 dut: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+2026-11-14 23:33:50 dut: pkill -x iperf3; true
+2026-11-14 23:33:50 gen: pkill -x iperf3; true
+2026-11-14 23:33:52 dut: pkill -KILL -f '^/root/progbench/progbench '; sysctl -qw kernel.bpf_stats_enabled=0; ethtool -K ens1f0np0 gro on tso on gso on; ethtool -L ens1f0np0 combined 63; true
+Actual changes:
+rx-gro: on
+tx-tcp-ecn-segmentation: off [requested on]
+tx-tcp-accecn-segmentation: off [requested on]
+2026-11-14 23:33:52 dut: pkill -x iperf3; true
+2026-11-14 23:33:52 gen: pkill -x iperf3; true
+2026-11-14 23:33:55 dut: iperf3 -s -D
+2026-11-14 23:33:55 gen: setsid nohup iperf3 -c 10.48.0.7 -P 32  -t 86400 > /tmp/iperf.log 2>&1 < /dev/null &
+2026-11-14 23:34:05 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent none --n 100 --label rx_gro\ P32\ acct_on\ r1\ none --out /root/res/b1c.jsonl --warmup 3 --secs 4 --stat-secs 0 > /dev/null 2>> /root/res/b1c.err; echo exit=$?
+exit=0
+2026-11-14 23:34:15 dut: p=$(pgrep -x iperf3 | head -1); [ -n "$p" ] || exit 1; cg=/sys/fs/cgroup$(cut -d: -f3 /proc/$p/cgroup); echo $cg > /tmp/acct.cg; while :; do bpftool -j cgroup show $cg | jq -r '.[] | select((.name // "") | startswith("sd_fw_")) | "\(.id) \(.attach_type)"' | while read -r id ty; do bpftool cgroup detach $cg $ty id $id && echo $cg $ty $id >> /tmp/acct.saved; done; [ $cg = /sys/fs/cgroup ] && break; cg=$(dirname $cg); done; cat /tmp/acct.saved 2> /dev/null; true
+/sys/fs/cgroup/user.slice/user-0.slice/session-3412.scope cgroup_inet_ingress 30259
+/sys/fs/cgroup/user.slice/user-0.slice/session-3412.scope cgroup_inet_egress 30258
+/sys/fs/cgroup/user.slice/user-0.slice cgroup_inet_ingress 29844
+/sys/fs/cgroup/user.slice/user-0.slice cgroup_inet_egress 29843
+/sys/fs/cgroup/user.slice cgroup_inet_ingress 185
+/sys/fs/cgroup/user.slice cgroup_inet_egress 184
+/sys/fs/cgroup cgroup_inet_ingress 183
+/sys/fs/cgroup cgroup_inet_egress 182
+2026-11-14 23:34:15 acct off: 0 accounting programs on the iperf3 path
+2026-11-14 23:34:15 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent none --n 100 --label rx_gro\ P32\ acct_off\ r1\ none --out /root/res/b1c.jsonl --warmup 3 --secs 4 --stat-secs 0 > /dev/null 2>> /root/res/b1c.err; echo exit=$?
+exit=0
+2026-11-14 23:34:25 dut: while read -r cg ty id; do [ -d $cg ] && bpftool cgroup attach $cg $ty id $id multi; done < /tmp/acct.saved
+2026-11-14 23:34:26 acct on: 8 accounting programs on the iperf3 path
+2026-11-14 23:34:26 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+2026-11-14 23:34:26 dut: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+2026-11-14 23:34:27 dut: pkill -x iperf3; true
+2026-11-14 23:34:27 gen: pkill -x iperf3; true
+2026-11-14 23:34:29 dut: pkill -KILL -f '^/root/progbench/progbench '; sysctl -qw kernel.bpf_stats_enabled=0; ethtool -K ens1f0np0 gro on tso on gso on; ethtool -L ens1f0np0 combined 63; true
+Actual changes:
+tx-tcp-ecn-segmentation: off [requested on]
+tx-tcp-accecn-segmentation: off [requested on]
+2026-11-14 23:34:29 dut: ethtool -K ens1f0np0 gro off
+2026-11-14 23:34:29 dut: pkill -x iperf3; true
+2026-11-14 23:34:30 gen: pkill -x iperf3; true
+2026-11-14 23:34:32 dut: iperf3 -s -D
+2026-11-14 23:34:32 gen: setsid nohup iperf3 -c 10.48.0.7 -P 32  -t 86400 > /tmp/iperf.log 2>&1 < /dev/null &
+2026-11-14 23:34:42 dut: p=$(pgrep -x iperf3 | head -1); [ -n "$p" ] || exit 1; cg=/sys/fs/cgroup$(cut -d: -f3 /proc/$p/cgroup); echo $cg > /tmp/acct.cg; while :; do bpftool -j cgroup show $cg | jq -r '.[] | select((.name // "") | startswith("sd_fw_")) | "\(.id) \(.attach_type)"' | while read -r id ty; do bpftool cgroup detach $cg $ty id $id && echo $cg $ty $id >> /tmp/acct.saved; done; [ $cg = /sys/fs/cgroup ] && break; cg=$(dirname $cg); done; cat /tmp/acct.saved 2> /dev/null; true
+/sys/fs/cgroup/user.slice/user-0.slice/session-3428.scope cgroup_inet_ingress 30291
+/sys/fs/cgroup/user.slice/user-0.slice/session-3428.scope cgroup_inet_egress 30290
+/sys/fs/cgroup/user.slice/user-0.slice cgroup_inet_ingress 29844
+/sys/fs/cgroup/user.slice/user-0.slice cgroup_inet_egress 29843
+/sys/fs/cgroup/user.slice cgroup_inet_ingress 185
+/sys/fs/cgroup/user.slice cgroup_inet_egress 184
+/sys/fs/cgroup cgroup_inet_ingress 183
+/sys/fs/cgroup cgroup_inet_egress 182
+2026-11-14 23:34:43 acct off: 0 accounting programs on the iperf3 path
+2026-11-14 23:34:43 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent none --n 100 --label rx_nogro\ P32\ acct_off\ r1\ none --out /root/res/b1c.jsonl --warmup 3 --secs 4 --stat-secs 0 > /dev/null 2>> /root/res/b1c.err; echo exit=$?
+exit=0
+2026-11-14 23:34:53 dut: while read -r cg ty id; do [ -d $cg ] && bpftool cgroup attach $cg $ty id $id multi; done < /tmp/acct.saved
+2026-11-14 23:34:54 acct on: 8 accounting programs on the iperf3 path
+2026-11-14 23:34:54 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent none --n 100 --label rx_nogro\ P32\ acct_on\ r1\ none --out /root/res/b1c.jsonl --warmup 3 --secs 4 --stat-secs 0 > /dev/null 2>> /root/res/b1c.err; echo exit=$?
+exit=0
+2026-11-14 23:35:04 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+2026-11-14 23:35:04 dut: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+2026-11-14 23:35:04 dut: pkill -x iperf3; true
+2026-11-14 23:35:04 gen: pkill -x iperf3; true
+2026-11-14 23:35:06 dut: pkill -KILL -f '^/root/progbench/progbench '; sysctl -qw kernel.bpf_stats_enabled=0; ethtool -K ens1f0np0 gro on tso on gso on; ethtool -L ens1f0np0 combined 63; true
+Actual changes:
+rx-gro: on
+tx-tcp-ecn-segmentation: off [requested on]
+tx-tcp-accecn-segmentation: off [requested on]
+2026-11-14 23:35:07 dut: pkill -x iperf3; true
+2026-11-14 23:35:07 gen: pkill -x iperf3; true
+2026-11-14 23:35:09 dut: iperf3 -s -D
+2026-11-14 23:35:09 gen: setsid nohup iperf3 -c 10.48.0.7 -P 64  -t 86400 > /tmp/iperf.log 2>&1 < /dev/null &
+2026-11-14 23:35:19 dut: p=$(pgrep -x iperf3 | head -1); [ -n "$p" ] || exit 1; cg=/sys/fs/cgroup$(cut -d: -f3 /proc/$p/cgroup); echo $cg > /tmp/acct.cg; while :; do bpftool -j cgroup show $cg | jq -r '.[] | select((.name // "") | startswith("sd_fw_")) | "\(.id) \(.attach_type)"' | while read -r id ty; do bpftool cgroup detach $cg $ty id $id && echo $cg $ty $id >> /tmp/acct.saved; done; [ $cg = /sys/fs/cgroup ] && break; cg=$(dirname $cg); done; cat /tmp/acct.saved 2> /dev/null; true
+/sys/fs/cgroup/user.slice/user-0.slice/session-3442.scope cgroup_inet_ingress 30319
+/sys/fs/cgroup/user.slice/user-0.slice/session-3442.scope cgroup_inet_egress 30318
+/sys/fs/cgroup/user.slice/user-0.slice cgroup_inet_ingress 29844
+/sys/fs/cgroup/user.slice/user-0.slice cgroup_inet_egress 29843
+/sys/fs/cgroup/user.slice cgroup_inet_ingress 185
+/sys/fs/cgroup/user.slice cgroup_inet_egress 184
+/sys/fs/cgroup cgroup_inet_ingress 183
+/sys/fs/cgroup cgroup_inet_egress 182
+2026-11-14 23:35:20 acct off: 0 accounting programs on the iperf3 path
+2026-11-14 23:35:20 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent none --n 100 --label rx_gro\ P64\ acct_off\ r1\ none --out /root/res/b1c.jsonl --warmup 3 --secs 4 --stat-secs 0 > /dev/null 2>> /root/res/b1c.err; echo exit=$?
+exit=0
+2026-11-14 23:35:30 dut: while read -r cg ty id; do [ -d $cg ] && bpftool cgroup attach $cg $ty id $id multi; done < /tmp/acct.saved
+2026-11-14 23:35:31 acct on: 8 accounting programs on the iperf3 path
+2026-11-14 23:35:31 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent none --n 100 --label rx_gro\ P64\ acct_on\ r1\ none --out /root/res/b1c.jsonl --warmup 3 --secs 4 --stat-secs 0 > /dev/null 2>> /root/res/b1c.err; echo exit=$?
+exit=0
+2026-11-14 23:35:41 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+2026-11-14 23:35:41 dut: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+2026-11-14 23:35:41 dut: pkill -x iperf3; true
+2026-11-14 23:35:41 gen: pkill -x iperf3; true
+2026-11-14 23:35:44 dut: pkill -KILL -f '^/root/progbench/progbench '; sysctl -qw kernel.bpf_stats_enabled=0; ethtool -K ens1f0np0 gro on tso on gso on; ethtool -L ens1f0np0 combined 63; true
+Actual changes:
+tx-tcp-ecn-segmentation: off [requested on]
+tx-tcp-accecn-segmentation: off [requested on]
+2026-11-14 23:35:44 dut: ethtool -K ens1f0np0 gro off
+2026-11-14 23:35:44 dut: pkill -x iperf3; true
+2026-11-14 23:35:44 gen: pkill -x iperf3; true
+2026-11-14 23:35:46 dut: iperf3 -s -D
+2026-11-14 23:35:46 gen: setsid nohup iperf3 -c 10.48.0.7 -P 64  -t 86400 > /tmp/iperf.log 2>&1 < /dev/null &
+2026-11-14 23:35:57 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent none --n 100 --label rx_nogro\ P64\ acct_on\ r1\ none --out /root/res/b1c.jsonl --warmup 3 --secs 4 --stat-secs 0 > /dev/null 2>> /root/res/b1c.err; echo exit=$?
+exit=0
+2026-11-14 23:36:07 dut: p=$(pgrep -x iperf3 | head -1); [ -n "$p" ] || exit 1; cg=/sys/fs/cgroup$(cut -d: -f3 /proc/$p/cgroup); echo $cg > /tmp/acct.cg; while :; do bpftool -j cgroup show $cg | jq -r '.[] | select((.name // "") | startswith("sd_fw_")) | "\(.id) \(.attach_type)"' | while read -r id ty; do bpftool cgroup detach $cg $ty id $id && echo $cg $ty $id >> /tmp/acct.saved; done; [ $cg = /sys/fs/cgroup ] && break; cg=$(dirname $cg); done; cat /tmp/acct.saved 2> /dev/null; true
+/sys/fs/cgroup/user.slice/user-0.slice/session-3457.scope cgroup_inet_ingress 30349
+/sys/fs/cgroup/user.slice/user-0.slice/session-3457.scope cgroup_inet_egress 30348
+/sys/fs/cgroup/user.slice/user-0.slice cgroup_inet_ingress 29844
+/sys/fs/cgroup/user.slice/user-0.slice cgroup_inet_egress 29843
+/sys/fs/cgroup/user.slice cgroup_inet_ingress 185
+/sys/fs/cgroup/user.slice cgroup_inet_egress 184
+/sys/fs/cgroup cgroup_inet_ingress 183
+/sys/fs/cgroup cgroup_inet_egress 182
+2026-11-14 23:36:07 acct off: 0 accounting programs on the iperf3 path
+2026-11-14 23:36:07 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent none --n 100 --label rx_nogro\ P64\ acct_off\ r1\ none --out /root/res/b1c.jsonl --warmup 3 --secs 4 --stat-secs 0 > /dev/null 2>> /root/res/b1c.err; echo exit=$?
+exit=0
+2026-11-14 23:36:17 dut: while read -r cg ty id; do [ -d $cg ] && bpftool cgroup attach $cg $ty id $id multi; done < /tmp/acct.saved
+2026-11-14 23:36:18 acct on: 8 accounting programs on the iperf3 path
+2026-11-14 23:36:19 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+2026-11-14 23:36:19 dut: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+2026-11-14 23:36:19 dut: pkill -x iperf3; true
+2026-11-14 23:36:19 gen: pkill -x iperf3; true
+2026-11-14 23:36:21 dut: pkill -KILL -f '^/root/progbench/progbench '; sysctl -qw kernel.bpf_stats_enabled=0; ethtool -K ens1f0np0 gro on tso on gso on; ethtool -L ens1f0np0 combined 63; true
+Actual changes:
+rx-gro: on
+tx-tcp-ecn-segmentation: off [requested on]
+tx-tcp-accecn-segmentation: off [requested on]
+2026-11-14 23:36:22 === phase b1c done
+2026-11-14 23:36:22 === phase b13p
+2026-11-14 23:36:22 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+2026-11-14 23:36:23 dut: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+2026-11-14 23:36:23 dut: pkill -x iperf3; true
+2026-11-14 23:36:23 gen: pkill -x iperf3; true
+2026-11-14 23:36:25 dut: pkill -KILL -f '^/root/progbench/progbench '; sysctl -qw kernel.bpf_stats_enabled=0; ethtool -K ens1f0np0 gro on tso on gso on; ethtool -L ens1f0np0 combined 63; true
+Actual changes:
+tx-tcp-ecn-segmentation: off [requested on]
+tx-tcp-accecn-segmentation: off [requested on]
+2026-11-14 23:36:25 dut: pkill -x iperf3; true
+2026-11-14 23:36:25 gen: pkill -x iperf3; true
+2026-11-14 23:36:28 dut: iperf3 -s -D
+2026-11-14 23:36:28 gen: setsid nohup iperf3 -c 10.48.0.7 -P 8  -t 86400 > /tmp/iperf.log 2>&1 < /dev/null &
+2026-11-14 23:36:38 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; setsid nohup nu /root/workload/gen.nu --iface ens1f0np0 --dst 10.48.0.7 --dstmac e8:eb:d3:fd:ce:ac --count 0 --threads 2 --flows 20000 > /tmp/gen.log 2>&1 < /dev/null &
+2026-11-14 23:36:56 dut rx pps 10109373
+2026-11-14 23:36:56 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent hsflowd --n 100 --label cohort\ t2\ r1\ hsflowd --out /root/res/b13p.jsonl --counts --warmup 3 --secs 4 --stat-secs 2 > /dev/null 2>> /root/res/b13p.err; echo exit=$?
+exit=0
+2026-11-14 23:37:18 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 100 --label cohort\ t2\ r1\ netobserv_sized --out /root/res/b13p.jsonl --neto-cache 65536 --counts --warmup 3 --secs 4 --stat-secs 2 > /dev/null 2>> /root/res/b13p.err; echo exit=$?
+exit=0
+2026-11-14 23:37:44 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label cohort\ t2\ r1\ rfm_acc --out /root/res/b13p.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --counts --warmup 3 --secs 4 --stat-secs 2 > /dev/null 2>> /root/res/b13p.err; echo exit=$?
+exit=0
+2026-11-14 23:38:02 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 100 --label cohort\ t2\ r1\ netobserv --out /root/res/b13p.jsonl --counts --warmup 3 --secs 4 --stat-secs 2 > /dev/null 2>> /root/res/b13p.err; echo exit=$?
+exit=0
+2026-11-14 23:38:22 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+2026-11-14 23:38:22 dut: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+2026-11-14 23:38:22 dut: pkill -x iperf3; true
+2026-11-14 23:38:22 gen: pkill -x iperf3; true
+2026-11-14 23:38:25 dut: pkill -KILL -f '^/root/progbench/progbench '; sysctl -qw kernel.bpf_stats_enabled=0; ethtool -K ens1f0np0 gro on tso on gso on; ethtool -L ens1f0np0 combined 63; true
+Actual changes:
+tx-tcp-ecn-segmentation: off [requested on]
+tx-tcp-accecn-segmentation: off [requested on]
+2026-11-14 23:38:25 dut: pkill -x iperf3; true
+2026-11-14 23:38:25 gen: pkill -x iperf3; true
+2026-11-14 23:38:27 dut: iperf3 -s -D
+2026-11-14 23:38:27 gen: setsid nohup iperf3 -c 10.48.0.7 -P 8  -t 86400 > /tmp/iperf.log 2>&1 < /dev/null &
+2026-11-14 23:38:37 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; setsid nohup nu /root/workload/gen.nu --iface ens1f0np0 --dst 10.48.0.7 --dstmac e8:eb:d3:fd:ce:ac --count 0 --threads 4 --flows 20000 > /tmp/gen.log 2>&1 < /dev/null &
+2026-11-14 23:38:56 dut rx pps 14106138
+2026-11-14 23:38:56 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 100 --label cohort\ t4\ r1\ netobserv --out /root/res/b13p.jsonl --counts --warmup 3 --secs 4 --stat-secs 2 > /dev/null 2>> /root/res/b13p.err; echo exit=$?
+exit=0
+2026-11-14 23:39:16 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent hsflowd --n 100 --label cohort\ t4\ r1\ hsflowd --out /root/res/b13p.jsonl --counts --warmup 3 --secs 4 --stat-secs 2 > /dev/null 2>> /root/res/b13p.err; echo exit=$?
+exit=0
+2026-11-14 23:39:49 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label cohort\ t4\ r1\ rfm_acc --out /root/res/b13p.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --counts --warmup 3 --secs 4 --stat-secs 2 > /dev/null 2>> /root/res/b13p.err; echo exit=$?
+exit=0
+2026-11-14 23:40:06 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 100 --label cohort\ t4\ r1\ netobserv_sized --out /root/res/b13p.jsonl --neto-cache 65536 --counts --warmup 3 --secs 4 --stat-secs 2 > /dev/null 2>> /root/res/b13p.err; echo exit=$?
+exit=0
+2026-11-14 23:40:36 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+2026-11-14 23:40:36 dut: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+2026-11-14 23:40:36 dut: pkill -x iperf3; true
+2026-11-14 23:40:36 gen: pkill -x iperf3; true
+2026-11-14 23:40:39 dut: pkill -KILL -f '^/root/progbench/progbench '; sysctl -qw kernel.bpf_stats_enabled=0; ethtool -K ens1f0np0 gro on tso on gso on; ethtool -L ens1f0np0 combined 63; true
+Actual changes:
+tx-tcp-ecn-segmentation: off [requested on]
+tx-tcp-accecn-segmentation: off [requested on]
+2026-11-14 23:40:39 dut: pkill -x iperf3; true
+2026-11-14 23:40:39 gen: pkill -x iperf3; true
+2026-11-14 23:40:41 dut: iperf3 -s -D
+2026-11-14 23:40:41 gen: setsid nohup iperf3 -c 10.48.0.7 -P 8  -t 86400 > /tmp/iperf.log 2>&1 < /dev/null &
+2026-11-14 23:40:52 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; setsid nohup nu /root/workload/gen.nu --iface ens1f0np0 --dst 10.48.0.7 --dstmac e8:eb:d3:fd:ce:ac --count 0 --threads 8 --flows 20000 > /tmp/gen.log 2>&1 < /dev/null &
+2026-11-14 23:41:10 dut rx pps 16486039
+2026-11-14 23:41:10 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 100 --label cohort\ t8\ r1\ netobserv --out /root/res/b13p.jsonl --counts --warmup 3 --secs 4 --stat-secs 2 > /dev/null 2>> /root/res/b13p.err; echo exit=$?
+exit=0
+2026-11-14 23:41:30 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 100 --label cohort\ t8\ r1\ netobserv_sized --out /root/res/b13p.jsonl --neto-cache 65536 --counts --warmup 3 --secs 4 --stat-secs 2 > /dev/null 2>> /root/res/b13p.err; echo exit=$?
+exit=0
+2026-11-14 23:42:02 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label cohort\ t8\ r1\ rfm_acc --out /root/res/b13p.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --counts --warmup 3 --secs 4 --stat-secs 2 > /dev/null 2>> /root/res/b13p.err; echo exit=$?
+exit=0
+2026-11-14 23:42:19 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent hsflowd --n 100 --label cohort\ t8\ r1\ hsflowd --out /root/res/b13p.jsonl --counts --warmup 3 --secs 4 --stat-secs 2 > /dev/null 2>> /root/res/b13p.err; echo exit=$?
+exit=0
+2026-11-14 23:42:51 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+2026-11-14 23:42:52 dut: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+2026-11-14 23:42:52 dut: pkill -x iperf3; true
+2026-11-14 23:42:52 gen: pkill -x iperf3; true
+2026-11-14 23:42:54 dut: pkill -KILL -f '^/root/progbench/progbench '; sysctl -qw kernel.bpf_stats_enabled=0; ethtool -K ens1f0np0 gro on tso on gso on; ethtool -L ens1f0np0 combined 63; true
+Actual changes:
+tx-tcp-ecn-segmentation: off [requested on]
+tx-tcp-accecn-segmentation: off [requested on]
+2026-11-14 23:42:54 dut: pkill -x iperf3; true
+2026-11-14 23:42:55 gen: pkill -x iperf3; true
+2026-11-14 23:42:57 dut: iperf3 -s -D
+2026-11-14 23:42:57 gen: setsid nohup iperf3 -c 10.48.0.7 -P 8 --fq-rate 2.5G -t 86400 > /tmp/iperf.log 2>&1 < /dev/null &
+2026-11-14 23:43:07 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; setsid nohup nu /root/workload/gen.nu --iface ens1f0np0 --dst 10.48.0.7 --dstmac e8:eb:d3:fd:ce:ac --count 0 --threads 8 --flows 20000 > /tmp/gen.log 2>&1 < /dev/null &
+2026-11-14 23:43:26 dut rx pps 18393846
+2026-11-14 23:43:26 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent hsflowd --n 100 --label cohort\ t8p\ r1\ hsflowd --out /root/res/b13p.jsonl --counts --warmup 3 --secs 4 --stat-secs 2 > /dev/null 2>> /root/res/b13p.err; echo exit=$?
+exit=0
+2026-11-14 23:44:11 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label cohort\ t8p\ r1\ rfm_acc --out /root/res/b13p.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --counts --warmup 3 --secs 4 --stat-secs 2 > /dev/null 2>> /root/res/b13p.err; echo exit=$?
+exit=0
+2026-11-14 23:44:29 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 100 --label cohort\ t8p\ r1\ netobserv --out /root/res/b13p.jsonl --counts --warmup 3 --secs 4 --stat-secs 2 > /dev/null 2>> /root/res/b13p.err; echo exit=$?
+exit=0
+2026-11-14 23:44:48 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 100 --label cohort\ t8p\ r1\ netobserv_sized --out /root/res/b13p.jsonl --neto-cache 65536 --counts --warmup 3 --secs 4 --stat-secs 2 > /dev/null 2>> /root/res/b13p.err; echo exit=$?
+exit=0
+2026-11-14 23:45:20 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+2026-11-14 23:45:20 dut: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+2026-11-14 23:45:20 dut: pkill -x iperf3; true
+2026-11-14 23:45:20 gen: pkill -x iperf3; true
+2026-11-14 23:45:23 dut: pkill -KILL -f '^/root/progbench/progbench '; sysctl -qw kernel.bpf_stats_enabled=0; ethtool -K ens1f0np0 gro on tso on gso on; ethtool -L ens1f0np0 combined 63; true
+Actual changes:
+tx-tcp-ecn-segmentation: off [requested on]
+tx-tcp-accecn-segmentation: off [requested on]
+2026-11-14 23:45:23 === phase b13p done
+2026-11-14 23:45:24 campaign done

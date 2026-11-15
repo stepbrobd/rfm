@@ -1,0 +1,52 @@
+2026-11-15 08:00:16 job 20530 vlan 4 dut spirou-7 gen spirou-8 phases: setup b9m
+2026-11-15 08:00:16 rounds R5 '1' R3 '1' R2 '1' RB4 '1' accuracy monitors 'rfm_acc netobserv hsflowd'
+2026-11-15 08:00:18 dut ctl 172.16.208.15 test 10.48.0.7 e8:eb:d3:fd:ce:ac, gen ctl 172.16.208.16 test 10.48.0.8 e8:eb:d3:fd:cf:0c pci 0000:4b:00.0
+2026-11-15 08:00:18 === phase setup
+2026-11-15 08:00:22 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+2026-11-15 08:00:22 dut: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+2026-11-15 08:00:22 dut: pkill -x iperf3; true
+2026-11-15 08:00:22 gen: pkill -x iperf3; true
+2026-11-15 08:00:24 dut: pkill -KILL -f '^/root/progbench/progbench '; sysctl -qw kernel.bpf_stats_enabled=0; ethtool -K ens1f0np0 gro on tso on gso on; ethtool -L ens1f0np0 combined 63; true
+Actual changes:
+tx-tcp-ecn-segmentation: off [requested on]
+tx-tcp-accecn-segmentation: off [requested on]
+2026-11-15 08:00:26 === phase setup done
+2026-11-15 08:00:26 === phase b9m
+2026-11-15 08:00:26 dut: echo 1 > /sys/devices/system/cpu/intel_pstate/no_turbo; for s in /sys/devices/system/cpu/cpu*/cpuidle/state*; do case $(cat $s/name) in C6* | C7* | C8* | C9* | C10*) echo 1 > $s/disable ;; *) echo 0 > $s/disable ;; esac; done; echo no_turbo $(cat /sys/devices/system/cpu/intel_pstate/no_turbo) disabled $(cat /sys/devices/system/cpu/cpu*/cpuidle/state*/disable | sort | uniq -c | tr -s ' \n' ' ')
+no_turbo 1 disabled 288 0 96 1
+2026-11-15 08:00:33 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+2026-11-15 08:00:33 dut: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+2026-11-15 08:00:33 dut: pkill -x iperf3; true
+2026-11-15 08:00:33 gen: pkill -x iperf3; true
+2026-11-15 08:00:36 dut: pkill -KILL -f '^/root/progbench/progbench '; sysctl -qw kernel.bpf_stats_enabled=0; ethtool -K ens1f0np0 gro on tso on gso on; ethtool -L ens1f0np0 combined 63; true
+Actual changes:
+tx-tcp-ecn-segmentation: off [requested on]
+tx-tcp-accecn-segmentation: off [requested on]
+2026-11-15 08:00:36 dut: ip link set dev ens1f0np0 mtu 1700; sleep 3; echo round 1 mtu $(cat /sys/class/net/ens1f0np0/mtu)
+round 1 mtu 1700
+2026-11-15 08:00:40 dut: pkill -x iperf3; true
+2026-11-15 08:00:40 gen: pkill -x iperf3; true
+2026-11-15 08:00:43 dut: iperf3 -s -D
+2026-11-15 08:00:43 gen: setsid nohup iperf3 -c 10.48.0.7 -P 8  -t 86400 > /tmp/iperf.log 2>&1 < /dev/null &
+2026-11-15 08:00:53 dut: rm -f /tmp/progbench_offload.jsonl; timeout 600 nu /root/workload/progbench_offload.nu --dir /root/progbench --iface ens1f0np0 --n 1000 --rounds 1 --window 3s --gro on --labels 'none xdp_empty' --stats off >> /root/res/b9m-fixed.log 2>&1; cat /tmp/progbench_offload.jsonl >> /root/res/b9m-fixed-mtu1700.jsonl
+2026-11-15 08:01:10 dut: ip link set dev ens1f0np0 mtu 1500; sleep 3; echo round 1 mtu $(cat /sys/class/net/ens1f0np0/mtu)
+round 1 mtu 1500
+2026-11-15 08:01:14 dut: pkill -x iperf3; true
+2026-11-15 08:01:15 gen: pkill -x iperf3; true
+2026-11-15 08:01:17 dut: iperf3 -s -D
+2026-11-15 08:01:17 gen: setsid nohup iperf3 -c 10.48.0.7 -P 8  -t 86400 > /tmp/iperf.log 2>&1 < /dev/null &
+2026-11-15 08:01:27 dut: rm -f /tmp/progbench_offload.jsonl; timeout 600 nu /root/workload/progbench_offload.nu --dir /root/progbench --iface ens1f0np0 --n 1000 --rounds 1 --window 3s --gro on --labels 'none xdp_empty' --stats off >> /root/res/b9m-fixed.log 2>&1; cat /tmp/progbench_offload.jsonl >> /root/res/b9m-fixed-mtu1500.jsonl
+2026-11-15 08:01:44 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+2026-11-15 08:01:44 dut: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+2026-11-15 08:01:44 dut: pkill -x iperf3; true
+2026-11-15 08:01:45 gen: pkill -x iperf3; true
+2026-11-15 08:01:47 dut: pkill -KILL -f '^/root/progbench/progbench '; sysctl -qw kernel.bpf_stats_enabled=0; ethtool -K ens1f0np0 gro on tso on gso on; ethtool -L ens1f0np0 combined 63; true
+Actual changes:
+tx-tcp-ecn-segmentation: off [requested on]
+tx-tcp-accecn-segmentation: off [requested on]
+2026-11-15 08:01:47 dut: ip link set dev ens1f0np0 mtu 1500; sleep 3; echo mtu $(cat /sys/class/net/ens1f0np0/mtu)
+mtu 1500
+2026-11-15 08:01:50 dut: echo 0 > /sys/devices/system/cpu/intel_pstate/no_turbo; for s in /sys/devices/system/cpu/cpu*/cpuidle/state*; do case $(cat $s/name) in C6* | C7* | C8* | C9* | C10*) echo 0 > $s/disable ;; *) echo 0 > $s/disable ;; esac; done; echo no_turbo $(cat /sys/devices/system/cpu/intel_pstate/no_turbo) disabled $(cat /sys/devices/system/cpu/cpu*/cpuidle/state*/disable | sort | uniq -c | tr -s ' \n' ' ')
+no_turbo 0 disabled 384 0
+2026-11-15 08:01:58 === phase b9m done
+2026-11-15 08:01:58 campaign done

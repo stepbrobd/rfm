@@ -1,0 +1,117 @@
+2026-11-13 15:03:56 job 20529 vlan 4 dut spirou-7 gen spirou-8 phases: setup b1
+2026-11-13 15:03:56 rounds R5 '1 2 3 4 5' R3 '1 2' R2 '1 2' RB4 '1' accuracy monitors 'pmacctd softflowd'
+2026-11-13 15:03:57 dut ctl 172.16.208.15 test 10.48.0.7 e8:eb:d3:fd:ce:ac, gen ctl 172.16.208.16 test 10.48.0.8 e8:eb:d3:fd:cf:0c pci 0000:4b:00.0
+2026-11-13 15:03:58 === phase setup
+2026-11-13 15:04:01 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+2026-11-13 15:04:01 dut: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+bash: line 1: /proc/net/pktgen/pgctrl: No such file or directory
+2026-11-13 15:04:01 dut: pkill -x iperf3; true
+2026-11-13 15:04:01 gen: pkill -x iperf3; true
+2026-11-13 15:04:03 dut: pkill -KILL -f '^/root/progbench/progbench '; sysctl -qw kernel.bpf_stats_enabled=0; ethtool -K ens1f0np0 gro on tso on gso on; ethtool -L ens1f0np0 combined 63; true
+Actual changes:
+tx-tcp-ecn-segmentation: off [requested on]
+tx-tcp-accecn-segmentation: off [requested on]
+2026-11-13 15:04:04 === phase setup done
+2026-11-13 15:04:04 === phase b1
+2026-11-13 15:04:04 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+2026-11-13 15:04:04 dut: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+bash: line 1: /proc/net/pktgen/pgctrl: No such file or directory
+2026-11-13 15:04:04 dut: pkill -x iperf3; true
+2026-11-13 15:04:04 gen: pkill -x iperf3; true
+2026-11-13 15:04:07 dut: pkill -KILL -f '^/root/progbench/progbench '; sysctl -qw kernel.bpf_stats_enabled=0; ethtool -K ens1f0np0 gro on tso on gso on; ethtool -L ens1f0np0 combined 63; true
+Actual changes:
+tx-tcp-ecn-segmentation: off [requested on]
+tx-tcp-accecn-segmentation: off [requested on]
+2026-11-13 15:04:07 dut: pkill -x iperf3; true
+2026-11-13 15:04:07 gen: pkill -x iperf3; true
+2026-11-13 15:04:09 dut: iperf3 -s -D
+2026-11-13 15:04:09 gen: setsid nohup iperf3 -c 10.48.0.7 -P 8  -t 86400 > /tmp/iperf.log 2>&1 < /dev/null &
+2026-11-13 15:04:19 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent pmacctd --n 100 --label rx_gro\ r1\ pmacctd --out /root/res/b1.jsonl --counts --warmup 12 --secs 45 --stat-secs 5 > /dev/null 2>> /root/res/b1.err; echo exit=$?
+exit=0
+2026-11-13 15:05:22 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent softflowd --n 100 --label rx_gro\ r1\ softflowd --out /root/res/b1.jsonl --counts --warmup 12 --secs 45 --stat-secs 5 > /dev/null 2>> /root/res/b1.err; echo exit=$?
+exit=0
+2026-11-13 15:06:25 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent softflowd --n 100 --label rx_gro\ r2\ softflowd --out /root/res/b1.jsonl --counts --warmup 12 --secs 45 --stat-secs 5 > /dev/null 2>> /root/res/b1.err; echo exit=$?
+exit=0
+2026-11-13 15:07:28 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent pmacctd --n 100 --label rx_gro\ r2\ pmacctd --out /root/res/b1.jsonl --counts --warmup 12 --secs 45 --stat-secs 5 > /dev/null 2>> /root/res/b1.err; echo exit=$?
+exit=0
+2026-11-13 15:08:30 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+2026-11-13 15:08:31 dut: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+bash: line 1: /proc/net/pktgen/pgctrl: No such file or directory
+2026-11-13 15:08:31 dut: pkill -x iperf3; true
+2026-11-13 15:08:31 gen: pkill -x iperf3; true
+2026-11-13 15:08:33 dut: pkill -KILL -f '^/root/progbench/progbench '; sysctl -qw kernel.bpf_stats_enabled=0; ethtool -K ens1f0np0 gro on tso on gso on; ethtool -L ens1f0np0 combined 63; true
+Actual changes:
+tx-tcp-ecn-segmentation: off [requested on]
+tx-tcp-accecn-segmentation: off [requested on]
+2026-11-13 15:08:33 dut: ethtool -K ens1f0np0 gro off
+2026-11-13 15:08:34 dut: pkill -x iperf3; true
+2026-11-13 15:08:34 gen: pkill -x iperf3; true
+2026-11-13 15:08:36 dut: iperf3 -s -D
+2026-11-13 15:08:36 gen: setsid nohup iperf3 -c 10.48.0.7 -P 8  -t 86400 > /tmp/iperf.log 2>&1 < /dev/null &
+2026-11-13 15:08:46 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent softflowd --n 100 --label rx_nogro\ r1\ softflowd --out /root/res/b1.jsonl --counts --warmup 12 --secs 45 --stat-secs 5 > /dev/null 2>> /root/res/b1.err; echo exit=$?
+exit=0
+2026-11-13 15:09:49 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent pmacctd --n 100 --label rx_nogro\ r1\ pmacctd --out /root/res/b1.jsonl --counts --warmup 12 --secs 45 --stat-secs 5 > /dev/null 2>> /root/res/b1.err; echo exit=$?
+exit=0
+2026-11-13 15:10:52 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent pmacctd --n 100 --label rx_nogro\ r2\ pmacctd --out /root/res/b1.jsonl --counts --warmup 12 --secs 45 --stat-secs 5 > /dev/null 2>> /root/res/b1.err; echo exit=$?
+exit=0
+2026-11-13 15:11:54 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent softflowd --n 100 --label rx_nogro\ r2\ softflowd --out /root/res/b1.jsonl --counts --warmup 12 --secs 45 --stat-secs 5 > /dev/null 2>> /root/res/b1.err; echo exit=$?
+exit=0
+2026-11-13 15:12:57 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+2026-11-13 15:12:57 dut: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+bash: line 1: /proc/net/pktgen/pgctrl: No such file or directory
+2026-11-13 15:12:57 dut: pkill -x iperf3; true
+2026-11-13 15:12:58 gen: pkill -x iperf3; true
+2026-11-13 15:13:00 dut: pkill -KILL -f '^/root/progbench/progbench '; sysctl -qw kernel.bpf_stats_enabled=0; ethtool -K ens1f0np0 gro on tso on gso on; ethtool -L ens1f0np0 combined 63; true
+Actual changes:
+rx-gro: on
+tx-tcp-ecn-segmentation: off [requested on]
+tx-tcp-accecn-segmentation: off [requested on]
+2026-11-13 15:13:00 dut: pkill -x iperf3; true
+2026-11-13 15:13:00 gen: pkill -x iperf3; true
+2026-11-13 15:13:02 gen: iperf3 -s -D
+2026-11-13 15:13:03 dut: setsid nohup iperf3 -c 10.48.0.8 -P 8  -t 86400 > /tmp/iperf.log 2>&1 < /dev/null &
+2026-11-13 15:13:13 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent softflowd --n 100 --label tx_tso\ r1\ softflowd --out /root/res/b1.jsonl --counts --warmup 12 --secs 45 --stat-secs 5 > /dev/null 2>> /root/res/b1.err; echo exit=$?
+exit=0
+2026-11-13 15:14:15 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent pmacctd --n 100 --label tx_tso\ r1\ pmacctd --out /root/res/b1.jsonl --counts --warmup 12 --secs 45 --stat-secs 5 > /dev/null 2>> /root/res/b1.err; echo exit=$?
+exit=0
+2026-11-13 15:15:18 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent softflowd --n 100 --label tx_tso\ r2\ softflowd --out /root/res/b1.jsonl --counts --warmup 12 --secs 45 --stat-secs 5 > /dev/null 2>> /root/res/b1.err; echo exit=$?
+exit=0
+2026-11-13 15:16:21 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent pmacctd --n 100 --label tx_tso\ r2\ pmacctd --out /root/res/b1.jsonl --counts --warmup 12 --secs 45 --stat-secs 5 > /dev/null 2>> /root/res/b1.err; echo exit=$?
+exit=0
+2026-11-13 15:17:24 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+2026-11-13 15:17:24 dut: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+bash: line 1: /proc/net/pktgen/pgctrl: No such file or directory
+2026-11-13 15:17:24 dut: pkill -x iperf3; true
+2026-11-13 15:17:24 gen: pkill -x iperf3; true
+2026-11-13 15:17:26 dut: pkill -KILL -f '^/root/progbench/progbench '; sysctl -qw kernel.bpf_stats_enabled=0; ethtool -K ens1f0np0 gro on tso on gso on; ethtool -L ens1f0np0 combined 63; true
+Actual changes:
+tx-tcp-ecn-segmentation: off [requested on]
+tx-tcp-accecn-segmentation: off [requested on]
+2026-11-13 15:17:27 dut: ethtool -K ens1f0np0 tso off gso off
+2026-11-13 15:17:27 dut: pkill -x iperf3; true
+2026-11-13 15:17:27 gen: pkill -x iperf3; true
+2026-11-13 15:17:29 gen: iperf3 -s -D
+2026-11-13 15:17:29 dut: setsid nohup iperf3 -c 10.48.0.8 -P 8  -t 86400 > /tmp/iperf.log 2>&1 < /dev/null &
+2026-11-13 15:17:39 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent pmacctd --n 100 --label tx_notso\ r1\ pmacctd --out /root/res/b1.jsonl --counts --warmup 12 --secs 45 --stat-secs 5 > /dev/null 2>> /root/res/b1.err; echo exit=$?
+exit=0
+2026-11-13 15:18:42 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent softflowd --n 100 --label tx_notso\ r1\ softflowd --out /root/res/b1.jsonl --counts --warmup 12 --secs 45 --stat-secs 5 > /dev/null 2>> /root/res/b1.err; echo exit=$?
+exit=0
+2026-11-13 15:19:45 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent pmacctd --n 100 --label tx_notso\ r2\ pmacctd --out /root/res/b1.jsonl --counts --warmup 12 --secs 45 --stat-secs 5 > /dev/null 2>> /root/res/b1.err; echo exit=$?
+exit=0
+2026-11-13 15:20:48 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent softflowd --n 100 --label tx_notso\ r2\ softflowd --out /root/res/b1.jsonl --counts --warmup 12 --secs 45 --stat-secs 5 > /dev/null 2>> /root/res/b1.err; echo exit=$?
+exit=0
+2026-11-13 15:21:50 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+2026-11-13 15:21:51 dut: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+bash: line 1: /proc/net/pktgen/pgctrl: No such file or directory
+2026-11-13 15:21:51 dut: pkill -x iperf3; true
+2026-11-13 15:21:51 gen: pkill -x iperf3; true
+2026-11-13 15:21:53 dut: pkill -KILL -f '^/root/progbench/progbench '; sysctl -qw kernel.bpf_stats_enabled=0; ethtool -K ens1f0np0 gro on tso on gso on; ethtool -L ens1f0np0 combined 63; true
+Actual changes:
+tx-generic-segmentation: on
+tx-tcp-segmentation: on
+tx-tcp-ecn-segmentation: off [requested on]
+tx-tcp-mangleid-segmentation: on
+tx-tcp6-segmentation: on
+tx-tcp-accecn-segmentation: off [requested on]
+2026-11-13 15:21:54 === phase b1 done
+2026-11-13 15:21:54 campaign done

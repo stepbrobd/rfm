@@ -1,0 +1,263 @@
+dahu-20-kavlan-4
+Linux dahu-20-kavlan-4 7.3.1 #1-NixOS SMP PREEMPT_DYNAMIC @1793362192 x86_64 GNU/Linux
+root=UUID=751111fc-6fed-46ee-b2f0-6efd228d6867 console=tty0 console=ttyS0,115200 intel_iommu=off init=/nix/store/v473ck2wfyy5ksxvbbxglkbz2fpaixwc-nixos-system-unnamed-26.11.20261106.0dea955/init rw console=tty0 console=ttyS0,115200 
+Architecture:                            x86_64
+CPU op-mode(s):                          32-bit, 64-bit
+Address sizes:                           46 bits physical, 48 bits virtual
+Byte Order:                              Little Endian
+CPU(s):                                  64
+On-line CPU(s) list:                     0-63
+Vendor ID:                               GenuineIntel
+Model name:                              Intel(R) Xeon(R) Gold 6130 CPU @ 2.10GHz
+CPU family:                              6
+Model:                                   85
+Thread(s) per core:                      2
+Core(s) per socket:                      16
+Socket(s):                               2
+Stepping:                                4
+Microcode version:                       0x2007006
+CPU(s) scaling MHz:                      98%
+CPU max MHz:                             3700.0000
+CPU min MHz:                             1000.0000
+BogoMIPS:                                4200.00
+Flags:                                   fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush dts acpi mmx fxsr sse sse2 ss ht tm pbe syscall nx pdpe1gb rdtscp lm constant_tsc art arch_perfmon pebs bts rep_good nopl xtopology nonstop_tsc cpuid aperfmperf pni pclmulqdq dtes64 monitor ds_cpl vmx smx est tm2 ssse3 sdbg fma cx16 xtpr pdcm pcid dca sse4_1 sse4_2 x2apic movbe popcnt tsc_deadline_timer aes xsave avx f16c rdrand lahf_lm abm 3dnowprefetch cpuid_fault epb cat_l3 cdp_l3 pti intel_ppin ssbd mba ibrs ibpb stibp tpr_shadow flexpriority ept vpid ept_ad fsgsbase tsc_adjust bmi1 hle avx2 smep bmi2 erms invpcid rtm cqm mpx rdt_a avx512f avx512dq rdseed adx smap clflushopt clwb intel_pt avx512cd avx512bw avx512vl xsaveopt xsavec xgetbv1 xsaves cqm_llc cqm_occup_llc cqm_mbm_total cqm_mbm_local dtherm ida arat pln pts hwp hwp_act_window hwp_epp hwp_pkg_req vnmi pku ospke md_clear flush_l1d arch_capabilities
+Virtualization:                          VT-x
+L1d cache:                               1 MiB (32 instances)
+L1i cache:                               1 MiB (32 instances)
+L2 cache:                                32 MiB (32 instances)
+L3 cache:                                44 MiB (2 instances)
+NUMA node(s):                            2
+NUMA node0 CPU(s):                       0-62:2
+NUMA node1 CPU(s):                       1-63:2
+Vulnerability Gather data sampling:      Mitigation; Microcode
+Vulnerability Ghostwrite:                Not affected
+Vulnerability Indirect target selection: Not affected
+Vulnerability Itlb multihit:             KVM: Mitigation: Split huge pages
+Vulnerability L1tf:                      Mitigation; PTE Inversion; VMX conditional cache flushes, SMT vulnerable
+Vulnerability Mds:                       Mitigation; Clear CPU buffers; SMT vulnerable
+Vulnerability Meltdown:                  Mitigation; PTI
+Vulnerability Mmio stale data:           Mitigation; Clear CPU buffers; SMT vulnerable
+Vulnerability Old microcode:             Not affected
+Vulnerability Reg file data sampling:    Not affected
+Vulnerability Retbleed:                  Mitigation; IBRS
+Vulnerability Spec rstack overflow:      Not affected
+Vulnerability Spec store bypass:         Mitigation; Speculative Store Bypass disabled via prctl
+Vulnerability Spectre v1:                Mitigation; usercopy/swapgs barriers and __user pointer sanitization
+Vulnerability Spectre v2:                Mitigation; IBRS; IBPB conditional; STIBP conditional; RSB filling; PBRSB-eIBRS Not affected; BHI Not affected
+Vulnerability Srbds:                     Not affected
+Vulnerability Tsa:                       Not affected
+Vulnerability Tsx async abort:           Mitigation; Clear CPU buffers; SMT vulnerable
+Vulnerability Vmscape:                   Mitigation; IBPB before exit to userspace
+               total        used        free      shared  buff/cache   available
+Mem:             187           2         185           0           0         185
+Swap:              3           0           3
+driver: i40e
+version: 7.3.1
+firmware-version: 9.50 0x8000f262 23.0.8
+expansion-rom-version: 
+bus-info: 0000:18:00.0
+supports-statistics: yes
+supports-test: yes
+supports-eeprom-access: yes
+supports-register-dump: yes
+supports-priv-flags: yes
+Features for ens3f0np0:
+rx-checksumming: on
+tx-checksumming: on
+	tx-checksum-ipv4: off [fixed]
+	tx-checksum-ip-generic: on
+	tx-checksum-ipv6: off [fixed]
+	tx-checksum-fcoe-crc: off [fixed]
+	tx-checksum-sctp: on
+scatter-gather: on
+	tx-scatter-gather: on
+	tx-scatter-gather-fraglist: off [fixed]
+tcp-segmentation-offload: on
+	tx-tcp-segmentation: on
+	tx-tcp-ecn-segmentation: on
+	tx-tcp-mangleid-segmentation: off
+	tx-tcp6-segmentation: on
+	tx-tcp-accecn-segmentation: off [fixed]
+generic-segmentation-offload: on
+generic-receive-offload: on
+large-receive-offload: off [fixed]
+rx-vlan-offload: on
+tx-vlan-offload: on
+ntuple-filters: on
+receive-hashing: on
+highdma: on
+rx-vlan-filter: on [fixed]
+vlan-challenged: off [fixed]
+tx-gso-robust: off [fixed]
+tx-fcoe-segmentation: off [fixed]
+tx-gre-segmentation: on
+tx-gre-csum-segmentation: on
+tx-ipxip4-segmentation: on
+tx-ipxip6-segmentation: on
+tx-udp_tnl-segmentation: on
+tx-udp_tnl-csum-segmentation: on
+tx-gso-partial: on
+tx-tunnel-remcsum-segmentation: off [fixed]
+tx-sctp-segmentation: off [fixed]
+tx-esp-segmentation: off [fixed]
+tx-udp-segmentation: on
+tx-gso-list: off [fixed]
+tx-nocache-copy: off
+loopback: off
+rx-fcs: off [fixed]
+rx-all: off [fixed]
+tx-vlan-stag-hw-insert: off [fixed]
+rx-vlan-stag-hw-parse: off [fixed]
+rx-vlan-stag-filter: off [fixed]
+l2-fwd-offload: off
+hw-tc-offload: off
+esp-hw-offload: off [fixed]
+esp-tx-csum-hw-offload: off [fixed]
+rx-udp_tunnel-port-offload: on
+tls-hw-tx-offload: off [fixed]
+tls-hw-rx-offload: off [fixed]
+rx-gro-hw: off [fixed]
+rx-gro-list: off
+macsec-hw-offload: off [fixed]
+rx-udp-gro-forwarding: off
+hsr-tag-ins-offload: off [fixed]
+hsr-tag-rm-offload: off [fixed]
+hsr-fwd-offload: off [fixed]
+hsr-dup-offload: off [fixed]
+Ring parameters for ens3f0np0:
+Pre-set maximums:
+RX:			8160
+RX Mini:		n/a
+RX Jumbo:		n/a
+TX:			8160
+TX push buff len:	n/a
+HDS thresh:		n/a
+Current hardware settings:
+RX:			512
+RX Mini:		n/a
+RX Jumbo:		n/a
+TX:			512
+RX Buf Len:		n/a
+CQE Size:		n/a
+TX Push:		off
+RX Push:		off
+TX push buff len:	n/a
+TCP data split:		n/a
+HDS thresh:		n/a
+Channel parameters for ens3f0np0:
+Pre-set maximums:
+RX:		n/a
+TX:		n/a
+Other:		1
+Combined:	64
+Current hardware settings:
+RX:		n/a
+TX:		n/a
+Other:		1
+Combined:	64
+Coalesce parameters for ens3f0np0:
+Adaptive RX: on  TX: on
+stats-block-usecs:	n/a
+sample-interval:	n/a
+pkt-rate-low:		n/a
+pkt-rate-high:		n/a
+
+rx-usecs:	50
+rx-frames:	n/a
+rx-usecs-irq:	n/a
+rx-frames-irq:	n/a
+
+tx-usecs:	50
+tx-frames:	n/a
+tx-usecs-irq:	n/a
+tx-frames-irq:	256
+
+rx-usecs-low:	n/a
+rx-frame-low:	n/a
+tx-usecs-low:	n/a
+tx-frame-low:	n/a
+
+rx-usecs-high:	0
+rx-frame-high:	n/a
+tx-usecs-high:	0
+tx-frame-high:	n/a
+
+CQE mode RX: n/a  TX: n/a
+
+tx-aggr-max-bytes:	n/a
+tx-aggr-max-frames:	n/a
+tx-aggr-time-usecs:	n/a
+
+rx-cqe-frames:		n/a
+rx-cqe-nsecs:		n/a
+
+performance
+0
+POLL
+C1
+C1E
+C6
+0
+0
+0
+0
+inactive
+net.core.bpf_jit_enable = 1
+net.core.bpf_jit_harden = 0
+net.core.bpf_jit_kallsyms = 1
+net.core.bpf_jit_limit = 528482304
+net.core.busy_poll = 0
+net.core.busy_read = 0
+net.core.bypass_prot_mem = 0
+net.core.default_qdisc = fq_codel
+net.core.dev_weight = 64
+net.core.dev_weight_rx_bias = 1
+net.core.dev_weight_tx_bias = 1
+net.core.devconf_inherit_init_net = 0
+net.core.fb_tunnels_only_for_init_net = 0
+net.core.flow_limit_cpu_bitmap = 00000000,00000000
+net.core.flow_limit_table_len = 4096
+net.core.gro_normal_batch = 8
+net.core.high_order_alloc_disable = 0
+net.core.max_skb_frags = 17
+net.core.mem_pcpu_rsv = 256
+net.core.message_burst = 10
+net.core.message_cost = 5
+net.core.netdev_budget = 300
+net.core.netdev_budget_usecs = 2000
+net.core.netdev_max_backlog = 1000
+net.core.netdev_rss_key = 48:74:08:c7:1a:a0:7d:95:38:8d:27:e7:be:c0:ea:b0:3b:64:ef:0d:bb:95:9a:ab:af:d0:94:0b:e3:8b:3f:7c:b1:1b:0c:fd:35:c4:bd:75:ba:2b:f6:e3:82:f4:8a:b6:30:3d:c8:15:d7:48:2e:77:da:26:b7:eb:a1:0f:e8:80:a2:a5:6d:30:40:fa:f9:0b:76:f4:cf:97:29:eb:e4:e6:84:45:e5:94:9d:d7:ae:dc:4d:e4:ff:28:b1:bd:a5:9f:74:b2:b3:70:cb:82:13:c3:0c:00:8b:53:27:0d:ef:14:97:37:0b:68:ea:92:a9:1f:87:22:ff:9f:72:b6:d0:a2:f8:ae:af:c7:61:8b:16:a9:8c:56:f1:40:65:c8:76:69:39:c7:66:dc:a1:2c:7b:29:c5:b1:23:6e:0f:73:a5:f0:f0:b6:13:1b:6a:9a:c1:9e:a1:f5:b2:67:3f:33:ca:d6:9d:37:cf:bd:48:8d:0c:05:29:a6:0a:30:5d:b6:6d:77:f9:da:85:34:bd:28:35:65:a2:55:88:b7:6e:b7:2d:e6:bc:d4:30:e2:cd:8f:e6:c2:e0:60:e0:5a:a7:7d:31:88:98:2e:ba:e7:55:fd:6f:6b:a1:9c:c2:d7:14:97:b8:49:75:61:18:d6:d2:2b:8c:06:67:35:db:6f:70:90:f8:37
+net.core.netdev_tstamp_prequeue = 1
+net.core.netdev_unregister_timeout_secs = 10
+net.core.optmem_max = 131072
+net.core.qdisc_max_burst = 1000
+net.core.rmem_default = 212992
+net.core.rmem_max = 4194304
+net.core.rps_default_mask = 00000000,00000000
+net.core.rps_sock_flow_entries = 0
+net.core.skb_defer_max = 128
+net.core.somaxconn = 4096
+net.core.tstamp_allow_data = 1
+net.core.txq_reselection_ms = 1000
+net.core.txrehash = 1
+net.core.warnings = 0
+net.core.wmem_default = 212992
+net.core.wmem_max = 4194304
+net.core.xfrm_acq_expires = 30
+net.core.xfrm_aevent_etime = 10
+net.core.xfrm_aevent_rseqth = 2
+net.core.xfrm_larval_drop = 1
+net.ipv4.conf.ens3f0np0.rp_filter = 2
+net.ipv4.icmp_msgs_per_sec = 10000
+default via 10.4.63.254 dev ens3f0np0 proto dhcp src 10.4.1.20 metric 100 
+blackhole 10.0.0.0/8 
+10.4.0.0/18 dev ens3f0np0 proto kernel scope link src 10.4.1.20 metric 100 
+2026.1109.0
+iperf 3.21 (cJSON 1.7.15)
+Linux dahu-20-kavlan-4 7.3.1 #1-NixOS SMP PREEMPT_DYNAMIC @1793362192 x86_64
+Optional features available: CPU affinity setting, IPv6 flow label, SCTP, TCP congestion algorithm setting, sendfile / zerocopy, socket pacing, authentication, bind to device, support IPv4 don't fragment, POSIX threads, GSO/GRO support
+0.116.1
+Promiscuous Mode Accounting Daemon, pmacctd 1.7.9-git [RELEASE]
+
+softflowd: option requires an argument -- 'v'
+Invalid commandline option.

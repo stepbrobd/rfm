@@ -1,0 +1,30 @@
+gro=on round 1 xdp_empty stats=off done
+gro=on round 1 none stats=off done
+wrote /tmp/progbench_offload.jsonl
+gro=on round 1 none stats=off done
+gro=on round 1 xdp_empty stats=off done
+wrote /tmp/progbench_offload.jsonl
+gro=on round 1 xdp_empty stats=off done
+gro=on round 1 none stats=off done
+wrote /tmp/progbench_offload.jsonl
+gro=on round 1 none stats=off done
+gro=on round 1 xdp_empty stats=off done
+wrote /tmp/progbench_offload.jsonl
+gro=on round 1 none stats=off done
+gro=on round 1 xdp_empty stats=off done
+wrote /tmp/progbench_offload.jsonl
+gro=on round 1 xdp_empty stats=off done
+gro=on round 1 none stats=off done
+wrote /tmp/progbench_offload.jsonl
+gro=on round 1 none stats=off done
+gro=on round 1 xdp_empty stats=off done
+wrote /tmp/progbench_offload.jsonl
+gro=on round 1 none stats=off done
+gro=on round 1 xdp_empty stats=off done
+wrote /tmp/progbench_offload.jsonl
+gro=on round 1 xdp_empty stats=off done
+gro=on round 1 none stats=off done
+wrote /tmp/progbench_offload.jsonl
+gro=on round 1 xdp_empty stats=off done
+gro=on round 1 none stats=off done
+wrote /tmp/progbench_offload.jsonl

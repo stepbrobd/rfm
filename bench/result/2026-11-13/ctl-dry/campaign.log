@@ -1,0 +1,139 @@
+2026-11-14 21:36:06 job 20530 vlan 4 dut spirou-7 gen spirou-8 phases: setup b1c b9s b13s ramp
+2026-11-14 21:36:06 rounds R5 '1' R3 '1' R2 '1' RB4 '1' accuracy monitors 'rfm_acc netobserv hsflowd'
+2026-11-14 21:36:08 dut ctl 172.16.208.15 test 10.48.0.7 e8:eb:d3:fd:ce:ac, gen ctl 172.16.208.16 test 10.48.0.8 e8:eb:d3:fd:cf:0c pci 0000:4b:00.0
+2026-11-14 21:36:08 === phase setup
+2026-11-14 21:36:11 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+2026-11-14 21:36:11 dut: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+2026-11-14 21:36:12 dut: pkill -x iperf3; true
+2026-11-14 21:36:12 gen: pkill -x iperf3; true
+2026-11-14 21:36:14 dut: pkill -KILL -f '^/root/progbench/progbench '; sysctl -qw kernel.bpf_stats_enabled=0; ethtool -K ens1f0np0 gro on tso on gso on; ethtool -L ens1f0np0 combined 63; true
+Actual changes:
+tx-tcp-ecn-segmentation: off [requested on]
+tx-tcp-accecn-segmentation: off [requested on]
+2026-11-14 21:36:15 === phase setup done
+2026-11-14 21:36:15 === phase b1c
+2026-11-14 21:36:15 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+2026-11-14 21:36:15 dut: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+2026-11-14 21:36:15 dut: pkill -x iperf3; true
+2026-11-14 21:36:15 gen: pkill -x iperf3; true
+2026-11-14 21:36:18 dut: pkill -KILL -f '^/root/progbench/progbench '; sysctl -qw kernel.bpf_stats_enabled=0; ethtool -K ens1f0np0 gro on tso on gso on; ethtool -L ens1f0np0 combined 63; true
+Actual changes:
+tx-tcp-ecn-segmentation: off [requested on]
+tx-tcp-accecn-segmentation: off [requested on]
+2026-11-14 21:36:18 dut: pkill -x iperf3; true
+2026-11-14 21:36:18 gen: pkill -x iperf3; true
+2026-11-14 21:36:20 dut: iperf3 -s -D
+2026-11-14 21:36:20 gen: setsid nohup iperf3 -c 10.48.0.7 -P 8  -t 86400 > /tmp/iperf.log 2>&1 < /dev/null &
+2026-11-14 21:36:31 dut: p=$(pgrep -x iperf3 | head -1); [ -n "$p" ] || exit 1; cg=/sys/fs/cgroup$(cut -d: -f3 /proc/$p/cgroup); echo $cg > /tmp/acct.cg; : > /tmp/acct.saved; while :; do bpftool -j cgroup show $cg | jq -r '.[] | select(.name | startswith("sd_fw_")) | "\(.id) \(.attach_type)"' | while read -r id ty; do bpftool cgroup detach $cg $ty id $id && echo $cg $ty $id >> /tmp/acct.saved; done; [ $cg = /sys/fs/cgroup ] && break; cg=$(dirname $cg); done; cat /tmp/acct.saved
+/sys/fs/cgroup/user.slice/user-0.slice/session-2905.scope cgroup_inet_ingress 28342
+/sys/fs/cgroup/user.slice/user-0.slice/session-2905.scope cgroup_inet_egress 28341
+/sys/fs/cgroup/user.slice/user-0.slice cgroup_inet_ingress 28285
+/sys/fs/cgroup/user.slice/user-0.slice cgroup_inet_egress 28284
+/sys/fs/cgroup/user.slice cgroup_inet_ingress 185
+/sys/fs/cgroup/user.slice cgroup_inet_egress 184
+/sys/fs/cgroup cgroup_inet_ingress 183
+/sys/fs/cgroup cgroup_inet_egress 182
+2026-11-14 21:36:31 acct off leaves '' accounting programs on the iperf3 path, want '0'
+2026-11-14 21:36:31 dut: while read -r cg ty id; do bpftool cgroup attach $cg $ty id $id multi; done < /tmp/acct.saved; rm -f /tmp/acct.saved
+2026-11-14 21:36:32 acct on: 8 accounting programs on the iperf3 path
+2026-11-14 21:36:32 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+2026-11-14 21:36:32 dut: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+2026-11-14 21:36:32 dut: pkill -x iperf3; true
+2026-11-14 21:36:32 gen: pkill -x iperf3; true
+2026-11-14 21:36:35 dut: pkill -KILL -f '^/root/progbench/progbench '; sysctl -qw kernel.bpf_stats_enabled=0; ethtool -K ens1f0np0 gro on tso on gso on; ethtool -L ens1f0np0 combined 63; true
+Actual changes:
+tx-tcp-ecn-segmentation: off [requested on]
+tx-tcp-accecn-segmentation: off [requested on]
+2026-11-14 21:36:36 === phase b1c done
+2026-11-14 21:36:36 === phase b9s
+2026-11-14 21:36:36 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+2026-11-14 21:36:36 dut: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+2026-11-14 21:36:36 dut: pkill -x iperf3; true
+2026-11-14 21:36:36 gen: pkill -x iperf3; true
+2026-11-14 21:36:38 dut: pkill -KILL -f '^/root/progbench/progbench '; sysctl -qw kernel.bpf_stats_enabled=0; ethtool -K ens1f0np0 gro on tso on gso on; ethtool -L ens1f0np0 combined 63; true
+Actual changes:
+tx-tcp-ecn-segmentation: off [requested on]
+tx-tcp-accecn-segmentation: off [requested on]
+2026-11-14 21:36:39 dut: pkill -x iperf3; true
+2026-11-14 21:36:39 gen: pkill -x iperf3; true
+2026-11-14 21:36:41 dut: iperf3 -s -D
+2026-11-14 21:36:41 gen: setsid nohup iperf3 -c 10.48.0.7 -P 8  -t 86400 > /tmp/iperf.log 2>&1 < /dev/null &
+2026-11-14 21:36:51 dut: timeout 2400 nu /root/workload/progbench_offload.nu --dir /root/progbench --iface ens1f0np0 --n 1000 --rounds 1 --window 3s --labels 'none skip_array_lazy_nowake xdp_skip_array' --stats 'on off' > /root/res/b9s.log 2>&1; cp /tmp/progbench_offload.jsonl /root/res/b9s.jsonl
+2026-11-14 21:38:09 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+2026-11-14 21:38:10 dut: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+2026-11-14 21:38:10 dut: pkill -x iperf3; true
+2026-11-14 21:38:10 gen: pkill -x iperf3; true
+2026-11-14 21:38:12 dut: pkill -KILL -f '^/root/progbench/progbench '; sysctl -qw kernel.bpf_stats_enabled=0; ethtool -K ens1f0np0 gro on tso on gso on; ethtool -L ens1f0np0 combined 63; true
+Actual changes:
+tx-tcp-ecn-segmentation: off [requested on]
+tx-tcp-accecn-segmentation: off [requested on]
+2026-11-14 21:38:13 === phase b9s done
+2026-11-14 21:38:13 === phase b13s
+2026-11-14 21:38:13 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+2026-11-14 21:38:13 dut: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+2026-11-14 21:38:13 dut: pkill -x iperf3; true
+2026-11-14 21:38:14 gen: pkill -x iperf3; true
+2026-11-14 21:38:16 dut: pkill -KILL -f '^/root/progbench/progbench '; sysctl -qw kernel.bpf_stats_enabled=0; ethtool -K ens1f0np0 gro on tso on gso on; ethtool -L ens1f0np0 combined 63; true
+Actual changes:
+tx-tcp-ecn-segmentation: off [requested on]
+tx-tcp-accecn-segmentation: off [requested on]
+2026-11-14 21:38:16 dut: pkill -x iperf3; true
+2026-11-14 21:38:16 gen: pkill -x iperf3; true
+2026-11-14 21:38:18 dut: iperf3 -s -D
+2026-11-14 21:38:19 gen: setsid nohup iperf3 -c 10.48.0.7 -P 8  -t 86400 > /tmp/iperf.log 2>&1 < /dev/null &
+2026-11-14 21:38:29 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; setsid nohup nu /root/workload/gen.nu --iface ens1f0np0 --dst 10.48.0.7 --dstmac e8:eb:d3:fd:ce:ac --count 0 --threads 1 --flows 20000 --rate 1000 > /tmp/gen.log 2>&1 < /dev/null &
+2026-11-14 21:38:47 dut rx pps 9100722
+2026-11-14 21:38:47 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 100 --label cohort\ u1000\ r1\ netobserv_sized --out /root/res/b13s.jsonl --neto-cache 65536 --counts --warmup 3 --secs 4 --stat-secs 2 > /dev/null 2>> /root/res/b13s.err; echo exit=$?
+exit=0
+2026-11-14 21:39:12 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 100 --label cohort\ u1000\ r1\ netobserv --out /root/res/b13s.jsonl --counts --warmup 3 --secs 4 --stat-secs 2 > /dev/null 2>> /root/res/b13s.err; echo exit=$?
+exit=0
+2026-11-14 21:39:32 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent hsflowd --n 100 --label cohort\ u1000\ r1\ hsflowd --out /root/res/b13s.jsonl --counts --warmup 3 --secs 4 --stat-secs 2 > /dev/null 2>> /root/res/b13s.err; echo exit=$?
+exit=0
+2026-11-14 21:39:52 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+2026-11-14 21:39:52 dut: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+2026-11-14 21:39:52 dut: pkill -x iperf3; true
+2026-11-14 21:39:52 gen: pkill -x iperf3; true
+2026-11-14 21:39:55 dut: pkill -KILL -f '^/root/progbench/progbench '; sysctl -qw kernel.bpf_stats_enabled=0; ethtool -K ens1f0np0 gro on tso on gso on; ethtool -L ens1f0np0 combined 63; true
+Actual changes:
+tx-tcp-ecn-segmentation: off [requested on]
+tx-tcp-accecn-segmentation: off [requested on]
+2026-11-14 21:39:55 === phase b13s done
+2026-11-14 21:39:55 === phase ramp
+2026-11-14 21:39:55 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+2026-11-14 21:39:56 dut: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+2026-11-14 21:39:56 dut: pkill -x iperf3; true
+2026-11-14 21:39:56 gen: pkill -x iperf3; true
+2026-11-14 21:39:58 dut: pkill -KILL -f '^/root/progbench/progbench '; sysctl -qw kernel.bpf_stats_enabled=0; ethtool -K ens1f0np0 gro on tso on gso on; ethtool -L ens1f0np0 combined 63; true
+Actual changes:
+tx-tcp-ecn-segmentation: off [requested on]
+tx-tcp-accecn-segmentation: off [requested on]
+2026-11-14 21:39:58 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; setsid nohup nu /root/workload/gen.nu --iface ens1f0np0 --dst 10.48.0.7 --dstmac e8:eb:d3:fd:ce:ac --count 0 --threads 1  > /tmp/gen.log 2>&1 < /dev/null &
+2026-11-14 21:40:17 dut rx pps 2655194
+2026-11-14 21:40:17 dut: setsid nohup nu /root/workload/control.nu --iface ens1f0np0 --n 1 --bpf 'stage_events=32\niface_slots=1' --timeline --adaptive --secs 80 --label 'ramp adaptive r1' --out /root/res/ramp.jsonl > /root/res/ramp-ramp.log 2>&1 < /dev/null &
+2026-11-14 21:40:19 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; setsid nohup nu /root/workload/gen.nu --iface ens1f0np0 --dst 10.48.0.7 --dstmac e8:eb:d3:fd:ce:ac --count 0 --threads 2  > /tmp/gen.log 2>&1 < /dev/null &
+2026-11-14 21:40:38 dut rx pps 4497642
+2026-11-14 21:40:40 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; setsid nohup nu /root/workload/gen.nu --iface ens1f0np0 --dst 10.48.0.7 --dstmac e8:eb:d3:fd:ce:ac --count 0 --threads 4  > /tmp/gen.log 2>&1 < /dev/null &
+2026-11-14 21:40:58 dut rx pps 8743729
+2026-11-14 21:41:00 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; setsid nohup nu /root/workload/gen.nu --iface ens1f0np0 --dst 10.48.0.7 --dstmac e8:eb:d3:fd:ce:ac --count 0 --threads 8  > /tmp/gen.log 2>&1 < /dev/null &
+2026-11-14 21:41:18 dut rx pps 17304187
+2026-11-14 21:41:55 dut: pkill -f '^nu /root/workload/control.nu'; pkill -f '^[^ ]*rfm agent'; true
+2026-11-14 21:41:55 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; setsid nohup nu /root/workload/gen.nu --iface ens1f0np0 --dst 10.48.0.7 --dstmac e8:eb:d3:fd:ce:ac --count 0 --threads 1  > /tmp/gen.log 2>&1 < /dev/null &
+2026-11-14 21:42:14 dut rx pps 2658262
+2026-11-14 21:42:14 dut: setsid nohup nu /root/workload/control.nu --iface ens1f0np0 --n 1 --bpf 'stage_events=32\niface_slots=1' --timeline  --secs 80 --label 'ramp static r1' --out /root/res/ramp.jsonl > /root/res/ramp-ramp.log 2>&1 < /dev/null &
+2026-11-14 21:42:16 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; setsid nohup nu /root/workload/gen.nu --iface ens1f0np0 --dst 10.48.0.7 --dstmac e8:eb:d3:fd:ce:ac --count 0 --threads 2  > /tmp/gen.log 2>&1 < /dev/null &
+2026-11-14 21:42:34 dut rx pps 4934597
+2026-11-14 21:42:36 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; setsid nohup nu /root/workload/gen.nu --iface ens1f0np0 --dst 10.48.0.7 --dstmac e8:eb:d3:fd:ce:ac --count 0 --threads 4  > /tmp/gen.log 2>&1 < /dev/null &
+2026-11-14 21:42:55 dut rx pps 8921654
+2026-11-14 21:42:57 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; setsid nohup nu /root/workload/gen.nu --iface ens1f0np0 --dst 10.48.0.7 --dstmac e8:eb:d3:fd:ce:ac --count 0 --threads 8  > /tmp/gen.log 2>&1 < /dev/null &
+2026-11-14 21:43:15 dut rx pps 17186338
+2026-11-14 21:43:52 dut: pkill -f '^nu /root/workload/control.nu'; pkill -f '^[^ ]*rfm agent'; true
+2026-11-14 21:43:52 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+2026-11-14 21:43:52 dut: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+2026-11-14 21:43:52 dut: pkill -x iperf3; true
+2026-11-14 21:43:53 gen: pkill -x iperf3; true
+2026-11-14 21:43:55 dut: pkill -KILL -f '^/root/progbench/progbench '; sysctl -qw kernel.bpf_stats_enabled=0; ethtool -K ens1f0np0 gro on tso on gso on; ethtool -L ens1f0np0 combined 63; true
+Actual changes:
+tx-tcp-ecn-segmentation: off [requested on]
+tx-tcp-accecn-segmentation: off [requested on]
+2026-11-14 21:43:56 === phase ramp done
+2026-11-14 21:43:56 campaign done

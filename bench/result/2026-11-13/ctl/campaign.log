@@ -1,0 +1,210 @@
+2026-11-14 21:43:58 job 20530 vlan 4 dut spirou-7 gen spirou-8 phases: setup b9s b13s ramp
+2026-11-14 21:43:58 rounds R5 '1 2 3 4 5' R3 '1 2 3 4 5' R2 '1 2 3 4 5' RB4 '1' accuracy monitors 'rfm_acc netobserv hsflowd'
+2026-11-14 21:43:59 dut ctl 172.16.208.15 test 10.48.0.7 e8:eb:d3:fd:ce:ac, gen ctl 172.16.208.16 test 10.48.0.8 e8:eb:d3:fd:cf:0c pci 0000:4b:00.0
+2026-11-14 21:43:59 === phase setup
+2026-11-14 21:44:02 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+2026-11-14 21:44:03 dut: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+2026-11-14 21:44:03 dut: pkill -x iperf3; true
+2026-11-14 21:44:03 gen: pkill -x iperf3; true
+2026-11-14 21:44:05 dut: pkill -KILL -f '^/root/progbench/progbench '; sysctl -qw kernel.bpf_stats_enabled=0; ethtool -K ens1f0np0 gro on tso on gso on; ethtool -L ens1f0np0 combined 63; true
+Actual changes:
+tx-tcp-ecn-segmentation: off [requested on]
+tx-tcp-accecn-segmentation: off [requested on]
+2026-11-14 21:44:06 === phase setup done
+2026-11-14 21:44:06 === phase b9s
+2026-11-14 21:44:06 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+2026-11-14 21:44:06 dut: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+2026-11-14 21:44:06 dut: pkill -x iperf3; true
+2026-11-14 21:44:07 gen: pkill -x iperf3; true
+2026-11-14 21:44:09 dut: pkill -KILL -f '^/root/progbench/progbench '; sysctl -qw kernel.bpf_stats_enabled=0; ethtool -K ens1f0np0 gro on tso on gso on; ethtool -L ens1f0np0 combined 63; true
+Actual changes:
+tx-tcp-ecn-segmentation: off [requested on]
+tx-tcp-accecn-segmentation: off [requested on]
+2026-11-14 21:44:09 dut: pkill -x iperf3; true
+2026-11-14 21:44:09 gen: pkill -x iperf3; true
+2026-11-14 21:44:11 dut: iperf3 -s -D
+2026-11-14 21:44:11 gen: setsid nohup iperf3 -c 10.48.0.7 -P 8  -t 86400 > /tmp/iperf.log 2>&1 < /dev/null &
+2026-11-14 21:44:22 dut: timeout 2400 nu /root/workload/progbench_offload.nu --dir /root/progbench --iface ens1f0np0 --n 1000 --rounds 5 --window 20s --labels 'none skip_array_lazy_nowake xdp_skip_array' --stats 'on off' > /root/res/b9s.log 2>&1; cp /tmp/progbench_offload.jsonl /root/res/b9s.jsonl
+2026-11-14 22:24:22 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+2026-11-14 22:24:22 dut: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+2026-11-14 22:24:22 dut: pkill -x iperf3; true
+2026-11-14 22:24:22 gen: pkill -x iperf3; true
+2026-11-14 22:24:25 dut: pkill -KILL -f '^/root/progbench/progbench '; sysctl -qw kernel.bpf_stats_enabled=0; ethtool -K ens1f0np0 gro on tso on gso on; ethtool -L ens1f0np0 combined 63; true
+Actual changes:
+rx-gro: on
+tx-tcp-ecn-segmentation: off [requested on]
+tx-tcp-accecn-segmentation: off [requested on]
+2026-11-14 22:24:26 === phase b9s done
+2026-11-14 22:24:26 === phase b13s
+2026-11-14 22:24:26 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+2026-11-14 22:24:26 dut: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+2026-11-14 22:24:26 dut: pkill -x iperf3; true
+2026-11-14 22:24:26 gen: pkill -x iperf3; true
+2026-11-14 22:24:28 dut: pkill -KILL -f '^/root/progbench/progbench '; sysctl -qw kernel.bpf_stats_enabled=0; ethtool -K ens1f0np0 gro on tso on gso on; ethtool -L ens1f0np0 combined 63; true
+Actual changes:
+tx-tcp-ecn-segmentation: off [requested on]
+tx-tcp-accecn-segmentation: off [requested on]
+2026-11-14 22:24:29 dut: pkill -x iperf3; true
+2026-11-14 22:24:29 gen: pkill -x iperf3; true
+2026-11-14 22:24:31 dut: iperf3 -s -D
+2026-11-14 22:24:31 gen: setsid nohup iperf3 -c 10.48.0.7 -P 8  -t 86400 > /tmp/iperf.log 2>&1 < /dev/null &
+2026-11-14 22:24:41 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; setsid nohup nu /root/workload/gen.nu --iface ens1f0np0 --dst 10.48.0.7 --dstmac e8:eb:d3:fd:ce:ac --count 0 --threads 1 --flows 20000 --rate 1000 > /tmp/gen.log 2>&1 < /dev/null &
+2026-11-14 22:25:00 dut rx pps 9298584
+2026-11-14 22:25:00 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 100 --label cohort\ u1000\ r1\ netobserv --out /root/res/b13s.jsonl --counts --warmup 12 --secs 45 --stat-secs 5 > /dev/null 2>> /root/res/b13s.err; echo exit=$?
+exit=0
+2026-11-14 22:26:40 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent hsflowd --n 100 --label cohort\ u1000\ r1\ hsflowd --out /root/res/b13s.jsonl --counts --warmup 12 --secs 45 --stat-secs 5 > /dev/null 2>> /root/res/b13s.err; echo exit=$?
+exit=0
+2026-11-14 22:28:13 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 100 --label cohort\ u1000\ r1\ netobserv_sized --out /root/res/b13s.jsonl --neto-cache 65536 --counts --warmup 12 --secs 45 --stat-secs 5 > /dev/null 2>> /root/res/b13s.err; echo exit=$?
+exit=0
+2026-11-14 22:30:20 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 100 --label cohort\ u1000\ r2\ netobserv --out /root/res/b13s.jsonl --counts --warmup 12 --secs 45 --stat-secs 5 > /dev/null 2>> /root/res/b13s.err; echo exit=$?
+exit=0
+2026-11-14 22:32:01 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 100 --label cohort\ u1000\ r2\ netobserv_sized --out /root/res/b13s.jsonl --neto-cache 65536 --counts --warmup 12 --secs 45 --stat-secs 5 > /dev/null 2>> /root/res/b13s.err; echo exit=$?
+exit=0
+2026-11-14 22:34:38 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent hsflowd --n 100 --label cohort\ u1000\ r2\ hsflowd --out /root/res/b13s.jsonl --counts --warmup 12 --secs 45 --stat-secs 5 > /dev/null 2>> /root/res/b13s.err; echo exit=$?
+exit=0
+2026-11-14 22:36:11 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent hsflowd --n 100 --label cohort\ u1000\ r3\ hsflowd --out /root/res/b13s.jsonl --counts --warmup 12 --secs 45 --stat-secs 5 > /dev/null 2>> /root/res/b13s.err; echo exit=$?
+exit=0
+2026-11-14 22:37:42 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 100 --label cohort\ u1000\ r3\ netobserv --out /root/res/b13s.jsonl --counts --warmup 12 --secs 45 --stat-secs 5 > /dev/null 2>> /root/res/b13s.err; echo exit=$?
+exit=0
+2026-11-14 22:39:25 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 100 --label cohort\ u1000\ r3\ netobserv_sized --out /root/res/b13s.jsonl --neto-cache 65536 --counts --warmup 12 --secs 45 --stat-secs 5 > /dev/null 2>> /root/res/b13s.err; echo exit=$?
+exit=0
+2026-11-14 22:41:36 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 100 --label cohort\ u1000\ r4\ netobserv_sized --out /root/res/b13s.jsonl --neto-cache 65536 --counts --warmup 12 --secs 45 --stat-secs 5 > /dev/null 2>> /root/res/b13s.err; echo exit=$?
+exit=0
+2026-11-14 22:43:42 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent hsflowd --n 100 --label cohort\ u1000\ r4\ hsflowd --out /root/res/b13s.jsonl --counts --warmup 12 --secs 45 --stat-secs 5 > /dev/null 2>> /root/res/b13s.err; echo exit=$?
+exit=0
+2026-11-14 22:45:14 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 100 --label cohort\ u1000\ r4\ netobserv --out /root/res/b13s.jsonl --counts --warmup 12 --secs 45 --stat-secs 5 > /dev/null 2>> /root/res/b13s.err; echo exit=$?
+exit=0
+2026-11-14 22:46:57 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 100 --label cohort\ u1000\ r5\ netobserv_sized --out /root/res/b13s.jsonl --neto-cache 65536 --counts --warmup 12 --secs 45 --stat-secs 5 > /dev/null 2>> /root/res/b13s.err; echo exit=$?
+exit=0
+2026-11-14 22:49:03 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent hsflowd --n 100 --label cohort\ u1000\ r5\ hsflowd --out /root/res/b13s.jsonl --counts --warmup 12 --secs 45 --stat-secs 5 > /dev/null 2>> /root/res/b13s.err; echo exit=$?
+exit=0
+2026-11-14 22:50:35 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 100 --label cohort\ u1000\ r5\ netobserv --out /root/res/b13s.jsonl --counts --warmup 12 --secs 45 --stat-secs 5 > /dev/null 2>> /root/res/b13s.err; echo exit=$?
+exit=0
+2026-11-14 22:52:33 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+2026-11-14 22:52:33 dut: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+2026-11-14 22:52:33 dut: pkill -x iperf3; true
+2026-11-14 22:52:33 gen: pkill -x iperf3; true
+2026-11-14 22:52:35 dut: pkill -KILL -f '^/root/progbench/progbench '; sysctl -qw kernel.bpf_stats_enabled=0; ethtool -K ens1f0np0 gro on tso on gso on; ethtool -L ens1f0np0 combined 63; true
+Actual changes:
+tx-tcp-ecn-segmentation: off [requested on]
+tx-tcp-accecn-segmentation: off [requested on]
+2026-11-14 22:52:36 === phase b13s done
+2026-11-14 22:52:36 === phase ramp
+2026-11-14 22:52:36 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+2026-11-14 22:52:36 dut: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+2026-11-14 22:52:37 dut: pkill -x iperf3; true
+2026-11-14 22:52:37 gen: pkill -x iperf3; true
+2026-11-14 22:52:39 dut: pkill -KILL -f '^/root/progbench/progbench '; sysctl -qw kernel.bpf_stats_enabled=0; ethtool -K ens1f0np0 gro on tso on gso on; ethtool -L ens1f0np0 combined 63; true
+Actual changes:
+tx-tcp-ecn-segmentation: off [requested on]
+tx-tcp-accecn-segmentation: off [requested on]
+2026-11-14 22:52:39 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; setsid nohup nu /root/workload/gen.nu --iface ens1f0np0 --dst 10.48.0.7 --dstmac e8:eb:d3:fd:ce:ac --count 0 --threads 1  > /tmp/gen.log 2>&1 < /dev/null &
+2026-11-14 22:52:58 dut rx pps 2667180
+2026-11-14 22:52:58 dut: setsid nohup nu /root/workload/control.nu --iface ens1f0np0 --n 1 --bpf 'stage_events=32\niface_slots=1' --timeline --adaptive --secs 160 --label 'ramp adaptive r1' --out /root/res/ramp.jsonl > /root/res/ramp-ramp.log 2>&1 < /dev/null &
+2026-11-14 22:53:20 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; setsid nohup nu /root/workload/gen.nu --iface ens1f0np0 --dst 10.48.0.7 --dstmac e8:eb:d3:fd:ce:ac --count 0 --threads 2  > /tmp/gen.log 2>&1 < /dev/null &
+2026-11-14 22:53:38 dut rx pps 4625353
+2026-11-14 22:54:00 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; setsid nohup nu /root/workload/gen.nu --iface ens1f0np0 --dst 10.48.0.7 --dstmac e8:eb:d3:fd:ce:ac --count 0 --threads 4  > /tmp/gen.log 2>&1 < /dev/null &
+2026-11-14 22:54:19 dut rx pps 8670261
+2026-11-14 22:54:41 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; setsid nohup nu /root/workload/gen.nu --iface ens1f0np0 --dst 10.48.0.7 --dstmac e8:eb:d3:fd:ce:ac --count 0 --threads 8  > /tmp/gen.log 2>&1 < /dev/null &
+2026-11-14 22:54:59 dut rx pps 17393423
+2026-11-14 22:56:02 dut: pkill -f '^nu /root/workload/control.nu'; pkill -f '^[^ ]*rfm agent'; true
+2026-11-14 22:56:02 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; setsid nohup nu /root/workload/gen.nu --iface ens1f0np0 --dst 10.48.0.7 --dstmac e8:eb:d3:fd:ce:ac --count 0 --threads 1  > /tmp/gen.log 2>&1 < /dev/null &
+2026-11-14 22:56:21 dut rx pps 2669531
+2026-11-14 22:56:21 dut: setsid nohup nu /root/workload/control.nu --iface ens1f0np0 --n 1 --bpf 'stage_events=32\niface_slots=1' --timeline  --secs 160 --label 'ramp static r1' --out /root/res/ramp.jsonl > /root/res/ramp-ramp.log 2>&1 < /dev/null &
+2026-11-14 22:56:43 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; setsid nohup nu /root/workload/gen.nu --iface ens1f0np0 --dst 10.48.0.7 --dstmac e8:eb:d3:fd:ce:ac --count 0 --threads 2  > /tmp/gen.log 2>&1 < /dev/null &
+2026-11-14 22:57:01 dut rx pps 4579203
+2026-11-14 22:57:23 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; setsid nohup nu /root/workload/gen.nu --iface ens1f0np0 --dst 10.48.0.7 --dstmac e8:eb:d3:fd:ce:ac --count 0 --threads 4  > /tmp/gen.log 2>&1 < /dev/null &
+2026-11-14 22:57:42 dut rx pps 8722395
+2026-11-14 22:58:04 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; setsid nohup nu /root/workload/gen.nu --iface ens1f0np0 --dst 10.48.0.7 --dstmac e8:eb:d3:fd:ce:ac --count 0 --threads 8  > /tmp/gen.log 2>&1 < /dev/null &
+2026-11-14 22:58:22 dut rx pps 17517745
+2026-11-14 22:59:25 dut: pkill -f '^nu /root/workload/control.nu'; pkill -f '^[^ ]*rfm agent'; true
+2026-11-14 22:59:25 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; setsid nohup nu /root/workload/gen.nu --iface ens1f0np0 --dst 10.48.0.7 --dstmac e8:eb:d3:fd:ce:ac --count 0 --threads 1  > /tmp/gen.log 2>&1 < /dev/null &
+2026-11-14 22:59:44 dut rx pps 2668136
+2026-11-14 22:59:44 dut: setsid nohup nu /root/workload/control.nu --iface ens1f0np0 --n 1 --bpf 'stage_events=32\niface_slots=1' --timeline --adaptive --secs 160 --label 'ramp adaptive r2' --out /root/res/ramp.jsonl > /root/res/ramp-ramp.log 2>&1 < /dev/null &
+2026-11-14 23:00:06 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; setsid nohup nu /root/workload/gen.nu --iface ens1f0np0 --dst 10.48.0.7 --dstmac e8:eb:d3:fd:ce:ac --count 0 --threads 2  > /tmp/gen.log 2>&1 < /dev/null &
+2026-11-14 23:00:24 dut rx pps 4682649
+2026-11-14 23:00:46 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; setsid nohup nu /root/workload/gen.nu --iface ens1f0np0 --dst 10.48.0.7 --dstmac e8:eb:d3:fd:ce:ac --count 0 --threads 4  > /tmp/gen.log 2>&1 < /dev/null &
+2026-11-14 23:01:05 dut rx pps 8826425
+2026-11-14 23:01:27 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; setsid nohup nu /root/workload/gen.nu --iface ens1f0np0 --dst 10.48.0.7 --dstmac e8:eb:d3:fd:ce:ac --count 0 --threads 8  > /tmp/gen.log 2>&1 < /dev/null &
+2026-11-14 23:01:45 dut rx pps 17578338
+2026-11-14 23:02:53 dut: pkill -f '^nu /root/workload/control.nu'; pkill -f '^[^ ]*rfm agent'; true
+2026-11-14 23:02:53 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; setsid nohup nu /root/workload/gen.nu --iface ens1f0np0 --dst 10.48.0.7 --dstmac e8:eb:d3:fd:ce:ac --count 0 --threads 1  > /tmp/gen.log 2>&1 < /dev/null &
+2026-11-14 23:03:12 dut rx pps 2657880
+2026-11-14 23:03:12 dut: setsid nohup nu /root/workload/control.nu --iface ens1f0np0 --n 1 --bpf 'stage_events=32\niface_slots=1' --timeline  --secs 160 --label 'ramp static r2' --out /root/res/ramp.jsonl > /root/res/ramp-ramp.log 2>&1 < /dev/null &
+2026-11-14 23:03:34 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; setsid nohup nu /root/workload/gen.nu --iface ens1f0np0 --dst 10.48.0.7 --dstmac e8:eb:d3:fd:ce:ac --count 0 --threads 2  > /tmp/gen.log 2>&1 < /dev/null &
+2026-11-14 23:03:52 dut rx pps 4910345
+2026-11-14 23:04:14 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; setsid nohup nu /root/workload/gen.nu --iface ens1f0np0 --dst 10.48.0.7 --dstmac e8:eb:d3:fd:ce:ac --count 0 --threads 4  > /tmp/gen.log 2>&1 < /dev/null &
+2026-11-14 23:04:33 dut rx pps 8920848
+2026-11-14 23:04:55 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; setsid nohup nu /root/workload/gen.nu --iface ens1f0np0 --dst 10.48.0.7 --dstmac e8:eb:d3:fd:ce:ac --count 0 --threads 8  > /tmp/gen.log 2>&1 < /dev/null &
+2026-11-14 23:05:13 dut rx pps 17476479
+2026-11-14 23:06:21 dut: pkill -f '^nu /root/workload/control.nu'; pkill -f '^[^ ]*rfm agent'; true
+2026-11-14 23:06:21 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; setsid nohup nu /root/workload/gen.nu --iface ens1f0np0 --dst 10.48.0.7 --dstmac e8:eb:d3:fd:ce:ac --count 0 --threads 1  > /tmp/gen.log 2>&1 < /dev/null &
+2026-11-14 23:06:40 dut rx pps 2669996
+2026-11-14 23:06:40 dut: setsid nohup nu /root/workload/control.nu --iface ens1f0np0 --n 1 --bpf 'stage_events=32\niface_slots=1' --timeline  --secs 160 --label 'ramp static r3' --out /root/res/ramp.jsonl > /root/res/ramp-ramp.log 2>&1 < /dev/null &
+2026-11-14 23:07:02 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; setsid nohup nu /root/workload/gen.nu --iface ens1f0np0 --dst 10.48.0.7 --dstmac e8:eb:d3:fd:ce:ac --count 0 --threads 2  > /tmp/gen.log 2>&1 < /dev/null &
+2026-11-14 23:07:21 dut rx pps 4647387
+2026-11-14 23:07:43 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; setsid nohup nu /root/workload/gen.nu --iface ens1f0np0 --dst 10.48.0.7 --dstmac e8:eb:d3:fd:ce:ac --count 0 --threads 4  > /tmp/gen.log 2>&1 < /dev/null &
+2026-11-14 23:08:01 dut rx pps 8741578
+2026-11-14 23:08:23 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; setsid nohup nu /root/workload/gen.nu --iface ens1f0np0 --dst 10.48.0.7 --dstmac e8:eb:d3:fd:ce:ac --count 0 --threads 8  > /tmp/gen.log 2>&1 < /dev/null &
+2026-11-14 23:08:41 dut rx pps 17489486
+2026-11-14 23:09:49 dut: pkill -f '^nu /root/workload/control.nu'; pkill -f '^[^ ]*rfm agent'; true
+2026-11-14 23:09:50 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; setsid nohup nu /root/workload/gen.nu --iface ens1f0np0 --dst 10.48.0.7 --dstmac e8:eb:d3:fd:ce:ac --count 0 --threads 1  > /tmp/gen.log 2>&1 < /dev/null &
+2026-11-14 23:10:08 dut rx pps 2666896
+2026-11-14 23:10:08 dut: setsid nohup nu /root/workload/control.nu --iface ens1f0np0 --n 1 --bpf 'stage_events=32\niface_slots=1' --timeline --adaptive --secs 160 --label 'ramp adaptive r3' --out /root/res/ramp.jsonl > /root/res/ramp-ramp.log 2>&1 < /dev/null &
+2026-11-14 23:10:30 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; setsid nohup nu /root/workload/gen.nu --iface ens1f0np0 --dst 10.48.0.7 --dstmac e8:eb:d3:fd:ce:ac --count 0 --threads 2  > /tmp/gen.log 2>&1 < /dev/null &
+2026-11-14 23:10:49 dut rx pps 4780987
+2026-11-14 23:11:11 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; setsid nohup nu /root/workload/gen.nu --iface ens1f0np0 --dst 10.48.0.7 --dstmac e8:eb:d3:fd:ce:ac --count 0 --threads 4  > /tmp/gen.log 2>&1 < /dev/null &
+2026-11-14 23:11:29 dut rx pps 8895963
+2026-11-14 23:11:51 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; setsid nohup nu /root/workload/gen.nu --iface ens1f0np0 --dst 10.48.0.7 --dstmac e8:eb:d3:fd:ce:ac --count 0 --threads 8  > /tmp/gen.log 2>&1 < /dev/null &
+2026-11-14 23:12:10 dut rx pps 17182745
+2026-11-14 23:13:12 dut: pkill -f '^nu /root/workload/control.nu'; pkill -f '^[^ ]*rfm agent'; true
+2026-11-14 23:13:13 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; setsid nohup nu /root/workload/gen.nu --iface ens1f0np0 --dst 10.48.0.7 --dstmac e8:eb:d3:fd:ce:ac --count 0 --threads 1  > /tmp/gen.log 2>&1 < /dev/null &
+2026-11-14 23:13:31 dut rx pps 2657509
+2026-11-14 23:13:31 dut: setsid nohup nu /root/workload/control.nu --iface ens1f0np0 --n 1 --bpf 'stage_events=32\niface_slots=1' --timeline --adaptive --secs 160 --label 'ramp adaptive r4' --out /root/res/ramp.jsonl > /root/res/ramp-ramp.log 2>&1 < /dev/null &
+2026-11-14 23:13:53 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; setsid nohup nu /root/workload/gen.nu --iface ens1f0np0 --dst 10.48.0.7 --dstmac e8:eb:d3:fd:ce:ac --count 0 --threads 2  > /tmp/gen.log 2>&1 < /dev/null &
+2026-11-14 23:14:12 dut rx pps 4486302
+2026-11-14 23:14:34 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; setsid nohup nu /root/workload/gen.nu --iface ens1f0np0 --dst 10.48.0.7 --dstmac e8:eb:d3:fd:ce:ac --count 0 --threads 4  > /tmp/gen.log 2>&1 < /dev/null &
+2026-11-14 23:14:52 dut rx pps 8898301
+2026-11-14 23:15:14 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; setsid nohup nu /root/workload/gen.nu --iface ens1f0np0 --dst 10.48.0.7 --dstmac e8:eb:d3:fd:ce:ac --count 0 --threads 8  > /tmp/gen.log 2>&1 < /dev/null &
+2026-11-14 23:15:32 dut rx pps 17430124
+2026-11-14 23:16:40 dut: pkill -f '^nu /root/workload/control.nu'; pkill -f '^[^ ]*rfm agent'; true
+2026-11-14 23:16:41 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; setsid nohup nu /root/workload/gen.nu --iface ens1f0np0 --dst 10.48.0.7 --dstmac e8:eb:d3:fd:ce:ac --count 0 --threads 1  > /tmp/gen.log 2>&1 < /dev/null &
+2026-11-14 23:16:59 dut rx pps 2653023
+2026-11-14 23:16:59 dut: setsid nohup nu /root/workload/control.nu --iface ens1f0np0 --n 1 --bpf 'stage_events=32\niface_slots=1' --timeline  --secs 160 --label 'ramp static r4' --out /root/res/ramp.jsonl > /root/res/ramp-ramp.log 2>&1 < /dev/null &
+2026-11-14 23:17:21 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; setsid nohup nu /root/workload/gen.nu --iface ens1f0np0 --dst 10.48.0.7 --dstmac e8:eb:d3:fd:ce:ac --count 0 --threads 2  > /tmp/gen.log 2>&1 < /dev/null &
+2026-11-14 23:17:40 dut rx pps 4741585
+2026-11-14 23:18:02 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; setsid nohup nu /root/workload/gen.nu --iface ens1f0np0 --dst 10.48.0.7 --dstmac e8:eb:d3:fd:ce:ac --count 0 --threads 4  > /tmp/gen.log 2>&1 < /dev/null &
+2026-11-14 23:18:20 dut rx pps 8900834
+2026-11-14 23:18:42 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; setsid nohup nu /root/workload/gen.nu --iface ens1f0np0 --dst 10.48.0.7 --dstmac e8:eb:d3:fd:ce:ac --count 0 --threads 8  > /tmp/gen.log 2>&1 < /dev/null &
+2026-11-14 23:19:01 dut rx pps 17585865
+2026-11-14 23:20:09 dut: pkill -f '^nu /root/workload/control.nu'; pkill -f '^[^ ]*rfm agent'; true
+2026-11-14 23:20:09 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; setsid nohup nu /root/workload/gen.nu --iface ens1f0np0 --dst 10.48.0.7 --dstmac e8:eb:d3:fd:ce:ac --count 0 --threads 1  > /tmp/gen.log 2>&1 < /dev/null &
+2026-11-14 23:20:27 dut rx pps 2662899
+2026-11-14 23:20:27 dut: setsid nohup nu /root/workload/control.nu --iface ens1f0np0 --n 1 --bpf 'stage_events=32\niface_slots=1' --timeline --adaptive --secs 160 --label 'ramp adaptive r5' --out /root/res/ramp.jsonl > /root/res/ramp-ramp.log 2>&1 < /dev/null &
+2026-11-14 23:20:50 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; setsid nohup nu /root/workload/gen.nu --iface ens1f0np0 --dst 10.48.0.7 --dstmac e8:eb:d3:fd:ce:ac --count 0 --threads 2  > /tmp/gen.log 2>&1 < /dev/null &
+2026-11-14 23:21:08 dut rx pps 4578060
+2026-11-14 23:21:30 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; setsid nohup nu /root/workload/gen.nu --iface ens1f0np0 --dst 10.48.0.7 --dstmac e8:eb:d3:fd:ce:ac --count 0 --threads 4  > /tmp/gen.log 2>&1 < /dev/null &
+2026-11-14 23:21:48 dut rx pps 8751945
+2026-11-14 23:22:10 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; setsid nohup nu /root/workload/gen.nu --iface ens1f0np0 --dst 10.48.0.7 --dstmac e8:eb:d3:fd:ce:ac --count 0 --threads 8  > /tmp/gen.log 2>&1 < /dev/null &
+2026-11-14 23:22:29 dut rx pps 17574176
+2026-11-14 23:23:31 dut: pkill -f '^nu /root/workload/control.nu'; pkill -f '^[^ ]*rfm agent'; true
+2026-11-14 23:23:32 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; setsid nohup nu /root/workload/gen.nu --iface ens1f0np0 --dst 10.48.0.7 --dstmac e8:eb:d3:fd:ce:ac --count 0 --threads 1  > /tmp/gen.log 2>&1 < /dev/null &
+2026-11-14 23:23:50 dut rx pps 2671110
+2026-11-14 23:23:50 dut: setsid nohup nu /root/workload/control.nu --iface ens1f0np0 --n 1 --bpf 'stage_events=32\niface_slots=1' --timeline  --secs 160 --label 'ramp static r5' --out /root/res/ramp.jsonl > /root/res/ramp-ramp.log 2>&1 < /dev/null &
+2026-11-14 23:24:12 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; setsid nohup nu /root/workload/gen.nu --iface ens1f0np0 --dst 10.48.0.7 --dstmac e8:eb:d3:fd:ce:ac --count 0 --threads 2  > /tmp/gen.log 2>&1 < /dev/null &
+2026-11-14 23:24:31 dut rx pps 4494569
+2026-11-14 23:24:53 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; setsid nohup nu /root/workload/gen.nu --iface ens1f0np0 --dst 10.48.0.7 --dstmac e8:eb:d3:fd:ce:ac --count 0 --threads 4  > /tmp/gen.log 2>&1 < /dev/null &
+2026-11-14 23:25:11 dut rx pps 8699110
+2026-11-14 23:25:33 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; setsid nohup nu /root/workload/gen.nu --iface ens1f0np0 --dst 10.48.0.7 --dstmac e8:eb:d3:fd:ce:ac --count 0 --threads 8  > /tmp/gen.log 2>&1 < /dev/null &
+2026-11-14 23:25:52 dut rx pps 17129445
+2026-11-14 23:27:00 dut: pkill -f '^nu /root/workload/control.nu'; pkill -f '^[^ ]*rfm agent'; true
+2026-11-14 23:27:00 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+2026-11-14 23:27:00 dut: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+2026-11-14 23:27:00 dut: pkill -x iperf3; true
+2026-11-14 23:27:00 gen: pkill -x iperf3; true
+2026-11-14 23:27:03 dut: pkill -KILL -f '^/root/progbench/progbench '; sysctl -qw kernel.bpf_stats_enabled=0; ethtool -K ens1f0np0 gro on tso on gso on; ethtool -L ens1f0np0 combined 63; true
+Actual changes:
+tx-tcp-ecn-segmentation: off [requested on]
+tx-tcp-accecn-segmentation: off [requested on]
+2026-11-14 23:27:03 === phase ramp done
+2026-11-14 23:27:03 campaign done

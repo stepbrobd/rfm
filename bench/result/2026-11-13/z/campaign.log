@@ -1,0 +1,184 @@
+2026-11-15 06:54:18 job 20530 vlan 4 dut spirou-7 gen spirou-8 phases: setup pm6d
+2026-11-15 06:54:18 rounds R5 '1 2 3 4 5' R3 '1 2 3' R2 '1 2' RB4 '1' accuracy monitors 'rfm_acc netobserv hsflowd'
+2026-11-15 06:54:19 dut ctl 172.16.208.15 test 10.48.0.7 e8:eb:d3:fd:ce:ac, gen ctl 172.16.208.16 test 10.48.0.8 e8:eb:d3:fd:cf:0c pci 0000:4b:00.0
+2026-11-15 06:54:20 === phase setup
+2026-11-15 06:54:23 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+2026-11-15 06:54:23 dut: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+2026-11-15 06:54:23 dut: pkill -x iperf3; true
+2026-11-15 06:54:23 gen: pkill -x iperf3; true
+2026-11-15 06:54:25 dut: pkill -KILL -f '^/root/progbench/progbench '; sysctl -qw kernel.bpf_stats_enabled=0; ethtool -K ens1f0np0 gro on tso on gso on; ethtool -L ens1f0np0 combined 63; true
+Actual changes:
+tx-tcp-ecn-segmentation: off [requested on]
+tx-tcp-accecn-segmentation: off [requested on]
+2026-11-15 06:54:27 === phase setup done
+2026-11-15 06:54:27 === phase pm6d
+2026-11-15 06:54:27 dut: echo 1 > /sys/devices/system/cpu/intel_pstate/no_turbo; for s in /sys/devices/system/cpu/cpu*/cpuidle/state*; do case $(cat $s/name) in C6* | C7* | C8* | C9* | C10*) echo 1 > $s/disable ;; *) echo 0 > $s/disable ;; esac; done; echo no_turbo $(cat /sys/devices/system/cpu/intel_pstate/no_turbo) disabled $(cat /sys/devices/system/cpu/cpu*/cpuidle/state*/disable | sort | uniq -c | tr -s ' \n' ' ')
+no_turbo 1 disabled 288 0 96 1
+2026-11-15 06:54:34 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; setsid nohup nu /root/workload/gen.nu --iface ens1f0np0 --dst 10.48.0.7 --dstmac e8:eb:d3:fd:ce:ac --count 0 --threads 1  > /tmp/gen.log 2>&1 < /dev/null &
+2026-11-15 06:54:52 dut rx pps 2688539
+2026-11-15 06:54:52 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label pm\ fixed\ t1\ N100\ r1\ rfm_nostage --out /root/res/pm6d.jsonl --rfm-bpf iface_slots=1\\nring_buf_size=16384 --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm6d.err; echo exit=$?
+exit=0
+2026-11-15 06:55:46 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label pm\ fixed\ t1\ N100\ r1\ rfm --out /root/res/pm6d.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm6d.err; echo exit=$?
+exit=0
+2026-11-15 06:56:40 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label pm\ fixed\ t1\ N100\ r1\ rfm_default --out /root/res/pm6d.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm6d.err; echo exit=$?
+exit=0
+2026-11-15 06:57:34 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 100 --label pm\ fixed\ t1\ N100\ r1\ netobserv --out /root/res/pm6d.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm6d.err; echo exit=$?
+exit=0
+2026-11-15 06:58:26 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent none --n 100 --label pm\ fixed\ t1\ N100\ r1\ none --out /root/res/pm6d.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm6d.err; echo exit=$?
+exit=0
+2026-11-15 06:59:09 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label pm\ fixed\ t1\ N100\ r2\ rfm_nostage --out /root/res/pm6d.jsonl --rfm-bpf iface_slots=1\\nring_buf_size=16384 --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm6d.err; echo exit=$?
+exit=0
+2026-11-15 07:00:03 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent none --n 100 --label pm\ fixed\ t1\ N100\ r2\ none --out /root/res/pm6d.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm6d.err; echo exit=$?
+exit=0
+2026-11-15 07:00:46 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label pm\ fixed\ t1\ N100\ r2\ rfm_default --out /root/res/pm6d.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm6d.err; echo exit=$?
+exit=0
+2026-11-15 07:01:40 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 100 --label pm\ fixed\ t1\ N100\ r2\ netobserv --out /root/res/pm6d.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm6d.err; echo exit=$?
+exit=0
+2026-11-15 07:02:32 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label pm\ fixed\ t1\ N100\ r2\ rfm --out /root/res/pm6d.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm6d.err; echo exit=$?
+exit=0
+2026-11-15 07:03:26 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent none --n 100 --label pm\ fixed\ t1\ N100\ r3\ none --out /root/res/pm6d.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm6d.err; echo exit=$?
+exit=0
+2026-11-15 07:04:09 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 100 --label pm\ fixed\ t1\ N100\ r3\ netobserv --out /root/res/pm6d.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm6d.err; echo exit=$?
+exit=0
+2026-11-15 07:05:01 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label pm\ fixed\ t1\ N100\ r3\ rfm --out /root/res/pm6d.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm6d.err; echo exit=$?
+exit=0
+2026-11-15 07:05:55 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label pm\ fixed\ t1\ N100\ r3\ rfm_nostage --out /root/res/pm6d.jsonl --rfm-bpf iface_slots=1\\nring_buf_size=16384 --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm6d.err; echo exit=$?
+exit=0
+2026-11-15 07:06:49 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label pm\ fixed\ t1\ N100\ r3\ rfm_default --out /root/res/pm6d.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm6d.err; echo exit=$?
+exit=0
+2026-11-15 07:07:42 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label pm\ fixed\ t1\ N100\ r4\ rfm_nostage --out /root/res/pm6d.jsonl --rfm-bpf iface_slots=1\\nring_buf_size=16384 --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm6d.err; echo exit=$?
+exit=0
+2026-11-15 07:08:36 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 100 --label pm\ fixed\ t1\ N100\ r4\ netobserv --out /root/res/pm6d.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm6d.err; echo exit=$?
+exit=0
+2026-11-15 07:09:28 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label pm\ fixed\ t1\ N100\ r4\ rfm_default --out /root/res/pm6d.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm6d.err; echo exit=$?
+exit=0
+2026-11-15 07:10:22 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label pm\ fixed\ t1\ N100\ r4\ rfm --out /root/res/pm6d.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm6d.err; echo exit=$?
+exit=0
+2026-11-15 07:11:16 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent none --n 100 --label pm\ fixed\ t1\ N100\ r4\ none --out /root/res/pm6d.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm6d.err; echo exit=$?
+exit=0
+2026-11-15 07:11:59 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 100 --label pm\ fixed\ t1\ N100\ r5\ netobserv --out /root/res/pm6d.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm6d.err; echo exit=$?
+exit=0
+2026-11-15 07:12:51 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label pm\ fixed\ t1\ N100\ r5\ rfm_default --out /root/res/pm6d.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm6d.err; echo exit=$?
+exit=0
+2026-11-15 07:13:45 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label pm\ fixed\ t1\ N100\ r5\ rfm_nostage --out /root/res/pm6d.jsonl --rfm-bpf iface_slots=1\\nring_buf_size=16384 --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm6d.err; echo exit=$?
+exit=0
+2026-11-15 07:14:39 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 100 --label pm\ fixed\ t1\ N100\ r5\ rfm --out /root/res/pm6d.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm6d.err; echo exit=$?
+exit=0
+2026-11-15 07:15:32 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent none --n 100 --label pm\ fixed\ t1\ N100\ r5\ none --out /root/res/pm6d.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm6d.err; echo exit=$?
+exit=0
+2026-11-15 07:16:15 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; setsid nohup nu /root/workload/gen.nu --iface ens1f0np0 --dst 10.48.0.7 --dstmac e8:eb:d3:fd:ce:ac --count 0 --threads 1  > /tmp/gen.log 2>&1 < /dev/null &
+2026-11-15 07:16:34 dut rx pps 2628012
+2026-11-15 07:16:34 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 10 --label pm\ fixed\ t1\ N10\ r1\ netobserv --out /root/res/pm6d.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm6d.err; echo exit=$?
+exit=0
+2026-11-15 07:17:26 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 10 --label pm\ fixed\ t1\ N10\ r1\ rfm_nostage --out /root/res/pm6d.jsonl --rfm-bpf iface_slots=1\\nring_buf_size=16384 --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm6d.err; echo exit=$?
+exit=0
+2026-11-15 07:18:20 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent none --n 10 --label pm\ fixed\ t1\ N10\ r1\ none --out /root/res/pm6d.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm6d.err; echo exit=$?
+exit=0
+2026-11-15 07:19:03 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 10 --label pm\ fixed\ t1\ N10\ r1\ rfm --out /root/res/pm6d.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm6d.err; echo exit=$?
+exit=0
+2026-11-15 07:19:57 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 10 --label pm\ fixed\ t1\ N10\ r1\ rfm_default --out /root/res/pm6d.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm6d.err; echo exit=$?
+exit=0
+2026-11-15 07:20:50 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 10 --label pm\ fixed\ t1\ N10\ r2\ rfm_default --out /root/res/pm6d.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm6d.err; echo exit=$?
+exit=0
+2026-11-15 07:21:44 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 10 --label pm\ fixed\ t1\ N10\ r2\ rfm_nostage --out /root/res/pm6d.jsonl --rfm-bpf iface_slots=1\\nring_buf_size=16384 --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm6d.err; echo exit=$?
+exit=0
+2026-11-15 07:22:38 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent none --n 10 --label pm\ fixed\ t1\ N10\ r2\ none --out /root/res/pm6d.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm6d.err; echo exit=$?
+exit=0
+2026-11-15 07:23:21 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 10 --label pm\ fixed\ t1\ N10\ r2\ netobserv --out /root/res/pm6d.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm6d.err; echo exit=$?
+exit=0
+2026-11-15 07:24:13 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 10 --label pm\ fixed\ t1\ N10\ r2\ rfm --out /root/res/pm6d.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm6d.err; echo exit=$?
+exit=0
+2026-11-15 07:25:07 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 10 --label pm\ fixed\ t1\ N10\ r3\ netobserv --out /root/res/pm6d.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm6d.err; echo exit=$?
+exit=0
+2026-11-15 07:25:59 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 10 --label pm\ fixed\ t1\ N10\ r3\ rfm_nostage --out /root/res/pm6d.jsonl --rfm-bpf iface_slots=1\\nring_buf_size=16384 --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm6d.err; echo exit=$?
+exit=0
+2026-11-15 07:26:53 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent none --n 10 --label pm\ fixed\ t1\ N10\ r3\ none --out /root/res/pm6d.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm6d.err; echo exit=$?
+exit=0
+2026-11-15 07:27:36 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 10 --label pm\ fixed\ t1\ N10\ r3\ rfm --out /root/res/pm6d.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm6d.err; echo exit=$?
+exit=0
+2026-11-15 07:28:30 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 10 --label pm\ fixed\ t1\ N10\ r3\ rfm_default --out /root/res/pm6d.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm6d.err; echo exit=$?
+exit=0
+2026-11-15 07:29:24 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 10 --label pm\ fixed\ t1\ N10\ r4\ rfm_default --out /root/res/pm6d.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm6d.err; echo exit=$?
+exit=0
+2026-11-15 07:30:18 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent none --n 10 --label pm\ fixed\ t1\ N10\ r4\ none --out /root/res/pm6d.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm6d.err; echo exit=$?
+exit=0
+2026-11-15 07:31:00 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 10 --label pm\ fixed\ t1\ N10\ r4\ rfm --out /root/res/pm6d.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm6d.err; echo exit=$?
+exit=0
+2026-11-15 07:31:54 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 10 --label pm\ fixed\ t1\ N10\ r4\ netobserv --out /root/res/pm6d.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm6d.err; echo exit=$?
+exit=0
+2026-11-15 07:32:46 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 10 --label pm\ fixed\ t1\ N10\ r4\ rfm_nostage --out /root/res/pm6d.jsonl --rfm-bpf iface_slots=1\\nring_buf_size=16384 --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm6d.err; echo exit=$?
+exit=0
+2026-11-15 07:33:40 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 10 --label pm\ fixed\ t1\ N10\ r5\ rfm --out /root/res/pm6d.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm6d.err; echo exit=$?
+exit=0
+2026-11-15 07:34:34 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent none --n 10 --label pm\ fixed\ t1\ N10\ r5\ none --out /root/res/pm6d.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm6d.err; echo exit=$?
+exit=0
+2026-11-15 07:35:17 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 10 --label pm\ fixed\ t1\ N10\ r5\ rfm_nostage --out /root/res/pm6d.jsonl --rfm-bpf iface_slots=1\\nring_buf_size=16384 --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm6d.err; echo exit=$?
+exit=0
+2026-11-15 07:36:11 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 10 --label pm\ fixed\ t1\ N10\ r5\ rfm_default --out /root/res/pm6d.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm6d.err; echo exit=$?
+exit=0
+2026-11-15 07:37:05 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 10 --label pm\ fixed\ t1\ N10\ r5\ netobserv --out /root/res/pm6d.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm6d.err; echo exit=$?
+exit=0
+2026-11-15 07:37:57 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; setsid nohup nu /root/workload/gen.nu --iface ens1f0np0 --dst 10.48.0.7 --dstmac e8:eb:d3:fd:ce:ac --count 0 --threads 1  > /tmp/gen.log 2>&1 < /dev/null &
+2026-11-15 07:38:16 dut rx pps 2726287
+2026-11-15 07:38:16 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 1000 --label pm\ fixed\ t1\ N1000\ r1\ rfm_default --out /root/res/pm6d.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm6d.err; echo exit=$?
+exit=0
+2026-11-15 07:39:10 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 1000 --label pm\ fixed\ t1\ N1000\ r1\ rfm_nostage --out /root/res/pm6d.jsonl --rfm-bpf iface_slots=1\\nring_buf_size=16384 --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm6d.err; echo exit=$?
+exit=0
+2026-11-15 07:40:03 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 1000 --label pm\ fixed\ t1\ N1000\ r1\ netobserv --out /root/res/pm6d.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm6d.err; echo exit=$?
+exit=0
+2026-11-15 07:40:56 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent none --n 1000 --label pm\ fixed\ t1\ N1000\ r1\ none --out /root/res/pm6d.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm6d.err; echo exit=$?
+exit=0
+2026-11-15 07:41:39 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 1000 --label pm\ fixed\ t1\ N1000\ r1\ rfm --out /root/res/pm6d.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm6d.err; echo exit=$?
+exit=0
+2026-11-15 07:42:32 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 1000 --label pm\ fixed\ t1\ N1000\ r2\ rfm --out /root/res/pm6d.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm6d.err; echo exit=$?
+exit=0
+2026-11-15 07:43:26 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 1000 --label pm\ fixed\ t1\ N1000\ r2\ rfm_nostage --out /root/res/pm6d.jsonl --rfm-bpf iface_slots=1\\nring_buf_size=16384 --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm6d.err; echo exit=$?
+exit=0
+2026-11-15 07:44:20 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 1000 --label pm\ fixed\ t1\ N1000\ r2\ netobserv --out /root/res/pm6d.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm6d.err; echo exit=$?
+exit=0
+2026-11-15 07:45:12 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 1000 --label pm\ fixed\ t1\ N1000\ r2\ rfm_default --out /root/res/pm6d.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm6d.err; echo exit=$?
+exit=0
+2026-11-15 07:46:06 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent none --n 1000 --label pm\ fixed\ t1\ N1000\ r2\ none --out /root/res/pm6d.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm6d.err; echo exit=$?
+exit=0
+2026-11-15 07:46:49 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent none --n 1000 --label pm\ fixed\ t1\ N1000\ r3\ none --out /root/res/pm6d.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm6d.err; echo exit=$?
+exit=0
+2026-11-15 07:47:32 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 1000 --label pm\ fixed\ t1\ N1000\ r3\ rfm_default --out /root/res/pm6d.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm6d.err; echo exit=$?
+exit=0
+2026-11-15 07:48:26 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 1000 --label pm\ fixed\ t1\ N1000\ r3\ rfm --out /root/res/pm6d.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm6d.err; echo exit=$?
+exit=0
+2026-11-15 07:49:19 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 1000 --label pm\ fixed\ t1\ N1000\ r3\ netobserv --out /root/res/pm6d.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm6d.err; echo exit=$?
+exit=0
+2026-11-15 07:50:12 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 1000 --label pm\ fixed\ t1\ N1000\ r3\ rfm_nostage --out /root/res/pm6d.jsonl --rfm-bpf iface_slots=1\\nring_buf_size=16384 --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm6d.err; echo exit=$?
+exit=0
+2026-11-15 07:51:05 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 1000 --label pm\ fixed\ t1\ N1000\ r4\ rfm --out /root/res/pm6d.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm6d.err; echo exit=$?
+exit=0
+2026-11-15 07:51:59 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent none --n 1000 --label pm\ fixed\ t1\ N1000\ r4\ none --out /root/res/pm6d.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm6d.err; echo exit=$?
+exit=0
+2026-11-15 07:52:42 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 1000 --label pm\ fixed\ t1\ N1000\ r4\ rfm_default --out /root/res/pm6d.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm6d.err; echo exit=$?
+exit=0
+2026-11-15 07:53:36 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 1000 --label pm\ fixed\ t1\ N1000\ r4\ netobserv --out /root/res/pm6d.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm6d.err; echo exit=$?
+exit=0
+2026-11-15 07:54:28 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 1000 --label pm\ fixed\ t1\ N1000\ r4\ rfm_nostage --out /root/res/pm6d.jsonl --rfm-bpf iface_slots=1\\nring_buf_size=16384 --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm6d.err; echo exit=$?
+exit=0
+2026-11-15 07:55:22 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 1000 --label pm\ fixed\ t1\ N1000\ r5\ rfm --out /root/res/pm6d.jsonl --rfm-bpf stage_events=32\\niface_slots=1\\nring_buf_size=16384 --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm6d.err; echo exit=$?
+exit=0
+2026-11-15 07:56:16 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 1000 --label pm\ fixed\ t1\ N1000\ r5\ rfm_nostage --out /root/res/pm6d.jsonl --rfm-bpf iface_slots=1\\nring_buf_size=16384 --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm6d.err; echo exit=$?
+exit=0
+2026-11-15 07:57:09 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent netobserv --n 1000 --label pm\ fixed\ t1\ N1000\ r5\ netobserv --out /root/res/pm6d.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm6d.err; echo exit=$?
+exit=0
+2026-11-15 07:58:02 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent none --n 1000 --label pm\ fixed\ t1\ N1000\ r5\ none --out /root/res/pm6d.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm6d.err; echo exit=$?
+exit=0
+2026-11-15 07:58:45 dut: timeout 900 nu /root/workload/measure.nu --iface ens1f0np0 --agent rfm --n 1000 --label pm\ fixed\ t1\ N1000\ r5\ rfm_default --out /root/res/pm6d.jsonl --warmup 10 --secs 30 --stat-secs 8 > /dev/null 2>> /root/res/pm6d.err; echo exit=$?
+exit=0
+2026-11-15 07:59:38 dut: echo 0 > /sys/devices/system/cpu/intel_pstate/no_turbo; for s in /sys/devices/system/cpu/cpu*/cpuidle/state*; do case $(cat $s/name) in C6* | C7* | C8* | C9* | C10*) echo 0 > $s/disable ;; *) echo 0 > $s/disable ;; esac; done; echo no_turbo $(cat /sys/devices/system/cpu/intel_pstate/no_turbo) disabled $(cat /sys/devices/system/cpu/cpu*/cpuidle/state*/disable | sort | uniq -c | tr -s ' \n' ' ')
+no_turbo 0 disabled 384 0
+2026-11-15 07:59:45 gen: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+2026-11-15 07:59:45 dut: echo stop > /proc/net/pktgen/pgctrl; pkill -f '^nu /root/workload/gen.nu'; true
+2026-11-15 07:59:45 dut: pkill -x iperf3; true
+2026-11-15 07:59:46 gen: pkill -x iperf3; true
+2026-11-15 07:59:48 dut: pkill -KILL -f '^/root/progbench/progbench '; sysctl -qw kernel.bpf_stats_enabled=0; ethtool -K ens1f0np0 gro on tso on gso on; ethtool -L ens1f0np0 combined 63; true
+Actual changes:
+tx-tcp-ecn-segmentation: off [requested on]
+tx-tcp-accecn-segmentation: off [requested on]
+2026-11-15 07:59:49 === phase pm6d done
+2026-11-15 07:59:49 campaign done
