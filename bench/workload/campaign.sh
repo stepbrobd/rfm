@@ -18,6 +18,7 @@
 # and off, b13s, the top cohort mix with netobserv's table enlarged, b13p, the cohort mixes past it
 # with more flood threads, pm3s, the pm3 cells with rfm's stage on and off, b8s, the flood windows
 # of the XDP comparison with the statistics on and off, b9p, a kernel profile of its bulk windows,
+# b9m, those windows at two MTUs of the dut with nothing and with an empty XDP program attached,
 # ramp, the adaptive against static half of b11 alone, and env, a record of the nodes for the
 # archive
 # SRC names a directory on the frontend that holds workload/ and progbench/. DRY=1 runs every
@@ -683,6 +684,40 @@ for ph in $PHASES; do
         fi
         power dflt
         quiet
+        ;;
+    b9m)
+        # the bulk TCP windows with nothing attached and with an XDP program that does nothing,
+        # at the dut's own MTU and at 1700
+        # mlx5 sizes a receive buffer from the MTU and the headroom, and at 1500 the headroom of
+        # XDP takes it past half a page, so every frame gets a page of its own where two shared one
+        # an MTU of 1700 on the dut alone does the same with nothing attached while the frames on
+        # the wire stay those of the generator's 1500, which splits the cost of that buffer layout
+        # from the cost of the hook
+        # the MTUs alternate within a round in a shuffled order and iperf3 restarts after each
+        # change, since the driver reopens its channels
+        # the dut's MTU is put back at the end and read back
+        power "${PWR:-dflt}" || continue
+        quiet
+        mtu0=$(dutq "cat /sys/class/net/$IF/mtu")
+        case $mtu0 in
+        '' | *[!0-9]*)
+            log "refusing: no MTU read from the dut"
+            power dflt
+            continue
+            ;;
+        esac
+        f=/root/res/b9m${PWR:+-$PWR}
+        for r in $(seq 1 "$ROUNDS"); do
+            for mtu in $(shuf_words "$mtu0" 1700); do
+                dut "ip link set dev $IF mtu $mtu; sleep 3; echo round $r mtu \$(cat /sys/class/net/$IF/mtu)"
+                iperf_rx 8
+                dut "rm -f /tmp/progbench_offload.jsonl; timeout 600 nu $W/progbench_offload.nu --dir $PB --iface $IF --n 1000 --rounds 1 --window $WIN --gro on --labels 'none xdp_empty' --stats off >> $f.log 2>&1; cat /tmp/progbench_offload.jsonl >> $f-mtu$mtu.jsonl"
+            done
+        done
+        quiet
+        dut "ip link set dev $IF mtu $mtu0; sleep 3; echo mtu \$(cat /sys/class/net/$IF/mtu)"
+        [ "$(dutq "cat /sys/class/net/$IF/mtu")" = "$mtu0" ] || log "refusing: the dut's MTU does not read back $mtu0"
+        power dflt
         ;;
     env)
         # what the inventory of setup leaves out, for the archive: the idle states with their
