@@ -1,0 +1,45 @@
+Warning[env_desc]: Unused field 'author'
+Deployment #D-277dd110-117d-452f-af26-b884ac562c34 started
+Grab the key file /home/yisun/.ssh/authorized_keys
+Grab the tarball file /home/yisun/rfm-image/nixos-x86_64-linux.tar.xz
+Grab the postinstall file server:///grid5000/postinstalls/g5k-postinstall.tgz
+Launching a deployment of nixos-x86_64-linux:yisun:x86_64:1 on gros-[8-9].nancy.grid5000.fr
+Performing a Deploy[SetDeploymentMiniOSTrusted] step
+  switch_pxe
+  send_deployment_kernel
+  set_default_vlan
+  kexec
+  wait_reboot
+  startup_script
+  send_key_in_deploy_env
+  create_partition_table
+  format_deploy_part
+  mount_deploy_part
+  format_tmp_part
+  format_swap_part
+End of step Deploy[SetDeploymentMiniOSTrusted] after 71s
+Performing a Deploy[BroadcastEnvKascade] step
+  send_environment
+   * Broadcast time: 15s
+  manage_user_post_install
+  check_kernel_files
+  send_key
+  sync
+  install_bootloader
+End of step Deploy[BroadcastEnvKascade] after 34s
+Performing a Deploy[BootNewEnvKexec] step
+  switch_pxe
+  umount_deploy_part
+  mount_deploy_part
+  kexec
+  set_vlan
+  wait_reboot
+End of step Deploy[BootNewEnvKexec] after 31s
+End of deployment for gros-[8-9].nancy.grid5000.fr after 136s
+End of deployment on cluster gros after 137s
+Deployment #D-277dd110-117d-452f-af26-b884ac562c34 done
+
+The deployment is successful on nodes
+gros-8.nancy.grid5000.fr
+gros-9.nancy.grid5000.fr
+deploy exit=0 vlan=5

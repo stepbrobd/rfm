@@ -37,14 +37,32 @@ window listed as invalid. No window of a later run is flagged.
 
 Each run of job 20530 was started by a wrapper on the louvain frontend that
 waited for the run before it (`run.sh`, kept in the run's directory with its
-`driver.out`). From `ctl` on, a wrapper first makes a pass with `DRY=1` (one
-round, windows of 3 s), drops a phase whose dry pass shows a failing call or
-no rows, moves the dry rows away on the DUT and then starts the real pass.
-The dry passes are kept as `*-dry/` and are no measurement.
+`driver.out`, under `run/` from `ctl` on). From `ctl` on, a wrapper first
+makes a pass with `DRY=1` (one round, windows of 3 s), drops a phase whose dry
+pass shows a failing call or no rows, moves the dry rows away on the DUT and
+then starts the real pass. The dry passes are kept as `*-dry/` and are no
+measurement. The directories of the other jobs hold the same files where they
+exist (`run.sh` of the runs a wrapper started, `driver.out`, the inventories),
+and `gros/` and `dahu/` keep their result files at the top level. The deploy
+log of each job is in its first directory: `pm6/rfm-kavlan-20529.log`,
+`weekend/rfm-kavlan-20530.log`, `gros/rfm-kavlan-7023876.log` and
+`dahu/rfm-kavlan-3169855.log`. Every result file was compared with its copy on
+the frontend by checksum on 2026-11-15, after the last run.
 
 `fetch` copies all of the DUT's `/root/res` after every phase, so the `res/`
 of a later run on job 20530 holds the files of the earlier runs again, byte
 for byte. The files that are new in a run are listed in its section.
+
+The sections below name the harness commits as they stand after two rewrites of
+the unpushed history: on 2026-11-15 the mode of `bench/workload/gap_error.py`
+was amended into it, and on 2026-11-17 the messages were reworded with every
+file left as it was. The runs were started from the earlier names, some of
+which the comments in `ctl/run/run.sh`, `x/run/run.sh` and `z/run/run.sh` still
+carry: `cfc81c8` for `490e676`, `a00f14c` for `af79f9d`, `ae17e9f` for
+`ed49eed`, `89a7718` for `4eacd75`, `bfbea10` for `0534c72` and `a34ff33` for
+`c31b7ff`, and for the last three runs `866b6c4` (`y`), `a3e1d42` (`z`) and
+`a635f01` (`m`), which hold the same files as `1968050`, `b25a755` and
+`aee2465` apart from that mode.
 
 From 2026-11-13 13:11 to 2026-11-15 02:44 a helper on the frontend
 (`~/rfm-weekend/live.sh`) also copied `/root/res/*` from the DUT by scp every
@@ -249,7 +267,7 @@ and none failed, from 23:45:27 to 05:03:46.
 
 ## XDP with the power settings fixed (`y-dry/`, `y/`)
 
-`y/run/run.sh`, harness `~/rfm-bench-y` (workload of `866b6c4`, the weekend's
+`y/run/run.sh`, harness `~/rfm-bench-y` (workload of `1968050`, the weekend's
 objects), `setup b8s b9s b9p env` with five rounds and `PWR=fixed`, which
 turns turbo off and disables C6 on the DUT for the three measuring phases,
 after a dry pass of those phases without a failing call. New files:
@@ -304,7 +322,7 @@ and at XDP, `skip_array_lazy_nowake` is the exact program at TCX and
 
 ## The per packet cells of rfm's defaults with the power settings fixed (`z-dry/`, `z/`)
 
-`z/run/run.sh`, harness `~/rfm-bench-z` (workload of `a3e1d42`, the weekend's
+`z/run/run.sh`, harness `~/rfm-bench-z` (workload of `b25a755`, the weekend's
 objects), `setup pm6d` with five rounds, after a dry pass. New file:
 `pm6d.jsonl` (75 windows). The cells of `pm6` at N of 100, 10 and 1000 for
 rfm with its defaults (`rfm_default`) and for the tuned configuration without
@@ -328,7 +346,7 @@ from `pm6`.
 
 ## The MTU control of the XDP comparison (`m-dry/`, `m/`)
 
-`m/run/run.sh`, harness `~/rfm-bench-m` (workload of `a635f01`, the weekend's
+`m/run/run.sh`, harness `~/rfm-bench-m` (workload of `aee2465`, the weekend's
 objects), `setup b9m` with five rounds and `PWR=fixed`, after a dry pass. New
 files: `b9m-fixed-mtu1500.jsonl` and `b9m-fixed-mtu1700.jsonl` (10 rows each).
 The bulk TCP windows of `b9s` (8 connections, GRO on, statistics off) with

@@ -1,0 +1,45 @@
+Warning[env_desc]: Unused field 'author'
+Deployment #D-4f594531-0808-4731-bc59-c20d53d902d1 started
+Grab the key file /home/yisun/.ssh/authorized_keys
+Grab the tarball file /home/yisun/rfm-image/nixos-x86_64-linux.tar.xz
+Grab the postinstall file server:///grid5000/postinstalls/g5k-postinstall.tgz
+Launching a deployment of nixos-x86_64-linux:yisun:x86_64:1 on dahu-[20,24].grenoble.grid5000.fr
+Performing a Deploy[SetDeploymentMiniOSTrusted] step
+  switch_pxe
+  send_deployment_kernel
+  set_default_vlan
+  kexec
+  wait_reboot
+  startup_script
+  send_key_in_deploy_env
+  create_partition_table
+  format_deploy_part
+  mount_deploy_part
+  format_tmp_part
+  format_swap_part
+End of step Deploy[SetDeploymentMiniOSTrusted] after 53s
+Performing a Deploy[BroadcastEnvKascade] step
+  send_environment
+   * Broadcast time: 19s
+  manage_user_post_install
+  check_kernel_files
+  send_key
+  sync
+  install_bootloader
+End of step Deploy[BroadcastEnvKascade] after 38s
+Performing a Deploy[BootNewEnvKexec] step
+  switch_pxe
+  umount_deploy_part
+  mount_deploy_part
+  kexec
+  set_vlan
+  wait_reboot
+End of step Deploy[BootNewEnvKexec] after 31s
+End of deployment for dahu-[20,24].grenoble.grid5000.fr after 122s
+End of deployment on cluster dahu after 123s
+Deployment #D-4f594531-0808-4731-bc59-c20d53d902d1 done
+
+The deployment is successful on nodes
+dahu-20.grenoble.grid5000.fr
+dahu-24.grenoble.grid5000.fr
+deploy exit=0 vlan=4
