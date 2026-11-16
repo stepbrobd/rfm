@@ -61,6 +61,66 @@ The sampling rate was 10 on every host for its whole window.
   guests on which rfm reads 0.4 to 3.7% above the driver in at least one
   direction. On the `macb` host rfm reads 6.1% more received bytes.
 
+## Flow records and series over 2 hours (`flows/`)
+
+A second measurement asks how much of the traffic lies in flow records, and
+in the series of a remote AS, that hold enough samples for a useful estimate.
+It ran on the 22 hosts on 2026-11-16 from 15:24:40 to 17:24:45 UTC (`start`,
+`end`).
+
+- `flowsize.py` takes a snapshot of each agent's flow table every 20 s over
+  ssh (`rfm flows top` with a limit above the table size). Every host
+  delivered 361 snapshots, none failed, and the longest gap between 2
+  snapshots was 20.6 s (`flowsize.log`). An entry stays in the table for 30 s
+  after its last packet, so every record is seen after its last packet and
+  its last sighting holds its final count. A record is identified by
+  interface, direction, protocol, addresses and ports, and a new record under
+  the same key by a `first_seen` that moved by more than 5 s. The keys are
+  hashed in memory and never written. The files with the counts per record
+  stay out of the archive.
+- `hist.py` sorts the records by the sampled packets they gained in the
+  window and weights them with the estimated packets they gained in the
+  window (`flowsize_hist.json`, `flowsize.md`). A record that existed before
+  the window counts with its gain since the first snapshot.
+- `flowcheck.py` with `fleet.py edges` compares the estimated packets that
+  the records of a host gained between its first and its last snapshot with
+  the exact IP counters of the same interval, interpolated from the store's
+  raw samples (`flowcheck.md`, `edges/`).
+- `fleet.py series` with `seriesshow.py` asks each store, over the window of
+  the host's snapshots, for the share of the estimated packets in label
+  tuples and in remote ASes whose sampled packets reach a threshold
+  (`series.md`, `series/`). The remote AS is the source AS of received and the
+  destination AS of sent packets. Packets whose remote address has no AS are
+  reported apart. These are 16 instant queries per host, and they took at
+  most 3.9 s of query time on a host.
+
+Results, as shares of the estimated packets of the 2 hours:
+
+- The check passes. The records' estimate is within 0.47% of the exact count
+  on every host and in both directions, where `1/sqrt` of the sampled packets
+  is 0.11 to 0.57%. The flow tables and the stores also agree on the total,
+  75.29 and 75.31 million estimated packets.
+- 1792292 records grew in the window, and 0.06% of them gained 100 or more
+  sampled packets.
+- Flow records with 100 or more sampled packets carried 43.6% pooled over the
+  hosts, and 5.3 to 96.1% per host with a median of 12.8%. 2 hosts are at 50%
+  or more. Records with 10 or more carried 68.6% pooled (54.4 to 98.8%, median
+  66.0%), and records with 4500 or more carried 37.0% pooled (median 0).
+- Label tuples with 100 or more sampled packets carried 93.0% pooled (85.1 to
+  99.8% per host, median 95.0%).
+- Named remote ASes with 100 or more sampled packets carried 96.4% pooled
+  (88.3 to 99.7% per host, median 95.0%). With 4500 or more they carried 66.1%
+  pooled (20.2 to 95.6%, median 37.7%). Packets without a remote AS were 1.7%
+  pooled and at most 9.9% on a host.
+- A host received from 51 to 1446 named ASes in the 2 hours, and 37 to 161 of
+  them reached 100 sampled packets.
+
+The thresholds are in sampled wire packets, the unit of the flow table and of
+`rfm_flow_sampled_packets_total`. A sampled skb of g packets adds g, so 100
+sampled packets are 100 samples for unmerged traffic and fewer under GRO or
+TSO. 4500 sampled packets hold at least 100 samples at up to 45 packets per
+skb. The agent keeps no count of sampled skbs.
+
 ## Notes
 
 - The run also asked for `count(rfm_flow_packets_total)` once per hour. On
@@ -76,4 +136,5 @@ The sampling rate was 10 on every host for its whole window.
   script keyed a record on `first_seen`, which the agent derives from a boot
   epoch that it reads anew on every request, so the key of one flow table
   entry changed with every snapshot and each entry was counted once per
-  snapshot with its cumulative count.
+  snapshot with its cumulative count. The section above holds the corrected
+  measurement, 43.6% in place of 99.5%.

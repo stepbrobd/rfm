@@ -1,0 +1,44 @@
+feldberg: first snapshot 615 flows, missing fields []
+lagern: first snapshot 282 flows, missing fields []
+isere: first snapshot 142 flows, missing fields []
+morasko: first snapshot 151 flows, missing fields []
+kebnekaise: first snapshot 240 flows, missing fields []
+walberla: first snapshot 302 flows, missing fields []
+rysy: first snapshot 420 flows, missing fields []
+highline: first snapshot 488 flows, missing fields []
+watchung: first snapshot 459 flows, missing fields []
+butte: first snapshot 2420 flows, missing fields []
+baldy: first snapshot 332 flows, missing fields []
+faber: first snapshot 261 flows, missing fields []
+guadalupe: first snapshot 300 flows, missing fields []
+toompea: first snapshot 643 flows, missing fields []
+timah: first snapshot 589 flows, missing fields []
+roraima: first snapshot 410 flows, missing fields []
+kongo: first snapshot 265 flows, missing fields []
+namsan: first snapshot 289 flows, missing fields []
+montmartre: first snapshot 5781 flows, missing fields []
+cradle: first snapshot 324 flows, missing fields []
+odake: first snapshot 360 flows, missing fields []
+lantau: first snapshot 399 flows, missing fields []
+lagern: done, 361 snapshots, 0 failed, longest gap 20.0 s, 21492 records, 0 counts that shrank, 0 keys seen twice in a snapshot
+morasko: done, 361 snapshots, 0 failed, longest gap 20.0 s, 12514 records, 0 counts that shrank, 0 keys seen twice in a snapshot
+isere: done, 361 snapshots, 0 failed, longest gap 20.0 s, 10603 records, 0 counts that shrank, 0 keys seen twice in a snapshot
+walberla: done, 361 snapshots, 0 failed, longest gap 20.0 s, 22462 records, 0 counts that shrank, 0 keys seen twice in a snapshot
+kebnekaise: done, 361 snapshots, 0 failed, longest gap 20.1 s, 23953 records, 0 counts that shrank, 0 keys seen twice in a snapshot
+rysy: done, 361 snapshots, 0 failed, longest gap 20.0 s, 34393 records, 0 counts that shrank, 0 keys seen twice in a snapshot
+highline: done, 361 snapshots, 0 failed, longest gap 20.0 s, 43213 records, 0 counts that shrank, 0 keys seen twice in a snapshot
+kongo: done, 361 snapshots, 0 failed, longest gap 20.0 s, 27781 records, 0 counts that shrank, 0 keys seen twice in a snapshot
+cradle: done, 361 snapshots, 0 failed, longest gap 20.1 s, 27196 records, 0 counts that shrank, 0 keys seen twice in a snapshot
+baldy: done, 361 snapshots, 0 failed, longest gap 20.0 s, 30428 records, 0 counts that shrank, 0 keys seen twice in a snapshot
+namsan: done, 361 snapshots, 0 failed, longest gap 20.0 s, 28877 records, 0 counts that shrank, 0 keys seen twice in a snapshot
+guadalupe: done, 361 snapshots, 0 failed, longest gap 20.0 s, 30437 records, 0 counts that shrank, 0 keys seen twice in a snapshot
+faber: done, 361 snapshots, 0 failed, longest gap 20.1 s, 30446 records, 0 counts that shrank, 0 keys seen twice in a snapshot
+odake: done, 361 snapshots, 0 failed, longest gap 20.6 s, 27854 records, 0 counts that shrank, 0 keys seen twice in a snapshot
+toompea: done, 361 snapshots, 0 failed, longest gap 20.0 s, 72437 records, 0 counts that shrank, 0 keys seen twice in a snapshot
+roraima: done, 361 snapshots, 0 failed, longest gap 20.6 s, 33709 records, 0 counts that shrank, 0 keys seen twice in a snapshot
+lantau: done, 361 snapshots, 0 failed, longest gap 20.0 s, 32743 records, 0 counts that shrank, 0 keys seen twice in a snapshot
+timah: done, 361 snapshots, 0 failed, longest gap 20.0 s, 54837 records, 0 counts that shrank, 0 keys seen twice in a snapshot
+watchung: done, 361 snapshots, 0 failed, longest gap 20.6 s, 49340 records, 0 counts that shrank, 0 keys seen twice in a snapshot
+feldberg: done, 361 snapshots, 0 failed, longest gap 20.1 s, 102671 records, 0 counts that shrank, 0 keys seen twice in a snapshot
+butte: done, 361 snapshots, 0 failed, longest gap 20.0 s, 333739 records, 0 counts that shrank, 0 keys seen twice in a snapshot
+montmartre: done, 361 snapshots, 0 failed, longest gap 20.0 s, 752637 records, 0 counts that shrank, 0 keys seen twice in a snapshot

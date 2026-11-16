@@ -17,6 +17,8 @@
 #   series there without need.
 # chain: the same sums from the store's raw samples, as a check of the hourly queries.
 # edges: the raw samples of the exact IP counters around a window, for flowcheck.py.
+# series: the share of a window's estimated packets in label tuples and in remote ASes with 100 or
+#   4500 or more sampled packets, 16 queries over every rollup series of the window.
 import argparse
 import json
 import os
@@ -208,9 +210,49 @@ def edges(node, start, end):
     return {"node": node, "start": start, "end": end, "series": series}
 
 
+def series(node, start, end):
+    # the share of the estimated packets of a window in label tuples, and in remote ASes, whose
+    # sampled packets of the window reach a threshold. The remote AS is the source AS of received
+    # and the destination AS of sent packets. An address without an AS has an empty label: these
+    # packets are reported apart ("unk") and are left out of the named ASes ("asn"), while "as100"
+    # counts them as one group. 16 instant queries, each reads every rollup series of the window
+    # once per metric it names.
+    w = f"[{end - start}s]"
+    est, smp = "rfm_flow_packets_total", "rfm_flow_sampled_packets_total"
+    exprs = {
+        "den": f"sum by (direction) (increase_pure({est}{w}))",
+        "tuple100": f"sum by (direction) (increase_pure({est}{w}) and (increase_pure({smp}{w}) >= 100))",
+    }
+    for side, lab, dirn in (("in", "src_asn", "ingress"), ("out", "dst_asn", "egress")):
+        e_all = f'sum by ({lab}) (increase_pure({est}{{direction="{dirn}"}}{w}))'
+        s_all = f'sum by ({lab}) (increase_pure({smp}{{direction="{dirn}"}}{w}))'
+        e_named = f'sum by ({lab}) (increase_pure({est}{{direction="{dirn}",{lab}!=""}}{w}))'
+        s_named = f'sum by ({lab}) (increase_pure({smp}{{direction="{dirn}",{lab}!=""}}{w}))'
+        exprs[f"as100_{side}"] = f"sum({e_all} and ({s_all} >= 100))"
+        exprs[f"unk_{side}"] = f'sum(increase_pure({est}{{direction="{dirn}",{lab}=""}}{w}))'
+        exprs[f"nasn_{side}"] = f"count({s_named} > 0)"
+        for thr in (100, 4500):
+            exprs[f"asn{thr}_{side}"] = f"sum({e_named} and ({s_named} >= {thr}))"
+            exprs[f"nasn{thr}_{side}"] = f"count({s_named} >= {thr})"
+    lines = []
+    for name, expr in exprs.items():
+        url = f"{VM}/api/v1/query?" + urllib.parse.urlencode({"query": expr, "time": str(end)})
+        lines.append(f"printf '%s ' {name}; curl -s --max-time 100 '{url}'; echo")
+    out = sh(node, "\n".join(lines) + "\n", timeout=900)
+    res = {"node": node, "start": start, "end": end, "q": {}}
+    for ln in out.splitlines():
+        t = ln.split(" ", 1)
+        if len(t) < 2 or not t[1].startswith("{"):
+            continue
+        body = json.loads(t[1])
+        res["q"][t[0]] = {"r": body.get("data", {}).get("result"), "ms": body.get("stats", {}).get("executionTimeMsec"),
+                          "series": body.get("stats", {}).get("seriesFetched"), "error": body.get("error")}
+    return res
+
+
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("cmd", choices=["survey", "window", "chain", "edges"])
+    ap.add_argument("cmd", choices=["survey", "window", "chain", "edges", "series"])
     ap.add_argument("--out", required=True)
     ap.add_argument("--plan")
     ap.add_argument("--jobs", type=int, default=8)
@@ -236,6 +278,8 @@ def main():
                 (out / f"{n}.win.json").write_text(json.dumps(window(n, *plan[n], flows=not a.no_flows)))
             elif a.cmd == "edges":
                 (out / f"{n}.edges.json").write_text(json.dumps(edges(n, *plan[n])))
+            elif a.cmd == "series":
+                (out / f"{n}.series.json").write_text(json.dumps(series(n, *plan[n])))
             else:
                 chain(n, *plan[n], out)
         except Exception as e:
