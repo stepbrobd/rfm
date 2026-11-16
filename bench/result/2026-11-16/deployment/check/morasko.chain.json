@@ -1,0 +1,1 @@
+{"node": "morasko", "start": 1794830400, "end": 1794837600, "tot": {"rfm_flow_sampled_packets_total|egress": 46053.0, "rfm_flow_sampled_packets_total|ingress": 27891.0, "rfm_flow_packets_total|egress": 460530.0, "rfm_flow_packets_total|ingress": 278910.0}, "series": 442, "new": 90, "restarted": 668, "samples": 82806, "rc": 0}

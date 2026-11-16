@@ -1,0 +1,1 @@
+{"node": "feldberg", "start": 1794830400, "end": 1794837600, "tot": {"rfm_flow_sampled_packets_total|egress": 143479.0, "rfm_flow_sampled_packets_total|ingress": 123279.0, "rfm_flow_packets_total|egress": 1434790.0, "rfm_flow_packets_total|ingress": 1232790.0}, "series": 14740, "new": 9430, "restarted": 29262, "samples": 747900, "rc": 0}

@@ -1,0 +1,1 @@
+{"node": "butte", "start": 1794830400, "end": 1794837600, "tot": {"rfm_flow_sampled_packets_total|egress": 428660.0, "rfm_flow_sampled_packets_total|ingress": 397279.0, "rfm_flow_packets_total|egress": 4286600.0, "rfm_flow_packets_total|ingress": 3972790.0}, "series": 23428, "new": 13672, "restarted": 57538, "samples": 1447320, "rc": 0}

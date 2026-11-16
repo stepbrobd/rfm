@@ -1,0 +1,5 @@
+# validation of the hourly increase_pure sums against chained raw samples
+# 2026-11-16 12:00 to 14:00 UTC
+morasko 1794830400 1794837600
+butte 1794830400 1794837600
+feldberg 1794830400 1794837600
